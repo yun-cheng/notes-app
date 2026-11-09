@@ -1,0 +1,314 @@
+import { useEffect, useRef, useState, type FormEvent, type ReactNode } from 'react';
+import { Link, useNavigate } from 'react-router';
+import { cardText, resolveTags, type Backlink } from '../domain/cardIndex';
+import { displayTitle } from '../domain/content';
+import { relativeDay } from '../domain/dates';
+import type { Card, TodoCard } from '../domain/types';
+import { useCards, useToday } from '../state/CardsContext';
+import { Icon, type IconName } from './Icon';
+import { cardPath } from './paths';
+import { useToast } from './Toast';
+
+export function Page({ title, actions, children }: { title: ReactNode; actions?: ReactNode; children: ReactNode }) {
+  return (
+    <div className="page">
+      <header className="page__head">
+        <h1>{title}</h1>
+        {actions && <div className="page__actions">{actions}</div>}
+      </header>
+      {children}
+    </div>
+  );
+}
+
+export function Section({ title, tone, children }: { title: string; tone?: 'alert'; children: ReactNode }) {
+  return (
+    <section className="section">
+      <h2 className={tone === 'alert' ? 'is-alert' : undefined}>{title}</h2>
+      {children}
+    </section>
+  );
+}
+
+export function Empty({ children }: { children: ReactNode }) {
+  return <p className="empty">{children}</p>;
+}
+
+const TYPE_ICON: Record<Card['type'], IconName> = { note: 'note', todo: 'todo', diary: 'diary', tag: 'tag' };
+
+export function TagChips({ tagIds }: { tagIds: string[] }) {
+  const { index } = useCards();
+  const tags = resolveTags(index, tagIds);
+  if (!tags.length) return null;
+  return (
+    <span className="chips">
+      {tags.map((t) => (
+        <span className="chip chip--small" key={t.id}>
+          {t.title}
+        </span>
+      ))}
+    </span>
+  );
+}
+
+export function CardRow({ card, detail }: { card: Card; detail?: string }) {
+  const { index } = useCards();
+  const preview = detail ?? cardText(index, card).slice(0, 140);
+  return (
+    <Link className="row row--link" to={cardPath(card)}>
+      <span className="row__icon">
+        <Icon name={TYPE_ICON[card.type]} size={18} />
+      </span>
+      <span className="row__body">
+        <span className="row__title">{displayTitle(card)}</span>
+        {preview && <span className="row__preview">{preview}</span>}
+        <TagChips tagIds={card.tags} />
+      </span>
+    </Link>
+  );
+}
+
+export function TodoRow({ todo, showDue = true }: { todo: TodoCard; showDue?: boolean }) {
+  const { repo } = useCards();
+  const today = useToday();
+  const done = todo.status === 'done';
+  const overdue = !done && todo.due !== null && todo.due < today;
+  return (
+    <div className={`row row--todo${done ? ' is-done' : ''}`}>
+      <label className="check">
+        <input
+          type="checkbox"
+          checked={done}
+          aria-label={`Mark "${displayTitle(todo)}" ${done ? 'not done' : 'done'}`}
+          onChange={() => void repo.update(todo.id, { status: done ? 'open' : 'done' })}
+        />
+      </label>
+      <Link className="row__body" to={cardPath(todo)}>
+        <span className="row__title">{displayTitle(todo)}</span>
+        {showDue && todo.due && <span className={`row__due${overdue ? ' is-alert' : ''}`}>{relativeDay(todo.due, today)}</span>}
+        <TagChips tagIds={todo.tags} />
+      </Link>
+    </div>
+  );
+}
+
+export function TodoList({ todos, showDue }: { todos: TodoCard[]; showDue?: boolean }) {
+  return (
+    <div className="list">
+      {todos.map((t) => (
+        <TodoRow key={t.id} todo={t} showDue={showDue} />
+      ))}
+    </div>
+  );
+}
+
+export function QuickAddTodo({ due, placeholder }: { due: string | null; placeholder: string }) {
+  const { repo } = useCards();
+  const [title, setTitle] = useState('');
+  const submit = (e: FormEvent) => {
+    e.preventDefault();
+    const text = title.trim();
+    if (!text) return;
+    setTitle('');
+    void repo.createTodo({ title: text, due });
+  };
+  return (
+    <form className="quick-add" onSubmit={submit}>
+      <input value={title} onChange={(e) => setTitle(e.target.value)} placeholder={placeholder} aria-label={placeholder} enterKeyHint="done" />
+      <button type="submit" aria-label="Add todo" disabled={!title.trim()}>
+        <Icon name="plus" size={18} />
+      </button>
+    </form>
+  );
+}
+
+export function TitleField({ value, onSave, autoFocus }: { value: string; onSave: (title: string) => void; autoFocus?: boolean }) {
+  const [draft, setDraft] = useState(value);
+  const focused = useRef(false);
+  const timer = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const pending = useRef<string | null>(null);
+  const save = useRef(onSave);
+  save.current = onSave;
+
+  const flush = useRef(() => {
+    if (timer.current) clearTimeout(timer.current);
+    timer.current = null;
+    if (pending.current !== null) {
+      const next = pending.current;
+      pending.current = null;
+      save.current(next);
+    }
+  }).current;
+
+  useEffect(() => {
+    const onHide = () => {
+      if (document.visibilityState === 'hidden') flush();
+    };
+    document.addEventListener('visibilitychange', onHide);
+    window.addEventListener('pagehide', flush);
+    return () => {
+      document.removeEventListener('visibilitychange', onHide);
+      window.removeEventListener('pagehide', flush);
+      flush();
+    };
+  }, [flush]);
+
+  useEffect(() => {
+    if (!focused.current && pending.current === null) setDraft(value);
+  }, [value]);
+
+  return (
+    <textarea
+      className="title-field"
+      rows={1}
+      value={draft}
+      autoFocus={autoFocus}
+      placeholder="Untitled"
+      aria-label="Title"
+      onFocus={() => (focused.current = true)}
+      onBlur={() => {
+        focused.current = false;
+        flush();
+      }}
+      onKeyDown={(e) => {
+        if (e.key === 'Enter') e.preventDefault();
+      }}
+      onChange={(e) => {
+        const next = e.target.value.replace(/\n/g, ' ');
+        setDraft(next);
+        pending.current = next;
+        if (timer.current) clearTimeout(timer.current);
+        timer.current = setTimeout(flush, 300);
+      }}
+    />
+  );
+}
+
+export function TagPicker({ tagIds, onChange }: { tagIds: string[]; onChange: (tags: string[]) => void }) {
+  const { index, repo } = useCards();
+  const [query, setQuery] = useState('');
+  const [open, setOpen] = useState(false);
+  const current = resolveTags(index, tagIds);
+  const q = query.trim().toLowerCase();
+  const options = index.tags.filter((t) => !tagIds.includes(t.id) && t.title.toLowerCase().includes(q)).slice(0, 6);
+  const exact = index.tags.find((t) => t.title.toLowerCase() === q);
+
+  const add = (id: string) => {
+    onChange([...tagIds, id]);
+    setQuery('');
+  };
+  const submit = () => {
+    const title = query.trim();
+    if (!title) return;
+    if (exact) {
+      if (!tagIds.includes(exact.id)) add(exact.id);
+      else setQuery('');
+      return;
+    }
+    const id = repo.newId();
+    void repo.createTag({ id, title });
+    add(id);
+  };
+
+  return (
+    <div className="tag-picker">
+      <div className="chips">
+        {current.map((t) => (
+          <span className="chip" key={t.id}>
+            <Link to={cardPath(t)}>{t.title}</Link>
+            <button type="button" aria-label={`Remove tag ${t.title}`} onClick={() => onChange(tagIds.filter((x) => x !== t.id))}>
+              ×
+            </button>
+          </span>
+        ))}
+        <input
+          className="tag-picker__input"
+          value={query}
+          placeholder="Add tag"
+          aria-label="Add tag"
+          enterKeyHint="done"
+          onChange={(e) => setQuery(e.target.value)}
+          onFocus={() => setOpen(true)}
+          onBlur={() => setOpen(false)}
+          onKeyDown={(e) => {
+            if (e.key === 'Enter') {
+              e.preventDefault();
+              submit();
+            } else if (e.key === 'Backspace' && !query && tagIds.length) {
+              onChange(tagIds.slice(0, -1));
+            }
+          }}
+        />
+      </div>
+      {open && (options.length > 0 || (q && !exact)) && (
+        <div className="tag-picker__options">
+          {options.map((t) => (
+            <button key={t.id} type="button" className="chip chip--option" onMouseDown={(e) => e.preventDefault()} onClick={() => add(t.id)}>
+              {t.title}
+            </button>
+          ))}
+          {q && !exact && (
+            <button type="button" className="chip chip--option chip--new" onMouseDown={(e) => e.preventDefault()} onClick={submit}>
+              Create “{query.trim()}”
+            </button>
+          )}
+        </div>
+      )}
+    </div>
+  );
+}
+
+export function Backlinks({ cardId, isTag }: { cardId: string; isTag?: boolean }) {
+  const { index } = useCards();
+  const links: Backlink[] = index.backlinks.get(cardId) ?? [];
+  const tagged = links.filter((l) => l.kind === 'tag').map((l) => l.from);
+  const seen = new Set(tagged.map((c) => c.id));
+  const linked = links.filter((l) => l.kind === 'link' && !seen.has(l.from.id)).map((l) => l.from);
+  return (
+    <>
+      {isTag && (
+        <Section title={`Tagged (${tagged.length})`}>
+          {tagged.length ? (
+            <div className="list">
+              {tagged.map((c) => (
+                <CardRow key={c.id} card={c} />
+              ))}
+            </div>
+          ) : (
+            <Empty>Nothing has this tag yet.</Empty>
+          )}
+        </Section>
+      )}
+      {linked.length > 0 && (
+        <Section title={`Linked from (${linked.length})`}>
+          <div className="list">
+            {linked.map((c) => (
+              <CardRow key={c.id} card={c} />
+            ))}
+          </div>
+        </Section>
+      )}
+    </>
+  );
+}
+
+/** Soft-deletes a card and offers an undo. */
+export function useDeleteCard() {
+  const { repo } = useCards();
+  const toast = useToast();
+  const navigate = useNavigate();
+  return (card: Card, goTo: string) => {
+    void repo.setDeleted(card.id, true);
+    navigate(goTo, { replace: true });
+    toast('Moved to Trash', { action: { label: 'Undo', run: () => void repo.setDeleted(card.id, false) } });
+  };
+}
+
+export function useNewNote() {
+  const { repo } = useCards();
+  const navigate = useNavigate();
+  return async (tags: string[] = []) => {
+    const card = await repo.createNote({ tags });
+    navigate(cardPath(card), { state: { fresh: true } });
+  };
+}

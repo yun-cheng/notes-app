@@ -89,7 +89,7 @@ Until encryption ships, a tech-savvy person with the unlocked laptop could read 
 ```
 User         id, google_sub, email, name
 Session      token_hash, user_id, expires_at
-Vault        id, owner_id, lock(none|pin), ai_access(off|read|write)
+Vault        id, owner_id, name, lock(none|pin), ai_access(off|read|write), pin_salt, pin_hash, pin_iterations, hidden
 VaultMember  vault_id, user_id, role(owner|editor|viewer)
 Card         id, home_vault_id, type(note|todo|diary|tag), payload(TipTap JSON + fields)
 Share        card_id, target(vault|user|public_link), role(view|comment|edit), expires_at
@@ -103,7 +103,7 @@ Links and tag associations live inside the card payload.
 
 1. Works on one device: notes, todos, diary; tags, links and backlinks; search; Today and Calendar views; installable PWA. **Built and hosted; not yet tried on a real Android phone.**
 2. Sync and accounts: Worker and D1, Google sign-in, multi-user data model (only the owner using it). **Built and deployed; a real Google sign-in has not been tried yet.**
-3. Private vaults: PIN, optional fingerprint, auto-lock, hidden from search.
+3. Private vaults: PIN, optional fingerprint, auto-lock, hidden from search. **Built and tested locally; not deployed. Run `npm run db:migrate:remote` before deploying it.**
 4. MCP server.
 5. Photos.
 6. Sharing vaults and single notes (roles, comments, public links).
@@ -121,7 +121,7 @@ Later: push reminders for todos, Tauri wrapper if PWA limits hurt.
 
 ## Open questions
 
-None. Next step is the first real sign-in, on the browser that holds the existing notes, then Milestone 3.
+None. Next steps: the first real sign-in on the browser that holds the existing notes, then deploying Milestone 3, then Milestone 4.
 
 ## Implementation notes from Milestone 1
 
@@ -141,3 +141,14 @@ None. Next step is the first real sign-in, on the browser that holds the existin
 - A push carries the last server version the device saw. Same version: it applies. Different: the newest `updated_at` wins, and the losing text is kept as a "(conflict copy)" card. No copy is made if only a todo's status or due date or a tag differs.
 - Each account's vault ID is derived from its user ID, so diary IDs match across devices.
 - Who can sign up is limited by the Google consent screen while it stays in Testing mode. Publishing it would need an allowlist first.
+
+## Implementation notes from Milestone 3
+
+- A PIN is stored as a salted PBKDF2 verifier and syncs with the vault, so one PIN works on every device. It gates the app and is not encryption, so it doesn't protect against someone reading browser storage or the server's database until Milestone 7.
+- Open vaults are held in memory only. They lock when the app goes to the background, after five idle minutes, and on reload. After five wrong PINs, attempts wait 30 seconds.
+- Locked cards are removed where the index is built, so lists, search, backlinks, Today, Calendar and Markdown export can't reach them. Links into a locked vault read "Locked", and a JSON backup leaves locked vaults out.
+- Each account's default vault can't be locked, because new cards go there.
+- New diary entries go to the oldest private vault if there is one, otherwise the default vault. Existing entries stay where they are unless moved.
+- A hidden vault is unlocked by entering its PIN under Vaults, and its name is not shown until then.
+- Fingerprint unlock is per device and off by default. It uses the device's built-in authenticator through WebAuthn, and has not been tried on a real phone.
+- A forgotten PIN can't be recovered yet. Vault creation and PIN changes need a connection.

@@ -30,4 +30,35 @@ describe('DexieStore', () => {
     await seen;
     expect(counts.at(-1)).toBe(1);
   });
+  it('tracks unpushed changes and protects them from remote updates', async () => {
+    const dx = new DexieStore(`t-${Math.random()}`);
+    await dx.putCards([rec('a', 5)]);
+    expect((await dx.listDirty()).map((r) => r.id)).toEqual(['a']);
+    await dx.applyRemote([{ ...rec('a', 9), seq: 3 }, { ...rec('b', 9), seq: 4 }]);
+    expect((await dx.getCard('a'))?.updated_at).toBe(5);
+    expect((await dx.getCard('b'))?.seq).toBe(4);
+    expect((await dx.listDirty()).map((r) => r.id)).toEqual(['a']);
+  });
+  it('keeps a card dirty if it changed after the push began', async () => {
+    const dx = new DexieStore(`t-${Math.random()}`);
+    await dx.putCards([rec('a', 5)]);
+    await dx.markSynced('a', 4, 10);
+    expect((await dx.getCard('a'))?.seq).toBe(10);
+    expect(await dx.listDirty()).toHaveLength(1);
+    await dx.markSynced('a', 5, 11);
+    expect(await dx.listDirty()).toHaveLength(0);
+  });
+  it('replaces a card outright with the server version', async () => {
+    const dx = new DexieStore(`t-${Math.random()}`);
+    await dx.putCards([rec('a', 5)]);
+    await dx.forceRemote({ ...rec('a', 9), seq: 2 });
+    expect((await dx.getCard('a'))?.updated_at).toBe(9);
+    expect(await dx.listDirty()).toHaveLength(0);
+  });
+  it('stores metadata', async () => {
+    const dx = new DexieStore(`t-${Math.random()}`);
+    expect(await dx.getMeta('cursor')).toBeUndefined();
+    await dx.setMeta('cursor', 12);
+    expect(await dx.getMeta('cursor')).toBe(12);
+  });
 });

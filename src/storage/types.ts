@@ -4,7 +4,17 @@ import type { CardPayload, CardRecord, Vault } from '../domain/types';
 export interface CardStore {
   listCards(): Promise<CardRecord[]>;
   getCard(id: string): Promise<CardRecord | undefined>;
+  /** Saves local changes and marks them as needing to be pushed. */
   putCards(records: CardRecord[]): Promise<void>;
+  listDirty(): Promise<CardRecord[]>;
+  /** Saves records from the server, skipping any card with unpushed local changes. */
+  applyRemote(records: CardRecord[]): Promise<void>;
+  /** Replaces a card with the server's version and discards its unpushed state. */
+  forceRemote(record: CardRecord): Promise<void>;
+  /** Records the seq a push was given. The card stays dirty if it changed since `updatedAt`. */
+  markSynced(id: string, updatedAt: number, seq: number): Promise<void>;
+  getMeta(key: string): Promise<unknown>;
+  setMeta(key: string, value: unknown): Promise<void>;
   listVaults(): Promise<Vault[]>;
   putVaults(vaults: Vault[]): Promise<void>;
   /** Calls back with every record now and after any change, including from other tabs. */

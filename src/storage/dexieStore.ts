@@ -77,6 +77,13 @@ export class DexieStore implements CardStore {
   async putVaults(vaults: Vault[]) {
     await this.db.vaults.bulkPut(vaults);
   }
+  subscribeVaults(listener: (vaults: Vault[]) => void) {
+    const subscription = liveQuery(() => this.db.vaults.toArray()).subscribe({
+      next: listener,
+      error: (err) => console.error('Reading vaults failed', err),
+    });
+    return () => subscription.unsubscribe();
+  }
   async destroy() {
     await this.db.delete();
   }

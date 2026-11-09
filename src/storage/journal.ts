@@ -12,7 +12,7 @@ export type DiaryPatch = Partial<Pick<DiaryCard, 'content' | 'tags'>>;
 
 export type JournalOp =
   | { kind: 'update'; at: number; id: string; patch: CardPatch }
-  | { kind: 'diary'; at: number; date: string; patch: DiaryPatch; existingId?: string };
+  | { kind: 'diary'; at: number; date: string; patch: DiaryPatch; existingId?: string; vaultId?: string };
 
 /**
  * Edits not yet committed to the store. IndexedDB is asynchronous, so a write started

@@ -5,7 +5,7 @@ import { MemoryStore } from './memoryStore';
 import type { Journal, JournalOp } from './journal';
 import { jsonCodec, type PayloadCodec } from './types';
 import { makeBackup } from '../domain/backup';
-import type { DiaryCard, TodoCard } from '../domain/types';
+import type { DiaryCard, TodoCard, Vault } from '../domain/types';
 
 const doc = (t: string) => ({ type: 'doc', content: [{ type: 'paragraph', content: [{ type: 'text', text: t }] }] });
 
@@ -151,6 +151,48 @@ describe('journal', () => {
     journal.save([{ kind: 'update', at: card.updatedAt, id: card.id, patch: { title: 'stale' } }]);
     await r.init();
     expect((await r.decode((await store.getCard(card.id))!)).title).toBe('newest');
+  });
+});
+
+describe('vaults', () => {
+  const vault = (id: string, created_at: number): Vault => ({ id, name: id, owner_id: 'u', lock: 'none', ai_access: 'off', created_at, pin: null, hidden: false });
+
+  it('creates cards in a chosen vault', async () => {
+    const card = await repo.createNote({ title: 'x', vaultId: 'private' });
+    expect(card.vaultId).toBe('private');
+    expect((await repo.createNote({ title: 'y' })).vaultId).not.toBe('private');
+  });
+  it('files a diary entry under the chosen vault', async () => {
+    const card = await repo.saveDiary('2026-11-10', { content: doc('x') }, undefined, 'private');
+    expect(card.vaultId).toBe('private');
+    expect(card.id).toBe(diaryId('private', '2026-11-10'));
+    const again = await repo.saveDiary('2026-11-10', { tags: ['t'] }, undefined, 'private');
+    expect(again.id).toBe(card.id);
+    expect(await store.listCards()).toHaveLength(1);
+  });
+  it('moves a card, marking it for sync', async () => {
+    const card = await repo.createNote({ title: 'x' });
+    await store.markSynced(card.id, card.updatedAt, 3);
+    await repo.moveToVault(card.id, 'private');
+    const record = (await store.getCard(card.id))!;
+    expect(record.vault_id).toBe('private');
+    expect(record.seq).toBe(3);
+    expect((await store.listDirty()).map((r) => r.id)).toEqual([card.id]);
+  });
+  it('leaves locked vaults out of an export', async () => {
+    await store.putVaults([vault('private', 5000)]);
+    await repo.createNote({ title: 'open' });
+    await repo.createNote({ title: 'secret', vaultId: 'private' });
+    const { cards, vaults } = await repo.exportAll(new Set(['private']));
+    expect(cards.map((c) => c.title)).toEqual(['open']);
+    expect(vaults.map((v) => v.id)).not.toContain('private');
+  });
+  it('tells subscribers when vaults change', async () => {
+    const seen: number[] = [];
+    const stop = store.subscribeVaults((v) => seen.push(v.length));
+    await repo.putVaults([vault('a', 5000)]);
+    stop();
+    expect(seen).toEqual([1, 2]);
   });
 });
 

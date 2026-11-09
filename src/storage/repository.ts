@@ -60,8 +60,8 @@ export class CardRepository {
         if (card && card.updatedAt < op.at) await this.applyUpdate(card, op.patch);
       } else {
         const vault = await this.defaultVault();
-        const card = await this.read(op.existingId ?? diaryId(vault.id, op.date));
-        if (!card || card.updatedAt < op.at) await this.applyDiary(op.date, op.patch, op.existingId);
+        const card = await this.read(op.existingId ?? diaryId(op.vaultId ?? vault.id, op.date));
+        if (!card || card.updatedAt < op.at) await this.applyDiary(op.date, op.patch, op.existingId, op.vaultId);
       }
     }
     this.journal.save(this.uncommitted);
@@ -98,16 +98,16 @@ export class CardRepository {
     return card;
   }
 
-  private async newEnvelope(id: string) {
-    const vault = await this.defaultVault();
+  private async newEnvelope(id: string, vaultId?: string) {
+    const target = vaultId ?? (await this.defaultVault()).id;
     const at = this.now();
-    return { id, vaultId: vault.id, updatedAt: at, createdAt: at, deleted: false, seq: 0 };
+    return { id, vaultId: target, updatedAt: at, createdAt: at, deleted: false, seq: 0 };
   }
 
-  createNote(init: { id?: string; title?: string; tags?: string[] } = {}): Promise<Card> {
+  createNote(init: { id?: string; title?: string; tags?: string[]; vaultId?: string } = {}): Promise<Card> {
     const id = init.id ?? this.newId();
     return this.enqueue(async () =>
-      this.write({ ...(await this.newEnvelope(id)), type: 'note', title: init.title ?? '', content: EMPTY_DOC, tags: init.tags ?? [] }),
+      this.write({ ...(await this.newEnvelope(id, init.vaultId)), type: 'note', title: init.title ?? '', content: EMPTY_DOC, tags: init.tags ?? [] }),
     );
   }
 
@@ -147,17 +147,17 @@ export class CardRepository {
   }
 
   /** Diary entries are created on first write. Their ID comes from the date, so two devices can't create two entries for one day. */
-  saveDiary(date: string, patch: DiaryPatch, existingId?: string): Promise<Card> {
-    return this.journaled({ kind: 'diary', at: this.now(), date, patch, existingId }, () => this.applyDiary(date, patch, existingId));
+  saveDiary(date: string, patch: DiaryPatch, existingId?: string, vaultId?: string): Promise<Card> {
+    return this.journaled({ kind: 'diary', at: this.now(), date, patch, existingId, vaultId }, () => this.applyDiary(date, patch, existingId, vaultId));
   }
 
-  private async applyDiary(date: string, patch: DiaryPatch, existingId?: string): Promise<Card> {
-    const vault = await this.defaultVault();
-    const id = existingId ?? diaryId(vault.id, date);
+  private async applyDiary(date: string, patch: DiaryPatch, existingId?: string, vaultId?: string): Promise<Card> {
+    const target = vaultId ?? (await this.defaultVault()).id;
+    const id = existingId ?? diaryId(target, date);
     const card = await this.read(id);
     if (card && !card.deleted) return this.write({ ...card, ...patch, updatedAt: this.now() } as Card);
     const content: JSONNode = patch.content ?? EMPTY_DOC;
-    return this.write({ ...(await this.newEnvelope(id)), type: 'diary', date, title: '', content, tags: patch.tags ?? [] });
+    return this.write({ ...(await this.newEnvelope(id, target)), type: 'diary', date, title: '', content, tags: patch.tags ?? [] });
   }
 
   setDeleted(id: string, deleted: boolean): Promise<void> {
@@ -167,10 +167,31 @@ export class CardRepository {
     });
   }
 
-  async exportAll(): Promise<{ vaults: Vault[]; cards: Card[] }> {
+  moveToVault(id: string, vaultId: string): Promise<void> {
+    return this.enqueue(async () => {
+      const card = await this.read(id);
+      if (card && card.vaultId !== vaultId) await this.write({ ...card, vaultId, updatedAt: this.now() });
+    });
+  }
+
+  putVaults(vaults: Vault[]): Promise<void> {
+    return this.enqueue(() => this.store.putVaults(vaults));
+  }
+
+  getMeta(key: string): Promise<unknown> {
+    return this.store.getMeta(key);
+  }
+
+  setMeta(key: string, value: unknown): Promise<void> {
+    return this.store.setMeta(key, value);
+  }
+
+  /** Everything outside `locked`, so a backup can't be used to read a vault that is still locked. */
+  async exportAll(locked: ReadonlySet<string> = new Set()): Promise<{ vaults: Vault[]; cards: Card[] }> {
     await this.queue;
     const [vaults, records] = await Promise.all([this.store.listVaults(), this.store.listCards()]);
-    return { vaults, cards: await Promise.all(records.map((r) => this.decode(r))) };
+    const cards = await Promise.all(records.filter((r) => !locked.has(r.vault_id)).map((r) => this.decode(r)));
+    return { vaults: vaults.filter((v) => !locked.has(v.id)), cards };
   }
 
   /** Merges a backup, keeping whichever version of each card is newest. Cards from other vaults move into this account's. */

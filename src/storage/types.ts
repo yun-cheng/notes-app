@@ -17,6 +17,8 @@ export interface CardStore {
   setMeta(key: string, value: unknown): Promise<void>;
   listVaults(): Promise<Vault[]>;
   putVaults(vaults: Vault[]): Promise<void>;
+  /** Calls back with every vault now and after any change. */
+  subscribeVaults(listener: (vaults: Vault[]) => void): () => void;
   /** Calls back with every record now and after any change, including from other tabs. */
   subscribe(listener: (records: CardRecord[]) => void): () => void;
 }

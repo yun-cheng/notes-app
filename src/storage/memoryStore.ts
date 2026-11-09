@@ -7,6 +7,7 @@ export class MemoryStore implements CardStore {
   private dirty = new Set<string>();
   private meta = new Map<string, unknown>();
   private listeners = new Set<(records: CardRecord[]) => void>();
+  private vaultListeners = new Set<(vaults: Vault[]) => void>();
 
   async listCards() {
     return [...this.cards.values()];
@@ -56,6 +57,13 @@ export class MemoryStore implements CardStore {
   }
   async putVaults(vaults: Vault[]) {
     vaults.forEach((v) => this.vaults.set(v.id, v));
+    const all = [...this.vaults.values()];
+    this.vaultListeners.forEach((l) => l(all));
+  }
+  subscribeVaults(listener: (vaults: Vault[]) => void) {
+    this.vaultListeners.add(listener);
+    listener([...this.vaults.values()]);
+    return () => void this.vaultListeners.delete(listener);
   }
   subscribe(listener: (records: CardRecord[]) => void) {
     this.listeners.add(listener);

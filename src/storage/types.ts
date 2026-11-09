@@ -1,0 +1,23 @@
+import type { CardPayload, CardRecord, Vault } from '../domain/types';
+
+/** Device storage. The UI never touches this directly, so a Tauri backend can replace it. */
+export interface CardStore {
+  listCards(): Promise<CardRecord[]>;
+  getCard(id: string): Promise<CardRecord | undefined>;
+  putCards(records: CardRecord[]): Promise<void>;
+  listVaults(): Promise<Vault[]>;
+  putVaults(vaults: Vault[]): Promise<void>;
+  /** Calls back with every record now and after any change, including from other tabs. */
+  subscribe(listener: (records: CardRecord[]) => void): () => void;
+}
+
+/** Turns a card payload into the opaque string that is stored. Encryption replaces this later. */
+export interface PayloadCodec {
+  encode(payload: CardPayload): Promise<string>;
+  decode(data: string): Promise<CardPayload>;
+}
+
+export const jsonCodec: PayloadCodec = {
+  encode: async (payload) => JSON.stringify(payload),
+  decode: async (data) => JSON.parse(data) as CardPayload,
+};

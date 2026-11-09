@@ -1,7 +1,9 @@
 import { useEffect } from 'react';
 import { Navigate, NavLink, Outlet, Route, Routes, useNavigate } from 'react-router';
 import { registerSW } from 'virtual:pwa-register';
-import { CardsProvider, useCards } from '../state/CardsContext';
+import { AuthGate, useAccount } from '../auth/AuthContext';
+import { useCards, useSyncStatus } from '../state/CardsContext';
+import { describeSync } from '../sync/engine';
 import { useNewNote } from './components';
 import { Icon, type IconName } from './Icon';
 import { CardPage, DayPage } from './pages/cards';
@@ -21,6 +23,7 @@ const MAIN_NAV: { to: string; label: string; icon: IconName }[] = [
 function Sidebar() {
   const { index } = useCards();
   const newNote = useNewNote();
+  const sync = useSyncStatus();
   return (
     <aside className="sidebar">
       <div className="sidebar__brand">Notes</div>
@@ -49,11 +52,28 @@ function Sidebar() {
           <span>All tags</span>
         </NavLink>
       </nav>
-      <NavLink to="/settings" className="nav-item sidebar__foot">
+      <p className="sidebar__sync" role="status">
+        {describeSync(sync)}
+      </p>
+      <NavLink to="/settings" className="nav-item">
         <Icon name="settings" />
         <span>Backup & settings</span>
       </NavLink>
     </aside>
+  );
+}
+
+function SessionBanner() {
+  const { state } = useSyncStatus();
+  const { signOut } = useAccount();
+  if (state !== 'expired') return null;
+  return (
+    <div className="banner" role="alert">
+      <span>Your session ended. Your notes are safe here, but they won't sync until you sign in again.</span>
+      <button type="button" className="btn" onClick={() => void signOut()}>
+        Sign in again
+      </button>
+    </div>
   );
 }
 
@@ -92,6 +112,7 @@ function Layout() {
     <div className="app">
       <Sidebar />
       <main className="main">
+        <SessionBanner />
         <Outlet />
       </main>
       <nav className="tabbar" aria-label="Main">
@@ -109,7 +130,7 @@ function Layout() {
 export function App() {
   return (
     <ToastProvider>
-      <CardsProvider>
+      <AuthGate>
         <Routes>
           <Route element={<Layout />}>
             <Route index element={<Navigate to="/today" replace />} />
@@ -125,7 +146,7 @@ export function App() {
             <Route path="*" element={<Navigate to="/today" replace />} />
           </Route>
         </Routes>
-      </CardsProvider>
+      </AuthGate>
     </ToastProvider>
   );
 }

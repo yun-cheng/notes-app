@@ -1,4 +1,4 @@
-import { createContext, useContext, useEffect, useState, type ReactNode } from 'react';
+import { createContext, useContext, useEffect, useState, useSyncExternalStore, type ReactNode } from 'react';
 import { buildIndex, type CardIndex } from '../domain/cardIndex';
 import { toDateKey } from '../domain/dates';
 import type { Card, CardRecord } from '../domain/types';
@@ -6,17 +6,33 @@ import { DexieStore } from '../storage/dexieStore';
 import { localStorageJournal } from '../storage/journal';
 import { CardRepository } from '../storage/repository';
 import { jsonCodec } from '../storage/types';
+import { SyncEngine, type SyncStatus } from '../sync/engine';
+import { httpTransport } from '../sync/http';
 
-const repo = new CardRepository(new DexieStore(), jsonCodec, undefined, undefined, localStorageJournal());
+/** Each account has its own database and journal, so accounts on one browser stay apart. */
+export function openAccountStorage(accountId: string) {
+  const store = new DexieStore(`notes-app:user:${accountId}`);
+  const repo = new CardRepository(store, jsonCodec, undefined, undefined, localStorageJournal(`notes-app:journal:${accountId}`));
+  return { store, repo };
+}
+
+function openAccount(accountId: string) {
+  const { repo } = openAccountStorage(accountId);
+  const engine = new SyncEngine(repo, httpTransport);
+  repo.onChange = () => engine.schedule();
+  return { repo, engine };
+}
 
 interface CardsValue {
   index: CardIndex;
   repo: CardRepository;
+  engine: SyncEngine;
 }
 
 const CardsContext = createContext<CardsValue | null>(null);
 
-export function CardsProvider({ children }: { children: ReactNode }) {
+export function CardsProvider({ accountId, children }: { accountId: string; children: ReactNode }) {
+  const [{ repo, engine }] = useState(() => openAccount(accountId));
   const [index, setIndex] = useState<CardIndex | null>(null);
   const [error, setError] = useState<string | null>(null);
 
@@ -39,7 +55,13 @@ export function CardsProvider({ children }: { children: ReactNode }) {
       if (active && run === latest) setIndex(buildIndex(cards));
     };
 
-    repo.init().catch((e: unknown) => setError(String(e)));
+    let stopSync: (() => void) | null = null;
+    repo
+      .init()
+      .then(() => {
+        if (active) stopSync = engine.start();
+      })
+      .catch((e: unknown) => setError(String(e)));
     void navigator.storage?.persist?.();
     const stop = repo.store.subscribe((records) => {
       load(records).catch((e: unknown) => setError(String(e)));
@@ -47,8 +69,9 @@ export function CardsProvider({ children }: { children: ReactNode }) {
     return () => {
       active = false;
       stop();
+      stopSync?.();
     };
-  }, []);
+  }, [repo, engine]);
 
   if (error) {
     return (
@@ -60,13 +83,18 @@ export function CardsProvider({ children }: { children: ReactNode }) {
     );
   }
   if (!index) return <div className="boot" aria-busy="true" />;
-  return <CardsContext.Provider value={{ index, repo }}>{children}</CardsContext.Provider>;
+  return <CardsContext.Provider value={{ index, repo, engine }}>{children}</CardsContext.Provider>;
 }
 
 export function useCards(): CardsValue {
   const value = useContext(CardsContext);
   if (!value) throw new Error('useCards must be used inside CardsProvider');
   return value;
+}
+
+export function useSyncStatus(): SyncStatus {
+  const { engine } = useCards();
+  return useSyncExternalStore(engine.subscribe, engine.getStatus);
 }
 
 /** Today's date key, kept current if the app stays open past midnight. */

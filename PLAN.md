@@ -75,7 +75,7 @@ Until encryption ships, a tech-savvy person with the unlocked laptop could read 
 - Keep storage and crypto behind small interfaces so the same UI can later be wrapped in Tauri 2 (macOS and Android).
 - Call `navigator.storage.persist()`. Build export/backup early, including Markdown plus image files.
 - **Note format:** TipTap JSON stored in the card, plus Markdown export. Links by card ID survive renames, and it supports comments and live co-editing through Yjs.
-- **Sync server:** hosted, not on the Mac mini. Cloudflare Worker (Hono) with D1. `POST /sync/push` assigns an increasing `seq`; `GET /sync/pull?since=<seq>`. Conflict: newest version per card wins, the loser is kept as a conflict copy. Avoid sync engines that need to read the data (PowerSync, Dexie Cloud); avoid Supabase free tier, which pauses when inactive.
+- **Sync server:** hosted, not on the Mac mini. Hono with D1, running as a Pages Function (a Worker on the site's own address, so sessions can use a secure cookie). `POST /api/sync/push` assigns an increasing `seq`; `GET /api/sync/pull?since=<seq>`. Conflict: newest version per card wins, the loser is kept as a conflict copy. Avoid sync engines that need to read the data (PowerSync, Dexie Cloud); avoid Supabase free tier, which pauses when inactive.
 - **Auth:** Google sign-in. Single user at first, but multi-user in the data model from day one; every request checks vault membership.
 - **Photos:** stored in Google Drive, behind a storage interface, with cards referencing their own attachment ID. Offline photos queue on the device and upload later, with small previews cached locally.
   - Uses the `drive.file` scope; the Worker does the one-time OAuth login and holds the refresh token, handing the app short-lived tokens so the phone isn't re-prompted hourly.
@@ -87,7 +87,8 @@ Until encryption ships, a tech-savvy person with the unlocked laptop could read 
 ## Data model
 
 ```
-User         id, email
+User         id, google_sub, email, name
+Session      token_hash, user_id, expires_at
 Vault        id, owner_id, lock(none|pin), ai_access(off|read|write)
 VaultMember  vault_id, user_id, role(owner|editor|viewer)
 Card         id, home_vault_id, type(note|todo|diary|tag), payload(TipTap JSON + fields)
@@ -101,7 +102,7 @@ Links and tag associations live inside the card payload.
 ## Milestones
 
 1. Works on one device: notes, todos, diary; tags, links and backlinks; search; Today and Calendar views; installable PWA. **Built and hosted; not yet tried on a real Android phone.**
-2. Sync and accounts: Worker and D1, Google sign-in, multi-user data model (only the owner using it).
+2. Sync and accounts: Worker and D1, Google sign-in, multi-user data model (only the owner using it). **Built and deployed; a real Google sign-in has not been tried yet.**
 3. Private vaults: PIN, optional fingerprint, auto-lock, hidden from search.
 4. MCP server.
 5. Photos.
@@ -120,13 +121,23 @@ Later: push reminders for todos, Tauri wrapper if PWA limits hurt.
 
 ## Open questions
 
-None. Next step is trying Milestone 1 on the phone, then Milestone 2.
+None. Next step is the first real sign-in, on the browser that holds the existing notes, then Milestone 3.
 
 ## Implementation notes from Milestone 1
 
 - Unsaved edits go to a synchronous `localStorage` journal first and are replayed on next launch, because an IndexedDB write started as a page closes never finishes. The journal holds plaintext, so Milestone 7 must encrypt or remove it.
 - Diary card IDs come from the vault and date, so two devices can't create two entries for one day once sync exists.
-- There is one default vault, created on first launch, with no vault UI until Milestone 3.
-- Backups are JSON and restore by merging, newest version of each card wins. Markdown export is one-way.
+- Each account has one default vault, with no vault UI until Milestone 3.
+- Backups are JSON and restore by merging, newest version of each card wins, and cards from other vaults move into the account's vault. Markdown export is one-way.
 - Search treats each Chinese, Japanese or Korean character as a term, so text in those scripts can be found without spaces.
-- The app is hosted on Cloudflare Pages at https://notes-app-afc.pages.dev (`npm run deploy`). It is a regular Pages project with no Git connection, so deploys are manual and pushes don't trigger them. It serves only the app, and notes stay in each visitor's browser until Milestone 2.
+- The app is hosted on Cloudflare Pages at https://notes-app-afc.pages.dev (`npm run deploy`). It is a regular Pages project with no Git connection, so deploys are manual and pushes don't trigger them.
+
+## Implementation notes from Milestone 2
+
+- The Google Cloud project is `notes-app-514219`. Its consent screen is in Testing mode, and test users are added under Google Auth Platform, Audience.
+- Sign-in is required. Google's ID token is verified on the server, which then issues its own 90-day session in an HttpOnly, SameSite=Strict cookie. Only a hash of the session token is stored.
+- Each account has its own local database and journal, so accounts on one browser stay apart in the app. Signing out keeps that account's local data, and unsynced changes go up at next sign-in. Until encryption ships, this does not stop someone tech-savvy with the unlocked device.
+- The first account to sign in on a browser takes over notes written before accounts existed, moved into that account's vault.
+- A push carries the last server version the device saw. Same version: it applies. Different: the newest `updated_at` wins, and the losing text is kept as a "(conflict copy)" card. No copy is made if only a todo's status or due date or a tag differs.
+- Each account's vault ID is derived from its user ID, so diary IDs match across devices.
+- Who can sign up is limited by the Google consent screen while it stays in Testing mode. Publishing it would need an allowlist first.

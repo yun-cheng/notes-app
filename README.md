@@ -4,7 +4,7 @@ One local-first app for notes, todos and a diary, built as an installable PWA. `
 
 Decisions, the data model and the milestones are in [PLAN.md](PLAN.md).
 
-**Status:** Milestone 1 is built: everything works on one device. There is no sync or account yet, so notes stay in the browser they were written in. Use **Backup & settings** to download a backup.
+**Status:** Milestones 1 and 2 are built: notes work offline and sync between devices through a Google account.
 
 **Live:** https://notes-app-afc.pages.dev, deployed manually with `npm run deploy`.
 
@@ -14,8 +14,14 @@ Needs Node 22 or later.
 
 ```bash
 npm install
-npm run dev
+npm run db:migrate:local
+npm run build
+npm run dev:api
 ```
+
+Then, in a second terminal, start the app with `npm run dev`. The API runs on port 8788 and Vite proxies `/api` to it. Rebuild only when you want `dev:api` itself to serve the latest app.
+
+Sign-in needs a Google OAuth client ID in `GOOGLE_CLIENT_ID` in `wrangler.jsonc`, with `http://localhost:5191` as an authorized origin.
 
 | Command | What it does |
 | --- | --- |
@@ -24,7 +30,10 @@ npm run dev
 | `npm run typecheck` | Check types |
 | `npm run build` | Typecheck and build to `dist/` |
 | `npm run preview` | Serve the build, with the service worker active |
-| `npm run deploy` | Build and publish to Cloudflare Pages (needs `npx wrangler login` first) |
+| `npm run deploy` | Build and publish to Cloudflare Pages (needs `npx wrangler login` first; run `db:migrate:remote` first if the schema changed) |
+| `npm run dev:api` | Run the API and a local D1 database |
+| `npm run db:migrate:local` | Apply database migrations locally |
+| `npm run db:migrate:remote` | Apply database migrations to production |
 | `npm run icons` | Regenerate the PWA icons from `public/icon.svg` |
 
 The service worker only runs in the built app, so use `build` then `preview` to test offline behaviour. Installing on a phone needs HTTPS.
@@ -36,7 +45,12 @@ src/
   domain/   Card types and pure logic: links, backlinks, todo views, search, Markdown, backup format
   storage/  CardStore interface, IndexedDB and in-memory stores, CardRepository, write-ahead journal
   state/    React context that loads cards and builds the derived index
+  sync/     Sync engine, HTTP transport, and the protocol shared with the server
+  auth/     Google sign-in screen and the account gate
   ui/       App shell, shared components, pages, and the TipTap editor
+server/     Hono API: Google token check, sessions, push and pull
+functions/  Cloudflare Pages entry point for the API
+migrations/ D1 schema
 ```
 
 ## How it fits together
@@ -46,4 +60,6 @@ src/
 - **Writes run one at a time.** The repository queues them so overlapping saves can't overwrite each other.
 - **Edits are journaled.** Each edit goes to `localStorage` synchronously, is cleared once committed, and is replayed on next launch, so closing the page mid-save loses nothing.
 - **Backlinks and search are derived on each device.** `buildIndex` recomputes them from the cards, and they are never stored or synced.
+- **Sync never blocks writing.** Edits save locally first and are pushed in the background. Remote changes share the write queue, and never overwrite unpushed edits.
+- **Each account has its own local database**, and the server checks vault membership on every request.
 - **Dates are local calendar days** stored as `YYYY-MM-DD` keys, never UTC instants.

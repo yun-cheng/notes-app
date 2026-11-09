@@ -1,5 +1,7 @@
 import { EMPTY_DOC, type Card, type CardPayload, type CardRecord, type JSONNode, type Vault } from '../domain/types';
 import type { Backup } from '../domain/backup';
+import { isBlank } from '../domain/content';
+import { diaryId, rehomeCards } from '../domain/rehome';
 import { noJournal, type CardPatch, type DiaryPatch, type Journal, type JournalOp } from './journal';
 import type { CardStore, PayloadCodec } from './types';
 
@@ -9,13 +11,13 @@ export interface ImportResult {
   skipped: number;
 }
 
-export const diaryId = (vaultId: string, date: string) => `diary:${vaultId}:${date}`;
-
 /** All card writes go through here, one at a time, so overlapping saves can't overwrite each other. */
 export class CardRepository {
   private queue: Promise<unknown> = Promise.resolve();
   private vault: Vault | null = null;
   private uncommitted: JournalOp[] = [];
+  /** Called after any local change, so sync can be scheduled. */
+  onChange: (() => void) | null = null;
 
   constructor(
     readonly store: CardStore,
@@ -92,6 +94,7 @@ export class CardRepository {
 
   private async write(card: Card): Promise<Card> {
     await this.store.putCards([await this.encode(card)]);
+    this.onChange?.();
     return card;
   }
 
@@ -170,17 +173,17 @@ export class CardRepository {
     return { vaults, cards: await Promise.all(records.map((r) => this.decode(r))) };
   }
 
-  /** Merges a backup, keeping whichever version of each card is newest. */
+  /** Merges a backup, keeping whichever version of each card is newest. Cards from other vaults move into this account's. */
   importBackup(backup: Backup): Promise<ImportResult> {
     return this.enqueue(async () => {
+      const vault = await this.defaultVault();
       const known = new Set((await this.store.listVaults()).map((v) => v.id));
-      await this.store.putVaults(backup.vaults.filter((v) => !known.has(v.id)));
-      this.vault = null;
+      const incoming = rehomeCards(backup.cards, known, vault.id);
 
       const existing = new Map((await this.store.listCards()).map((r) => [r.id, r]));
       const result: ImportResult = { added: 0, updated: 0, skipped: 0 };
       const records: CardRecord[] = [];
-      for (const card of backup.cards) {
+      for (const card of incoming) {
         const current = existing.get(card.id);
         if (current && current.updated_at >= card.updatedAt) {
           result.skipped++;
@@ -188,10 +191,77 @@ export class CardRepository {
         }
         if (current) result.updated++;
         else result.added++;
-        records.push(await this.encode({ ...card, deleted: !!card.deleted, seq: 0 }));
+        records.push(await this.encode({ ...card, deleted: !!card.deleted, seq: current?.seq ?? 0 }));
       }
-      if (records.length) await this.store.putCards(records);
+      if (records.length) {
+        await this.store.putCards(records);
+        this.onChange?.();
+      }
       return result;
+    });
+  }
+
+  // Sync. These share the write queue, so a remote change can't land in the middle of a local edit.
+
+  /** Records waiting to be pushed. A blank card that never reached the server stays local. */
+  pushable(limit = Infinity, exclude: ReadonlySet<string> = new Set()): Promise<CardRecord[]> {
+    return this.enqueue(async () => {
+      const out: CardRecord[] = [];
+      for (const record of await this.store.listDirty()) {
+        if (out.length >= limit) break;
+        if (exclude.has(record.id)) continue;
+        if (record.seq === 0 && isBlank(await this.decode(record))) continue;
+        out.push(record);
+      }
+      return out;
+    });
+  }
+
+  applyRemote(records: CardRecord[]): Promise<void> {
+    return this.enqueue(() => this.store.applyRemote(records));
+  }
+
+  forceRemote(record: CardRecord): Promise<void> {
+    return this.enqueue(() => this.store.forceRemote(record));
+  }
+
+  markSynced(id: string, updatedAt: number, seq: number): Promise<void> {
+    return this.enqueue(() => this.store.markSynced(id, updatedAt, seq));
+  }
+
+  async getCursor(): Promise<number> {
+    return Number((await this.store.getMeta('cursor')) ?? 0);
+  }
+
+  setCursor(seq: number): Promise<void> {
+    return this.store.setMeta('cursor', seq);
+  }
+
+  /** Keeps the losing side of a conflict as its own card, when it holds text the winner doesn't. */
+  saveConflictCopy(loserRecord: CardRecord, winnerRecord: CardRecord): Promise<void> {
+    return this.enqueue(async () => {
+      const [loser, winner] = await Promise.all([this.decode(loserRecord), this.decode(winnerRecord)]);
+      if (loser.deleted || loser.type === 'tag' || isBlank(loser)) return;
+      if (loser.title === winner.title && JSON.stringify(loser.content) === JSON.stringify(winner.content)) return;
+
+      const at = this.now();
+      const title = loser.type === 'diary' ? `Diary ${loser.date} (conflict copy)` : `${loser.title.trim() || 'Untitled'} (conflict copy)`;
+      const common = {
+        id: this.newId(),
+        vaultId: loser.vaultId,
+        updatedAt: at,
+        createdAt: loser.createdAt,
+        deleted: false,
+        seq: 0,
+        title,
+        content: loser.content,
+        tags: loser.tags,
+      };
+      await this.write(
+        loser.type === 'todo'
+          ? { ...common, type: 'todo', status: loser.status, due: loser.due, completedAt: loser.completedAt }
+          : { ...common, type: 'note' },
+      );
     });
   }
 }

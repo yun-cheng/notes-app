@@ -1,5 +1,6 @@
 import { beforeEach, describe, expect, it } from 'vitest';
-import { CardRepository, diaryId } from './repository';
+import { CardRepository } from './repository';
+import { diaryId } from '../domain/rehome';
 import { MemoryStore } from './memoryStore';
 import type { Journal, JournalOp } from './journal';
 import { jsonCodec, type PayloadCodec } from './types';
@@ -154,21 +155,31 @@ describe('journal', () => {
 });
 
 describe('backup import', () => {
-  it('keeps the newest version of each card and restores the source vault', async () => {
+  it('keeps the newest version of each card', async () => {
     const mine = await repo.createNote({ title: 'mine' });
     const old = { ...mine, title: 'stale', updatedAt: mine.updatedAt - 500 };
     const newer = await repo.createNote({ title: 'second' });
     const newerCopy = { ...newer, title: 'from backup', updatedAt: newer.updatedAt + 500 };
     const added = { ...newer, id: 'fresh', title: 'added' };
-    const vault = { id: 'older', name: 'Old', owner_id: 'local', lock: 'none' as const, ai_access: 'off' as const, created_at: 1 };
 
-    const result = await repo.importBackup(makeBackup([vault], [old, newerCopy, added]));
+    const result = await repo.importBackup(makeBackup([], [old, newerCopy, added]));
     expect(result).toEqual({ added: 1, updated: 1, skipped: 1 });
     const titles = await Promise.all((await store.listCards()).map(async (r) => (await repo.decode(r)).title));
     expect(titles.sort()).toEqual(['added', 'from backup', 'mine']);
-
-    const diary = await repo.saveDiary('2026-11-11', {});
-    expect(diary.id).toBe(diaryId('older', '2026-11-11'));
+  });
+  it('moves cards from another vault into this account', async () => {
+    const vault = await repo.init();
+    const entry: DiaryCard = { id: diaryId('foreign', '2026-11-10'), vaultId: 'foreign', updatedAt: 5, createdAt: 5, deleted: false, seq: 0, title: '', content: doc('hi'), tags: [], type: 'diary', date: '2026-11-10' };
+    await repo.importBackup(makeBackup([], [entry]));
+    const [record] = await store.listCards();
+    expect(record.vault_id).toBe(vault.id);
+    expect(record.id).toBe(diaryId(vault.id, '2026-11-10'));
+  });
+  it('keeps the known server version when an import updates a synced card', async () => {
+    const card = await repo.createNote({ title: 'x' });
+    await store.markSynced(card.id, card.updatedAt, 7);
+    await repo.importBackup(makeBackup([], [{ ...card, title: 'y', updatedAt: card.updatedAt + 1 }]));
+    expect((await store.getCard(card.id))!.seq).toBe(7);
   });
   it('includes deleted cards in a full export', async () => {
     const card = await repo.createNote({ title: 'x' });

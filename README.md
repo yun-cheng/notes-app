@@ -6,6 +6,8 @@ Decisions, the data model and the milestones are in [PLAN.md](PLAN.md).
 
 **Status:** Milestone 1 is built: everything works on one device. There is no sync or account yet, so notes stay in the browser they were written in. Use **Backup & settings** to download a backup.
 
+**Live:** https://notes-app-afc.pages.dev, deployed manually with `npm run deploy`.
+
 ## Run it
 
 Needs Node 22 or later.
@@ -22,6 +24,7 @@ npm run dev
 | `npm run typecheck` | Check types |
 | `npm run build` | Typecheck and build to `dist/` |
 | `npm run preview` | Serve the build, with the service worker active |
+| `npm run deploy` | Build and publish to Cloudflare Pages (needs `npx wrangler login` first) |
 | `npm run icons` | Regenerate the PWA icons from `public/icon.svg` |
 
 The service worker only runs in the built app, so use `build` then `preview` to test offline behaviour. Installing on a phone needs HTTPS.

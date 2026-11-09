@@ -100,7 +100,7 @@ Links and tag associations live inside the card payload.
 
 ## Milestones
 
-1. Works on one device: notes, todos, diary; tags, links and backlinks; search; Today and Calendar views; installable PWA. **Built on branch `milestone-1`; not yet tried on a real Android phone.**
+1. Works on one device: notes, todos, diary; tags, links and backlinks; search; Today and Calendar views; installable PWA. **Built and hosted; not yet tried on a real Android phone.**
 2. Sync and accounts: Worker and D1, Google sign-in, multi-user data model (only the owner using it).
 3. Private vaults: PIN, optional fingerprint, auto-lock, hidden from search.
 4. MCP server.
@@ -129,4 +129,4 @@ None. Next step is trying Milestone 1 on the phone, then Milestone 2.
 - There is one default vault, created on first launch, with no vault UI until Milestone 3.
 - Backups are JSON and restore by merging, newest version of each card wins. Markdown export is one-way.
 - Search treats each Chinese, Japanese or Korean character as a term, so text in those scripts can be found without spaces.
-- The PWA must be served over HTTPS to install on a phone, so the phone needs a hosted copy (Cloudflare Pages fits, ahead of Milestone 2).
+- The app is hosted on Cloudflare Pages at https://notes-app-afc.pages.dev (`npm run deploy`). It is a regular Pages project with no Git connection, so deploys are manual and pushes don't trigger them. It serves only the app, and notes stay in each visitor's browser until Milestone 2.

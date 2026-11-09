@@ -1,7 +1,9 @@
 import { useEffect, useRef, useState, type ChangeEvent } from 'react';
 import { makeBackup, markdownFiles, parseBackup, zipMarkdown } from '../../domain/backup';
 import { displayTitle } from '../../domain/content';
-import { useCards, useToday } from '../../state/CardsContext';
+import { useAccount } from '../../auth/AuthContext';
+import { useCards, useSyncStatus, useToday } from '../../state/CardsContext';
+import { describeSync } from '../../sync/engine';
 import { Empty, Page, Section } from '../components';
 import { useToast } from '../Toast';
 
@@ -15,7 +17,9 @@ function download(data: BlobPart, name: string, type: string) {
 }
 
 export function SettingsPage() {
-  const { index, repo } = useCards();
+  const { index, repo, engine } = useCards();
+  const { account, signOut } = useAccount();
+  const sync = useSyncStatus();
   const today = useToday();
   const toast = useToast();
   const [persisted, setPersisted] = useState<boolean | null>(null);
@@ -51,6 +55,20 @@ export function SettingsPage() {
 
   return (
     <Page title="Backup & settings">
+      <Section title="Account">
+        <p className="prose-note">
+          Signed in as {account.name} ({account.email}). {describeSync(sync)}
+          {sync.lastSyncedAt ? `, last synced at ${new Date(sync.lastSyncedAt).toLocaleTimeString([], { hour: 'numeric', minute: '2-digit' })}` : ''}.
+        </p>
+        <div className="button-row">
+          <button type="button" className="btn" disabled={sync.state === 'syncing'} onClick={() => void engine.sync()}>
+            Sync now
+          </button>
+          <button type="button" className="btn" onClick={() => void signOut()}>
+            Sign out
+          </button>
+        </div>
+      </Section>
       <Section title="Storage">
         <p className="prose-note">
           {persisted === null && 'Checking how this browser stores your notes.'}
@@ -59,7 +77,7 @@ export function SettingsPage() {
         </p>
       </Section>
       <Section title="Backup">
-        <p className="prose-note">Notes live only on this device until sync is built. Keep a backup somewhere safe.</p>
+        <p className="prose-note">Your notes sync to your account. A backup is an extra copy you control.</p>
         <div className="button-row">
           <button type="button" className="btn btn--primary" onClick={() => void exportBackup()}>
             Download backup

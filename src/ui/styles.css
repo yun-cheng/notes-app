@@ -240,3 +240,11 @@ body:has(.title-field:focus) .tabbar { display: none; }
 .signin__button { display: flex; justify-content: center; min-height: 44px; }
 .signin__note { color: var(--muted); font-size: 14px; }
 .signin__error { color: var(--alert); font-size: 14px; margin-top: 14px; }
+
+.lock-panel { max-width: 340px; margin: 12px 0; padding: 18px; background: var(--surface); border: 1px solid var(--line); border-radius: 12px; }
+.lock-panel__title { display: flex; align-items: center; gap: 8px; font-weight: 600; margin-bottom: 10px; }
+.lock-panel__row { display: flex; gap: 6px; }
+.text-input { flex: 1; min-width: 0; min-height: 40px; padding: 0 12px; background: var(--bg); border: 1px solid var(--line); border-radius: 9px; outline: none; }
+.text-input:focus { border-color: var(--accent); }
+.lock-panel__error { color: var(--alert); font-size: 14px; margin-top: 8px; }
+.lock-panel .btn--quiet { margin-top: 8px; padding: 0; }

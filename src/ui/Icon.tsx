@@ -7,6 +7,7 @@ const PATHS = {
   tag: 'M3 12V5a2 2 0 0 1 2-2h7l9 9-9 9-9-9ZM8 8h.01',
   settings: 'M4 7h9M17 7h3M4 17h3M11 17h9M15 5v4M9 15v4',
   plus: 'M12 5v14M5 12h14',
+  lock: 'M7 11V8a5 5 0 0 1 10 0v3M6 11h12a1 1 0 0 1 1 1v7a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2v-7a1 1 0 0 1 1-1Z',
   pin: 'M9 4h6l-1 6 4 4H6l4-4-1-6ZM12 14v7',
   trash: 'M4 7h16M10 11v6M14 11v6M6 7l1 13h10l1-13M9 7V4h6v3',
   left: 'M15 5l-7 7 7 7',

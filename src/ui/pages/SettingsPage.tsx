@@ -17,7 +17,7 @@ function download(data: BlobPart, name: string, type: string) {
 }
 
 export function SettingsPage() {
-  const { index, repo, engine } = useCards();
+  const { index, repo, engine, locked } = useCards();
   const { account, signOut } = useAccount();
   const sync = useSyncStatus();
   const today = useToday();
@@ -36,9 +36,9 @@ export function SettingsPage() {
   };
 
   const exportBackup = async () => {
-    const { vaults, cards } = await repo.exportAll();
+    const { vaults, cards } = await repo.exportAll(locked);
     download(JSON.stringify(makeBackup(vaults, cards), null, 1), `notes-backup-${today}.json`, 'application/json');
-    toast(`Backed up ${cards.length} ${cards.length === 1 ? 'card' : 'cards'}`);
+    toast(`Backed up ${cards.length} ${cards.length === 1 ? 'card' : 'cards'}${locked.size ? '. Locked vaults were left out' : ''}`);
   };
 
   const restore = async (e: ChangeEvent<HTMLInputElement>) => {
@@ -77,7 +77,7 @@ export function SettingsPage() {
         </p>
       </Section>
       <Section title="Backup">
-        <p className="prose-note">Your notes sync to your account. A backup is an extra copy you control.</p>
+        <p className="prose-note">Your notes sync to your account. A backup is an extra copy you control. Unlock a private vault first to include it.</p>
         <div className="button-row">
           <button type="button" className="btn btn--primary" onClick={() => void exportBackup()}>
             Download backup

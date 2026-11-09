@@ -1,7 +1,8 @@
-import { createContext, useContext, useEffect, useState, useSyncExternalStore, type ReactNode } from 'react';
+import { createContext, useContext, useEffect, useMemo, useState, useSyncExternalStore, type ReactNode } from 'react';
 import { buildIndex, type CardIndex } from '../domain/cardIndex';
 import { toDateKey } from '../domain/dates';
-import type { Card, CardRecord } from '../domain/types';
+import { lockedVaultIds, VaultLocks } from '../domain/locks';
+import type { Card, CardRecord, Vault } from '../domain/types';
 import { DexieStore } from '../storage/dexieStore';
 import { localStorageJournal } from '../storage/journal';
 import { CardRepository } from '../storage/repository';
@@ -20,20 +21,29 @@ function openAccount(accountId: string) {
   const { repo } = openAccountStorage(accountId);
   const engine = new SyncEngine(repo, httpTransport);
   repo.onChange = () => engine.schedule();
-  return { repo, engine };
+  return { repo, engine, locks: new VaultLocks() };
 }
 
 interface CardsValue {
   index: CardIndex;
   repo: CardRepository;
   engine: SyncEngine;
+  vaults: Vault[];
+  locks: VaultLocks;
+  /** Vaults with a PIN that aren't open on this device. */
+  locked: ReadonlySet<string>;
 }
 
 const CardsContext = createContext<CardsValue | null>(null);
 
 export function CardsProvider({ accountId, children }: { accountId: string; children: ReactNode }) {
-  const [{ repo, engine }] = useState(() => openAccount(accountId));
-  const [index, setIndex] = useState<CardIndex | null>(null);
+  const [{ repo, engine, locks }] = useState(() => openAccount(accountId));
+  const [cards, setCards] = useState<Card[] | null>(null);
+  const [vaults, setVaults] = useState<Vault[] | null>(null);
+  const open = useSyncExternalStore(locks.subscribe, locks.getOpen);
+  const locked = useMemo(() => lockedVaultIds(vaults ?? [], open), [vaults, open]);
+  // Waits for the vault list, so a locked card can't flash up before its lock is known.
+  const index = useMemo<CardIndex | null>(() => (cards && vaults ? buildIndex(cards, locked) : null), [cards, vaults, locked]);
   const [error, setError] = useState<string | null>(null);
 
   useEffect(() => {
@@ -43,7 +53,7 @@ export function CardsProvider({ accountId, children }: { accountId: string; chil
 
     const load = async (records: CardRecord[]) => {
       const run = ++latest;
-      const cards = await Promise.all(
+      const loaded = await Promise.all(
         records.map(async (r) => {
           const hit = decoded.get(r.id);
           if (hit && hit.at === r.updated_at && hit.deleted === r.deleted) return hit.card;
@@ -52,7 +62,7 @@ export function CardsProvider({ accountId, children }: { accountId: string; chil
           return card;
         }),
       );
-      if (active && run === latest) setIndex(buildIndex(cards));
+      if (active && run === latest) setCards(loaded);
     };
 
     let stopSync: (() => void) | null = null;
@@ -66,12 +76,16 @@ export function CardsProvider({ accountId, children }: { accountId: string; chil
     const stop = repo.store.subscribe((records) => {
       load(records).catch((e: unknown) => setError(String(e)));
     });
+    const stopVaults = repo.store.subscribeVaults(setVaults);
+    const stopLocks = locks.start();
     return () => {
       active = false;
       stop();
+      stopVaults();
+      stopLocks();
       stopSync?.();
     };
-  }, [repo, engine]);
+  }, [repo, engine, locks]);
 
   if (error) {
     return (
@@ -82,8 +96,8 @@ export function CardsProvider({ accountId, children }: { accountId: string; chil
       </div>
     );
   }
-  if (!index) return <div className="boot" aria-busy="true" />;
-  return <CardsContext.Provider value={{ index, repo, engine }}>{children}</CardsContext.Provider>;
+  if (!index || !vaults) return <div className="boot" aria-busy="true" />;
+  return <CardsContext.Provider value={{ index, repo, engine, vaults, locks, locked }}>{children}</CardsContext.Provider>;
 }
 
 export function useCards(): CardsValue {

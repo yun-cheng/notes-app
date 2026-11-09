@@ -21,6 +21,13 @@ function CardLinkView({ node }: ReactNodeViewProps) {
   const id = String(node.attrs.id);
   const card = index.byId.get(id);
   const label = String(node.attrs.label || 'Untitled');
+  if (index.lockedCards.has(id)) {
+    return (
+      <NodeViewWrapper as="span" className="card-link card-link--dead" title="This card is in a locked vault">
+        Locked
+      </NodeViewWrapper>
+    );
+  }
   if (!card || card.deleted) {
     return (
       <NodeViewWrapper as="span" className="card-link card-link--dead" title="This card was deleted">

@@ -1,10 +1,12 @@
 import { Link, Navigate, useLocation, useNavigate, useParams } from 'react-router';
 import { addDays, formatDay, isDateKey, relativeDay } from '../../domain/dates';
+import { diaryVault } from '../../domain/locks';
 import { todosDueOn } from '../../domain/todos';
 import { EMPTY_DOC, type Card } from '../../domain/types';
 import { useCards, useToday } from '../../state/CardsContext';
 import { Backlinks, Empty, Page, QuickAddTodo, Section, TagPicker, TitleField, TodoList, useDeleteCard, useNewNote } from '../components';
 import { Editor } from '../editor/Editor';
+import { LockPanel } from '../LockPanel';
 import { Icon } from '../Icon';
 
 const HOME: Record<Card['type'], string> = { note: '/notes', todo: '/upcoming', tag: '/tags', diary: '/calendar' };
@@ -14,7 +16,15 @@ export function CardPage() {
   const { id } = useParams();
   const { index, repo } = useCards();
   const card = id ? index.byId.get(id) : undefined;
+  const lockedIn = id ? index.lockedCards.get(id) : undefined;
 
+  if (lockedIn) {
+    return (
+      <Page title="Locked">
+        <LockPanel vaultId={lockedIn} />
+      </Page>
+    );
+  }
   if (!card) {
     return (
       <Page title="Not found">
@@ -119,7 +129,7 @@ function CardDetail({ card }: { card: Exclude<Card, { type: 'diary' }> }) {
 
 export function DayPage() {
   const { date } = useParams();
-  const { index, repo } = useCards();
+  const { index, repo, vaults, locked } = useCards();
   const today = useToday();
   const remove = useDeleteCard();
 
@@ -132,6 +142,8 @@ export function DayPage() {
   }
   const card = index.diaryByDate.get(date);
   const todos = todosDueOn(index.todos, date);
+  const privateVault = diaryVault(vaults);
+  const lockedIn = card ? undefined : (index.lockedDiaries.get(date) ?? (privateVault && locked.has(privateVault.id) ? privateVault.id : undefined));
 
   return (
     <Page
@@ -152,14 +164,20 @@ export function DayPage() {
         </>
       }
     >
-      <Editor
-        key={date}
-        content={card?.content ?? EMPTY_DOC}
-        selfId={card?.id}
-        placeholder={date === today ? 'How was today?' : 'Write about this day.'}
-        onChange={(content) => void repo.saveDiary(date, { content }, card?.id)}
-      />
-      <TagPicker tagIds={card?.tags ?? []} onChange={(tags) => void repo.saveDiary(date, { tags }, card?.id)} />
+      {lockedIn ? (
+        <LockPanel vaultId={lockedIn} />
+      ) : (
+        <>
+          <Editor
+            key={date}
+            content={card?.content ?? EMPTY_DOC}
+            selfId={card?.id}
+            placeholder={date === today ? 'How was today?' : 'Write about this day.'}
+            onChange={(content) => void repo.saveDiary(date, { content }, card?.id, privateVault?.id)}
+          />
+          <TagPicker tagIds={card?.tags ?? []} onChange={(tags) => void repo.saveDiary(date, { tags }, card?.id, privateVault?.id)} />
+        </>
+      )}
 
       <Section title="Todos due">
         {todos.length > 0 && <TodoList todos={todos} showDue={false} />}

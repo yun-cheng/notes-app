@@ -81,6 +81,7 @@ export function Editor({ content, onChange, placeholder, selfId }: EditorProps) 
   latest.current = { index, onChange, menu, selfId };
   const command = useRef<((item: LinkOption) => void) | null>(null);
   const pending = useRef<JSONNode | null>(null);
+  const sent = useRef<string[]>([]);
   const timer = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   const flush = useRef(() => {
@@ -89,6 +90,7 @@ export function Editor({ content, onChange, placeholder, selfId }: EditorProps) 
     if (pending.current) {
       const value = pending.current;
       pending.current = null;
+      sent.current = [...sent.current.slice(-19), JSON.stringify(value)];
       latest.current.onChange(value);
     }
   }).current;
@@ -190,11 +192,17 @@ export function Editor({ content, onChange, placeholder, selfId }: EditorProps) 
     };
   }, [flush]);
 
-  // Pick up changes made elsewhere (another tab, a restore), but never under the user's cursor.
+  // Pick up changes from sync, another tab or a restore. Ignore the echo of this editor's own saves.
   useEffect(() => {
-    if (!editor || pending.current || editor.isFocused) return;
-    if (JSON.stringify(editor.getJSON()) !== JSON.stringify(content)) {
-      editor.commands.setContent(content, { emitUpdate: false });
+    if (!editor || pending.current) return;
+    const incoming = JSON.stringify(content);
+    if (incoming === JSON.stringify(editor.getJSON()) || sent.current.includes(incoming)) return;
+    const { from, to } = editor.state.selection;
+    const focused = editor.isFocused;
+    editor.commands.setContent(content, { emitUpdate: false });
+    if (focused) {
+      const end = editor.state.doc.content.size;
+      editor.commands.setTextSelection({ from: Math.min(from, end), to: Math.min(to, end) });
     }
   }, [editor, content]);
 

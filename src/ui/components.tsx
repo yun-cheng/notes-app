@@ -258,6 +258,27 @@ export function TagPicker({ tagIds, onChange }: { tagIds: string[]; onChange: (t
   );
 }
 
+/** Moves a card between the vaults that are open. Hidden when there's nowhere to move it. */
+export function VaultField({ card }: { card: Card }) {
+  const { repo, vaults, locked } = useCards();
+  const options = vaults.filter((v) => !locked.has(v.id));
+  if (options.length < 2) return null;
+  return (
+    <div className="field-row">
+      <label>
+        Vault
+        <select value={card.vaultId} onChange={(e) => void repo.moveToVault(card.id, e.target.value)}>
+          {options.map((v) => (
+            <option key={v.id} value={v.id}>
+              {v.name}
+            </option>
+          ))}
+        </select>
+      </label>
+    </div>
+  );
+}
+
 export function Backlinks({ cardId, isTag }: { cardId: string; isTag?: boolean }) {
   const { index } = useCards();
   const links: Backlink[] = index.backlinks.get(cardId) ?? [];
@@ -307,8 +328,8 @@ export function useDeleteCard() {
 export function useNewNote() {
   const { repo } = useCards();
   const navigate = useNavigate();
-  return async (tags: string[] = []) => {
-    const card = await repo.createNote({ tags });
+  return async (tags: string[] = [], vaultId?: string) => {
+    const card = await repo.createNote({ tags, vaultId });
     navigate(cardPath(card), { state: { fresh: true } });
   };
 }

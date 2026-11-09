@@ -117,3 +117,6 @@ export function lockedVaultIds(vaults: Vault[], open: ReadonlySet<string>): Set<
 export function diaryVault(vaults: Vault[]): Vault | null {
   return [...vaults].filter((v) => v.lock === 'pin').sort((a, b) => a.created_at - b.created_at)[0] ?? null;
 }
+
+/** Each account's first vault. It holds new cards, so it always stays open. */
+export const isDefaultVault = (vault: Vault) => vault.id === `vault-${vault.owner_id}`;

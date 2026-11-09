@@ -161,6 +161,9 @@ export function NotesPage() {
         <Link className="chip chip--nav chip--quiet" to="/tags">
           All tags
         </Link>
+        <Link className="chip chip--nav chip--quiet" to="/vaults">
+          Vaults
+        </Link>
       </div>
       {notes.length ? (
         <div className="list">

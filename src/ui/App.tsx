@@ -8,6 +8,7 @@ import { useNewNote } from './components';
 import { Icon, type IconName } from './Icon';
 import { CardPage, DayPage } from './pages/cards';
 import { SettingsPage } from './pages/SettingsPage';
+import { VaultPage, VaultsPage } from './pages/vaults';
 import { CalendarPage, NotesPage, SearchPage, TagsPage, TodayPage, UpcomingPage } from './pages/views';
 import { cardPath } from './paths';
 import { ToastProvider, useToast } from './Toast';
@@ -50,6 +51,10 @@ function Sidebar() {
         <NavLink to="/tags" className="nav-item nav-item--quiet">
           <span className="nav-item__pad" />
           <span>All tags</span>
+        </NavLink>
+        <NavLink to="/vaults" className="nav-item nav-item--quiet">
+          <Icon name="lock" />
+          <span>Vaults</span>
         </NavLink>
       </nav>
       <p className="sidebar__sync" role="status">
@@ -139,6 +144,8 @@ export function App() {
             <Route path="calendar" element={<CalendarPage />} />
             <Route path="notes" element={<NotesPage />} />
             <Route path="tags" element={<TagsPage />} />
+            <Route path="vaults" element={<VaultsPage />} />
+            <Route path="vault/:id" element={<VaultPage />} />
             <Route path="search" element={<SearchPage />} />
             <Route path="settings" element={<SettingsPage />} />
             <Route path="card/:id" element={<CardPage />} />

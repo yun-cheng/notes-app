@@ -248,3 +248,11 @@ body:has(.title-field:focus) .tabbar { display: none; }
 .text-input:focus { border-color: var(--accent); }
 .lock-panel__error { color: var(--alert); font-size: 14px; margin-top: 8px; }
 .lock-panel .btn--quiet { margin-top: 8px; padding: 0; }
+
+.vault-form { display: flex; flex-direction: column; gap: 8px; max-width: 340px; }
+.vault-form .btn { align-self: flex-start; }
+.vault-gap { margin-top: 10px; }
+.vault-options { display: flex; flex-direction: column; align-items: flex-start; gap: 10px; margin-top: 14px; }
+.check-row { display: flex; align-items: flex-start; gap: 10px; font-size: 15px; }
+.check-row input { width: 20px; height: 20px; margin: 1px 0 0; flex: none; accent-color: var(--accent); }
+.field-row select { min-height: 36px; padding: 0 8px; background: var(--surface); border: 1px solid var(--line); border-radius: 8px; color: var(--text); }

@@ -4,7 +4,7 @@ import { diaryVault } from '../../domain/locks';
 import { todosDueOn } from '../../domain/todos';
 import { EMPTY_DOC, type Card } from '../../domain/types';
 import { useCards, useToday } from '../../state/CardsContext';
-import { Backlinks, Empty, Page, QuickAddTodo, Section, TagPicker, TitleField, TodoList, useDeleteCard, useNewNote } from '../components';
+import { Backlinks, Empty, Page, QuickAddTodo, Section, TagPicker, TitleField, TodoList, useDeleteCard, useNewNote, VaultField } from '../components';
 import { Editor } from '../editor/Editor';
 import { LockPanel } from '../LockPanel';
 import { Icon } from '../Icon';
@@ -113,6 +113,8 @@ function CardDetail({ card }: { card: Exclude<Card, { type: 'diary' }> }) {
         </div>
       )}
 
+      <VaultField card={card} />
+
       {card.type !== 'tag' && <TagPicker tagIds={card.tags} onChange={(tags) => void repo.update(card.id, { tags })} />}
 
       <Editor
@@ -168,6 +170,7 @@ export function DayPage() {
         <LockPanel vaultId={lockedIn} />
       ) : (
         <>
+          {card && <VaultField card={card} />}
           <Editor
             key={date}
             content={card?.content ?? EMPTY_DOC}

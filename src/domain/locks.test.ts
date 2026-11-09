@@ -1,5 +1,5 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
-import { diaryVault, lockedVaultIds, VaultLocks } from './locks';
+import { diaryVault, isDefaultVault, lockedVaultIds, VaultLocks } from './locks';
 import { hashPin } from './pin';
 import type { Vault } from './types';
 
@@ -68,6 +68,10 @@ describe('vault helpers', () => {
     const locked = await privateVault('l', '1234');
     const unlocked = await privateVault('u', '1234');
     expect([...lockedVaultIds([open, locked, unlocked], new Set(['u']))]).toEqual(['l']);
+  });
+  it('recognises the default vault', () => {
+    expect(isDefaultVault(make('vault-u'))).toBe(true);
+    expect(isDefaultVault(make('other'))).toBe(false);
   });
   it('sends diary entries to the oldest private vault', async () => {
     expect(diaryVault([make('open')])).toBeNull();

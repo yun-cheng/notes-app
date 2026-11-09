@@ -9,7 +9,8 @@
     "preview": "vite preview",
     "typecheck": "tsc --noEmit",
     "test": "vitest run",
-    "icons": "pwa-assets-generator"
+    "icons": "pwa-assets-generator",
+    "deploy": "npm run build && wrangler pages deploy dist --project-name notes-app --branch main"
   },
   "dependencies": {
     "@tiptap/extensions": "^3.33.0",
@@ -36,6 +37,7 @@
     "vite-plugin-pwa": "^2.0.0",
     "vitest": "^5.1.0",
     "workbox-build": "^7.4.1",
-    "workbox-window": "^7.4.1"
+    "workbox-window": "^7.4.1",
+    "wrangler": "^4.159.0"
   }
 }

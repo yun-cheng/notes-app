@@ -38,7 +38,7 @@ export class CardRepository {
     const vaults = await this.store.listVaults();
     let vault = vaults.sort((a, b) => a.created_at - b.created_at)[0];
     if (!vault) {
-      vault = { id: this.newId(), name: 'Personal', owner_id: 'local', lock: 'none', ai_access: 'off', created_at: this.now() };
+      vault = { id: this.newId(), name: 'Personal', owner_id: 'local', lock: 'none', ai_access: 'off', created_at: this.now(), pin: null, hidden: false };
       await this.store.putVaults([vault]);
     }
     this.vault = vault;

@@ -1,7 +1,7 @@
 import { createRemoteJWKSet, jwtVerify, type JWTVerifyGetKey } from 'jose';
-import type { Vault } from '../src/domain/types';
 import type { Account } from '../src/sync/protocol';
 import type { Database } from './db';
+import { defaultVaultId } from './vaults';
 
 export interface GoogleIdentity {
   sub: string;
@@ -57,7 +57,7 @@ export async function upsertUser(db: Database, identity: GoogleIdentity, now: nu
   if (!user) throw new Error('Saving the user failed');
 
   // Derived from the user ID, so repeating a first sign-in can't create a second vault.
-  const vaultId = `vault-${user.id}`;
+  const vaultId = defaultVaultId(user.id);
   await db.batch([
     db
       .prepare(`INSERT OR IGNORE INTO vaults (id, owner_id, name, created_at) VALUES (?, ?, 'Personal', ?)`)
@@ -102,15 +102,4 @@ export async function resolveSession(db: Database, token: string, now: number): 
 
 export async function deleteSession(db: Database, token: string): Promise<void> {
   await db.prepare(`DELETE FROM sessions WHERE token_hash = ?`).bind(await hashToken(token)).run();
-}
-
-export async function listVaults(db: Database, userId: string): Promise<Vault[]> {
-  const { results } = await db
-    .prepare(
-      `SELECT v.id, v.name, v.owner_id, v.lock, v.ai_access, v.created_at
-       FROM vaults v JOIN vault_members m ON m.vault_id = v.id WHERE m.user_id = ? ORDER BY v.created_at`,
-    )
-    .bind(userId)
-    .all<Vault>();
-  return results;
 }

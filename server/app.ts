@@ -1,5 +1,6 @@
 import { Hono, type Context } from 'hono';
 import { deleteCookie, getCookie, setCookie } from 'hono/cookie';
+import type { VaultPin } from '../src/domain/pin';
 import type { CardRecord } from '../src/domain/types';
 import { PUSH_LIMIT, type Account, type ConfigResponse, type SessionInfo } from '../src/sync/protocol';
 import {
@@ -7,7 +8,6 @@ import {
   deleteSession,
   googleVerifier,
   InvalidGoogleToken,
-  listVaults,
   resolveSession,
   SESSION_DAYS,
   upsertUser,
@@ -15,6 +15,7 @@ import {
 } from './auth';
 import type { Bindings } from './db';
 import { pullRecords, pushRecords } from './sync';
+import { createVault, listVaults, updateVault, type VaultUpdate } from './vaults';
 
 type Env = { Bindings: Bindings; Variables: { user: Account } };
 
@@ -39,6 +40,39 @@ function isRecord(value: unknown): value is CardRecord {
     r.seq! >= 0 &&
     typeof r.payload === 'string'
   );
+}
+
+function isPin(value: unknown): value is VaultPin {
+  const p = value as Partial<VaultPin> | null;
+  return (
+    !!p &&
+    typeof p.salt === 'string' &&
+    p.salt.length <= 200 &&
+    typeof p.hash === 'string' &&
+    p.hash.length <= 200 &&
+    Number.isSafeInteger(p.iterations) &&
+    p.iterations! >= 100_000 &&
+    p.iterations! <= 10_000_000
+  );
+}
+
+/** Reads the fields of a vault create or update, or returns null if any is invalid. */
+function parseVaultBody(body: Record<string, unknown> | null): VaultUpdate | null {
+  if (!body) return null;
+  const out: VaultUpdate = {};
+  if (body.name !== undefined) {
+    if (typeof body.name !== 'string' || !body.name.trim() || body.name.length > 80) return null;
+    out.name = body.name.trim();
+  }
+  if (body.pin !== undefined) {
+    if (body.pin !== null && !isPin(body.pin)) return null;
+    out.pin = body.pin;
+  }
+  if (body.hidden !== undefined) {
+    if (typeof body.hidden !== 'boolean') return null;
+    out.hidden = body.hidden;
+  }
+  return out;
 }
 
 export function createApp({ verifyGoogle = googleVerifier(), now = Date.now }: AppOptions = {}) {
@@ -96,6 +130,21 @@ export function createApp({ verifyGoogle = googleVerifier(), now = Date.now }: A
   app.get('/me', async (c) => {
     const user = c.get('user');
     return c.json<SessionInfo>({ user, vaults: await listVaults(c.env.DB, user.id) });
+  });
+
+  app.post('/vaults', async (c) => {
+    const input = parseVaultBody(await c.req.json<Record<string, unknown>>().catch(() => null));
+    if (!input?.name) return c.json({ error: 'Invalid vault' }, 400);
+    const vault = await createVault(c.env.DB, c.get('user').id, { name: input.name, pin: input.pin ?? null, hidden: input.hidden ?? false }, now());
+    return c.json(vault, 201);
+  });
+
+  app.patch('/vaults/:id', async (c) => {
+    const update = parseVaultBody(await c.req.json<Record<string, unknown>>().catch(() => null));
+    if (!update) return c.json({ error: 'Invalid vault' }, 400);
+    const result = await updateVault(c.env.DB, c.get('user').id, c.req.param('id'), update);
+    if ('vault' in result) return c.json(result.vault);
+    return result.error === 'not_found' ? c.json({ error: 'Vault not found' }, 404) : c.json({ error: 'The default vault cannot be locked' }, 400);
   });
 
   app.post('/sync/push', async (c) => {

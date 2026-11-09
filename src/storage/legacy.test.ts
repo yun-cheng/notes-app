@@ -9,7 +9,7 @@ import { claimLegacyNotes } from './legacy';
 import { CardRepository } from './repository';
 import { jsonCodec } from './types';
 
-const vault: Vault = { id: 'server-vault', name: 'Personal', owner_id: 'u', lock: 'none', ai_access: 'off', created_at: 1 };
+const vault: Vault = { id: 'server-vault', name: 'Personal', owner_id: 'u', lock: 'none', ai_access: 'off', created_at: 1, pin: null, hidden: false };
 
 async function account() {
   const store = new DexieStore(`acct-${Math.random()}`);

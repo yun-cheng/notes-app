@@ -13,7 +13,7 @@ describe('DexieStore', () => {
     expect((await dx.getCard('a'))?.updated_at).toBe(2);
     expect(await dx.listCards()).toHaveLength(2);
     expect(await dx.getCard('zzz')).toBeUndefined();
-    const vault = { id: 'v', name: 'P', owner_id: 'l', lock: 'none' as const, ai_access: 'off' as const, created_at: 1 };
+    const vault = { id: 'v', name: 'P', owner_id: 'l', lock: 'none' as const, ai_access: 'off' as const, created_at: 1, pin: null, hidden: false };
     await dx.putVaults([vault]);
     expect(await dx.listVaults()).toEqual([vault]);
   });

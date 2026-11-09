@@ -1,4 +1,4 @@
-import { readFileSync } from 'node:fs';
+import { readdirSync, readFileSync } from 'node:fs';
 import { DatabaseSync, type StatementSync } from 'node:sqlite';
 import type { Database, Statement } from './db';
 
@@ -35,7 +35,8 @@ class SqliteStatement implements Statement {
 export function createTestDb(): Database & { raw: DatabaseSync } {
   const raw = new DatabaseSync(':memory:');
   raw.exec('PRAGMA foreign_keys = ON');
-  raw.exec(readFileSync(new URL('../migrations/0001_init.sql', import.meta.url), 'utf8'));
+  const dir = new URL('../migrations/', import.meta.url);
+  for (const file of readdirSync(dir).sort()) raw.exec(readFileSync(new URL(file, dir), 'utf8'));
   return {
     raw,
     prepare: (sql) => new SqliteStatement(raw, sql),

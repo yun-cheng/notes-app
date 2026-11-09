@@ -1,3 +1,5 @@
+import type { VaultPin } from './pin';
+
 export interface JSONNode {
   type: string;
   attrs?: Record<string, unknown>;
@@ -69,4 +71,8 @@ export interface Vault {
   lock: 'none' | 'pin';
   ai_access: 'off' | 'read' | 'write';
   created_at: number;
+  /** Set when `lock` is 'pin'. */
+  pin: VaultPin | null;
+  /** Left out of the app entirely until unlocked. */
+  hidden: boolean;
 }

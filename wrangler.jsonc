@@ -1,0 +1,16 @@
+{
+  "name": "notes-app",
+  "pages_build_output_dir": "./dist",
+  "compatibility_date": "2026-11-01",
+  "d1_databases": [
+    {
+      "binding": "DB",
+      "database_name": "notes-app",
+      "database_id": "fd354c14-41f7-47e8-9aa0-935d90d37d3a",
+      "migrations_dir": "migrations"
+    }
+  ],
+  "vars": {
+    "GOOGLE_CLIENT_ID": "468133721722-vll21ap6270hafml9rc7gra71sbbmg3i.apps.googleusercontent.com"
+  }
+}

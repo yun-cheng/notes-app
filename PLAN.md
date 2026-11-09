@@ -71,7 +71,7 @@ Until encryption ships, a tech-savvy person with the unlocked laptop could read 
 
 ## Technical decisions
 
-- **Client:** PWA first. React, TypeScript, Vite, vite-plugin-pwa, Dexie (IndexedDB), TipTap editor with `[[link]]` autocomplete, MiniSearch.
+- **Client:** PWA first. React, TypeScript, Vite, vite-plugin-pwa, React Router, Dexie (IndexedDB), TipTap editor with `[[link]]` autocomplete, MiniSearch, fflate for zip export.
 - Keep storage and crypto behind small interfaces so the same UI can later be wrapped in Tauri 2 (macOS and Android).
 - Call `navigator.storage.persist()`. Build export/backup early, including Markdown plus image files.
 - **Note format:** TipTap JSON stored in the card, plus Markdown export. Links by card ID survive renames, and it supports comments and live co-editing through Yjs.
@@ -100,7 +100,7 @@ Links and tag associations live inside the card payload.
 
 ## Milestones
 
-1. Works on one device: notes, todos, diary; tags, links and backlinks; search; Today and Calendar views; installable PWA.
+1. Works on one device: notes, todos, diary; tags, links and backlinks; search; Today and Calendar views; installable PWA. **Built on branch `milestone-1`; not yet tried on a real Android phone.**
 2. Sync and accounts: Worker and D1, Google sign-in, multi-user data model (only the owner using it).
 3. Private vaults: PIN, optional fingerprint, auto-lock, hidden from search.
 4. MCP server.
@@ -120,4 +120,13 @@ Later: push reminders for todos, Tauri wrapper if PWA limits hurt.
 
 ## Open questions
 
-None. Next step is Milestone 1, once the owner says to start.
+None. Next step is trying Milestone 1 on the phone, then Milestone 2.
+
+## Implementation notes from Milestone 1
+
+- Unsaved edits go to a synchronous `localStorage` journal first and are replayed on next launch, because an IndexedDB write started as a page closes never finishes. The journal holds plaintext, so Milestone 7 must encrypt or remove it.
+- Diary card IDs come from the vault and date, so two devices can't create two entries for one day once sync exists.
+- There is one default vault, created on first launch, with no vault UI until Milestone 3.
+- Backups are JSON and restore by merging, newest version of each card wins. Markdown export is one-way.
+- Search treats each Chinese, Japanese or Korean character as a term, so text in those scripts can be found without spaces.
+- The PWA must be served over HTTPS to install on a phone, so the phone needs a hosted copy (Cloudflare Pages fits, ahead of Milestone 2).

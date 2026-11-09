@@ -10,7 +10,10 @@
     "typecheck": "tsc --noEmit",
     "test": "vitest run",
     "icons": "pwa-assets-generator",
-    "deploy": "npm run build && wrangler pages deploy dist --project-name notes-app --branch main"
+    "deploy": "npm run build && wrangler pages deploy dist --project-name notes-app --branch main",
+    "dev:api": "wrangler pages dev dist --port 8788",
+    "db:migrate:local": "wrangler d1 migrations apply notes-app --local",
+    "db:migrate:remote": "wrangler d1 migrations apply notes-app --remote"
   },
   "dependencies": {
     "@tiptap/extensions": "^3.33.0",
@@ -20,6 +23,8 @@
     "@tiptap/suggestion": "^3.33.0",
     "dexie": "^4.4.7",
     "fflate": "^0.8.3",
+    "hono": "^4.13.17",
+    "jose": "^6.2.16",
     "minisearch": "^7.2.0",
     "react": "^19.3.1",
     "react-dom": "^19.3.1",

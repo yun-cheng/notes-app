@@ -120,3 +120,6 @@ export function diaryVault(vaults: Vault[]): Vault | null {
 
 /** Each account's first vault. It holds new cards, so it always stays open. */
 export const isDefaultVault = (vault: Vault) => vault.id === `vault-${vault.owner_id}`;
+
+/** Oldest first, which puts the default vault at the top. */
+export const sortVaults = (vaults: Vault[]) => [...vaults].sort((a, b) => a.created_at - b.created_at || a.id.localeCompare(b.id));

@@ -1,7 +1,7 @@
 import { createContext, useContext, useEffect, useMemo, useState, useSyncExternalStore, type ReactNode } from 'react';
 import { buildIndex, type CardIndex } from '../domain/cardIndex';
 import { toDateKey } from '../domain/dates';
-import { lockedVaultIds, VaultLocks } from '../domain/locks';
+import { lockedVaultIds, sortVaults, VaultLocks } from '../domain/locks';
 import type { Card, CardRecord, Vault } from '../domain/types';
 import { DexieStore } from '../storage/dexieStore';
 import { localStorageJournal } from '../storage/journal';
@@ -76,7 +76,7 @@ export function CardsProvider({ accountId, children }: { accountId: string; chil
     const stop = repo.store.subscribe((records) => {
       load(records).catch((e: unknown) => setError(String(e)));
     });
-    const stopVaults = repo.store.subscribeVaults(setVaults);
+    const stopVaults = repo.store.subscribeVaults((list) => setVaults(sortVaults(list)));
     const stopLocks = locks.start();
     return () => {
       active = false;

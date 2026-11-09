@@ -57,6 +57,14 @@ describe('backup', () => {
     expect(noteFile.text).toContain('tags: ["Work"]');
     expect(files.find((f) => f.path.startsWith('todos'))!.text).toContain('due: 2026-11-12');
   });
+  it('exports no locked card, and no locked title through a link', () => {
+    const secret = note('s', 'Secret title', { vaultId: 'private' });
+    const open = note('o', 'Open', { content: doc(p(link('s', 'Secret title'))) });
+    const files = markdownFiles(buildIndex([secret, open], new Set(['private'])));
+    expect(files).toHaveLength(1);
+    expect(files[0].text).toContain('[[Locked]]');
+    expect(files[0].text).not.toContain('Secret title');
+  });
   it('round-trips and rejects files it cannot restore', () => {
     const b = makeBackup([], [t], 0);
     expect(parseBackup(JSON.stringify(b)).cards).toEqual([t]);

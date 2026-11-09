@@ -34,3 +34,14 @@ describe('search', () => {
     expect(search.search('autumn')[0].snippet).toContain('autumn');
   });
 });
+
+describe('search with locked vaults', () => {
+  it('finds nothing in a locked vault, even through a link label', () => {
+    const secret = note('s', 'Zanzibar plans', { vaultId: 'private', content: doc(p(text('hidden words'))) });
+    const open = note('o', 'Open', { content: doc(p({ type: 'cardLink', attrs: { id: 's', label: 'Zanzibar plans' } })) });
+    const locked = buildSearch(buildIndex([secret, open], new Set(['private'])));
+    expect(locked.search('zanzibar')).toEqual([]);
+    expect(locked.search('hidden')).toEqual([]);
+    expect(buildSearch(buildIndex([secret, open])).search('hidden').map((h) => h.card.id)).toEqual(['s']);
+  });
+});

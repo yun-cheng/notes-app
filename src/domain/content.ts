@@ -15,11 +15,14 @@ export function linkedCardIds(content: JSONNode): string[] {
 }
 
 /** `titleOf` lets previews and search use a linked card's current title, not the one stored when it was linked. */
-export function plainText(content: JSONNode, titleOf?: (id: string) => string | undefined): string {
+export function plainText(content: JSONNode, titleOf?: (id: string, label: string) => string): string {
   const parts: string[] = [];
   const visit = (n: JSONNode) => {
     if (n.type === 'text' && n.text) parts.push(n.text);
-    else if (n.type === 'cardLink') parts.push(titleOf?.(String(n.attrs?.id)) ?? String(n.attrs?.label ?? ''));
+    else if (n.type === 'cardLink') {
+      const label = String(n.attrs?.label ?? '');
+      parts.push(titleOf ? titleOf(String(n.attrs?.id), label) : label);
+    }
     else if (n.type === 'hardBreak') parts.push(' ');
     n.content?.forEach(visit);
     if (n.content && n.type !== 'doc') parts.push(' ');

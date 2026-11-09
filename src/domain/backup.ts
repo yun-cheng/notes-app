@@ -1,6 +1,5 @@
 import { strToU8, zipSync } from 'fflate';
-import { resolveTags, type CardIndex } from './cardIndex';
-import { displayTitle } from './content';
+import { linkTitle, resolveTags, type CardIndex } from './cardIndex';
 import { toMarkdown } from './markdown';
 import { CARD_TYPES, type Card, type Vault } from './types';
 
@@ -21,10 +20,7 @@ const iso = (ms: number) => new Date(ms).toISOString();
 
 export function markdownFiles(index: CardIndex): MarkdownFile[] {
   const used = new Set<string>();
-  const titleOf = (id: string, fallback: string) => {
-    const card = index.byId.get(id);
-    return card ? displayTitle(card) : fallback;
-  };
+  const titleOf = (id: string, fallback: string) => linkTitle(index, id, fallback);
 
   return index.live.map((card) => {
     const base = card.type === 'diary' ? card.date : safeName(card.title);

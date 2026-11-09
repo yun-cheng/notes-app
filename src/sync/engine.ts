@@ -76,8 +76,9 @@ export class SyncEngine {
     let state: SyncState = 'idle';
     try {
       const failed = await this.push();
-      await this.pull();
+      // Vaults first, so a card in a newly private vault is never shown before its lock is known.
       await this.repo.putVaults(await this.transport.vaults());
+      await this.pull();
       if (failed) state = 'error';
       else this.publish({ lastSyncedAt: this.now() });
     } catch (err) {

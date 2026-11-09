@@ -1,4 +1,5 @@
-import type { CardRecord } from '../domain/types';
+import type { VaultPin } from '../domain/pin';
+import type { CardRecord, Vault } from '../domain/types';
 import { SyncAuthExpired, SyncOffline, type SyncTransport } from './engine';
 import type { ConfigResponse, PullResponse, PushResponse, SessionInfo } from './protocol';
 
@@ -18,6 +19,7 @@ export const httpTransport: SyncTransport = {
   push: async (records: CardRecord[]) =>
     (await request<PushResponse>('/sync/push', { method: 'POST', body: JSON.stringify({ records }) })).results,
   pull: (since) => request<PullResponse>(`/sync/pull?since=${since}`),
+  vaults: async () => (await request<SessionInfo>('/me')).vaults,
 };
 
 export const fetchConfig = () => request<ConfigResponse>('/config');
@@ -26,3 +28,14 @@ export const signInWithGoogle = (credential: string) =>
   request<SessionInfo>('/auth/google', { method: 'POST', body: JSON.stringify({ credential }) });
 
 export const signOutOfServer = () => request<unknown>('/auth/logout', { method: 'POST', body: '{}' });
+
+export interface VaultChanges {
+  name?: string;
+  pin?: VaultPin | null;
+  hidden?: boolean;
+}
+
+export const createVault = (input: VaultChanges) => request<Vault>('/vaults', { method: 'POST', body: JSON.stringify(input) });
+
+export const updateVault = (id: string, changes: VaultChanges) =>
+  request<Vault>(`/vaults/${encodeURIComponent(id)}`, { method: 'PATCH', body: JSON.stringify(changes) });

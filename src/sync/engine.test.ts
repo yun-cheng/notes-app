@@ -38,6 +38,12 @@ function createServer() {
         if (res.status === 401) throw new SyncAuthExpired();
         return (await res.json()) as PullResponse;
       },
+      async vaults() {
+        if (!t.online) throw new SyncOffline();
+        const res = await app.request('/api/me', { headers: { cookie } }, env);
+        if (res.status === 401) throw new SyncAuthExpired();
+        return ((await res.json()) as SessionInfo).vaults;
+      },
     };
     return t;
   };
@@ -301,6 +307,21 @@ describe('safety while syncing', () => {
     void phone.engine.sync();
     await first;
     expect(spy).toHaveBeenCalledTimes(2);
+  });
+});
+
+describe('vaults across devices', () => {
+  it('brings a vault and its cards to another device', async () => {
+    const { phone, mac, server, cookie } = await twoDevices();
+    const res = await server.app.request('/api/vaults', { method: 'POST', headers: { cookie }, body: JSON.stringify({ name: 'Private' }) }, server.env);
+    const vault = (await res.json()) as Vault;
+    await phone.engine.sync();
+    await phone.repo.createNote({ title: 'In private', vaultId: vault.id });
+    await phone.engine.sync();
+    await mac.engine.sync();
+    expect((await mac.store.listVaults()).map((v) => v.name)).toContain('Private');
+    expect((await mac.cards()).map((c) => c.vaultId)).toEqual([vault.id]);
+    expect(mac.engine.getStatus()).toMatchObject({ state: 'idle', pending: 0 });
   });
 });
 

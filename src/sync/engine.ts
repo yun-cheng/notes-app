@@ -1,4 +1,4 @@
-import type { CardRecord } from '../domain/types';
+import type { CardRecord, Vault } from '../domain/types';
 import type { CardRepository } from '../storage/repository';
 import { PUSH_LIMIT, type PullResponse, type PushResult } from './protocol';
 
@@ -8,6 +8,7 @@ export class SyncAuthExpired extends Error {}
 export interface SyncTransport {
   push(records: CardRecord[]): Promise<PushResult[]>;
   pull(since: number): Promise<PullResponse>;
+  vaults(): Promise<Vault[]>;
 }
 
 export type SyncState = 'idle' | 'syncing' | 'offline' | 'expired' | 'error';
@@ -76,6 +77,7 @@ export class SyncEngine {
     try {
       const failed = await this.push();
       await this.pull();
+      await this.repo.putVaults(await this.transport.vaults());
       if (failed) state = 'error';
       else this.publish({ lastSyncedAt: this.now() });
     } catch (err) {

@@ -68,6 +68,16 @@ describe('vaults', () => {
     db.raw.prepare(`UPDATE vaults SET ai_access = 'write' WHERE id = ?`).run(vault.id);
     expect((await patch(cookie, vault.id, { pin })).vault.ai_access).toBe('off');
   });
+  it('sets AI access on an open vault only', async () => {
+    const { signIn, create, patch } = vaultApi();
+    const { cookie, vault: personal } = await signIn('ann');
+    expect((await patch(cookie, personal, { ai_access: 'read' })).vault.ai_access).toBe('read');
+    expect((await patch(cookie, personal, { ai_access: 'everything' })).status).toBe(400);
+    const { vault: diary } = await create(cookie, { name: 'Diary', pin });
+    expect((await patch(cookie, diary.id, { ai_access: 'write' })).status).toBe(400);
+    expect((await patch(cookie, diary.id, { pin: null, ai_access: 'write' })).vault.ai_access).toBe('write');
+    expect((await patch(cookie, diary.id, { ai_access: 'off' })).vault.ai_access).toBe('off');
+  });
   it('refuses to lock the default vault, but allows renaming it', async () => {
     const { signIn, patch } = vaultApi();
     const { cookie, vault } = await signIn('ann');

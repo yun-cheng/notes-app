@@ -105,7 +105,7 @@ Links and tag associations live inside the card payload.
 2. Sync and accounts: Worker and D1, Google sign-in, multi-user data model (only the owner using it). **Built and deployed; a real Google sign-in has not been tried yet.**
 3. Private vaults: PIN, optional fingerprint, auto-lock, hidden from search. **Built and tested locally; not deployed. Run `npm run db:migrate:remote` before deploying it.**
    - Added alongside: version history per card, and undo and redo buttons in the editor. Also not deployed; same migration step.
-4. MCP server.
+4. MCP server. **Started: the vault API accepts `ai_access` (off, read, write), refused for private vaults. No app setting yet, since nothing reads it until the MCP server exists.**
 5. Photos.
 6. Sharing vaults and single notes (roles, comments, public links).
 7. End-to-end encryption for private vaults.

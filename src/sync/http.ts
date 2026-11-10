@@ -33,6 +33,7 @@ export interface VaultChanges {
   name?: string;
   pin?: VaultPin | null;
   hidden?: boolean;
+  ai_access?: Vault['ai_access'];
 }
 
 export const createVault = (input: VaultChanges) => request<Vault>('/vaults', { method: 'POST', body: JSON.stringify(input) });

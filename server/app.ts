@@ -69,6 +69,10 @@ function parseVaultBody(body: Record<string, unknown> | null): VaultUpdate | nul
     if (body.pin !== null && !isPin(body.pin)) return null;
     out.pin = body.pin;
   }
+  if (body.ai_access !== undefined) {
+    if (body.ai_access !== 'off' && body.ai_access !== 'read' && body.ai_access !== 'write') return null;
+    out.ai_access = body.ai_access;
+  }
   if (body.hidden !== undefined) {
     if (typeof body.hidden !== 'boolean') return null;
     out.hidden = body.hidden;
@@ -145,7 +149,8 @@ export function createApp({ verifyGoogle = googleVerifier(), now = Date.now }: A
     if (!update) return c.json({ error: 'Invalid vault' }, 400);
     const result = await updateVault(c.env.DB, c.get('user').id, c.req.param('id'), update);
     if ('vault' in result) return c.json(result.vault);
-    return result.error === 'not_found' ? c.json({ error: 'Vault not found' }, 404) : c.json({ error: 'The default vault cannot be locked' }, 400);
+    if (result.error === 'not_found') return c.json({ error: 'Vault not found' }, 404);
+    return c.json({ error: result.error === 'default_vault' ? 'The default vault cannot be locked' : 'A private vault cannot give AI access' }, 400);
   });
 
   app.post('/sync/push', async (c) => {

@@ -44,9 +44,9 @@ export async function createVault(db: Database, userId: string, input: VaultInpu
   return (await listVaults(db, userId)).find((v) => v.id === id)!;
 }
 
-export type VaultUpdate = Partial<VaultInput>;
+export type VaultUpdate = Partial<VaultInput> & { ai_access?: Vault['ai_access'] };
 
-export type UpdateResult = { vault: Vault } | { error: 'not_found' | 'default_vault' };
+export type UpdateResult = { vault: Vault } | { error: 'not_found' | 'default_vault' | 'private_ai' };
 
 /** Only the owner can change a vault. A private vault never has AI access. */
 export async function updateVault(db: Database, userId: string, id: string, update: VaultUpdate): Promise<UpdateResult> {
@@ -55,10 +55,12 @@ export async function updateVault(db: Database, userId: string, id: string, upda
   if (update.pin && id === defaultVaultId(userId)) return { error: 'default_vault' };
 
   const pin = update.pin === undefined ? current.pin : update.pin;
+  if (pin && update.ai_access && update.ai_access !== 'off') return { error: 'private_ai' };
   const hidden = !!pin && (update.hidden ?? current.hidden);
+  const aiAccess = pin ? 'off' : (update.ai_access ?? current.ai_access);
   await db
     .prepare(`UPDATE vaults SET name = ?, lock = ?, ai_access = ?, pin_salt = ?, pin_hash = ?, pin_iterations = ?, hidden = ? WHERE id = ?`)
-    .bind(update.name ?? current.name, pin ? 'pin' : 'none', pin ? 'off' : current.ai_access, pin?.salt ?? null, pin?.hash ?? null, pin?.iterations ?? null, hidden ? 1 : 0, id)
+    .bind(update.name ?? current.name, pin ? 'pin' : 'none', aiAccess, pin?.salt ?? null, pin?.hash ?? null, pin?.iterations ?? null, hidden ? 1 : 0, id)
     .run();
   return { vault: (await listVaults(db, userId)).find((v) => v.id === id)! };
 }

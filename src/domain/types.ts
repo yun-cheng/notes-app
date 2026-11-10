@@ -1,3 +1,4 @@
+import type { VaultEncryption } from '../crypto/vaultKeys';
 import type { VaultPin } from './pin';
 
 export interface JSONNode {
@@ -79,4 +80,6 @@ export interface Vault {
   role?: 'owner' | 'editor' | 'viewer';
   /** How many people can see it, including the owner. */
   members?: number;
+  /** Set when the vault is end-to-end encrypted. Only ever with a PIN. */
+  encryption?: VaultEncryption | null;
 }

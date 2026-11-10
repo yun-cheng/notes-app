@@ -43,10 +43,14 @@ export async function cardShares(db: Database, cardId: string, now: number): Pro
   return { people: people.results, invites: invites.results, vaults: vaults.results, links: links.results };
 }
 
-/** Only members who can edit a card's own vault may share it onward. */
+/** Only members who can edit a card's own vault may share it onward, and not yet from an encrypted vault. */
 async function mayShare(c: Context<AppEnv>, cardId: string): Promise<boolean> {
   const access = await cardAccess(c.env.DB, c.get('user').id, cardId);
-  return !!access?.member && allows(access, 'write');
+  if (!access?.member || !allows(access, 'write')) return false;
+  const sealed = await c.env.DB.prepare(`SELECT 1 AS yes FROM cards c JOIN vaults v ON v.id = c.vault_id WHERE c.id = ? AND v.encryption IS NOT NULL`)
+    .bind(cardId)
+    .first();
+  return !sealed;
 }
 
 interface PublicCard {

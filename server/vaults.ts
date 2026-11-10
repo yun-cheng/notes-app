@@ -1,8 +1,10 @@
 import type { VaultPin } from '../src/domain/pin';
+import type { VaultEncryption } from '../src/crypto/vaultKeys';
 import type { Vault } from '../src/domain/types';
 import type { Database } from './db';
 
-interface VaultRow extends Omit<Vault, 'pin' | 'hidden'> {
+interface VaultRow extends Omit<Vault, 'pin' | 'hidden' | 'encryption'> {
+  encryption: string | null;
   role: 'owner' | 'editor' | 'viewer';
   members: number;
   pin_salt: string | null;
@@ -11,12 +13,12 @@ interface VaultRow extends Omit<Vault, 'pin' | 'hidden'> {
   hidden: number;
 }
 
-const COLUMNS = `v.id, v.name, v.owner_id, v.lock, v.ai_access, v.created_at, v.pin_salt, v.pin_hash, v.pin_iterations, v.hidden, m.role,
+const COLUMNS = `v.id, v.name, v.owner_id, v.lock, v.ai_access, v.created_at, v.pin_salt, v.pin_hash, v.pin_iterations, v.hidden, v.encryption, m.role,
   (SELECT COUNT(*) FROM vault_members x WHERE x.vault_id = v.id) AS members`;
 
-function toVault({ pin_salt, pin_hash, pin_iterations, hidden, ...rest }: VaultRow): Vault {
+function toVault({ pin_salt, pin_hash, pin_iterations, hidden, encryption, ...rest }: VaultRow): Vault {
   const pin = pin_salt && pin_hash && pin_iterations ? { salt: pin_salt, hash: pin_hash, iterations: pin_iterations } : null;
-  return { ...rest, pin, hidden: !!hidden };
+  return { ...rest, pin, hidden: !!hidden, encryption: encryption ? (JSON.parse(encryption) as VaultEncryption) : null };
 }
 
 export const defaultVaultId = (userId: string) => `vault-${userId}`;
@@ -33,15 +35,20 @@ export interface VaultInput {
   name: string;
   pin: VaultPin | null;
   hidden: boolean;
+  /** The wrapped vault key, if the vault is end-to-end encrypted. Opaque to the server. */
+  encryption?: VaultEncryption | null;
 }
 
 export async function createVault(db: Database, userId: string, input: VaultInput, now: number): Promise<Vault> {
   const id = crypto.randomUUID();
   const { pin, name } = input;
+  const encryption = pin && input.encryption ? JSON.stringify(input.encryption) : null;
   await db.batch([
     db
-      .prepare(`INSERT INTO vaults (id, owner_id, name, lock, created_at, pin_salt, pin_hash, pin_iterations, hidden) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)`)
-      .bind(id, userId, name, pin ? 'pin' : 'none', now, pin?.salt ?? null, pin?.hash ?? null, pin?.iterations ?? null, pin && input.hidden ? 1 : 0),
+      .prepare(
+        `INSERT INTO vaults (id, owner_id, name, lock, created_at, pin_salt, pin_hash, pin_iterations, hidden, encryption) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+      )
+      .bind(id, userId, name, pin ? 'pin' : 'none', now, pin?.salt ?? null, pin?.hash ?? null, pin?.iterations ?? null, pin && input.hidden ? 1 : 0, encryption),
     db.prepare(`INSERT INTO vault_members (vault_id, user_id, role) VALUES (?, ?, 'owner')`).bind(id, userId),
   ]);
   return (await listVaults(db, userId)).find((v) => v.id === id)!;
@@ -49,7 +56,7 @@ export async function createVault(db: Database, userId: string, input: VaultInpu
 
 export type VaultUpdate = Partial<VaultInput> & { ai_access?: Vault['ai_access'] };
 
-export type UpdateResult = { vault: Vault } | { error: 'not_found' | 'default_vault' | 'private_ai' | 'shared_private' };
+export type UpdateResult = { vault: Vault } | { error: 'not_found' | 'default_vault' | 'private_ai' | 'shared_private' | 'encrypted_open' };
 
 /** Only the owner can change a vault. A private vault never has AI access. */
 export async function updateVault(db: Database, userId: string, id: string, update: VaultUpdate): Promise<UpdateResult> {
@@ -63,9 +70,22 @@ export async function updateVault(db: Database, userId: string, id: string, upda
   if (pin && update.ai_access && update.ai_access !== 'off') return { error: 'private_ai' };
   const hidden = !!pin && (update.hidden ?? current.hidden);
   const aiAccess = pin ? 'off' : (update.ai_access ?? current.ai_access);
+  const encryption = update.encryption === undefined ? (current.encryption ?? null) : update.encryption;
+  // Dropping the PIN of an encrypted vault must say the encryption goes too, after the device decrypted its cards.
+  if (!pin && encryption) return { error: 'encrypted_open' };
   await db
-    .prepare(`UPDATE vaults SET name = ?, lock = ?, ai_access = ?, pin_salt = ?, pin_hash = ?, pin_iterations = ?, hidden = ? WHERE id = ?`)
-    .bind(update.name ?? current.name, pin ? 'pin' : 'none', aiAccess, pin?.salt ?? null, pin?.hash ?? null, pin?.iterations ?? null, hidden ? 1 : 0, id)
+    .prepare(`UPDATE vaults SET name = ?, lock = ?, ai_access = ?, pin_salt = ?, pin_hash = ?, pin_iterations = ?, hidden = ?, encryption = ? WHERE id = ?`)
+    .bind(
+      update.name ?? current.name,
+      pin ? 'pin' : 'none',
+      aiAccess,
+      pin?.salt ?? null,
+      pin?.hash ?? null,
+      pin?.iterations ?? null,
+      hidden ? 1 : 0,
+      encryption ? JSON.stringify(encryption) : null,
+      id,
+    )
     .run();
   return { vault: (await listVaults(db, userId)).find((v) => v.id === id)! };
 }

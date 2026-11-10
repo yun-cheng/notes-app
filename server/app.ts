@@ -65,6 +65,14 @@ function isPin(value: unknown): value is VaultPin {
   );
 }
 
+/** The server can't check a wrapped key, only its shape and size. */
+function isEncryption(value: unknown): boolean {
+  const e = value as { version?: unknown; kdf?: unknown; wrapped?: unknown; recovery?: unknown } | null;
+  return (
+    !!e && e.version === 1 && typeof e.kdf === 'object' && typeof e.wrapped === 'string' && typeof e.recovery === 'string' && JSON.stringify(e).length <= 4000
+  );
+}
+
 /** Reads the fields of a vault create or update, or returns null if any is invalid. */
 function parseVaultBody(body: Record<string, unknown> | null): VaultUpdate | null {
   if (!body) return null;
@@ -80,6 +88,10 @@ function parseVaultBody(body: Record<string, unknown> | null): VaultUpdate | nul
   if (body.ai_access !== undefined) {
     if (body.ai_access !== 'off' && body.ai_access !== 'read' && body.ai_access !== 'write') return null;
     out.ai_access = body.ai_access;
+  }
+  if (body.encryption !== undefined) {
+    if (body.encryption !== null && !isEncryption(body.encryption)) return null;
+    out.encryption = body.encryption as VaultUpdate['encryption'];
   }
   if (body.hidden !== undefined) {
     if (typeof body.hidden !== 'boolean') return null;
@@ -153,7 +165,12 @@ export function createApp({ verifyGoogle = googleVerifier(), now = Date.now, goo
   app.post('/vaults', async (c) => {
     const input = parseVaultBody(await c.req.json<Record<string, unknown>>().catch(() => null));
     if (!input?.name) return c.json({ error: 'Invalid vault' }, 400);
-    const vault = await createVault(c.env.DB, c.get('user').id, { name: input.name, pin: input.pin ?? null, hidden: input.hidden ?? false }, now());
+    const vault = await createVault(
+      c.env.DB,
+      c.get('user').id,
+      { name: input.name, pin: input.pin ?? null, hidden: input.hidden ?? false, encryption: input.encryption ?? null },
+      now(),
+    );
     return c.json(vault, 201);
   });
 
@@ -167,8 +184,21 @@ export function createApp({ verifyGoogle = googleVerifier(), now = Date.now, goo
       default_vault: 'The default vault cannot be locked',
       private_ai: 'A private vault cannot give AI access',
       shared_private: 'A shared vault cannot have a PIN',
+      encrypted_open: 'Remove the encryption along with the PIN',
     };
     return c.json({ error: messages[result.error] }, 400);
+  });
+
+  /** After a vault is encrypted, its history's plaintext versions are removed. */
+  app.post('/vaults/:id/purge-plaintext', async (c) => {
+    const vault = (await listVaults(c.env.DB, c.get('user').id)).find((v) => v.id === c.req.param('id'));
+    if (!vault || vault.owner_id !== c.get('user').id || !vault.encryption) return c.json({ error: 'Vault not found' }, 404);
+    await c.env.DB.prepare(
+      `DELETE FROM card_versions WHERE payload NOT LIKE 'e1:%' AND card_id IN (SELECT id FROM cards WHERE vault_id = ?)`,
+    )
+      .bind(vault.id)
+      .run();
+    return c.json({ ok: true });
   });
 
   app.post('/sync/push', async (c) => {

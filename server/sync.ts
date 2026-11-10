@@ -50,6 +50,8 @@ interface Write {
 /** `via` names the AI app making the change, for its history; null for the person's own devices. */
 export async function pushRecords(db: Database, userId: string, records: CardRecord[], via: string | null = null): Promise<PushResult[]> {
   const writable = await writableVaults(db, userId);
+  const { results: sealed } = await db.prepare(`SELECT id FROM vaults WHERE encryption IS NOT NULL`).all<{ id: string }>();
+  const encrypted = new Set(sealed.map((v) => v.id));
   const editable = await editableShares(db, userId, records.map((r) => r.id));
   const { results: rows } = await db
     .prepare(`SELECT id, vault_id, updated_at, deleted, seq, payload FROM cards WHERE id IN (${records.map(() => '?').join(',')})`)
@@ -64,7 +66,8 @@ export async function pushRecords(db: Database, userId: string, records: CardRec
     const current = existing.get(id);
     if (new TextEncoder().encode(record.payload).length > MAX_PAYLOAD_BYTES) {
       results.set(id, { id, status: 'too_large' });
-    } else if (!mayWrite(record, current, writable, editable)) {
+    } else if (!mayWrite(record, current, writable, editable) || (encrypted.has(record.vault_id) && !record.payload.startsWith('e1:'))) {
+      // An encrypted vault only takes ciphertext, so a device that missed the change can't write plaintext into it.
       results.set(id, { id, status: 'forbidden' });
     } else if (!current) {
       writes.push({ record, expected: null, result: (seq) => ({ id, status: 'ok', seq }) });

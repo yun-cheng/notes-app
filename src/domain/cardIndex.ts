@@ -37,7 +37,8 @@ export function buildIndex(allCards: Card[], locked: ReadonlySet<string> = new S
       continue;
     }
     lockedCards.set(card.id, card.vaultId);
-    if (card.type === 'diary' && !card.deleted && !isBlank(card)) lockedDiaries.set(card.date, card.vaultId);
+    // An encrypted entry reads as blank while locked, so blankness can't decide this.
+    if (card.type === 'diary' && !card.deleted) lockedDiaries.set(card.date, card.vaultId);
   }
 
   const byId = new Map(cards.map((c) => [c.id, c]));

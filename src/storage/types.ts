@@ -27,10 +27,18 @@ export interface CardStore {
   subscribe(listener: (records: CardRecord[]) => void): () => void;
 }
 
-/** Turns a card payload into the opaque string that is stored. Encryption replaces this later. */
+export interface CodecContext {
+  id: string;
+  vaultId: string;
+}
+
+/** Turns a card payload into the opaque string that is stored: JSON, or ciphertext in an encrypted vault. */
 export interface PayloadCodec {
-  encode(payload: CardPayload): Promise<string>;
-  decode(data: string): Promise<CardPayload>;
+  encode(payload: CardPayload, context: CodecContext): Promise<string>;
+  /** Null when the payload can't be read on this device right now, because its vault key isn't open. */
+  decode(data: string, context: CodecContext): Promise<CardPayload | null>;
+  /** True for a vault whose cards must be stored encrypted. */
+  isEncrypted?(vaultId: string): boolean;
 }
 
 export const jsonCodec: PayloadCodec = {

@@ -3,6 +3,18 @@ import type { Vault } from './types';
 
 export type UnlockResult = 'ok' | 'wrong' | 'throttled';
 
+/** Opening and forgetting the keys of end-to-end encrypted vaults, alongside their locks. */
+export interface VaultKeyHooks {
+  /** Unwraps the vault key with the PIN. False if the PIN is wrong. */
+  unlock(vault: Vault, pin: string): Promise<boolean>;
+  /** Uses a key kept on this device for fingerprint unlock. False if there isn't one. */
+  unlockStored(vault: Vault): Promise<boolean>;
+  forget(vaultId: string): void;
+  forgetAll(): void;
+}
+
+const noKeys: VaultKeyHooks = { unlock: async () => true, unlockStored: async () => true, forget: () => undefined, forgetAll: () => undefined };
+
 const AUTO_LOCK_MS = 5 * 60_000;
 const FREE_ATTEMPTS = 5;
 const THROTTLE_MS = 30_000;
@@ -18,6 +30,7 @@ export class VaultLocks {
   constructor(
     private now: () => number = Date.now,
     private autoLockMs = AUTO_LOCK_MS,
+    private keys: VaultKeyHooks = noKeys,
   ) {}
 
   getOpen = () => this.open;
@@ -41,15 +54,28 @@ export class VaultLocks {
     this.touch();
   }
 
-  /** Opens a vault that was just verified another way, such as by fingerprint. */
+  /** Opens a vault whose key, if it has one, is already in the keyring, such as after recovery. */
   unlockVerified(id: string) {
     this.failures = 0;
     this.markOpen(id);
   }
 
+  /** Opens a vault after another check, such as a fingerprint. An encrypted vault also needs its key kept on this device. */
+  async unlockWithDevice(vault: Vault): Promise<boolean> {
+    if (vault.encryption && !(await this.keys.unlockStored(vault))) return false;
+    this.unlockVerified(vault.id);
+    return true;
+  }
+
+  /** The PIN opens an encrypted vault only if it unwraps the vault key, which checks it too. */
+  private async matches(vault: Vault, pin: string): Promise<boolean> {
+    if (vault.encryption) return this.keys.unlock(vault, pin);
+    return !!vault.pin && (await verifyPin(pin, vault.pin));
+  }
+
   async tryUnlock(vault: Vault, pin: string): Promise<UnlockResult> {
     if (this.isThrottled()) return 'throttled';
-    if (vault.pin && (await verifyPin(pin, vault.pin))) {
+    if (await this.matches(vault, pin)) {
       this.unlockVerified(vault.id);
       return 'ok';
     }
@@ -59,7 +85,7 @@ export class VaultLocks {
   /** Tries a PIN against several vaults at once, for finding a hidden vault without naming it. */
   async tryUnlockAny(vaults: Vault[], pin: string): Promise<UnlockResult> {
     if (this.isThrottled()) return 'throttled';
-    const matches = await Promise.all(vaults.map(async (v) => !!v.pin && (await verifyPin(pin, v.pin))));
+    const matches = await Promise.all(vaults.map((v) => this.matches(v, pin)));
     const found = vaults.filter((_, i) => matches[i]);
     if (!found.length) return this.recordFailure();
     found.forEach((v) => this.unlockVerified(v.id));
@@ -75,12 +101,14 @@ export class VaultLocks {
   }
 
   lock(id: string) {
+    this.keys.forget(id);
     if (this.open.has(id)) this.set(new Set([...this.open].filter((v) => v !== id)));
   }
 
   lockAll() {
     if (this.timer) clearTimeout(this.timer);
     this.timer = null;
+    this.keys.forgetAll();
     if (this.open.size) this.set(new Set());
   }
 

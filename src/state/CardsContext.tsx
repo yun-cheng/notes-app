@@ -1,30 +1,50 @@
 import { createContext, useContext, useEffect, useMemo, useState, useSyncExternalStore, type ReactNode } from 'react';
 import { buildIndex, type CardIndex } from '../domain/cardIndex';
 import { toDateKey } from '../domain/dates';
-import { lockedVaultIds, sortVaults, VaultLocks } from '../domain/locks';
+import { lockedVaultIds, sortVaults, VaultLocks, type VaultKeyHooks } from '../domain/locks';
 import type { Card, CardRecord, Vault } from '../domain/types';
 import { DexieStore } from '../storage/dexieStore';
 import { localStorageJournal } from '../storage/journal';
 import { CardRepository } from '../storage/repository';
-import { jsonCodec } from '../storage/types';
 import { SyncEngine, type SyncStatus } from '../sync/engine';
 import type { SharedCard } from '../sync/protocol';
 import { httpTransport, photoTransport } from '../sync/http';
 import { preparePhoto } from '../photos/prepare';
 import { PhotoService, type PhotoState } from '../photos/service';
+import { Keyring } from '../crypto/keyring';
+import { unlockWithPin } from '../crypto/vaultKeys';
 
 /** Each account has its own database and journal, so accounts on one browser stay apart. */
 export function openAccountStorage(accountId: string) {
   const store = new DexieStore(`notes-app:user:${accountId}`);
-  const repo = new CardRepository(store, jsonCodec, undefined, undefined, localStorageJournal(`notes-app:journal:${accountId}`), `vault-${accountId}`);
-  return { store, repo };
+  const keyring = new Keyring();
+  const repo = new CardRepository(store, keyring, undefined, undefined, localStorageJournal(`notes-app:journal:${accountId}`), `vault-${accountId}`);
+  return { store, repo, keyring };
 }
 
+/** Where a vault's key is kept on this device for fingerprint unlock. Never extractable. */
+export const deviceKeyName = (vaultId: string) => `devicekey:${vaultId}`;
+
 function openAccount(accountId: string) {
-  const { store, repo } = openAccountStorage(accountId);
+  const { store, repo, keyring } = openAccountStorage(accountId);
   const engine = new SyncEngine(repo, httpTransport);
   repo.onChange = () => engine.schedule();
-  return { repo, engine, locks: new VaultLocks(), photos: new PhotoService(store, photoTransport, preparePhoto) };
+  const keys: VaultKeyHooks = {
+    unlock: async (vault, pin) => {
+      const key = vault.encryption && (await unlockWithPin(vault.encryption, pin));
+      if (key) keyring.set(vault.id, key);
+      return !!key;
+    },
+    unlockStored: async (vault) => {
+      const key = await repo.getMeta(deviceKeyName(vault.id));
+      if (!(key instanceof CryptoKey)) return false;
+      keyring.set(vault.id, key);
+      return true;
+    },
+    forget: (id) => keyring.forget(id),
+    forgetAll: () => keyring.forgetAll(),
+  };
+  return { repo, engine, keyring, locks: new VaultLocks(undefined, undefined, keys), photos: new PhotoService(store, photoTransport, preparePhoto) };
 }
 
 interface CardsValue {
@@ -34,6 +54,7 @@ interface CardsValue {
   vaults: Vault[];
   locks: VaultLocks;
   photos: PhotoService;
+  keyring: Keyring;
   accountId: string;
   /** Cards shared with this account from outside its vaults, by card ID. */
   shared: ReadonlyMap<string, SharedCard>;
@@ -44,7 +65,7 @@ interface CardsValue {
 const CardsContext = createContext<CardsValue | null>(null);
 
 export function CardsProvider({ accountId, children }: { accountId: string; children: ReactNode }) {
-  const [{ repo, engine, locks, photos }] = useState(() => openAccount(accountId));
+  const [{ repo, engine, locks, photos, keyring }] = useState(() => openAccount(accountId));
   const [cards, setCards] = useState<Card[] | null>(null);
   const [vaults, setVaults] = useState<Vault[] | null>(null);
   const open = useSyncExternalStore(locks.subscribe, locks.getOpen);
@@ -70,21 +91,26 @@ export function CardsProvider({ accountId, children }: { accountId: string; chil
   useEffect(() => {
     let active = true;
     let latest = 0;
-    const decoded = new Map<string, { at: number; deleted: boolean; card: Card }>();
+    const decoded = new Map<string, { at: number; deleted: boolean; generation: number; card: Card }>();
+    let lastRecords: CardRecord[] = [];
 
     const load = async (records: CardRecord[]) => {
+      lastRecords = records;
       const run = ++latest;
+      const generation = keyring.getGeneration();
       const loaded = await Promise.all(
         records.map(async (r) => {
           const hit = decoded.get(r.id);
-          if (hit && hit.at === r.updated_at && hit.deleted === r.deleted) return hit.card;
+          if (hit && hit.at === r.updated_at && hit.deleted === r.deleted && hit.generation === generation) return hit.card;
           const card = await repo.decode(r);
-          decoded.set(r.id, { at: r.updated_at, deleted: r.deleted, card });
+          decoded.set(r.id, { at: r.updated_at, deleted: r.deleted, generation, card });
           return card;
         }),
       );
       if (active && run === latest) setCards(loaded);
     };
+    // Opening or forgetting a key changes what can be read.
+    const stopKeys = keyring.subscribe(() => load(lastRecords).catch((e: unknown) => setError(String(e))));
 
     let stopSync: (() => void) | null = null;
     let stopPhotos: (() => void) | null = null;
@@ -100,11 +126,15 @@ export function CardsProvider({ accountId, children }: { accountId: string; chil
     const stop = repo.store.subscribe((records) => {
       load(records).catch((e: unknown) => setError(String(e)));
     });
-    const stopVaults = repo.store.subscribeVaults((list) => setVaults(sortVaults(list)));
+    const stopVaults = repo.store.subscribeVaults((list) => {
+      keyring.setVaults(list);
+      setVaults(sortVaults(list));
+    });
     const stopLocks = locks.start();
     return () => {
       active = false;
       stop();
+      stopKeys();
       stopVaults();
       stopLocks();
       stopSync?.();
@@ -122,7 +152,7 @@ export function CardsProvider({ accountId, children }: { accountId: string; chil
     );
   }
   if (!index || !vaults) return <div className="boot" aria-busy="true" />;
-  return <CardsContext.Provider value={{ index, repo, engine, vaults, locks, locked, photos, accountId, shared }}>{children}</CardsContext.Provider>;
+  return <CardsContext.Provider value={{ index, repo, engine, vaults, locks, locked, photos, keyring, accountId, shared }}>{children}</CardsContext.Provider>;
 }
 
 export function useCards(): CardsValue {

@@ -6,6 +6,20 @@ import { noJournal, type CardPatch, type DiaryPatch, type Journal, type JournalO
 import type { SharedCard } from '../sync/protocol';
 import type { CardStore, PayloadCodec } from './types';
 
+/** Marks a stand-in for a card that couldn't be decrypted. It must never be written back. */
+export const SEALED = Symbol('sealed');
+
+/** What a card in a locked encrypted vault looks like to the app: nothing but its ID, vault and dates. */
+function sealedCard(record: CardRecord): Card {
+  const common = { id: record.id, vaultId: record.vault_id, updatedAt: record.updated_at, deleted: record.deleted, seq: record.seq, createdAt: 0, title: '', content: EMPTY_DOC, tags: [] };
+  // Diary IDs carry their date, so a locked day still knows it has an entry.
+  const date = record.id.startsWith('diary:') ? record.id.slice(record.id.lastIndexOf(':') + 1) : null;
+  const card: Card = date ? { ...common, type: 'diary', date } : { ...common, type: 'note' };
+  return Object.assign(card, { [SEALED]: true });
+}
+
+const isSealed = (card: Card) => (card as { [SEALED]?: boolean })[SEALED] === true;
+
 export interface ImportResult {
   added: number;
   updated: number;
@@ -17,6 +31,8 @@ export class CardRepository {
   private queue: Promise<unknown> = Promise.resolve();
   private vault: Vault | null = null;
   private uncommitted: JournalOp[] = [];
+  /** Cards known to be in encrypted vaults. Their edits skip the plaintext journal. */
+  private encryptedIds = new Set<string>();
   /** Called after any local change, so sync can be scheduled. */
   onChange: (() => void) | null = null;
 
@@ -81,13 +97,41 @@ export class CardRepository {
   }
 
   async decode(record: CardRecord): Promise<Card> {
-    const payload = await this.codec.decode(record.payload);
+    if (this.codec.isEncrypted?.(record.vault_id)) this.encryptedIds.add(record.id);
+    else this.encryptedIds.delete(record.id);
+    const payload = await this.codec.decode(record.payload, { id: record.id, vaultId: record.vault_id });
+    if (!payload) return sealedCard(record);
     return { ...payload, id: record.id, vaultId: record.vault_id, updatedAt: record.updated_at, deleted: record.deleted, seq: record.seq } as Card;
   }
 
   private async encode(card: Card): Promise<CardRecord> {
+    if (isSealed(card)) throw new Error('A locked card cannot be saved');
+    if (this.codec.isEncrypted?.(card.vaultId)) this.encryptedIds.add(card.id);
+    else this.encryptedIds.delete(card.id);
     const { id, vaultId, updatedAt, deleted, seq, ...payload } = card;
-    return { id, vault_id: vaultId, updated_at: updatedAt, deleted, seq, payload: await this.codec.encode(payload as CardPayload) };
+    return { id, vault_id: vaultId, updated_at: updatedAt, deleted, seq, payload: await this.codec.encode(payload as CardPayload, { id, vaultId }) };
+  }
+
+  /** The journal is plaintext, so edits to encrypted cards skip it, trading crash safety for secrecy. */
+  private secret(id: string, vaultId?: string): boolean {
+    return this.encryptedIds.has(id) || (!!vaultId && !!this.codec.isEncrypted?.(vaultId));
+  }
+
+  /** Stores every readable card in a vault again, after its encryption was turned on or off. */
+  recodeVault(vaultId: string): Promise<number> {
+    return this.enqueue(async () => {
+      const records: CardRecord[] = [];
+      for (const record of await this.store.listCards()) {
+        if (record.vault_id !== vaultId) continue;
+        const card = await this.decode(record);
+        if (!isSealed(card)) records.push(await this.encode(card));
+      }
+      if (records.length) {
+        await this.store.putCards(records);
+        this.onChange?.();
+      }
+      return records.length;
+    });
   }
 
   private async read(id: string): Promise<Card | undefined> {
@@ -137,10 +181,11 @@ export class CardRepository {
   }
 
   update(id: string, patch: CardPatch): Promise<Card | undefined> {
-    return this.journaled({ kind: 'update', at: this.now(), id, patch }, async () => {
+    const work = async () => {
       const card = await this.read(id);
       return card && this.applyUpdate(card, patch);
-    });
+    };
+    return this.secret(id) ? this.enqueue(work) : this.journaled({ kind: 'update', at: this.now(), id, patch }, work);
   }
 
   private applyUpdate(card: Card, patch: CardPatch): Promise<Card> {
@@ -151,7 +196,9 @@ export class CardRepository {
 
   /** Diary entries are created on first write. Their ID comes from the date, so two devices can't create two entries for one day. */
   saveDiary(date: string, patch: DiaryPatch, existingId?: string, vaultId?: string): Promise<Card> {
-    return this.journaled({ kind: 'diary', at: this.now(), date, patch, existingId, vaultId }, () => this.applyDiary(date, patch, existingId, vaultId));
+    const work = () => this.applyDiary(date, patch, existingId, vaultId);
+    if (this.secret(existingId ?? '', vaultId)) return this.enqueue(work);
+    return this.journaled({ kind: 'diary', at: this.now(), date, patch, existingId, vaultId }, work);
   }
 
   private async applyDiary(date: string, patch: DiaryPatch, existingId?: string, vaultId?: string): Promise<Card> {
@@ -234,8 +281,19 @@ export class CardRepository {
       for (const record of await this.store.listDirty()) {
         if (out.length >= limit) break;
         if (exclude.has(record.id)) continue;
-        if (record.seq === 0 && isBlank(await this.decode(record))) continue;
-        out.push(record);
+        let next = record;
+        // Written as plaintext before this device learned the vault is encrypted: encrypt it now, or wait for the key.
+        if (this.codec.isEncrypted?.(record.vault_id) && !record.payload.startsWith('e1:')) {
+          const card = await this.decode(record);
+          try {
+            next = await this.encode(card);
+          } catch {
+            continue;
+          }
+          await this.store.putCards([next]);
+        }
+        if (next.seq === 0 && isBlank(await this.decode(next))) continue;
+        out.push(next);
       }
       return out;
     });

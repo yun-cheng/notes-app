@@ -77,3 +77,19 @@ export async function connectAi(call: ReturnType<typeof setup>['call'], cookie: 
 }
 
 export { challengeFor };
+
+/** Two signed-in people, with helpers for calling the API as either. */
+export async function people() {
+  const t = setup();
+  const ann = await t.signIn('ann');
+  const ben = await t.signIn('ben');
+  const json = async <T>(res: Response | Promise<Response>) => (await (await res).json()) as T;
+  const send = (cookie: string, method: string, path: string, body?: unknown) =>
+    t.call(path, { method, ...(body === undefined ? {} : { body: JSON.stringify(body) }) }, cookie);
+  const me = async (cookie: string) => json<SessionInfo>(t.call('/api/me', {}, cookie));
+  const ids = async (cookie: string) => (await t.pull(cookie)).records.map((r) => r.id).sort();
+  return { ...t, ann, ben, json, send, me, ids };
+}
+
+export const notePayload = (title: string, extra: object = {}) =>
+  JSON.stringify({ type: 'note', title, content: { type: 'doc', content: [] }, tags: [], createdAt: 1, ...extra });

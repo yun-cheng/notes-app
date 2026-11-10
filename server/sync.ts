@@ -1,5 +1,6 @@
 import type { CardRecord } from '../src/domain/types';
 import { MAX_PAYLOAD_BYTES, PULL_LIMIT, type PullResponse, type PushResult } from '../src/sync/protocol';
+import { SHARED_WITH } from './access';
 import type { Database, Statement } from './db';
 import { recordVersions, type Written } from './versions';
 
@@ -8,6 +9,24 @@ interface CardRow extends Omit<CardRecord, 'deleted'> {
 }
 
 const toRecord = (row: CardRow): CardRecord => ({ ...row, deleted: !!row.deleted });
+
+/** Cards among `ids` shared with the user for editing. */
+async function editableShares(db: Database, userId: string, ids: string[]): Promise<Set<string>> {
+  const { results } = await db
+    .prepare(`SELECT s.card_id FROM card_shares s WHERE s.role = 'edit' AND s.card_id IN (${ids.map(() => '?').join(',')}) AND ${SHARED_WITH}`)
+    .bind(...ids, userId, userId)
+    .all<{ card_id: string }>();
+  return new Set(results.map((r) => r.card_id));
+}
+
+/**
+ * A member who can edit both the old and new vault may write anything. Someone a card was
+ * shared with for editing may change its content, but not move it, trash it, or create it.
+ */
+function mayWrite(record: CardRecord, current: CardRecord | undefined, writable: Set<string>, editable: Set<string>): boolean {
+  if (writable.has(record.vault_id) && (!current || writable.has(current.vault_id))) return true;
+  return !!current && editable.has(record.id) && record.vault_id === current.vault_id && record.deleted === current.deleted;
+}
 
 async function writableVaults(db: Database, userId: string): Promise<Set<string>> {
   const { results } = await db
@@ -31,6 +50,7 @@ interface Write {
 /** `via` names the AI app making the change, for its history; null for the person's own devices. */
 export async function pushRecords(db: Database, userId: string, records: CardRecord[], via: string | null = null): Promise<PushResult[]> {
   const writable = await writableVaults(db, userId);
+  const editable = await editableShares(db, userId, records.map((r) => r.id));
   const { results: rows } = await db
     .prepare(`SELECT id, vault_id, updated_at, deleted, seq, payload FROM cards WHERE id IN (${records.map(() => '?').join(',')})`)
     .bind(...records.map((r) => r.id))
@@ -44,7 +64,7 @@ export async function pushRecords(db: Database, userId: string, records: CardRec
     const current = existing.get(id);
     if (new TextEncoder().encode(record.payload).length > MAX_PAYLOAD_BYTES) {
       results.set(id, { id, status: 'too_large' });
-    } else if (!writable.has(record.vault_id) || (current && !writable.has(current.vault_id))) {
+    } else if (!mayWrite(record, current, writable, editable)) {
       results.set(id, { id, status: 'forbidden' });
     } else if (!current) {
       writes.push({ record, expected: null, result: (seq) => ({ id, status: 'ok', seq }) });
@@ -93,11 +113,13 @@ export async function pushRecords(db: Database, userId: string, records: CardRec
 export async function pullRecords(db: Database, userId: string, since: number): Promise<PullResponse> {
   const { results } = await db
     .prepare(
-      `SELECT c.id, c.vault_id, c.updated_at, c.deleted, c.seq, c.payload
-       FROM cards c JOIN vault_members m ON m.vault_id = c.vault_id
-       WHERE m.user_id = ? AND c.seq > ? ORDER BY c.seq LIMIT ?`,
+      `SELECT c.id, c.vault_id, c.updated_at, c.deleted, c.seq, c.payload FROM cards c
+       WHERE c.seq > ?
+         AND (c.vault_id IN (SELECT vault_id FROM vault_members WHERE user_id = ?)
+              OR c.id IN (SELECT s.card_id FROM card_shares s WHERE ${SHARED_WITH}))
+       ORDER BY c.seq LIMIT ?`,
     )
-    .bind(userId, since, PULL_LIMIT + 1)
+    .bind(since, userId, userId, userId, PULL_LIMIT + 1)
     .all<CardRow>();
   const more = results.length > PULL_LIMIT;
   const page = results.slice(0, PULL_LIMIT).map(toRecord);

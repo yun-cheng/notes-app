@@ -3,13 +3,16 @@ import type { Vault } from '../src/domain/types';
 import type { Database } from './db';
 
 interface VaultRow extends Omit<Vault, 'pin' | 'hidden'> {
+  role: 'owner' | 'editor' | 'viewer';
+  members: number;
   pin_salt: string | null;
   pin_hash: string | null;
   pin_iterations: number | null;
   hidden: number;
 }
 
-const COLUMNS = 'v.id, v.name, v.owner_id, v.lock, v.ai_access, v.created_at, v.pin_salt, v.pin_hash, v.pin_iterations, v.hidden';
+const COLUMNS = `v.id, v.name, v.owner_id, v.lock, v.ai_access, v.created_at, v.pin_salt, v.pin_hash, v.pin_iterations, v.hidden, m.role,
+  (SELECT COUNT(*) FROM vault_members x WHERE x.vault_id = v.id) AS members`;
 
 function toVault({ pin_salt, pin_hash, pin_iterations, hidden, ...rest }: VaultRow): Vault {
   const pin = pin_salt && pin_hash && pin_iterations ? { salt: pin_salt, hash: pin_hash, iterations: pin_iterations } : null;
@@ -46,13 +49,15 @@ export async function createVault(db: Database, userId: string, input: VaultInpu
 
 export type VaultUpdate = Partial<VaultInput> & { ai_access?: Vault['ai_access'] };
 
-export type UpdateResult = { vault: Vault } | { error: 'not_found' | 'default_vault' | 'private_ai' };
+export type UpdateResult = { vault: Vault } | { error: 'not_found' | 'default_vault' | 'private_ai' | 'shared_private' };
 
 /** Only the owner can change a vault. A private vault never has AI access. */
 export async function updateVault(db: Database, userId: string, id: string, update: VaultUpdate): Promise<UpdateResult> {
   const current = (await listVaults(db, userId)).find((v) => v.id === id);
   if (!current || current.owner_id !== userId) return { error: 'not_found' };
   if (update.pin && id === defaultVaultId(userId)) return { error: 'default_vault' };
+  // A PIN would have to be told to every member. Keep shared vaults open until sharing private vaults is designed.
+  if (update.pin && (current.members ?? 1) > 1) return { error: 'shared_private' };
 
   const pin = update.pin === undefined ? current.pin : update.pin;
   if (pin && update.ai_access && update.ai_access !== 'off') return { error: 'private_ai' };

@@ -63,6 +63,18 @@ export async function upsertUser(db: Database, identity: GoogleIdentity, now: nu
       .prepare(`INSERT OR IGNORE INTO vaults (id, owner_id, name, created_at) VALUES (?, ?, 'Personal', ?)`)
       .bind(vaultId, user.id, now),
     db.prepare(`INSERT OR IGNORE INTO vault_members (vault_id, user_id, role) VALUES (?, ?, 'owner')`).bind(vaultId, user.id),
+    // Whatever was shared with this email before the account existed now belongs to it.
+    db
+      .prepare(`INSERT OR IGNORE INTO vault_members (vault_id, user_id, role) SELECT vault_id, ?, role FROM vault_invites WHERE email = lower(?)`)
+      .bind(user.id, user.email),
+    db.prepare(`DELETE FROM vault_invites WHERE email = lower(?)`).bind(user.email),
+    db
+      .prepare(
+        `INSERT OR IGNORE INTO card_shares (card_id, target_type, target_id, role, shared_by, created_at)
+         SELECT card_id, 'user', ?, role, shared_by, created_at FROM card_share_invites WHERE email = lower(?)`,
+      )
+      .bind(user.id, user.email),
+    db.prepare(`DELETE FROM card_share_invites WHERE email = lower(?)`).bind(user.email),
   ]);
   return user;
 }

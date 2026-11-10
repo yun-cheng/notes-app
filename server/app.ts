@@ -17,6 +17,8 @@ import type { AppEnv } from './db';
 import { aiPublicRoutes, aiSessionRoutes, wellKnown } from './aiApp';
 import type { GoogleFetch } from './drive';
 import { drivePublicRoutes, photoRoutes } from './photos';
+import { memberRoutes } from './members';
+import { publicRoutes, shareRoutes } from './shares';
 import { pullRecords, pushRecords } from './sync';
 import { createVault, listVaults, updateVault, type VaultUpdate } from './vaults';
 import { getVersion, listVersions, sealVersions } from './versions';
@@ -130,6 +132,7 @@ export function createApp({ verifyGoogle = googleVerifier(), now = Date.now, goo
   // AI apps authenticate with their own bearer tokens, not the session cookie.
   aiPublicRoutes(app, now);
   drivePublicRoutes(app, googleFetch, now);
+  publicRoutes(app, googleFetch, now);
 
   // Everything registered after this requires a valid session.
   app.use(async (c, next) => {
@@ -159,7 +162,12 @@ export function createApp({ verifyGoogle = googleVerifier(), now = Date.now, goo
     const result = await updateVault(c.env.DB, c.get('user').id, c.req.param('id'), update);
     if ('vault' in result) return c.json(result.vault);
     if (result.error === 'not_found') return c.json({ error: 'Vault not found' }, 404);
-    return c.json({ error: result.error === 'default_vault' ? 'The default vault cannot be locked' : 'A private vault cannot give AI access' }, 400);
+    const messages = {
+      default_vault: 'The default vault cannot be locked',
+      private_ai: 'A private vault cannot give AI access',
+      shared_private: 'A shared vault cannot have a PIN',
+    };
+    return c.json({ error: messages[result.error] }, 400);
   });
 
   app.post('/sync/push', async (c) => {
@@ -196,6 +204,8 @@ export function createApp({ verifyGoogle = googleVerifier(), now = Date.now, goo
 
   aiSessionRoutes(app, now);
   photoRoutes(app, googleFetch, now);
+  memberRoutes(app, now);
+  shareRoutes(app, now);
 
   app.onError((err, c) => {
     console.error(err);

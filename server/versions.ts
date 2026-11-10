@@ -1,5 +1,6 @@
 import type { CardRecord } from '../src/domain/types';
 import type { VersionInfo, VersionResponse } from '../src/sync/protocol';
+import { allows, cardAccess } from './access';
 import type { Database, Statement } from './db';
 
 /** Saves this close together, by one person through one app, extend the same version. */
@@ -90,14 +91,7 @@ export async function recordVersions(db: Database, userId: string, writes: Writt
 
 /** Closes the card's newest version, so the next change starts a new one. False if the user can't edit the card. */
 export async function sealVersions(db: Database, userId: string, cardId: string): Promise<boolean> {
-  const row = await db
-    .prepare(
-      `SELECT 1 AS ok FROM cards c JOIN vault_members m ON m.vault_id = c.vault_id
-       WHERE c.id = ? AND m.user_id = ? AND m.role IN ('owner', 'editor')`,
-    )
-    .bind(cardId, userId)
-    .first<{ ok: number }>();
-  if (!row) return false;
+  if (!allows(await cardAccess(db, userId, cardId), 'write')) return false;
   await db
     .prepare(`UPDATE card_versions SET sealed = 1 WHERE id = (SELECT MAX(id) FROM card_versions WHERE card_id = ?)`)
     .bind(cardId)
@@ -105,13 +99,9 @@ export async function sealVersions(db: Database, userId: string, cardId: string)
   return true;
 }
 
-/** True if the user can read the card now, through its current vault. */
+/** True if the user can read the card now, through its vault or a share. */
 async function canRead(db: Database, userId: string, cardId: string): Promise<boolean> {
-  const row = await db
-    .prepare(`SELECT 1 AS ok FROM cards c JOIN vault_members m ON m.vault_id = c.vault_id WHERE c.id = ? AND m.user_id = ?`)
-    .bind(cardId, userId)
-    .first<{ ok: number }>();
-  return !!row;
+  return !!(await cardAccess(db, userId, cardId));
 }
 
 const INFO = `v.id, v.started_at, v.saved_at, u.name AS author, v.via`;

@@ -1,4 +1,5 @@
 import type { Context, Hono } from 'hono';
+import { SHARED_WITH } from './access';
 import type { AppEnv } from './db';
 import {
   disconnect,
@@ -112,11 +113,16 @@ export function photoRoutes(app: Hono<AppEnv>, fetcher: GoogleFetch, now: () => 
 
   /** Streams a photo from the owner's Drive to any member of its vault. */
   app.get('/attachments/:id', async (c) => {
+    const userId = c.get('user').id;
+    // Members of its vault see a photo, and so do people a card holding it was shared with.
     const row = await c.env.DB.prepare(
-      `SELECT a.id, a.owner_id, a.vault_id, a.drive_file_id, a.mime FROM attachments a JOIN vault_members m ON m.vault_id = a.vault_id
-       WHERE a.id = ? AND m.user_id = ?`,
+      `SELECT a.id, a.owner_id, a.vault_id, a.drive_file_id, a.mime FROM attachments a
+       WHERE a.id = ?
+         AND (a.vault_id IN (SELECT vault_id FROM vault_members WHERE user_id = ?)
+              OR EXISTS (SELECT 1 FROM cards c JOIN card_shares s ON s.card_id = c.id
+                         WHERE c.vault_id = a.vault_id AND instr(c.payload, a.id) > 0 AND ${SHARED_WITH}))`,
     )
-      .bind(c.req.param('id'), c.get('user').id)
+      .bind(c.req.param('id'), userId, userId, userId)
       .first<AttachmentRow>();
     if (!row) return c.json({ error: 'Photo not found' }, 404);
     const config = driveConfig(c, fetcher);

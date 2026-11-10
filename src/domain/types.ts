@@ -75,4 +75,8 @@ export interface Vault {
   pin: VaultPin | null;
   /** Left out of the app entirely until unlocked. */
   hidden: boolean;
+  /** This account's role in the vault, from the server. Missing for a vault made before sign-in. */
+  role?: 'owner' | 'editor' | 'viewer';
+  /** How many people can see it, including the owner. */
+  members?: number;
 }

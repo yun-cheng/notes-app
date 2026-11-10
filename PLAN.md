@@ -107,7 +107,7 @@ Links and tag associations live inside the card payload.
    - Added alongside: version history per card, and undo and redo buttons in the editor. Deployed.
 4. MCP server. **Built and tested locally against a simulated AI app; not yet tried from Claude itself.**
 5. Photos. **Built and tested locally against a simulated Google; Drive is not connected in production yet (see the setup steps below).**
-6. Sharing vaults and single notes (roles, comments, public links).
+6. Sharing vaults and single notes (roles, comments, public links). **Built and tested locally with two accounts.**
 7. End-to-end encryption for private vaults.
 
 Later: push reminders for todos, Tauri wrapper if PWA limits hurt.
@@ -196,3 +196,16 @@ None. Defaults chosen while building are listed in the implementation notes, and
 3. In Data access, add the scope `.../auth/drive.file`.
 4. Copy the client secret and run `npx wrangler pages secret put GOOGLE_CLIENT_SECRET --project-name notes-app`, pasting it when asked. For local testing, put `GOOGLE_CLIENT_SECRET=...` in `.dev.vars` (ignored by git).
 5. In the app, Backup & settings, Photos, press Connect Google Drive.
+
+## Implementation notes from Milestone 6
+
+- Sharing a vault: its owner adds people by email as editors or viewers. Someone without an account is invited and joins at first sign-in. Members can leave. Viewers can read and comment; editors can also change, add, move and trash cards.
+- Private vaults can't be shared, and a shared vault can't get a PIN, since every member would need it. Sharing private vaults with their own key is a Milestone 7 question.
+- Sharing one card: with a person by email, or with everyone in another vault the sharer belongs to, for viewing, commenting or editing. Edit access changes content only; recipients can't move, trash or re-create the card. Only members who can edit the card's own vault can share it onward.
+- Sharing a card into another vault shows a warning naming both vaults and how many people are in each. Sharing from a private vault needs the vault open and a confirmation.
+- Public links: unlisted, read only, optional expiry (1, 7 or 30 days), revocable, at `/s/<token>`. The server strips linked cards' stored titles from the public response, and serves only photos the card contains. Until Milestone 7 the server can read public cards; then the key moves into the URL fragment.
+- Recipients sync shared cards like their own. When access grows the device pulls from the start, since a newly shared card can be older than its cursor; when access ends, those cards are removed from the device.
+- Links to cards the account can't see read "Not shared" everywhere, rather than the title stored when the link was made.
+- Comments are server-only, so they need a connection. They show under a card once others can see it, or once it has comments.
+- AI apps treat shared vaults as read only (Milestone 4), so text written by other people can't steer AI edits.
+- Not done yet: notifications when something is shared, and moving a card's photos' access along with the card.

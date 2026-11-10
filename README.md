@@ -4,7 +4,7 @@ One local-first app for notes, todos and a diary, built as an installable PWA. `
 
 Decisions, the data model and the milestones are in [PLAN.md](PLAN.md).
 
-**Status:** Milestones 1 to 4 are built: notes work offline, sync between devices through a Google account, can be kept in private vaults with a PIN, and can be opened to Claude and other AI apps over MCP, vault by vault, and can hold photos, stored in Google Drive. Each card has a version history with restore, and the editor has undo and redo buttons.
+**Status:** Milestones 1 to 4 are built: notes work offline, sync between devices through a Google account, can be kept in private vaults with a PIN, and can be opened to Claude and other AI apps over MCP, vault by vault, can hold photos, stored in Google Drive, and can be shared: whole vaults or single cards, with comments and public links. Each card has a version history with restore, and the editor has undo and redo buttons.
 
 **Live:** https://notes-app-afc.pages.dev, deployed manually with `npm run deploy`.
 
@@ -49,7 +49,7 @@ src/
   photos/   Photo queue: shrink on the device, keep in IndexedDB, upload in the background
   auth/     Google sign-in screen and the account gate
   ui/       App shell, shared components, pages, and the TipTap editor
-server/     Hono API: Google token check, sessions, vaults, push and pull, card history, OAuth and MCP for AI apps, photos in Drive
+server/     Hono API: Google token check, sessions, vaults, push and pull, card history, OAuth and MCP for AI apps, photos in Drive, sharing and comments
 functions/  Cloudflare Pages entry points: /api and /.well-known
 migrations/ D1 schema
 ```

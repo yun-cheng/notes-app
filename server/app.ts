@@ -16,7 +16,7 @@ import {
 import type { Bindings } from './db';
 import { pullRecords, pushRecords } from './sync';
 import { createVault, listVaults, updateVault, type VaultUpdate } from './vaults';
-import { getVersion, listVersions } from './versions';
+import { getVersion, listVersions, sealVersions } from './versions';
 
 type Env = { Bindings: Bindings; Variables: { user: Account } };
 
@@ -168,6 +168,10 @@ export function createApp({ verifyGoogle = googleVerifier(), now = Date.now }: A
     const versions = await listVersions(c.env.DB, c.get('user').id, c.req.param('id'));
     return versions ? c.json<VersionsResponse>({ versions }) : c.json({ error: 'Card not found' }, 404);
   });
+
+  app.post('/cards/:id/versions/seal', async (c) =>
+    (await sealVersions(c.env.DB, c.get('user').id, c.req.param('id'))) ? c.json({ ok: true }) : c.json({ error: 'Card not found' }, 404),
+  );
 
   app.get('/cards/:id/versions/:version', async (c) => {
     const versionId = Number(c.req.param('version'));

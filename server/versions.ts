@@ -16,6 +16,7 @@ interface VersionRow {
   started_at: number;
   saved_at: number;
   payload: string;
+  sealed: number;
 }
 
 export interface Written {
@@ -35,7 +36,7 @@ export async function recordVersions(db: Database, userId: string, writes: Writt
   const ids = writes.map((w) => w.record.id);
   const { results } = await db
     .prepare(
-      `SELECT v.id, v.card_id, v.author_id, v.started_at, v.saved_at, v.payload FROM card_versions v
+      `SELECT v.id, v.card_id, v.author_id, v.started_at, v.saved_at, v.payload, v.sealed FROM card_versions v
        WHERE v.card_id IN (${ids.map(() => '?').join(',')})
          AND v.id = (SELECT MAX(id) FROM card_versions WHERE card_id = v.card_id)`,
     )
@@ -50,10 +51,10 @@ export async function recordVersions(db: Database, userId: string, writes: Writt
     );
 
   for (const { record, previous, conflict } of writes) {
-    let last: Pick<VersionRow, 'author_id' | 'started_at' | 'saved_at' | 'payload'> | undefined = latest.get(record.id);
+    let last: Omit<VersionRow, 'id' | 'card_id'> | undefined = latest.get(record.id);
     if (!last && previous && previous.payload !== record.payload) {
       insert(record.id, null, previous.updated_at, previous.payload);
-      last = { author_id: null, started_at: previous.updated_at, saved_at: previous.updated_at, payload: previous.payload };
+      last = { author_id: null, started_at: previous.updated_at, saved_at: previous.updated_at, payload: previous.payload, sealed: 0 };
     }
     if (last?.payload === record.payload) continue;
 
@@ -62,6 +63,7 @@ export async function recordVersions(db: Database, userId: string, writes: Writt
       last &&
       latest.has(record.id) &&
       !conflict &&
+      !last.sealed &&
       last.author_id === userId &&
       at >= last.saved_at &&
       at - last.saved_at <= VERSION_GAP &&
@@ -80,6 +82,23 @@ export async function recordVersions(db: Database, userId: string, writes: Writt
     }
   }
   if (statements.length) await db.batch(statements);
+}
+
+/** Closes the card's newest version, so the next change starts a new one. False if the user can't edit the card. */
+export async function sealVersions(db: Database, userId: string, cardId: string): Promise<boolean> {
+  const row = await db
+    .prepare(
+      `SELECT 1 AS ok FROM cards c JOIN vault_members m ON m.vault_id = c.vault_id
+       WHERE c.id = ? AND m.user_id = ? AND m.role IN ('owner', 'editor')`,
+    )
+    .bind(cardId, userId)
+    .first<{ ok: number }>();
+  if (!row) return false;
+  await db
+    .prepare(`UPDATE card_versions SET sealed = 1 WHERE id = (SELECT MAX(id) FROM card_versions WHERE card_id = ?)`)
+    .bind(cardId)
+    .run();
+  return true;
 }
 
 /** True if the user can read the card now, through its current vault. */

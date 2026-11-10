@@ -45,6 +45,23 @@ describe('card history', () => {
     await edit(cookie, vault, 'b', steady);
     expect((await list(cookie, 'b')).versions).toHaveLength(2);
   });
+  it('starts a new version after the newest is sealed', async () => {
+    const { signIn, call, edit, push, list } = historyApi();
+    const { cookie, vault } = await signIn('ann');
+    const seq = await edit(cookie, vault, 'a', [[0, 'draft']]);
+    expect((await call('/api/cards/a/versions/seal', { method: 'POST' }, cookie)).status).toBe(200);
+    await push(cookie, [rec(vault, 'a', { seq, updated_at: MIN, payload: 'restored' })]);
+    expect((await list(cookie, 'a')).versions).toHaveLength(2);
+  });
+  it('only lets editors seal', async () => {
+    const { db, signIn, call, edit } = historyApi();
+    const ann = await signIn('ann');
+    const ben = await signIn('ben');
+    await edit(ann.cookie, ann.vault, 'a', [[0, 'x']]);
+    expect((await call('/api/cards/a/versions/seal', { method: 'POST' }, ben.cookie)).status).toBe(404);
+    db.raw.exec(`INSERT INTO vault_members (vault_id, user_id, role) VALUES ('${ann.vault}', '${ben.user.id}', 'viewer')`);
+    expect((await call('/api/cards/a/versions/seal', { method: 'POST' }, ben.cookie)).status).toBe(404);
+  });
   it('skips writes that leave the payload unchanged', async () => {
     const { signIn, push, edit, list } = historyApi();
     const { cookie, vault } = await signIn('ann');

@@ -45,3 +45,6 @@ export const fetchVersions = async (cardId: string) =>
 
 export const fetchVersion = (cardId: string, versionId: number) =>
   request<VersionResponse>(`/cards/${encodeURIComponent(cardId)}/versions/${versionId}`);
+
+/** Closes the card's newest version, so a restore shows up as its own entry. */
+export const sealVersions = (cardId: string) => request<unknown>(`/cards/${encodeURIComponent(cardId)}/versions/seal`, { method: 'POST', body: '{}' });

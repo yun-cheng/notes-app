@@ -7,7 +7,7 @@ import { cardLines, changeSize, diffLines, restorePatch, sameContent, type DiffL
 import type { Card } from '../../domain/types';
 import { useCards } from '../../state/CardsContext';
 import { SyncAuthExpired, SyncOffline } from '../../sync/engine';
-import { fetchVersion, fetchVersions } from '../../sync/http';
+import { fetchVersion, fetchVersions, sealVersions } from '../../sync/http';
 import type { VersionInfo } from '../../sync/protocol';
 import { Empty, Page } from '../components';
 import { ReadOnlyDoc } from '../editor/ReadOnlyDoc';
@@ -151,6 +151,8 @@ function History({ card }: { card: Card }) {
 
   const restore = async (version: Card, label: string) => {
     const undo = restorePatch(card);
+    // Keeps what is there now as its own version. If this fails, the restore still goes ahead.
+    await sealVersions(card.id).catch(() => undefined);
     await repo.update(card.id, restorePatch(version));
     toast(`Restored the version from ${label}`, { action: { label: 'Undo', run: () => void repo.update(card.id, undo) } });
     void navigate(cardPath(card));

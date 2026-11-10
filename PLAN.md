@@ -162,7 +162,9 @@ For Milestone 4, decide how AI writes are approved: per change, or once per vaul
 - One version covers a stretch of edits by one person: saves within 10 minutes of each other extend it, up to an hour. Both sides of a sync conflict are kept as separate versions. At most 200 versions per card.
 - A card that existed before history was kept gets its earlier state saved, with no author, the first time it changes.
 - History is visible to members of the card's current vault. Locked cards show the unlock panel instead, as their card page does.
-- The page compares a version with the one before it, word by word (each CJK character counts as a word), or shows its full text. Restore writes the old title, text, tags and todo fields back as a new change, so it can itself be undone.
+- The page compares a version with the one before it, word by word (each CJK character counts as a word), or shows its full text. A line that was mostly rewritten is shown as the old line and the new one.
+- Restore writes the old title, text, tags and todo fields back as a new change, so it can itself be undone. It seals the newest version first, so the restore always gets its own entry.
 - Edits on this device that haven't synced yet appear as their own entry at the top.
+- Ticking off a todo in a list, moving a card to another vault and moving to Trash each show Undo in a toast.
 - Undo in the editor covers this device's typing only. A change arriving from sync is not undoable, so undo can't revert another device's edit. Older states are restored from history.
 - Milestone 4 will need versions to record that an edit came from AI, and AI edits must not extend a person's version.

@@ -123,6 +123,7 @@ function CardDetail({ card }: { card: Exclude<Card, { type: 'diary' }> }) {
       <Editor
         content={card.content}
         selfId={card.id}
+        vaultId={card.vaultId}
         placeholder={card.type === 'tag' ? 'Describe this tag. Type [[ to link a card.' : 'Write something. Type [[ to link a card.'}
         onChange={(content) => void repo.update(card.id, { content })}
       />
@@ -183,6 +184,7 @@ export function DayPage() {
             key={date}
             content={card?.content ?? EMPTY_DOC}
             selfId={card?.id}
+            vaultId={card?.vaultId ?? privateVault?.id}
             placeholder={date === today ? 'How was today?' : 'Write about this day.'}
             onChange={(content) => void repo.saveDiary(date, { content }, card?.id, privateVault?.id)}
           />

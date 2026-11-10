@@ -7,6 +7,7 @@ import { describeSync } from '../../sync/engine';
 import { Empty, Page, Section } from '../components';
 import { useToast } from '../Toast';
 import { AiAppsSection } from './ai';
+import { PhotosSection } from './photosSettings';
 
 function download(data: BlobPart, name: string, type: string) {
   const url = URL.createObjectURL(new Blob([data], { type }));
@@ -92,6 +93,7 @@ export function SettingsPage() {
           <input ref={fileInput} type="file" accept="application/json,.json" hidden onChange={(e) => void restore(e)} />
         </div>
       </Section>
+      <PhotosSection />
       <AiAppsSection />
       <Section title={`Trash (${index.trash.length})`}>
         {index.trash.length ? (

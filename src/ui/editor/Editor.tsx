@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState } from 'react';
+import { useEffect, useRef, useState, type ChangeEvent } from 'react';
 import { EditorContent, useEditor, type Editor as TiptapEditor } from '@tiptap/react';
 import { StarterKit } from '@tiptap/starter-kit';
 import { Placeholder } from '@tiptap/extensions';
@@ -8,13 +8,17 @@ import type { CardIndex } from '../../domain/cardIndex';
 import type { JSONNode } from '../../domain/types';
 import { useCards } from '../../state/CardsContext';
 import { Icon, type IconName } from '../Icon';
+import { useToast } from '../Toast';
 import { CardLink, insertCardLink, type LinkOption } from './cardLink';
+import { Photo } from './photo';
 
 interface EditorProps {
   content: JSONNode;
   onChange: (content: JSONNode) => void;
   placeholder: string;
   selfId?: string;
+  /** The vault new photos belong to. Defaults to the account's main vault. */
+  vaultId?: string;
 }
 
 const SAVE_DELAY = 300;
@@ -53,7 +57,8 @@ interface Tool {
   className?: string;
 }
 
-function Toolbar({ editor }: { editor: TiptapEditor }) {
+function Toolbar({ editor, onPhotos }: { editor: TiptapEditor; onPhotos: (files: File[]) => void }) {
+  const picker = useRef<HTMLInputElement>(null);
   const mod = /Mac|iPhone|iPad/.test(navigator.platform) ? '⌘' : 'Ctrl+';
   const tools: Tool[] = [
     { label: 'Undo', title: `Undo (${mod}Z)`, icon: 'undo', run: () => editor.chain().focus().undo().run(), disabled: !editor.can().undo() },
@@ -72,7 +77,13 @@ function Toolbar({ editor }: { editor: TiptapEditor }) {
     { label: '1.', title: 'Numbered list', run: () => editor.chain().focus().toggleOrderedList().run(), active: editor.isActive('orderedList') },
     { label: '“', title: 'Quote', run: () => editor.chain().focus().toggleBlockquote().run(), active: editor.isActive('blockquote') },
     { label: '[[', title: 'Link to a card', run: () => editor.chain().focus().insertContent('[[').run() },
+    { label: 'Photo', title: 'Add a photo', icon: 'image', run: () => picker.current?.click() },
   ];
+  const picked = (e: ChangeEvent<HTMLInputElement>) => {
+    const files = [...(e.target.files ?? [])];
+    e.target.value = '';
+    if (files.length) onPhotos(files);
+  };
   return (
     <div className="toolbar" role="toolbar" aria-label="Formatting">
       {tools.map((t) => (
@@ -90,17 +101,37 @@ function Toolbar({ editor }: { editor: TiptapEditor }) {
           {t.icon ? <Icon name={t.icon} size={18} /> : t.label}
         </button>
       ))}
+      <input ref={picker} type="file" accept="image/*" multiple hidden onChange={picked} />
     </div>
   );
 }
 
-export function Editor({ content, onChange, placeholder, selfId }: EditorProps) {
-  const { index, repo } = useCards();
+export function Editor({ content, onChange, placeholder, selfId, vaultId }: EditorProps) {
+  const { index, repo, photos, vaults } = useCards();
+  const toast = useToast();
   const [menu, setMenu] = useState<MenuState | null>(null);
   const [, redraw] = useState(0);
 
-  const latest = useRef({ index, onChange, menu, selfId });
-  latest.current = { index, onChange, menu, selfId };
+  const latest = useRef({ index, onChange, menu, selfId, vaultId: vaultId ?? vaults[0]?.id });
+  latest.current = { index, onChange, menu, selfId, vaultId: vaultId ?? vaults[0]?.id };
+  const editorRef = useRef<TiptapEditor | null>(null);
+
+  /** Saves each image on the device and puts it in the text, at `at` or the cursor. */
+  const addPhotos = async (files: File[], at?: number) => {
+    for (const file of files.filter((f) => f.type.startsWith('image/'))) {
+      try {
+        const id = await photos.add(file, latest.current.vaultId!);
+        const node = { type: 'photo', attrs: { id } };
+        const chain = editorRef.current?.chain().focus();
+        if (at === undefined) chain?.insertContent(node).run();
+        else chain?.insertContentAt(at, node).run();
+      } catch (err) {
+        toast(err instanceof Error ? err.message : "That photo couldn't be added.");
+      }
+    }
+  };
+  const addPhotosRef = useRef(addPhotos);
+  addPhotosRef.current = addPhotos;
   const command = useRef<((item: LinkOption) => void) | null>(null);
   const pending = useRef<JSONNode | null>(null);
   const sent = useRef<string[]>([]);
@@ -133,6 +164,7 @@ export function Editor({ content, onChange, placeholder, selfId }: EditorProps) 
     extensions: [
       StarterKit.configure({ heading: { levels: [1, 2, 3] } }),
       Placeholder.configure({ placeholder }),
+      Photo,
       CardLink.configure({
         suggestion: {
           char: '[[',
@@ -190,7 +222,22 @@ export function Editor({ content, onChange, placeholder, selfId }: EditorProps) 
       }),
     ],
     content,
-    editorProps: { attributes: { class: 'prose' } },
+    editorProps: {
+      attributes: { class: 'prose' },
+      handlePaste: (_view, event) => {
+        const files = [...(event.clipboardData?.files ?? [])].filter((f) => f.type.startsWith('image/'));
+        if (!files.length) return false;
+        void addPhotosRef.current(files);
+        return true;
+      },
+      handleDrop: (view, event, _slice, moved) => {
+        const files = [...(event.dataTransfer?.files ?? [])].filter((f) => f.type.startsWith('image/'));
+        if (moved || !files.length) return false;
+        event.preventDefault();
+        void addPhotosRef.current(files, view.posAtCoords({ left: event.clientX, top: event.clientY })?.pos);
+        return true;
+      },
+    },
     onUpdate: ({ editor: ed }) => {
       pending.current = ed.getJSON() as JSONNode;
       if (timer.current) clearTimeout(timer.current);
@@ -229,10 +276,11 @@ export function Editor({ content, onChange, placeholder, selfId }: EditorProps) 
     }
   }, [editor, content]);
 
+  editorRef.current = editor;
   if (!editor) return null;
   return (
     <div className="editor">
-      <Toolbar editor={editor} />
+      <Toolbar editor={editor} onPhotos={(files) => void addPhotos(files)} />
       <EditorContent editor={editor} />
       {menu && (
         <ul className="link-menu" role="listbox" aria-label="Link to a card" style={{ left: menu.left, top: menu.top }}>

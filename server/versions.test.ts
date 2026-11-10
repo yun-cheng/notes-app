@@ -1,5 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import type { PushResult, VersionResponse, VersionsResponse } from '../src/sync/protocol';
+import { pushRecords } from './sync';
 import { rec, setup } from './testHarness';
 import { recordVersions, VERSION_GAP, VERSION_LIMIT, VERSION_SPAN } from './versions';
 
@@ -110,6 +111,14 @@ describe('card history', () => {
     expect((await get(ann.cookie, 'a', 'nope')).status).toBe(404);
     expect((await get(ann.cookie, 'missing', versions[0].id)).status).toBe(404);
     expect((await list(ann.cookie, 'missing')).status).toBe(404);
+  });
+  it('never folds an AI edit into a person’s version', async () => {
+    const { signIn, edit, list, db } = historyApi();
+    const { cookie, vault, user } = await signIn('ann');
+    const seq = await edit(cookie, vault, 'a', [[0, 'mine']]);
+    await pushRecords(db, user.id, [rec(vault, 'a', { seq, updated_at: MIN, payload: 'from claude' })], 'Claude');
+    const { versions } = await list(cookie, 'a');
+    expect(versions.map((v) => [v.author, v.via])).toEqual([['ann', 'Claude'], ['ann', null]]);
   });
   it('keeps history apart for each editor of a shared vault', async () => {
     const { db, signIn, push, list } = historyApi();

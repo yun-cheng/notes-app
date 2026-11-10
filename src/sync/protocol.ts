@@ -45,6 +45,8 @@ export interface VersionInfo {
   saved_at: number;
   /** Who made it, or null for a card's state from before history was kept. */
   author: string | null;
+  /** The AI app that made it on the author's behalf, or null. */
+  via: string | null;
 }
 
 export interface VersionsResponse {

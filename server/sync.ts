@@ -28,7 +28,8 @@ interface Write {
  * Applies a batch of records. Decisions are made from a read, and each write only lands
  * if the card hasn't changed since. A write that lost that race comes back as `retry`.
  */
-export async function pushRecords(db: Database, userId: string, records: CardRecord[]): Promise<PushResult[]> {
+/** `via` names the AI app making the change, for its history; null for the person's own devices. */
+export async function pushRecords(db: Database, userId: string, records: CardRecord[], via: string | null = null): Promise<PushResult[]> {
   const writable = await writableVaults(db, userId);
   const { results: rows } = await db
     .prepare(`SELECT id, vault_id, updated_at, deleted, seq, payload FROM cards WHERE id IN (${records.map(() => '?').join(',')})`)
@@ -84,7 +85,7 @@ export async function pushRecords(db: Database, userId: string, records: CardRec
       if (row) written.push({ record: write.record, previous: existing.get(id), conflict: result.status === 'conflict_client_won' });
     });
     // History is a convenience: a failure here must not fail a push that already landed.
-    await recordVersions(db, userId, written).catch((err) => console.error('Could not record versions', err));
+    await recordVersions(db, userId, written, via).catch((err) => console.error('Could not record versions', err));
   }
   return records.map((r) => results.get(r.id)!);
 }

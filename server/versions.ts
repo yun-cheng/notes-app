@@ -2,7 +2,7 @@ import type { CardRecord } from '../src/domain/types';
 import type { VersionInfo, VersionResponse } from '../src/sync/protocol';
 import type { Database, Statement } from './db';
 
-/** Saves this close together, by one person, extend the same version. */
+/** Saves this close together, by one person through one app, extend the same version. */
 export const VERSION_GAP = 10 * 60_000;
 /** A version never covers more than this much editing time, so long sessions still leave steps. */
 export const VERSION_SPAN = 60 * 60_000;
@@ -17,6 +17,7 @@ interface VersionRow {
   saved_at: number;
   payload: string;
   sealed: number;
+  via: string | null;
 }
 
 export interface Written {
@@ -31,12 +32,12 @@ export interface Written {
  * Adds each successful write to its card's history. The newest version always matches the card.
  * A card from before history was kept gets its earlier state saved first, with no author.
  */
-export async function recordVersions(db: Database, userId: string, writes: Written[]): Promise<void> {
+export async function recordVersions(db: Database, userId: string, writes: Written[], via: string | null = null): Promise<void> {
   if (!writes.length) return;
   const ids = writes.map((w) => w.record.id);
   const { results } = await db
     .prepare(
-      `SELECT v.id, v.card_id, v.author_id, v.started_at, v.saved_at, v.payload, v.sealed FROM card_versions v
+      `SELECT v.id, v.card_id, v.author_id, v.started_at, v.saved_at, v.payload, v.sealed, v.via FROM card_versions v
        WHERE v.card_id IN (${ids.map(() => '?').join(',')})
          AND v.id = (SELECT MAX(id) FROM card_versions WHERE card_id = v.card_id)`,
     )
@@ -45,16 +46,18 @@ export async function recordVersions(db: Database, userId: string, writes: Writt
   const latest = new Map(results.map((r) => [r.card_id, r]));
 
   const statements: Statement[] = [];
-  const insert = (cardId: string, author: string | null, at: number, payload: string) =>
+  const insert = (cardId: string, author: string | null, at: number, payload: string, source: string | null) =>
     statements.push(
-      db.prepare(`INSERT INTO card_versions (card_id, author_id, started_at, saved_at, payload) VALUES (?, ?, ?, ?, ?)`).bind(cardId, author, at, at, payload),
+      db
+        .prepare(`INSERT INTO card_versions (card_id, author_id, started_at, saved_at, payload, via) VALUES (?, ?, ?, ?, ?, ?)`)
+        .bind(cardId, author, at, at, payload, source),
     );
 
   for (const { record, previous, conflict } of writes) {
     let last: Omit<VersionRow, 'id' | 'card_id'> | undefined = latest.get(record.id);
     if (!last && previous && previous.payload !== record.payload) {
-      insert(record.id, null, previous.updated_at, previous.payload);
-      last = { author_id: null, started_at: previous.updated_at, saved_at: previous.updated_at, payload: previous.payload, sealed: 0 };
+      insert(record.id, null, previous.updated_at, previous.payload, null);
+      last = { author_id: null, started_at: previous.updated_at, saved_at: previous.updated_at, payload: previous.payload, sealed: 0, via: null };
     }
     if (last?.payload === record.payload) continue;
 
@@ -65,13 +68,14 @@ export async function recordVersions(db: Database, userId: string, writes: Writt
       !conflict &&
       !last.sealed &&
       last.author_id === userId &&
+      last.via === via &&
       at >= last.saved_at &&
       at - last.saved_at <= VERSION_GAP &&
       at - last.started_at <= VERSION_SPAN;
     if (extend) {
       statements.push(db.prepare(`UPDATE card_versions SET saved_at = ?, payload = ? WHERE id = ?`).bind(at, record.payload, latest.get(record.id)!.id));
     } else {
-      insert(record.id, userId, at, record.payload);
+      insert(record.id, userId, at, record.payload, via);
       statements.push(
         db
           .prepare(
@@ -110,7 +114,7 @@ async function canRead(db: Database, userId: string, cardId: string): Promise<bo
   return !!row;
 }
 
-const INFO = `v.id, v.started_at, v.saved_at, u.name AS author`;
+const INFO = `v.id, v.started_at, v.saved_at, u.name AS author, v.via`;
 
 /** Newest first, or null if the card isn't readable by this user. */
 export async function listVersions(db: Database, userId: string, cardId: string): Promise<VersionInfo[] | null> {

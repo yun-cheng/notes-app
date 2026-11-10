@@ -26,7 +26,8 @@ const LOCAL = 'local';
 
 function describe(entry: Entry, first: boolean): string {
   if (!entry.info) return 'Not synced yet';
-  const who = entry.info.author ?? 'From before history was kept';
+  const author = entry.info.author ?? 'From before history was kept';
+  const who = entry.info.via ? `${author} via ${entry.info.via} (AI)` : author;
   return first ? `Current version · ${who}` : who;
 }
 

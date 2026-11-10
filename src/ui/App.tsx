@@ -2,6 +2,7 @@ import { useEffect } from 'react';
 import { Navigate, NavLink, Outlet, Route, Routes, useNavigate } from 'react-router';
 import { registerSW } from 'virtual:pwa-register';
 import { AuthGate, useAccount } from '../auth/AuthContext';
+import { PairPage } from '../auth/PairPage';
 import { useCards, useSyncStatus } from '../state/CardsContext';
 import { describeSync } from '../sync/engine';
 import { useNewNote } from './components';
@@ -152,6 +153,7 @@ function SignedInApp() {
     <AuthGate>
       <Routes>
         <Route path="oauth/authorize" element={<ConnectPage />} />
+        <Route path="pair" element={<PairPage />} />
         <Route element={<Layout />}>
           <Route index element={<Navigate to="/today" replace />} />
           <Route path="today" element={<TodayPage />} />

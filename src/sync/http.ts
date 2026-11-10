@@ -193,3 +193,22 @@ export async function fetchPublicCard(token: string): Promise<PublicCard | null>
 
 /** Removes plaintext versions from an encrypted vault's history on the server. */
 export const purgePlaintextHistory = (vaultId: string) => request<unknown>(`/vaults/${encodeURIComponent(vaultId)}/purge-plaintext`, { method: 'POST', body: '{}' });
+
+/** Starts signing in the native app through the system browser. */
+export const startPairing = () => request<{ pair: string; code: string }>('/auth/pair/start', { method: 'POST', body: '{}' });
+
+/** The app's session once the browser approves; 'pending' until then; 'expired' if it took too long. */
+export async function claimPairing(pair: string): Promise<SessionInfo | 'pending' | 'expired'> {
+  let res: Response;
+  try {
+    res = await fetch('/api/auth/pair/claim', { method: 'POST', credentials: 'same-origin', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ pair }) });
+  } catch {
+    return 'pending';
+  }
+  if (res.status === 202) return 'pending';
+  if (!res.ok) return 'expired';
+  return (await res.json()) as SessionInfo;
+}
+
+export const pairingCode = async (pair: string) => (await request<{ code: string }>(`/auth/pair/code?pair=${encodeURIComponent(pair)}`)).code;
+export const approvePairing = (pair: string) => request<unknown>('/auth/pair/approve', { method: 'POST', body: JSON.stringify({ pair }) });

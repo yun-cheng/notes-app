@@ -1,6 +1,8 @@
 import { useEffect, useRef, useState } from 'react';
-import { fetchConfig } from '../sync/http';
 import { SyncAuthExpired, SyncOffline } from '../sync/engine';
+import { claimPairing, fetchConfig, startPairing } from '../sync/http';
+import type { SessionInfo } from '../sync/protocol';
+import { isNativeShell } from './shell';
 
 interface GoogleIdentityServices {
   accounts: {
@@ -33,7 +35,77 @@ function loadGoogleScript(): Promise<GoogleIdentityServices> {
 
 type Phase = 'loading' | 'ready' | 'unconfigured' | 'offline' | 'busy';
 
-export function SignInScreen({ onCredential }: { onCredential: (credential: string) => Promise<void> }) {
+const POLL_MS = 2000;
+
+/**
+ * Inside the native app Google won't sign in, so the app pairs with a signed-in browser instead.
+ * Both show the same short code, so a link from someone else can't sign their app in as you.
+ */
+function BrowserSignIn({ onSession }: { onSession: (info: SessionInfo) => Promise<void> }) {
+  const [pairing, setPairing] = useState<{ pair: string; code: string } | null>(null);
+  const [error, setError] = useState<string | null>(null);
+
+  useEffect(() => {
+    if (!pairing) return;
+    let live = true;
+    const poll = async () => {
+      const result = await claimPairing(pairing.pair);
+      if (!live) return;
+      if (result === 'pending') return void setTimeout(poll, POLL_MS);
+      if (result === 'expired') {
+        setPairing(null);
+        return setError('That took too long. Start again.');
+      }
+      await onSession(result).catch(() => setError('Sign-in failed. Start again.'));
+    };
+    const timer = setTimeout(poll, POLL_MS);
+    return () => {
+      live = false;
+      clearTimeout(timer);
+    };
+  }, [pairing, onSession]);
+
+  const start = async () => {
+    setError(null);
+    try {
+      const next = await startPairing();
+      setPairing(next);
+      // The app opens anything outside itself in the system browser.
+      window.open(`${location.origin}/pair?p=${encodeURIComponent(next.pair)}`, '_blank');
+    } catch (err) {
+      setError(err instanceof SyncOffline ? 'Connect to the internet to sign in.' : 'Sign-in failed. Try again.');
+    }
+  };
+
+  return (
+    <>
+      {pairing ? (
+        <>
+          <p className="signin__note">Your browser opened. Sign in there and confirm this code:</p>
+          <p className="signin__code" aria-label="Code">
+            {pairing.code}
+          </p>
+          <p className="signin__note">Waiting for your browser…</p>
+          <button type="button" className="btn btn--quiet" onClick={() => void start()}>
+            Open the browser again
+          </button>
+        </>
+      ) : (
+        <button type="button" className="btn btn--primary" onClick={() => void start()}>
+          Sign in with your browser
+        </button>
+      )}
+      {error && (
+        <p className="signin__error" role="alert">
+          {error}
+        </p>
+      )}
+    </>
+  );
+}
+
+export function SignInScreen({ onCredential, onSession }: { onCredential: (credential: string) => Promise<void>; onSession: (info: SessionInfo) => Promise<void> }) {
+  const native = useState(isNativeShell)[0];
   const button = useRef<HTMLDivElement>(null);
   const [phase, setPhase] = useState<Phase>('loading');
   const [error, setError] = useState<string | null>(null);
@@ -41,6 +113,7 @@ export function SignInScreen({ onCredential }: { onCredential: (credential: stri
   handler.current = onCredential;
 
   useEffect(() => {
+    if (native) return;
     let active = true;
     (async () => {
       try {
@@ -79,15 +152,16 @@ export function SignInScreen({ onCredential }: { onCredential: (credential: stri
     return () => {
       active = false;
     };
-  }, []);
+  }, [native]);
 
   return (
     <main className="signin">
       <div className="signin__card">
         <h1>Notes</h1>
         <p className="signin__lede">Your notes, todos and diary, on every device.</p>
-        <div className="signin__button" ref={button} hidden={phase !== 'ready'} />
-        {phase === 'loading' && <p className="signin__note">Getting sign-in ready…</p>}
+        {native && <BrowserSignIn onSession={onSession} />}
+        <div className="signin__button" ref={button} hidden={native || phase !== 'ready'} />
+        {!native && phase === 'loading' && <p className="signin__note">Getting sign-in ready…</p>}
         {phase === 'busy' && <p className="signin__note">Signing you in…</p>}
         {phase === 'offline' && <p className="signin__note">Connect to the internet to sign in.</p>}
         {phase === 'unconfigured' && <p className="signin__note">Sign-in isn't available yet.</p>}

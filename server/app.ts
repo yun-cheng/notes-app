@@ -19,6 +19,7 @@ import type { GoogleFetch } from './drive';
 import { drivePublicRoutes, photoRoutes } from './photos';
 import { commentRoutes } from './comments';
 import { memberRoutes } from './members';
+import { pairingPublicRoutes, pairingSessionRoutes } from './pairing';
 import { publicRoutes, shareRoutes } from './shares';
 import { pullRecords, pushRecords } from './sync';
 import { createVault, listVaults, updateVault, type VaultUpdate } from './vaults';
@@ -146,6 +147,7 @@ export function createApp({ verifyGoogle = googleVerifier(), now = Date.now, goo
   aiPublicRoutes(app, now);
   drivePublicRoutes(app, googleFetch, now);
   publicRoutes(app, googleFetch, now);
+  pairingPublicRoutes(app, sendSessionCookie, now);
 
   // Everything registered after this requires a valid session.
   app.use(async (c, next) => {
@@ -238,6 +240,7 @@ export function createApp({ verifyGoogle = googleVerifier(), now = Date.now, goo
   memberRoutes(app, now);
   shareRoutes(app, now);
   commentRoutes(app, now);
+  pairingSessionRoutes(app, now);
 
   app.onError((err, c) => {
     console.error(err);

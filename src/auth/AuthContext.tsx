@@ -2,7 +2,7 @@ import { createContext, useCallback, useContext, useMemo, useState, type ReactNo
 import { claimLegacyNotes } from '../storage/legacy';
 import { CardsProvider, openAccountStorage } from '../state/CardsContext';
 import { signInWithGoogle, signOutOfServer } from '../sync/http';
-import type { Account } from '../sync/protocol';
+import type { Account, SessionInfo } from '../sync/protocol';
 import { SignInScreen } from './SignInScreen';
 
 const ACCOUNT_KEY = 'notes-app:account';
@@ -33,8 +33,7 @@ export function useAccount(): AuthValue {
 export function AuthGate({ children }: { children: ReactNode }) {
   const [account, setAccount] = useState<Account | null>(loadAccount);
 
-  const signIn = useCallback(async (credential: string) => {
-    const { user, vaults } = await signInWithGoogle(credential);
+  const finish = useCallback(async ({ user, vaults }: SessionInfo) => {
     const { store, repo } = openAccountStorage(user.id);
     await store.putVaults(vaults);
     await repo.init();
@@ -42,6 +41,8 @@ export function AuthGate({ children }: { children: ReactNode }) {
     localStorage.setItem(ACCOUNT_KEY, JSON.stringify(user));
     setAccount(user);
   }, []);
+
+  const signIn = useCallback(async (credential: string) => finish(await signInWithGoogle(credential)), [finish]);
 
   // Unsynced changes stay in this account's local database and sync at next sign-in.
   const signOut = useCallback(async () => {
@@ -52,7 +53,7 @@ export function AuthGate({ children }: { children: ReactNode }) {
 
   const value = useMemo(() => (account ? { account, signOut } : null), [account, signOut]);
 
-  if (!value) return <SignInScreen onCredential={signIn} />;
+  if (!value) return <SignInScreen onCredential={signIn} onSession={finish} />;
   return (
     <AuthContext.Provider value={value}>
       <CardsProvider key={value.account.id} accountId={value.account.id}>

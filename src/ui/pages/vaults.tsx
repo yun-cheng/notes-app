@@ -117,6 +117,31 @@ export function VaultsPage() {
   );
 }
 
+const AI_HINT: Record<Vault['ai_access'], string> = {
+  off: 'AI apps see nothing in this vault.',
+  read: 'Connected AI apps can search and read this vault.',
+  write: 'Connected AI apps can also add and edit cards here. Every change is kept in history and can be undone.',
+};
+
+/** What connected AI apps may do in an open vault. Private vaults are always off. */
+export function AiAccessField({ vault, labelled }: { vault: Vault; labelled?: boolean }) {
+  const save = useVaultSaver();
+  const set = (ai_access: Vault['ai_access']) => void save(() => updateVault(vault.id, { ai_access }));
+  return (
+    <div className="ai-field">
+      <label className="field-row">
+        {labelled ? vault.name : 'AI access'}
+        <select value={vault.ai_access} aria-label={`AI access for ${vault.name}`} onChange={(e) => set(e.target.value as Vault['ai_access'])}>
+          <option value="off">Off</option>
+          <option value="read">Read</option>
+          <option value="write">Read and write</option>
+        </select>
+      </label>
+      <p className="prose-note">{AI_HINT[vault.ai_access]}</p>
+    </div>
+  );
+}
+
 function VaultSettings({ vault }: { vault: Vault }) {
   const { repo } = useCards();
   const save = useVaultSaver();
@@ -176,6 +201,12 @@ function VaultSettings({ vault }: { vault: Vault }) {
           {error && <p className="lock-panel__error">{error}</p>}
           {!isPrivate && <p className="prose-note vault-gap">A forgotten PIN can't be recovered yet, so keep it somewhere safe.</p>}
         </>
+      )}
+
+      {!isPrivate && (
+        <div className="vault-gap">
+          <AiAccessField vault={vault} />
+        </div>
       )}
 
       {isPrivate && (

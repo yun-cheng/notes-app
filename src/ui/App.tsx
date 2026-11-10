@@ -6,6 +6,7 @@ import { useCards, useSyncStatus } from '../state/CardsContext';
 import { describeSync } from '../sync/engine';
 import { useNewNote } from './components';
 import { Icon, type IconName } from './Icon';
+import { ConnectPage } from './pages/ai';
 import { CardPage, DayPage } from './pages/cards';
 import { HistoryPage } from './pages/history';
 import { SettingsPage } from './pages/SettingsPage';
@@ -138,6 +139,7 @@ export function App() {
     <ToastProvider>
       <AuthGate>
         <Routes>
+          <Route path="oauth/authorize" element={<ConnectPage />} />
           <Route element={<Layout />}>
             <Route index element={<Navigate to="/today" replace />} />
             <Route path="today" element={<TodayPage />} />

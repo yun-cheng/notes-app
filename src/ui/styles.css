@@ -296,3 +296,13 @@ body:has(.title-field:focus) .tabbar { display: none; }
   .history__list { order: 2; max-height: calc(100dvh - 160px); position: sticky; top: 20px; }
 }
 .page:has(> .history) { max-width: 1040px; }
+
+/* Connecting an AI app */
+.connect { min-height: 100dvh; display: grid; place-items: center; padding: 24px 16px; }
+.connect__card { width: 100%; max-width: 480px; padding: 24px; background: var(--surface); border: 1px solid var(--line); border-radius: 14px; display: flex; flex-direction: column; gap: 12px; }
+.connect__card h1 { font: 600 24px/1.25 var(--serif); overflow-wrap: anywhere; }
+.connect__card h2 { font-size: 13px; font-weight: 600; color: var(--muted); margin-top: 6px; }
+.connect__vaults { display: flex; flex-direction: column; gap: 4px; }
+.connect__warn { color: var(--alert); }
+.ai-field .field-row { margin: 0; }
+.ai-field .prose-note { font-size: 14px; margin-top: 2px; }

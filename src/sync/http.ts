@@ -49,3 +49,21 @@ export const fetchVersion = (cardId: string, versionId: number) =>
 
 /** Closes the card's newest version, so a restore shows up as its own entry. */
 export const sealVersions = (cardId: string) => request<unknown>(`/cards/${encodeURIComponent(cardId)}/versions/seal`, { method: 'POST', body: '{}' });
+
+export interface ConnectedApp {
+  id: string;
+  name: string;
+  created_at: number;
+  last_used_at: number | null;
+}
+
+export const fetchOAuthClient = (clientId: string, redirectUri: string) =>
+  request<{ name: string; redirect_host: string }>(`/oauth/client?${new URLSearchParams({ client_id: clientId, redirect_uri: redirectUri })}`);
+
+/** Approves or declines an AI app's request. Returns where to send the browser next. */
+export const answerOAuth = async (params: Record<string, string>, approve: boolean) =>
+  (await request<{ redirect: string }>('/oauth/authorize', { method: 'POST', body: JSON.stringify({ ...params, approve }) })).redirect;
+
+export const listAiApps = async () => (await request<{ apps: ConnectedApp[] }>('/ai/apps')).apps;
+
+export const disconnectAiApp = (id: string) => request<unknown>(`/ai/apps/${encodeURIComponent(id)}`, { method: 'DELETE' });

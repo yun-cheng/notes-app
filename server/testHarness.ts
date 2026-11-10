@@ -2,21 +2,22 @@ import { expect } from 'vitest';
 import type { CardRecord } from '../src/domain/types';
 import type { PullResponse, PushResult, SessionInfo } from '../src/sync/protocol';
 import { createApp } from './app';
+import type { GoogleFetch } from './drive';
 import { InvalidGoogleToken, type VerifyGoogleToken } from './auth';
 import { createTestDb } from './testDb';
 
 export const CLIENT_ID = 'test-client';
 export const DAY = 86_400_000;
 
-export function setup() {
+export function setup(options: { googleFetch?: GoogleFetch; clientSecret?: string } = {}) {
   const db = createTestDb();
   let clock = 1_000_000;
   const verifyGoogle: VerifyGoogleToken = async (credential) => {
     if (credential === 'bad') throw new InvalidGoogleToken('no');
     return { sub: credential, email: `${credential}@example.com`, name: credential };
   };
-  const app = createApp({ verifyGoogle, now: () => clock });
-  const env = { DB: db, GOOGLE_CLIENT_ID: CLIENT_ID };
+  const app = createApp({ verifyGoogle, now: () => clock, googleFetch: options.googleFetch });
+  const env = { DB: db, GOOGLE_CLIENT_ID: CLIENT_ID, GOOGLE_CLIENT_SECRET: options.clientSecret };
   const call = (path: string, init: RequestInit = {}, cookie?: string) =>
     app.request(path, { ...init, headers: { 'content-type': 'application/json', ...(cookie ? { cookie } : {}), ...init.headers } }, env);
   const signIn = async (name: string) => {

@@ -15,6 +15,8 @@ import {
 } from './auth';
 import type { AppEnv } from './db';
 import { aiPublicRoutes, aiSessionRoutes, wellKnown } from './aiApp';
+import type { GoogleFetch } from './drive';
+import { drivePublicRoutes, photoRoutes } from './photos';
 import { pullRecords, pushRecords } from './sync';
 import { createVault, listVaults, updateVault, type VaultUpdate } from './vaults';
 import { getVersion, listVersions, sealVersions } from './versions';
@@ -24,6 +26,8 @@ type Env = AppEnv;
 export interface AppOptions {
   verifyGoogle?: VerifyGoogleToken;
   now?: () => number;
+  /** Calls to Google's token and Drive APIs, replaced in tests. */
+  googleFetch?: GoogleFetch;
 }
 
 const COOKIE = 'session';
@@ -81,7 +85,7 @@ function parseVaultBody(body: Record<string, unknown> | null): VaultUpdate | nul
   return out;
 }
 
-export function createApp({ verifyGoogle = googleVerifier(), now = Date.now }: AppOptions = {}) {
+export function createApp({ verifyGoogle = googleVerifier(), now = Date.now, googleFetch = (input, init) => fetch(input, init) }: AppOptions = {}) {
   const app = new Hono<Env>();
 
   const sendSessionCookie = (c: Context<Env>, token: string) =>
@@ -95,7 +99,7 @@ export function createApp({ verifyGoogle = googleVerifier(), now = Date.now }: A
 
   app.use(async (c, next) => {
     await next();
-    c.header('Cache-Control', 'no-store');
+    if (!c.res.headers.has('Cache-Control')) c.header('Cache-Control', 'no-store');
   });
 
   app.get('/config', (c) => c.json<ConfigResponse>({ googleClientId: c.env.GOOGLE_CLIENT_ID ?? '' }));
@@ -125,6 +129,7 @@ export function createApp({ verifyGoogle = googleVerifier(), now = Date.now }: A
 
   // AI apps authenticate with their own bearer tokens, not the session cookie.
   aiPublicRoutes(app, now);
+  drivePublicRoutes(app, googleFetch, now);
 
   // Everything registered after this requires a valid session.
   app.use(async (c, next) => {
@@ -190,6 +195,7 @@ export function createApp({ verifyGoogle = googleVerifier(), now = Date.now }: A
   });
 
   aiSessionRoutes(app, now);
+  photoRoutes(app, googleFetch, now);
 
   app.onError((err, c) => {
     console.error(err);

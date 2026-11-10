@@ -16,6 +16,8 @@ export interface Database {
 export interface Bindings {
   DB: Database;
   GOOGLE_CLIENT_ID: string;
+  /** Only needed for photos: the server's side of the Google Drive connection. A secret, never in config files. */
+  GOOGLE_CLIENT_SECRET?: string;
 }
 
 /** Hono's environment for every route: D1 and settings, plus the signed-in user once known. */

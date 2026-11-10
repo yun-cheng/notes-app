@@ -36,12 +36,12 @@ export function googleVerifier(keys: JWTVerifyGetKey = googleKeys): VerifyGoogle
 const DAY = 86_400_000;
 export const SESSION_DAYS = 90;
 
-function base64url(bytes: Uint8Array): string {
+export function base64url(bytes: Uint8Array): string {
   return btoa(String.fromCharCode(...bytes)).replace(/\+/g, '-').replace(/\//g, '_').replace(/=+$/, '');
 }
 
 /** Only the hash is stored, so a leaked database can't be used to sign in. */
-async function hashToken(token: string): Promise<string> {
+export async function hashToken(token: string): Promise<string> {
   return base64url(new Uint8Array(await crypto.subtle.digest('SHA-256', new TextEncoder().encode(token))));
 }
 
@@ -67,8 +67,10 @@ export async function upsertUser(db: Database, identity: GoogleIdentity, now: nu
   return user;
 }
 
+export const randomToken = () => base64url(crypto.getRandomValues(new Uint8Array(32)));
+
 export async function createSession(db: Database, userId: string, now: number): Promise<string> {
-  const token = base64url(crypto.getRandomValues(new Uint8Array(32)));
+  const token = randomToken();
   await db
     .prepare(`INSERT INTO sessions (token_hash, user_id, expires_at) VALUES (?, ?, ?)`)
     .bind(await hashToken(token), userId, now + SESSION_DAYS * DAY)

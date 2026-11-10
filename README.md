@@ -4,7 +4,7 @@ One local-first app for notes, todos and a diary, built as an installable PWA. `
 
 Decisions, the data model and the milestones are in [PLAN.md](PLAN.md).
 
-**Status:** Milestones 1 to 3 are built: notes work offline, sync between devices through a Google account, and can be kept in private vaults with a PIN. Each card also has a version history with restore, and the editor has undo and redo buttons. Milestones 1 and 2 are deployed.
+**Status:** Milestones 1 to 4 are built: notes work offline, sync between devices through a Google account, can be kept in private vaults with a PIN, and can be opened to Claude and other AI apps over MCP, vault by vault. Each card has a version history with restore, and the editor has undo and redo buttons.
 
 **Live:** https://notes-app-afc.pages.dev, deployed manually with `npm run deploy`.
 
@@ -48,8 +48,8 @@ src/
   sync/     Sync engine, HTTP transport, and the protocol shared with the server
   auth/     Google sign-in screen and the account gate
   ui/       App shell, shared components, pages, and the TipTap editor
-server/     Hono API: Google token check, sessions, vaults, push and pull, card history
-functions/  Cloudflare Pages entry point for the API
+server/     Hono API: Google token check, sessions, vaults, push and pull, card history, OAuth and MCP for AI apps
+functions/  Cloudflare Pages entry points: /api and /.well-known
 migrations/ D1 schema
 ```
 
@@ -64,4 +64,5 @@ migrations/ D1 schema
 - **Each account has its own local database**, and the server checks vault membership on every request.
 - **Locked cards stop at `buildIndex`.** Lists, search, backlinks and exports are built from the index, so a new view can't leak a locked card by accident. Links must go through `linkTitle`, because a link stores the title it was created with.
 - **History lives on the server.** Each push that changes a card extends or adds a version, so history needs a connection but covers every device. Versions hold the same opaque payload as cards.
+- **AI apps get the same protection as locked vaults.** The MCP server builds its index with every vault closed to AI marked locked, and writes through the same push path as devices, so AI edits sync and show in history.
 - **Dates are local calendar days** stored as `YYYY-MM-DD` keys, never UTC instants.

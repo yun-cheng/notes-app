@@ -55,7 +55,7 @@ Runs beside the sync server on the same database, using Cloudflare's MCP setup f
 
 - Per-vault AI access: off (default), read, read + write. Private vaults can never have AI access.
 - The server enforces this, not the AI.
-- Write access is approved by the owner.
+- Write access is approved by the owner, once per vault (decided 2026-11-10): the AI access setting is the approval, with no per-change prompts. Every AI edit can be undone from history.
 - Tools, read: `search_cards`, `get_card` (with backlinks), `list_todos(due, status)`, `get_diary(date range)`.
 - Tools, write: `create_note`, `add_todo`, `complete_todo`, `append_to_diary`, plus editing existing notes.
 - Every AI edit creates a version labeled as AI-authored, undoable in one click.
@@ -101,11 +101,11 @@ Links and tag associations live inside the card payload.
 
 ## Milestones
 
-1. Works on one device: notes, todos, diary; tags, links and backlinks; search; Today and Calendar views; installable PWA. **Built and hosted; not yet tried on a real Android phone.**
-2. Sync and accounts: Worker and D1, Google sign-in, multi-user data model (only the owner using it). **Built and deployed; a real Google sign-in has not been tried yet.**
-3. Private vaults: PIN, optional fingerprint, auto-lock, hidden from search. **Built and tested locally; not deployed. Run `npm run db:migrate:remote` before deploying it.**
-   - Added alongside: version history per card, and undo and redo buttons in the editor. Also not deployed; same migration step.
-4. MCP server. **Started: the vault API accepts `ai_access` (off, read, write), refused for private vaults. No app setting yet, since nothing reads it until the MCP server exists.**
+1. Works on one device: notes, todos, diary; tags, links and backlinks; search; Today and Calendar views; installable PWA. **Built and deployed; not yet tried on a real Android phone.**
+2. Sync and accounts: Worker and D1, Google sign-in, multi-user data model (only the owner using it). **Built and deployed; real Google sign-in works.**
+3. Private vaults: PIN, optional fingerprint, auto-lock, hidden from search. **Built and deployed.**
+   - Added alongside: version history per card, and undo and redo buttons in the editor. Deployed.
+4. MCP server. **Built and tested locally against a simulated AI app; not yet tried from Claude itself.**
 5. Photos.
 6. Sharing vaults and single notes (roles, comments, public links).
 7. End-to-end encryption for private vaults.
@@ -122,9 +122,7 @@ Later: push reminders for todos, Tauri wrapper if PWA limits hurt.
 
 ## Open questions
 
-None. Real Google sign-in works (2026-11-10). Next steps: deploy Milestone 3 and history (remote migrations 0002 and 0003 first), then Milestone 4.
-
-For Milestone 4, decide how AI writes are approved: per change, or once per vault with every AI edit undoable from history.
+None. Defaults chosen while building are listed in the implementation notes, and can change later.
 
 ## Implementation notes from Milestone 1
 
@@ -167,4 +165,16 @@ For Milestone 4, decide how AI writes are approved: per change, or once per vaul
 - Edits on this device that haven't synced yet appear as their own entry at the top.
 - Ticking off a todo in a list, moving a card to another vault and moving to Trash each show Undo in a toast.
 - Undo in the editor covers this device's typing only. A change arriving from sync is not undoable, so undo can't revert another device's edit. Older states are restored from history.
-- Milestone 4 will need versions to record that an edit came from AI, and AI edits must not extend a person's version.
+
+## Implementation notes from Milestone 4
+
+- The MCP server is `/api/mcp` on the app's own address, using Streamable HTTP with plain JSON replies (no streaming, no sessions), so it runs as a Pages Function without Durable Objects. No MCP SDK: the server handles `initialize`, `ping`, `tools/list` and `tools/call` itself.
+- Sign-in for AI apps is OAuth 2.1, built in rather than through Cloudflare's OAuth library, so it needs no KV namespace: dynamic client registration, codes with PKCE (S256), one-hour access tokens and rotating 90-day refresh tokens. Discovery documents are under `/.well-known` at the site root. Only token hashes are stored.
+- Approval happens in the app at `/oauth/authorize`, which uses the normal session. The session cookie stays SameSite=Strict, because the page calls the API from the app's own origin.
+- What an app can reach is set per vault (off, read, read and write) and enforced on the server. Private vaults are always off. Writes also need the user to own the vault, so shared vaults stay read only to AI.
+- Every vault closed to AI goes into the AI's index as locked, so links into it read "Locked" and its text never reaches search, through the same code that hides locked vaults in the app.
+- Tools: `list_vaults`, `search_cards`, `get_card`, `list_todos`, `get_diary`, `create_note`, `add_todo`, `complete_todo`, `append_to_diary`, `edit_card`. There is no delete. AI writes Markdown, which becomes the card's TipTap document; `[[Exact title]]` links to an existing card.
+- AI writes go through the same push path as devices, so they sync, and their versions record the app's name ("Ann via Claude (AI)"). An AI edit never extends a person's version.
+- New diary entries are refused while the diary lives in a private vault, because AI can't reach it.
+- The MCP `instructions` tell the model to treat card text as data, not instructions.
+- To connect Claude: Backup & settings, AI apps shows the address to add as a custom connector. Turn on AI access for a vault, under Vaults or on the approval page.

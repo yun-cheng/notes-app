@@ -347,3 +347,5 @@ body:has(.title-field:focus) .tabbar { display: none; }
 .public__card { max-width: 720px; margin: 0 auto; }
 .public__card h1 { font: 600 30px/1.2 var(--serif); margin-bottom: 8px; overflow-wrap: anywhere; }
 .public__foot { margin-top: 32px; color: var(--muted); font-size: 13px; }
+.recovery-key { font: 600 18px/1.6 ui-monospace, "SF Mono", Menlo, monospace; letter-spacing: 0.04em; padding: 12px 14px; border-radius: 10px; background: var(--sunken); overflow-wrap: anywhere; user-select: all; }
+.encrypt-box { padding: 12px; border: 1px solid var(--line); border-radius: 10px; display: flex; flex-direction: column; gap: 8px; }

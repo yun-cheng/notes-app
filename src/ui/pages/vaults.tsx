@@ -2,7 +2,8 @@ import { useEffect, useState, type FormEvent } from 'react';
 import { Link, useParams } from 'react-router';
 import { biometricAvailable, biometricKey, enrollBiometric } from '../../auth/biometric';
 import { isDefaultVault } from '../../domain/locks';
-import { hashPin, MIN_PIN_LENGTH } from '../../domain/pin';
+import { createVaultKey } from '../../crypto/vaultKeys';
+import { hashPin, MIN_PIN_LENGTH, verifyPin } from '../../domain/pin';
 import type { Vault } from '../../domain/types';
 import { useCards } from '../../state/CardsContext';
 import { SyncOffline } from '../../sync/engine';
@@ -11,6 +12,8 @@ import { CardRow, Empty, Page, Section, useNewNote } from '../components';
 import { Icon } from '../Icon';
 import { LockPanel } from '../LockPanel';
 import { useToast } from '../Toast';
+import { RecoveryKeyDialog } from '../RecoveryKeyDialog';
+import { NeedsPin, useVaultEncryption } from '../useVaultEncryption';
 import { VaultPeopleSection } from './people';
 
 const pinError = `Use at least ${MIN_PIN_LENGTH} characters.`;
@@ -35,16 +38,20 @@ function CreateVaultForm() {
   const [name, setName] = useState('');
   const [pin, setPin] = useState('');
   const [error, setError] = useState<string | null>(null);
+  const [recoveryKey, setRecoveryKey] = useState<string | null>(null);
 
+  // A private vault is end-to-end encrypted from the start, and its recovery key is shown once.
   const submit = async (e: FormEvent) => {
     e.preventDefault();
     if (!name.trim()) return;
     if (pin && pin.length < MIN_PIN_LENGTH) return setError(pinError);
     setError(null);
     const hashed = pin ? await hashPin(pin) : null;
-    if (await save(() => createVault({ name: name.trim(), pin: hashed }))) {
+    const sealed = pin ? await createVaultKey(pin) : null;
+    if (await save(() => createVault({ name: name.trim(), pin: hashed, encryption: sealed?.encryption ?? null }))) {
       setName('');
       setPin('');
+      if (sealed) setRecoveryKey(sealed.recoveryKey);
     }
   };
 
@@ -56,6 +63,7 @@ function CreateVaultForm() {
         Create vault
       </button>
       {error && <p className="lock-panel__error">{error}</p>}
+      {recoveryKey && <RecoveryKeyDialog recoveryKey={recoveryKey} onClose={() => setRecoveryKey(null)} />}
     </form>
   );
 }
@@ -154,6 +162,23 @@ function VaultSettings({ vault }: { vault: Vault }) {
   const [fingerprintOn, setFingerprintOn] = useState(false);
   const change = (changes: VaultChanges, done: string) => save(() => updateVault(vault.id, changes), done);
   const isPrivate = vault.lock === 'pin';
+  const encrypted = !!vault.encryption;
+  const crypt = useVaultEncryption();
+  const [busy, setBusy] = useState<string | null>(null);
+  const [recoveryKey, setRecoveryKey] = useState<string | null>(null);
+  const [currentPin, setCurrentPin] = useState('');
+
+  /** Runs a step that may take a while, reporting any failure. */
+  const step = async (label: string, work: () => Promise<void>) => {
+    setBusy(label);
+    try {
+      await work();
+    } catch (err) {
+      toast(err instanceof NeedsPin ? err.message : err instanceof SyncOffline ? 'Connect to the internet to change a vault.' : "That didn't work. Try again.");
+    } finally {
+      setBusy(null);
+    }
+  };
 
   useEffect(() => {
     void biometricAvailable().then(setCanUseFingerprint);
@@ -164,15 +189,36 @@ function VaultSettings({ vault }: { vault: Vault }) {
     e.preventDefault();
     if (pin.length < MIN_PIN_LENGTH) return setError(pinError);
     setError(null);
-    if (await change({ pin: await hashPin(pin) }, isPrivate ? 'PIN changed' : 'Vault is now private')) setPin('');
+    const next = pin;
+    setPin('');
+    if (encrypted) return step('Changing the PIN…', async () => (await crypt.rewrap(vault, next), toast('PIN changed')));
+    // Making a vault private encrypts it.
+    if (!isPrivate) return step('Encrypting…', async () => setRecoveryKey(await crypt.encrypt(vault, next)));
+    if (await change({ pin: await hashPin(next) }, 'PIN changed')) setPin('');
+  };
+
+  const encryptNow = async (e: FormEvent) => {
+    e.preventDefault();
+    const entered = currentPin;
+    setCurrentPin('');
+    if (!vault.pin || !(await verifyPin(entered, vault.pin))) return setError("That PIN isn't right.");
+    setError(null);
+    await step('Encrypting…', async () => setRecoveryKey(await crypt.encrypt(vault, entered)));
+  };
+
+  const removePin = async () => {
+    if (encrypted && !confirm(`Remove the PIN from ${vault.name}? Its cards will be decrypted and stored readable again.`)) return;
+    if (encrypted) await step('Decrypting…', async () => (await crypt.decrypt(vault), toast('Vault is no longer private')));
+    else await change({ pin: null }, 'Vault is no longer private');
   };
 
   const toggleFingerprint = async (on: boolean) => {
     try {
+      await crypt.rememberOnDevice(vault, on);
       await repo.setMeta(biometricKey(vault.id), on ? await enrollBiometric(vault.name) : null);
       setFingerprintOn(on);
-    } catch {
-      toast("Fingerprint couldn't be set up on this device.");
+    } catch (err) {
+      toast(err instanceof NeedsPin ? err.message : "Fingerprint couldn't be set up on this device.");
     }
   };
 
@@ -195,14 +241,31 @@ function VaultSettings({ vault }: { vault: Vault }) {
         <>
           <form className="lock-panel__row vault-gap" onSubmit={(e) => void submitPin(e)}>
             <input className="text-input" type="password" value={pin} placeholder={isPrivate ? 'New PIN' : 'PIN'} aria-label={isPrivate ? 'New PIN' : 'PIN'} autoComplete="new-password" onChange={(e) => setPin(e.target.value)} />
-            <button type="submit" className="btn" disabled={!pin}>
+            <button type="submit" className="btn" disabled={!pin || !!busy}>
               {isPrivate ? 'Change PIN' : 'Make private'}
             </button>
           </form>
           {error && <p className="lock-panel__error">{error}</p>}
-          {!isPrivate && <p className="prose-note vault-gap">A forgotten PIN can't be recovered yet, so keep it somewhere safe.</p>}
+          {!isPrivate && (
+            <p className="prose-note vault-gap">A private vault is end-to-end encrypted: its cards are readable only on devices where you enter the PIN. You'll get a recovery key in case you forget it.</p>
+          )}
         </>
       )}
+
+      {isPrivate && encrypted && <p className="access-note vault-gap">End-to-end encrypted. Only devices where the PIN is entered can read this vault.</p>}
+      {isPrivate && !encrypted && (
+        <form className="encrypt-box vault-gap" onSubmit={(e) => void encryptNow(e)}>
+          <p className="prose-note">This vault was made before encryption. Its PIN only hides it in the app; the server and this device can still read its cards.</p>
+          <div className="lock-panel__row">
+            <input className="text-input" type="password" value={currentPin} placeholder="Current PIN" aria-label="Current PIN to encrypt with" autoComplete="off" onChange={(e) => setCurrentPin(e.target.value)} />
+            <button type="submit" className="btn btn--primary" disabled={!currentPin || !!busy}>
+              Encrypt this vault
+            </button>
+          </div>
+        </form>
+      )}
+      {busy && <p className="prose-note vault-gap" role="status">{busy}</p>}
+      {recoveryKey && <RecoveryKeyDialog recoveryKey={recoveryKey} onClose={() => setRecoveryKey(null)} />}
 
       {!isPrivate && (
         <div className="vault-gap">
@@ -222,7 +285,7 @@ function VaultSettings({ vault }: { vault: Vault }) {
               <span>Unlock with fingerprint on this device. Anyone with a fingerprint enrolled on it can then open this vault, and family members often have theirs enrolled.</span>
             </label>
           )}
-          <button type="button" className="btn vault-gap" onClick={() => void change({ pin: null }, 'Vault is no longer private')}>
+          <button type="button" className="btn vault-gap" disabled={!!busy} onClick={() => void removePin()}>
             Remove PIN
           </button>
         </div>

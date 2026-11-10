@@ -16,7 +16,10 @@ async function derive(pin: string, salt: Uint8Array<ArrayBuffer>, iterations: nu
   return toBase64(new Uint8Array(bits));
 }
 
-/** Makes a verifier for a PIN. This gates the UI only: it is not encryption, which comes in Milestone 7. */
+/**
+ * Makes a verifier for a PIN. For a vault made before encryption it is the only check, and gates the UI only.
+ * An encrypted vault is checked by unwrapping its key instead (see crypto/vaultKeys).
+ */
 export async function hashPin(pin: string): Promise<VaultPin> {
   const salt = crypto.getRandomValues(new Uint8Array(16));
   return { salt: toBase64(salt), hash: await derive(pin, salt, ITERATIONS), iterations: ITERATIONS };

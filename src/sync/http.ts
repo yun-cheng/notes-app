@@ -36,6 +36,7 @@ export interface VaultChanges {
   pin?: VaultPin | null;
   hidden?: boolean;
   ai_access?: Vault['ai_access'];
+  encryption?: Vault['encryption'];
 }
 
 export const createVault = (input: VaultChanges) => request<Vault>('/vaults', { method: 'POST', body: JSON.stringify(input) });
@@ -189,3 +190,6 @@ export async function fetchPublicCard(token: string): Promise<PublicCard | null>
   if (!res.ok) throw new Error(`Loading the shared card failed with ${res.status}`);
   return (await res.json()) as PublicCard;
 }
+
+/** Removes plaintext versions from an encrypted vault's history on the server. */
+export const purgePlaintextHistory = (vaultId: string) => request<unknown>(`/vaults/${encodeURIComponent(vaultId)}/purge-plaintext`, { method: 'POST', body: '{}' });

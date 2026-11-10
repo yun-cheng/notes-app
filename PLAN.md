@@ -94,7 +94,7 @@ VaultMember  vault_id, user_id, role(owner|editor|viewer)
 Card         id, home_vault_id, type(note|todo|diary|tag), payload(TipTap JSON + fields)
 Share        card_id, target(vault|user|public_link), role(view|comment|edit), expires_at
 Comment      id, card_id, author_id, anchor, body
-CardVersion  card_id, payload, author(user|ai), at
+CardVersion  id, card_id, author_id, started_at, saved_at, payload
 ```
 
 Links and tag associations live inside the card payload.
@@ -104,6 +104,7 @@ Links and tag associations live inside the card payload.
 1. Works on one device: notes, todos, diary; tags, links and backlinks; search; Today and Calendar views; installable PWA. **Built and hosted; not yet tried on a real Android phone.**
 2. Sync and accounts: Worker and D1, Google sign-in, multi-user data model (only the owner using it). **Built and deployed; a real Google sign-in has not been tried yet.**
 3. Private vaults: PIN, optional fingerprint, auto-lock, hidden from search. **Built and tested locally; not deployed. Run `npm run db:migrate:remote` before deploying it.**
+   - Added alongside: version history per card, and undo and redo buttons in the editor. Also not deployed; same migration step.
 4. MCP server.
 5. Photos.
 6. Sharing vaults and single notes (roles, comments, public links).
@@ -121,7 +122,9 @@ Later: push reminders for todos, Tauri wrapper if PWA limits hurt.
 
 ## Open questions
 
-None. Next steps: the first real sign-in on the browser that holds the existing notes, then deploying Milestone 3, then Milestone 4.
+None. Real Google sign-in works (2026-11-10). Next steps: deploy Milestone 3 and history (remote migrations 0002 and 0003 first), then Milestone 4.
+
+For Milestone 4, decide how AI writes are approved: per change, or once per vault with every AI edit undoable from history.
 
 ## Implementation notes from Milestone 1
 
@@ -152,3 +155,14 @@ None. Next steps: the first real sign-in on the browser that holds the existing 
 - A hidden vault is unlocked by entering its PIN under Vaults, and its name is not shown until then.
 - Fingerprint unlock is per device and off by default. It uses the device's built-in authenticator through WebAuthn, and has not been tried on a real phone.
 - A forgotten PIN can't be recovered yet. Vault creation and PIN changes need a connection.
+
+## Implementation notes from version history
+
+- The server keeps history, so every device sees the same versions and a new device gets them too. It needs a connection; offline, the page says so.
+- One version covers a stretch of edits by one person: saves within 10 minutes of each other extend it, up to an hour. Both sides of a sync conflict are kept as separate versions. At most 200 versions per card.
+- A card that existed before history was kept gets its earlier state saved, with no author, the first time it changes.
+- History is visible to members of the card's current vault. Locked cards show the unlock panel instead, as their card page does.
+- The page compares a version with the one before it, word by word (each CJK character counts as a word), or shows its full text. Restore writes the old title, text, tags and todo fields back as a new change, so it can itself be undone.
+- Edits on this device that haven't synced yet appear as their own entry at the top.
+- Undo in the editor covers this device's typing only. A change arriving from sync is not undoable, so undo can't revert another device's edit. Older states are restored from history.
+- Milestone 4 will need versions to record that an edit came from AI, and AI edits must not extend a person's version.

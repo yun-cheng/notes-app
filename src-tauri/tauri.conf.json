@@ -1,6 +1,6 @@
 {
   "$schema": "../node_modules/@tauri-apps/cli/config.schema.json",
-  "productName": "Notes",
+  "productName": "notes-app",
   "version": "0.1.0",
   "identifier": "dev.notesapp.notes",
   "build": {

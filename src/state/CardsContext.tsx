@@ -8,7 +8,9 @@ import { localStorageJournal } from '../storage/journal';
 import { CardRepository } from '../storage/repository';
 import { jsonCodec } from '../storage/types';
 import { SyncEngine, type SyncStatus } from '../sync/engine';
-import { httpTransport } from '../sync/http';
+import { httpTransport, photoTransport } from '../sync/http';
+import { preparePhoto } from '../photos/prepare';
+import { PhotoService, type PhotoState } from '../photos/service';
 
 /** Each account has its own database and journal, so accounts on one browser stay apart. */
 export function openAccountStorage(accountId: string) {
@@ -18,10 +20,10 @@ export function openAccountStorage(accountId: string) {
 }
 
 function openAccount(accountId: string) {
-  const { repo } = openAccountStorage(accountId);
+  const { store, repo } = openAccountStorage(accountId);
   const engine = new SyncEngine(repo, httpTransport);
   repo.onChange = () => engine.schedule();
-  return { repo, engine, locks: new VaultLocks() };
+  return { repo, engine, locks: new VaultLocks(), photos: new PhotoService(store, photoTransport, preparePhoto) };
 }
 
 interface CardsValue {
@@ -30,6 +32,7 @@ interface CardsValue {
   engine: SyncEngine;
   vaults: Vault[];
   locks: VaultLocks;
+  photos: PhotoService;
   /** Vaults with a PIN that aren't open on this device. */
   locked: ReadonlySet<string>;
 }
@@ -37,7 +40,7 @@ interface CardsValue {
 const CardsContext = createContext<CardsValue | null>(null);
 
 export function CardsProvider({ accountId, children }: { accountId: string; children: ReactNode }) {
-  const [{ repo, engine, locks }] = useState(() => openAccount(accountId));
+  const [{ repo, engine, locks, photos }] = useState(() => openAccount(accountId));
   const [cards, setCards] = useState<Card[] | null>(null);
   const [vaults, setVaults] = useState<Vault[] | null>(null);
   const open = useSyncExternalStore(locks.subscribe, locks.getOpen);
@@ -66,10 +69,13 @@ export function CardsProvider({ accountId, children }: { accountId: string; chil
     };
 
     let stopSync: (() => void) | null = null;
+    let stopPhotos: (() => void) | null = null;
     repo
       .init()
       .then(() => {
-        if (active) stopSync = engine.start();
+        if (!active) return;
+        stopSync = engine.start();
+        stopPhotos = photos.start();
       })
       .catch((e: unknown) => setError(String(e)));
     void navigator.storage?.persist?.();
@@ -84,8 +90,9 @@ export function CardsProvider({ accountId, children }: { accountId: string; chil
       stopVaults();
       stopLocks();
       stopSync?.();
+      stopPhotos?.();
     };
-  }, [repo, engine, locks]);
+  }, [repo, engine, locks, photos]);
 
   if (error) {
     return (
@@ -97,7 +104,7 @@ export function CardsProvider({ accountId, children }: { accountId: string; chil
     );
   }
   if (!index || !vaults) return <div className="boot" aria-busy="true" />;
-  return <CardsContext.Provider value={{ index, repo, engine, vaults, locks, locked }}>{children}</CardsContext.Provider>;
+  return <CardsContext.Provider value={{ index, repo, engine, vaults, locks, locked, photos }}>{children}</CardsContext.Provider>;
 }
 
 export function useCards(): CardsValue {
@@ -124,4 +131,9 @@ export function useToday(): string {
     };
   }, []);
   return today;
+}
+
+export function usePhotoState(): PhotoState {
+  const { photos } = useCards();
+  return useSyncExternalStore(photos.subscribe, photos.getState);
 }

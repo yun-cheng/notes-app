@@ -17,6 +17,16 @@ describe('DexieStore', () => {
     await dx.putVaults([vault]);
     expect(await dx.listVaults()).toEqual([vault]);
   });
+  it('keeps photos and lists the ones waiting to upload, oldest first', async () => {
+    const dx = new DexieStore(`t-${Math.random()}`);
+    const photo = (id: string, addedAt: number) => ({ id, vaultId: 'v', blob: new Blob(['x']), mime: 'image/jpeg', width: 1, height: 1, uploaded: 0 as const, addedAt });
+    await dx.putPhoto(photo('b', 2));
+    await dx.putPhoto(photo('a', 1));
+    expect((await dx.pendingPhotos()).map((p) => p.id)).toEqual(['a', 'b']);
+    await dx.markPhotoUploaded('a');
+    expect((await dx.pendingPhotos()).map((p) => p.id)).toEqual(['b']);
+    expect((await dx.getPhoto('a'))?.uploaded).toBe(1);
+  });
   it('notifies subscribers of later writes', async () => {
     const dx = new DexieStore(`t-${Math.random()}`);
     const counts: number[] = [];

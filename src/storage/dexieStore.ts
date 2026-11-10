@@ -1,5 +1,6 @@
 import Dexie, { liveQuery, type Table } from 'dexie';
 import type { CardRecord, Vault } from '../domain/types';
+import type { PhotoRecord, PhotoStore } from '../photos/types';
 import type { CardStore } from './types';
 
 class NotesDb extends Dexie {
@@ -7,15 +8,17 @@ class NotesDb extends Dexie {
   vaults!: Table<Vault, string>;
   dirty!: Table<{ id: string }, string>;
   meta!: Table<{ key: string; value: unknown }, string>;
+  photos!: Table<PhotoRecord, string>;
 
   constructor(name: string) {
     super(name);
     this.version(1).stores({ cards: 'id, vault_id, updated_at, seq', vaults: 'id' });
     this.version(2).stores({ dirty: 'id', meta: 'key' });
+    this.version(3).stores({ photos: 'id, uploaded, addedAt' });
   }
 }
 
-export class DexieStore implements CardStore {
+export class DexieStore implements CardStore, PhotoStore {
   private db: NotesDb;
 
   constructor(name = 'notes-app') {
@@ -83,6 +86,18 @@ export class DexieStore implements CardStore {
       error: (err) => console.error('Reading vaults failed', err),
     });
     return () => subscription.unsubscribe();
+  }
+  async putPhoto(photo: PhotoRecord) {
+    await this.db.photos.put(photo);
+  }
+  getPhoto(id: string) {
+    return this.db.photos.get(id);
+  }
+  async pendingPhotos() {
+    return (await this.db.photos.where('uploaded').equals(0).toArray()).sort((a, b) => a.addedAt - b.addedAt);
+  }
+  async markPhotoUploaded(id: string) {
+    await this.db.photos.update(id, { uploaded: 1 });
   }
   async destroy() {
     await this.db.delete();

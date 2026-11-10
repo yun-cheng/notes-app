@@ -1,5 +1,6 @@
 import type { VaultPin } from '../domain/pin';
 import type { CardRecord, Vault } from '../domain/types';
+import type { PhotoTransport } from '../photos/types';
 import { SyncAuthExpired, SyncOffline, type SyncTransport } from './engine';
 import type { ConfigResponse, PullResponse, PushResponse, SessionInfo, VersionResponse, VersionsResponse } from './protocol';
 
@@ -67,3 +68,48 @@ export const answerOAuth = async (params: Record<string, string>, approve: boole
 export const listAiApps = async () => (await request<{ apps: ConnectedApp[] }>('/ai/apps')).apps;
 
 export const disconnectAiApp = (id: string) => request<unknown>(`/ai/apps/${encodeURIComponent(id)}`, { method: 'DELETE' });
+
+export interface DriveStatus {
+  configured: boolean;
+  connected: boolean;
+  email: string | null;
+}
+
+export const fetchDriveStatus = () => request<DriveStatus>('/drive');
+
+/** Where to send the browser to approve Drive access at Google. */
+export const startDriveConnect = async () => (await request<{ url: string }>('/drive/connect', { method: 'POST', body: '{}' })).url;
+
+export const disconnectDrive = () => request<unknown>('/drive', { method: 'DELETE' });
+
+async function rawRequest(path: string, init?: RequestInit): Promise<Response> {
+  try {
+    const res = await fetch(`/api${path}`, { credentials: 'same-origin', ...init });
+    if (res.status === 401) throw new SyncAuthExpired('Not signed in');
+    return res;
+  } catch (err) {
+    if (err instanceof SyncAuthExpired) throw err;
+    throw new SyncOffline('The server could not be reached');
+  }
+}
+
+export const photoTransport: PhotoTransport = {
+  async upload(photo) {
+    const query = new URLSearchParams({ vault: photo.vaultId });
+    if (photo.width) query.set('w', String(photo.width));
+    if (photo.height) query.set('h', String(photo.height));
+    const res = await rawRequest(`/attachments/${encodeURIComponent(photo.id)}?${query}`, { method: 'PUT', body: photo.blob, headers: { 'content-type': photo.mime } });
+    if (res.ok) return 'ok';
+    const error = ((await res.json().catch(() => ({}))) as { error?: string }).error;
+    if (error === 'drive_not_connected') return 'needs_drive';
+    if (error === 'photos_not_configured') return 'not_configured';
+    if (res.status >= 500) throw new Error(`Photo upload failed with ${res.status}`);
+    return 'rejected';
+  },
+  async download(id) {
+    const res = await rawRequest(`/attachments/${encodeURIComponent(id)}`);
+    if (res.ok) return res.blob();
+    if (res.status === 404 || res.status === 409 || res.status === 503) return null;
+    throw new Error(`Photo download failed with ${res.status}`);
+  },
+};

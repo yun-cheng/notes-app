@@ -38,7 +38,19 @@ Sign-in needs a Google OAuth client ID in `GOOGLE_CLIENT_ID` in `wrangler.jsonc`
 
 The service worker only runs in the built app, so use `build` then `preview` to test offline behaviour. Installing on a phone needs HTTPS.
 
-## Layout
+## Native apps
+
+`src-tauri/` is a Tauri 2 shell for macOS, Android and iOS. Its window loads the live site, so the apps need no separate release when the web app changes. Inside it, sign-in goes through the system browser (Google doesn't allow sign-in in embedded webviews): the app shows a code, and you confirm it in a browser where you're signed in.
+
+Needs Rust (`brew install rustup`, then `rustup default stable`), plus Xcode with CocoaPods for iOS, and Android Studio's SDK and NDK for Android.
+
+| Command | What it builds |
+| --- | --- |
+| `npm run native:mac` | `src-tauri/target/release/bundle/macos/notes-app.app` |
+| `ANDROID_HOME=~/Library/Android/sdk NDK_HOME=~/Library/Android/sdk/ndk/28.2.13676358 JAVA_HOME="/Applications/Android Studio.app/Contents/jbr/Contents/Home" npx tauri android build --apk --debug --target aarch64` | A debug APK to install on an Android phone |
+| `npx tauri ios build --debug --target aarch64-sim` | An app for the iOS Simulator (a phone build needs an Apple developer team) |
+
+
 
 ```
 src/
@@ -52,6 +64,8 @@ src/
   ui/       App shell, shared components, pages, and the TipTap editor
 server/     Hono API: Google token check, sessions, vaults, push and pull, card history, OAuth and MCP for AI apps, photos in Drive, sharing and comments
 functions/  Cloudflare Pages entry points: /api and /.well-known
+src-tauri/  Native shell (Tauri 2) for macOS, Android and iOS
+native/     The shell's local page, shown if the site can't be reached
 migrations/ D1 schema
 ```
 

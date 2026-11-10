@@ -110,7 +110,9 @@ Links and tag associations live inside the card payload.
 6. Sharing vaults and single notes (roles, comments, public links). **Built and tested locally with two accounts.**
 7. End-to-end encryption for private vaults. **Built and tested locally, including encrypting an existing private vault and recovering a forgotten PIN.**
 
-Later: push reminders for todos, Tauri wrapper if PWA limits hurt.
+Later: push reminders for todos.
+
+Native apps: started 2026-11-10 at the owner's request, as a Tauri 2 shell around the live site (see the notes below).
 
 ## Resolved questions
 
@@ -220,3 +222,11 @@ None. Defaults chosen while building are listed in the implementation notes, and
 - Forgot PIN: the recovery key opens the vault and sets a new PIN. Changing the PIN rewraps the same key. Removing the PIN decrypts the vault.
 - The PIN is the weak point: anyone with a copy of the server database can try PINs offline, so a 4-digit PIN falls in under an hour. A longer passphrase is much stronger. Worth a warning in the app later.
 - Not covered yet: photos in private vaults are not encrypted in Drive or on the device; cards in encrypted vaults can't be shared or published (they need per-card keys, with the key in the link's `#` fragment); open vaults rely on Cloudflare's encryption at rest rather than their own key.
+
+## Implementation notes from the native apps
+
+- One Tauri 2 project (`src-tauri/`) builds the macOS, Android and iOS apps. The window loads the live site rather than a bundled copy, so cookies, Google Drive, sharing and updates work as on the web, and the site gets no native permissions.
+- Google blocks sign-in inside embedded webviews, so the apps sign in through the system browser by pairing: the app shows a four-character code, the person confirms it on `/pair` in a signed-in browser, and the app claims its own session. Matching codes stop a link from someone else signing their app in as you.
+- Links to other sites open in the system browser.
+- Offline: the web app's own offline support depends on the webview's service worker support, which is solid on Android and limited in Apple's WKWebView. If the site can't be reached at first launch, a local page says so. A bundled copy of the web app is the fix if this matters in practice.
+- The bundle identifier is `dev.notesapp.notes` and the product name `notes-app`, until a real name is picked. Store releases need signing: an Apple developer team for iOS and macOS distribution, and a release keystore for Android.

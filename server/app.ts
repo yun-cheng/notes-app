@@ -17,6 +17,7 @@ import type { AppEnv } from './db';
 import { aiPublicRoutes, aiSessionRoutes, wellKnown } from './aiApp';
 import type { GoogleFetch } from './drive';
 import { drivePublicRoutes, photoRoutes } from './photos';
+import { commentRoutes } from './comments';
 import { memberRoutes } from './members';
 import { publicRoutes, shareRoutes } from './shares';
 import { pullRecords, pushRecords } from './sync';
@@ -206,6 +207,7 @@ export function createApp({ verifyGoogle = googleVerifier(), now = Date.now, goo
   photoRoutes(app, googleFetch, now);
   memberRoutes(app, now);
   shareRoutes(app, now);
+  commentRoutes(app, now);
 
   app.onError((err, c) => {
     console.error(err);

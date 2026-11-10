@@ -1,3 +1,4 @@
+import { useState } from 'react';
 import { Link, Navigate, useLocation, useNavigate, useParams } from 'react-router';
 import { addDays, formatDay, isDateKey, relativeDay } from '../../domain/dates';
 import { diaryVault } from '../../domain/locks';
@@ -8,7 +9,9 @@ import { permissions } from '../../domain/access';
 import { Backlinks, Empty, Page, QuickAddTodo, Section, TagChips, TagPicker, TitleField, TodoList, useDeleteCard, useNewNote, VaultField } from '../components';
 import { Editor } from '../editor/Editor';
 import { LockPanel } from '../LockPanel';
+import { Comments } from '../Comments';
 import { Icon } from '../Icon';
+import { ShareDialog } from '../ShareDialog';
 
 const HOME: Record<Card['type'], string> = { note: '/notes', todo: '/upcoming', tag: '/tags', diary: '/calendar' };
 const LABEL: Record<Card['type'], string> = { note: 'Note', todo: 'Todo', tag: 'Tag', diary: 'Diary' };
@@ -54,6 +57,7 @@ function CardDetail({ card }: { card: Exclude<Card, { type: 'diary' }> }) {
   const newNote = useNewNote();
   const today = useToday();
   const fresh = !!(useLocation().state as { fresh?: boolean } | null)?.fresh;
+  const [sharing, setSharing] = useState(false);
   const navigate = useNavigate();
 
   return (
@@ -80,6 +84,11 @@ function CardDetail({ card }: { card: Exclude<Card, { type: 'diary' }> }) {
               <Icon name="pin" />
             </button>
           </>
+        )}
+        {can.share && (
+          <button type="button" className="btn" onClick={() => setSharing(true)}>
+            Share
+          </button>
         )}
         <Link className="icon-btn" to={`/card/${card.id}/history`} aria-label="Version history" title="Version history">
           <Icon name="history" />
@@ -135,7 +144,9 @@ function CardDetail({ card }: { card: Exclude<Card, { type: 'diary' }> }) {
         onChange={(content) => void repo.update(card.id, { content })}
       />
 
+      <Comments card={card} />
       <Backlinks cardId={card.id} isTag={card.type === 'tag'} />
+      {sharing && <ShareDialog card={card} onClose={() => setSharing(false)} />}
     </article>
   );
 }

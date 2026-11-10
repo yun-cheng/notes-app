@@ -79,6 +79,9 @@ function CardDetail({ card }: { card: Exclude<Card, { type: 'diary' }> }) {
             </button>
           </>
         )}
+        <Link className="icon-btn" to={`/card/${card.id}/history`} aria-label="Version history" title="Version history">
+          <Icon name="history" />
+        </Link>
         <button type="button" className="icon-btn" aria-label="Move to Trash" title="Move to Trash" onClick={() => remove(card, HOME[card.type])}>
           <Icon name="trash" />
         </button>
@@ -158,6 +161,11 @@ export function DayPage() {
           <Link className="icon-btn" to={`/day/${addDays(date, 1)}`} aria-label="Next day">
             <Icon name="right" />
           </Link>
+          {card && (
+            <Link className="icon-btn" to={`/day/${date}/history`} aria-label="Version history" title="Version history">
+              <Icon name="history" />
+            </Link>
+          )}
           {card && (
             <button type="button" className="icon-btn" aria-label="Move diary entry to Trash" title="Move to Trash" onClick={() => remove(card, '/calendar')}>
               <Icon name="trash" />

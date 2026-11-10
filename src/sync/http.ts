@@ -1,7 +1,7 @@
 import type { VaultPin } from '../domain/pin';
 import type { CardRecord, Vault } from '../domain/types';
 import { SyncAuthExpired, SyncOffline, type SyncTransport } from './engine';
-import type { ConfigResponse, PullResponse, PushResponse, SessionInfo } from './protocol';
+import type { ConfigResponse, PullResponse, PushResponse, SessionInfo, VersionResponse, VersionsResponse } from './protocol';
 
 async function request<T>(path: string, init?: RequestInit): Promise<T> {
   let res: Response;
@@ -39,3 +39,9 @@ export const createVault = (input: VaultChanges) => request<Vault>('/vaults', { 
 
 export const updateVault = (id: string, changes: VaultChanges) =>
   request<Vault>(`/vaults/${encodeURIComponent(id)}`, { method: 'PATCH', body: JSON.stringify(changes) });
+
+export const fetchVersions = async (cardId: string) =>
+  (await request<VersionsResponse>(`/cards/${encodeURIComponent(cardId)}/versions`)).versions;
+
+export const fetchVersion = (cardId: string, versionId: number) =>
+  request<VersionResponse>(`/cards/${encodeURIComponent(cardId)}/versions/${versionId}`);

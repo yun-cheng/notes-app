@@ -7,6 +7,7 @@ import { describeSync } from '../sync/engine';
 import { useNewNote } from './components';
 import { Icon, type IconName } from './Icon';
 import { CardPage, DayPage } from './pages/cards';
+import { HistoryPage } from './pages/history';
 import { SettingsPage } from './pages/SettingsPage';
 import { VaultPage, VaultsPage } from './pages/vaults';
 import { CalendarPage, NotesPage, SearchPage, TagsPage, TodayPage, UpcomingPage } from './pages/views';
@@ -149,7 +150,9 @@ export function App() {
             <Route path="search" element={<SearchPage />} />
             <Route path="settings" element={<SettingsPage />} />
             <Route path="card/:id" element={<CardPage />} />
+            <Route path="card/:id/history" element={<HistoryPage />} />
             <Route path="day/:date" element={<DayPage />} />
+            <Route path="day/:date/history" element={<HistoryPage />} />
             <Route path="*" element={<Navigate to="/today" replace />} />
           </Route>
         </Routes>

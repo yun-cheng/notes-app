@@ -12,6 +12,7 @@ const PATHS = {
   trash: 'M4 7h16M10 11v6M14 11v6M6 7l1 13h10l1-13M9 7V4h6v3',
   undo: 'M9 14 4 9l5-5M4 9h11a5 5 0 0 1 0 10h-3',
   redo: 'M15 14l5-5-5-5M20 9H9a5 5 0 0 0 0 10h3',
+  history: 'M3 12a9 9 0 1 0 3-6.7L3 8M3 3v5h5M12 7v5l3 2',
   left: 'M15 5l-7 7 7 7',
   right: 'M9 5l7 7-7 7',
   diary: 'M6 3h12a1 1 0 0 1 1 1v16a1 1 0 0 1-1 1H6a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2ZM8 3v18M12 8h4',

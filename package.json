@@ -13,7 +13,9 @@
     "deploy": "npm run build && wrangler pages deploy dist --project-name notes-app --branch main",
     "dev:api": "wrangler pages dev dist --port 8788",
     "db:migrate:local": "wrangler d1 migrations apply notes-app --local",
-    "db:migrate:remote": "wrangler d1 migrations apply notes-app --remote"
+    "db:migrate:remote": "wrangler d1 migrations apply notes-app --remote",
+    "tauri": "tauri",
+    "native:mac": "tauri build --bundles app"
   },
   "dependencies": {
     "@tiptap/extensions": "^3.33.0",
@@ -32,6 +34,7 @@
     "react-router": "^8.5.1"
   },
   "devDependencies": {
+    "@tauri-apps/cli": "2.12.4",
     "@types/node": "^26.6.6",
     "@types/react": "^19.3.0",
     "@types/react-dom": "^19.3.0",

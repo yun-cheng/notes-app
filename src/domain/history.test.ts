@@ -54,6 +54,12 @@ describe('diffs', () => {
     expect(diff.map((l) => l.kind)).toEqual(['same', 'changed', 'removed', 'same', 'added']);
     expect(changeSize(diff)).toEqual({ added: 2, removed: 2 });
   });
+  it('shows a mostly rewritten line as the old line and the new one', () => {
+    expect(diffLines(['recent edit'], ['old text'])).toEqual([
+      { kind: 'removed', text: 'recent edit' },
+      { kind: 'added', text: 'old text' },
+    ]);
+  });
   it('handles empty versions', () => {
     expect(diffLines([], ['hi'])).toEqual([{ kind: 'added', text: 'hi' }]);
     expect(diffLines(['hi'], [])).toEqual([{ kind: 'removed', text: 'hi' }]);

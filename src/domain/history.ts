@@ -108,6 +108,9 @@ export function diffWords(before: string, after: string): Piece[] {
   return pieces;
 }
 
+/** Share of a line that must survive an edit for the edit to be shown word by word. */
+const MOSTLY_KEPT = 0.4;
+
 /**
  * Compares two versions line by line. A run of removed lines followed by added ones is paired up
  * as changed lines, so a small edit in a long paragraph shows only the words that changed.
@@ -133,7 +136,16 @@ export function diffLines(before: string[], after: string[]): DiffLine[] {
       k++;
     }
     const pairs = Math.min(removed.length, added.length);
-    for (let p = 0; p < pairs; p++) out.push({ kind: 'changed', pieces: diffWords(removed[p], added[p]) });
+    for (let p = 0; p < pairs; p++) {
+      const pieces = diffWords(removed[p], added[p]);
+      const kept = pieces.filter((piece) => piece.kind === 'same').reduce((n, piece) => n + piece.text.trim().length, 0);
+      // A line that was mostly rewritten reads better as the old line and the new one.
+      if (kept < MOSTLY_KEPT * Math.max(removed[p].length, added[p].length)) {
+        out.push({ kind: 'removed', text: removed[p] }, { kind: 'added', text: added[p] });
+      } else {
+        out.push({ kind: 'changed', pieces });
+      }
+    }
     for (const text of removed.slice(pairs)) out.push({ kind: 'removed', text });
     for (const text of added.slice(pairs)) out.push({ kind: 'added', text });
   }

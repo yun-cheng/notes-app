@@ -2,7 +2,7 @@ import { Hono, type Context } from 'hono';
 import { deleteCookie, getCookie, setCookie } from 'hono/cookie';
 import type { VaultPin } from '../src/domain/pin';
 import type { CardRecord } from '../src/domain/types';
-import { PUSH_LIMIT, type Account, type ConfigResponse, type SessionInfo } from '../src/sync/protocol';
+import { PUSH_LIMIT, type Account, type ConfigResponse, type SessionInfo, type VersionResponse, type VersionsResponse } from '../src/sync/protocol';
 import {
   createSession,
   deleteSession,
@@ -16,6 +16,7 @@ import {
 import type { Bindings } from './db';
 import { pullRecords, pushRecords } from './sync';
 import { createVault, listVaults, updateVault, type VaultUpdate } from './vaults';
+import { getVersion, listVersions } from './versions';
 
 type Env = { Bindings: Bindings; Variables: { user: Account } };
 
@@ -161,6 +162,18 @@ export function createApp({ verifyGoogle = googleVerifier(), now = Date.now }: A
     const since = Number(c.req.query('since') ?? 0);
     if (!Number.isSafeInteger(since) || since < 0) return c.json({ error: 'Invalid cursor' }, 400);
     return c.json(await pullRecords(c.env.DB, c.get('user').id, since));
+  });
+
+  app.get('/cards/:id/versions', async (c) => {
+    const versions = await listVersions(c.env.DB, c.get('user').id, c.req.param('id'));
+    return versions ? c.json<VersionsResponse>({ versions }) : c.json({ error: 'Card not found' }, 404);
+  });
+
+  app.get('/cards/:id/versions/:version', async (c) => {
+    const versionId = Number(c.req.param('version'));
+    if (!Number.isSafeInteger(versionId)) return c.json({ error: 'Version not found' }, 404);
+    const version = await getVersion(c.env.DB, c.get('user').id, c.req.param('id'), versionId);
+    return version ? c.json<VersionResponse>(version) : c.json({ error: 'Version not found' }, 404);
   });
 
   app.onError((err, c) => {

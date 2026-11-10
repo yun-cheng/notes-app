@@ -1,6 +1,7 @@
 import type { CardRecord } from '../src/domain/types';
 import { MAX_PAYLOAD_BYTES, PULL_LIMIT, type PullResponse, type PushResult } from '../src/sync/protocol';
 import type { Database, Statement } from './db';
+import { recordVersions, type Written } from './versions';
 
 interface CardRow extends Omit<CardRecord, 'deleted'> {
   deleted: number;
@@ -74,11 +75,16 @@ export async function pushRecords(db: Database, userId: string, records: CardRec
       );
     });
     const outcomes = await db.batch<{ seq: number }>(statements);
+    const written: Written[] = [];
     writes.forEach((write, i) => {
       const row = outcomes[i + 1].results[0];
       const { id } = write.record;
-      results.set(id, row ? write.result(row.seq) : { id, status: 'retry' });
+      const result: PushResult = row ? write.result(row.seq) : { id, status: 'retry' };
+      results.set(id, result);
+      if (row) written.push({ record: write.record, previous: existing.get(id), conflict: result.status === 'conflict_client_won' });
     });
+    // History is a convenience: a failure here must not fail a push that already landed.
+    await recordVersions(db, userId, written).catch((err) => console.error('Could not record versions', err));
   }
   return records.map((r) => results.get(r.id)!);
 }

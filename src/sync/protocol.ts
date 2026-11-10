@@ -37,3 +37,20 @@ export interface PullResponse {
   next: number;
   more: boolean;
 }
+
+/** One entry on a card's history page. Times come from the editing device's clock. */
+export interface VersionInfo {
+  id: number;
+  started_at: number;
+  saved_at: number;
+  /** Who made it, or null for a card's state from before history was kept. */
+  author: string | null;
+}
+
+export interface VersionsResponse {
+  versions: VersionInfo[];
+}
+
+export interface VersionResponse extends VersionInfo {
+  payload: string;
+}

@@ -36,8 +36,17 @@ export function displayTitle(card: Card): string {
   return card.title.trim() || 'Untitled';
 }
 
-/** A note or todo the user opened but never wrote anything in. */
+/** IDs of photos in the body, in order. */
+export function photoIds(content: JSONNode): string[] {
+  const ids: string[] = [];
+  walk(content, (n) => {
+    if (n.type === 'photo' && typeof n.attrs?.id === 'string') ids.push(n.attrs.id);
+  });
+  return ids;
+}
+
+/** A note or todo the user opened but never wrote anything in. A photo counts as something. */
 export function isBlank(card: Card): boolean {
   if (card.type === 'tag') return false;
-  return card.title.trim() === '' && card.tags.length === 0 && plainText(card.content) === '';
+  return card.title.trim() === '' && card.tags.length === 0 && plainText(card.content) === '' && photoIds(card.content).length === 0;
 }

@@ -60,3 +60,12 @@ describe('fromMarkdown', () => {
     expect(toMarkdown(fromMarkdown(source, resolve), plain).trim()).toBe(source);
   });
 });
+
+describe('photos', () => {
+  it('reads and writes a photo reference', () => {
+    const doc = fromMarkdown('Before\n![Beach](attachment:photo-1234)\nAfter');
+    expect(doc.content!.map((n) => n.type)).toEqual(['paragraph', 'photo', 'paragraph']);
+    expect(doc.content![1].attrs).toEqual({ id: 'photo-1234', alt: 'Beach' });
+    expect(toMarkdown(doc, plain)).toBe('Before\n\n![Beach](attachment:photo-1234)\n\nAfter');
+  });
+});

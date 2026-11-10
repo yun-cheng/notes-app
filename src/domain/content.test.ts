@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { displayTitle, isBlank, linkedCardIds, plainText } from './content';
+import { displayTitle, isBlank, linkedCardIds, photoIds, plainText } from './content';
 import { doc, link, note, p, tag, text } from './testFixtures';
 
 describe('content', () => {
@@ -18,5 +18,14 @@ describe('content', () => {
   it('names cards for display', () => {
     expect(displayTitle(note('n', '  '))).toBe('Untitled');
     expect(displayTitle(note('n', 'Plan'))).toBe('Plan');
+  });
+});
+
+describe('photos', () => {
+  it('counts a photo as content, so a photo-only note is kept', () => {
+    const withPhoto = note('n', '', { content: doc({ type: 'photo', attrs: { id: 'p-12345678' } }) });
+    expect(photoIds(withPhoto.content)).toEqual(['p-12345678']);
+    expect(isBlank(withPhoto)).toBe(false);
+    expect(isBlank(note('m', ''))).toBe(true);
   });
 });

@@ -24,6 +24,8 @@ function blockLines(node: JSONNode, titleOf: TitleOf | undefined, prefix = ''): 
       return plainCode(node).split('\n').map((line) => prefix + line);
     case 'horizontalRule':
       return [`${prefix}———`];
+    case 'photo':
+      return [`${prefix}[Photo${node.attrs?.alt ? `: ${String(node.attrs.alt)}` : ''}]`];
     default:
       return [prefix + plainText(node, titleOf)];
   }

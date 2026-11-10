@@ -57,6 +57,8 @@ function renderBlock(node: JSONNode, title: TitleResolver): string {
       const lang = typeof node.attrs?.language === 'string' ? node.attrs.language : '';
       return `\`\`\`${lang}\n${(node.content ?? []).map((t) => t.text ?? '').join('')}\n\`\`\``;
     }
+    case 'photo':
+      return `![${String(node.attrs?.alt || 'Photo').replace(/[[\]]/g, '')}](attachment:${String(node.attrs?.id ?? '')})`;
     case 'horizontalRule':
       return '---';
     default:

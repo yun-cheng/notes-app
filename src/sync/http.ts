@@ -1,5 +1,5 @@
 import type { VaultPin } from '../domain/pin';
-import type { CardRecord, Vault } from '../domain/types';
+import type { CardRecord, JSONNode, Vault } from '../domain/types';
 import type { PhotoTransport } from '../photos/types';
 import { SyncAuthExpired, SyncOffline, type SyncTransport } from './engine';
 import type { ConfigResponse, PullResponse, PushResponse, SessionInfo, SharedCard, VersionResponse, VersionsResponse } from './protocol';
@@ -114,3 +114,78 @@ export const photoTransport: PhotoTransport = {
     throw new Error(`Photo download failed with ${res.status}`);
   },
 };
+
+export interface VaultPeople {
+  members: { user_id: string; name: string; email: string; role: 'owner' | 'editor' | 'viewer' }[];
+  invites: { email: string; role: 'editor' | 'viewer' }[];
+}
+
+const vaultPath = (id: string) => `/vaults/${encodeURIComponent(id)}`;
+
+export const fetchVaultPeople = (vaultId: string) => request<VaultPeople>(`${vaultPath(vaultId)}/members`);
+export const addVaultMember = (vaultId: string, email: string, role: 'editor' | 'viewer') =>
+  request<VaultPeople>(`${vaultPath(vaultId)}/members`, { method: 'POST', body: JSON.stringify({ email, role }) });
+export const removeVaultMember = (vaultId: string, userId: string) =>
+  request<VaultPeople | { ok: true }>(`${vaultPath(vaultId)}/members/${encodeURIComponent(userId)}`, { method: 'DELETE' });
+export const cancelVaultInvite = (vaultId: string, email: string) =>
+  request<VaultPeople>(`${vaultPath(vaultId)}/invites/${encodeURIComponent(email)}`, { method: 'DELETE' });
+
+export type ShareRole = 'view' | 'comment' | 'edit';
+
+export interface CardShares {
+  people: { user_id: string; name: string; email: string; role: ShareRole }[];
+  invites: { email: string; role: ShareRole }[];
+  vaults: { vault_id: string; name: string; role: ShareRole; members: number }[];
+  links: { token: string; created_at: number; expires_at: number | null }[];
+}
+
+const cardPath = (id: string) => `/cards/${encodeURIComponent(id)}`;
+
+export const fetchCardShares = (cardId: string) => request<CardShares>(`${cardPath(cardId)}/shares`);
+export const shareCard = (cardId: string, target: { email: string } | { vault_id: string }, role: ShareRole) =>
+  request<CardShares>(`${cardPath(cardId)}/shares`, { method: 'POST', body: JSON.stringify({ ...target, role }) });
+export const unshareCard = (cardId: string, type: 'user' | 'vault' | 'invite', target: string) =>
+  request<CardShares>(`${cardPath(cardId)}/shares/${type}/${encodeURIComponent(target)}`, { method: 'DELETE' });
+export const createPublicLink = (cardId: string, expiresInDays: number | null) =>
+  request<CardShares>(`${cardPath(cardId)}/links`, { method: 'POST', body: JSON.stringify({ expires_in_days: expiresInDays }) });
+export const deletePublicLink = (cardId: string, token: string) => request<CardShares>(`${cardPath(cardId)}/links/${encodeURIComponent(token)}`, { method: 'DELETE' });
+
+export interface CardComment {
+  id: string;
+  author_id: string;
+  author: string;
+  body: string;
+  created_at: number;
+  resolved_at: number | null;
+}
+
+export const fetchComments = async (cardId: string) => (await request<{ comments: CardComment[] }>(`${cardPath(cardId)}/comments`)).comments;
+export const addComment = async (cardId: string, body: string) =>
+  (await request<{ comments: CardComment[] }>(`${cardPath(cardId)}/comments`, { method: 'POST', body: JSON.stringify({ body }) })).comments;
+export const resolveComment = async (cardId: string, id: string, resolved: boolean) =>
+  (await request<{ comments: CardComment[] }>(`${cardPath(cardId)}/comments/${id}`, { method: 'PATCH', body: JSON.stringify({ resolved }) })).comments;
+export const deleteComment = async (cardId: string, id: string) =>
+  (await request<{ comments: CardComment[] }>(`${cardPath(cardId)}/comments/${id}`, { method: 'DELETE' })).comments;
+
+export interface PublicCard {
+  type: 'note' | 'todo' | 'diary' | 'tag';
+  title: string;
+  date: string | null;
+  content: JSONNode;
+  status: string | null;
+  due: string | null;
+  updated_at: number;
+}
+
+/** No session needed: anyone with the link may read it. */
+export async function fetchPublicCard(token: string): Promise<PublicCard | null> {
+  let res: Response;
+  try {
+    res = await fetch(`/api/public/${encodeURIComponent(token)}`);
+  } catch {
+    throw new SyncOffline('The server could not be reached');
+  }
+  if (res.status === 404) return null;
+  if (!res.ok) throw new Error(`Loading the shared card failed with ${res.status}`);
+  return (await res.json()) as PublicCard;
+}

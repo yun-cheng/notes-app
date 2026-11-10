@@ -11,6 +11,7 @@ import { CardRow, Empty, Page, Section, useNewNote } from '../components';
 import { Icon } from '../Icon';
 import { LockPanel } from '../LockPanel';
 import { useToast } from '../Toast';
+import { VaultPeopleSection } from './people';
 
 const pinError = `Use at least ${MIN_PIN_LENGTH} characters.`;
 
@@ -190,7 +191,7 @@ function VaultSettings({ vault }: { vault: Vault }) {
         </button>
       </form>
 
-      {!isDefaultVault(vault) && (
+      {!isDefaultVault(vault) && (vault.members ?? 1) <= 1 && (
         <>
           <form className="lock-panel__row vault-gap" onSubmit={(e) => void submitPin(e)}>
             <input className="text-input" type="password" value={pin} placeholder={isPrivate ? 'New PIN' : 'PIN'} aria-label={isPrivate ? 'New PIN' : 'PIN'} autoComplete="new-password" onChange={(e) => setPin(e.target.value)} />
@@ -261,9 +262,11 @@ export function VaultPage() {
               Lock now
             </button>
           )}
-          <button type="button" className="btn btn--primary" onClick={() => void newNote([], vault.id)}>
-            New note here
-          </button>
+          {vault.role !== 'viewer' && (
+            <button type="button" className="btn btn--primary" onClick={() => void newNote([], vault.id)}>
+              New note here
+            </button>
+          )}
         </>
       }
     >
@@ -276,7 +279,8 @@ export function VaultPage() {
       ) : (
         <Empty>Nothing in this vault yet.</Empty>
       )}
-      <VaultSettings key={vault.id} vault={vault} />
+      {(vault.role ?? 'owner') === 'owner' && <VaultSettings key={vault.id} vault={vault} />}
+      <VaultPeopleSection key={`people-${vault.id}`} vault={vault} />
     </Page>
   );
 }

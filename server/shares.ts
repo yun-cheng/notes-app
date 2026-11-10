@@ -1,5 +1,5 @@
 import type { Context, Hono } from 'hono';
-import { photoIds } from '../src/domain/content';
+import { photoIds, walk } from '../src/domain/content';
 import type { CardPayload } from '../src/domain/types';
 import { allows, cardAccess, sharedWith } from './access';
 import { randomToken } from './auth';
@@ -77,6 +77,10 @@ export function publicRoutes(app: Hono<AppEnv>, googleFetch: GoogleFetch, now: (
     const card = await publicCard(c.env.DB, c.req.param('token'), now());
     if (!card) return c.json({ error: 'This link has expired or was turned off' }, 404);
     const p = card.payload;
+    // A link's stored label is the linked card's title, which isn't shared. Leave it out.
+    walk(p.content, (n) => {
+      if (n.type === 'cardLink' && n.attrs) n.attrs = { ...n.attrs, label: '' };
+    });
     return c.json<PublicCard>({
       type: p.type,
       title: p.title,

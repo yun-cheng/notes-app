@@ -7,6 +7,7 @@ import { describeSync } from '../sync/engine';
 import { useNewNote } from './components';
 import { Icon, type IconName } from './Icon';
 import { ConnectPage } from './pages/ai';
+import { PublicPage } from './pages/public';
 import { CardPage, DayPage } from './pages/cards';
 import { HistoryPage } from './pages/history';
 import { SettingsPage } from './pages/SettingsPage';
@@ -137,28 +138,38 @@ function Layout() {
 export function App() {
   return (
     <ToastProvider>
-      <AuthGate>
-        <Routes>
-          <Route path="oauth/authorize" element={<ConnectPage />} />
-          <Route element={<Layout />}>
-            <Route index element={<Navigate to="/today" replace />} />
-            <Route path="today" element={<TodayPage />} />
-            <Route path="upcoming" element={<UpcomingPage />} />
-            <Route path="calendar" element={<CalendarPage />} />
-            <Route path="notes" element={<NotesPage />} />
-            <Route path="tags" element={<TagsPage />} />
-            <Route path="vaults" element={<VaultsPage />} />
-            <Route path="vault/:id" element={<VaultPage />} />
-            <Route path="search" element={<SearchPage />} />
-            <Route path="settings" element={<SettingsPage />} />
-            <Route path="card/:id" element={<CardPage />} />
-            <Route path="card/:id/history" element={<HistoryPage />} />
-            <Route path="day/:date" element={<DayPage />} />
-            <Route path="day/:date/history" element={<HistoryPage />} />
-            <Route path="*" element={<Navigate to="/today" replace />} />
-          </Route>
-        </Routes>
-      </AuthGate>
+      <Routes>
+        {/* A public link needs no account, so it sits outside sign-in. */}
+        <Route path="s/:token" element={<PublicPage />} />
+        <Route path="*" element={<SignedInApp />} />
+      </Routes>
     </ToastProvider>
+  );
+}
+
+function SignedInApp() {
+  return (
+    <AuthGate>
+      <Routes>
+        <Route path="oauth/authorize" element={<ConnectPage />} />
+        <Route element={<Layout />}>
+          <Route index element={<Navigate to="/today" replace />} />
+          <Route path="today" element={<TodayPage />} />
+          <Route path="upcoming" element={<UpcomingPage />} />
+          <Route path="calendar" element={<CalendarPage />} />
+          <Route path="notes" element={<NotesPage />} />
+          <Route path="tags" element={<TagsPage />} />
+          <Route path="vaults" element={<VaultsPage />} />
+          <Route path="vault/:id" element={<VaultPage />} />
+          <Route path="search" element={<SearchPage />} />
+          <Route path="settings" element={<SettingsPage />} />
+          <Route path="card/:id" element={<CardPage />} />
+          <Route path="card/:id/history" element={<HistoryPage />} />
+          <Route path="day/:date" element={<DayPage />} />
+          <Route path="day/:date/history" element={<HistoryPage />} />
+          <Route path="*" element={<Navigate to="/today" replace />} />
+        </Route>
+      </Routes>
+    </AuthGate>
   );
 }

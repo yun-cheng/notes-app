@@ -78,4 +78,12 @@ describe('public links', () => {
     expect((await call(`/api/public/${forever}`)).status).toBe(404);
     expect((await call('/api/public/made-up')).status).toBe(404);
   });
+  it('leaves out the titles of linked cards', async () => {
+    const { ann, push, send, call, json } = await people();
+    const content = { type: 'doc', content: [{ type: 'paragraph', content: [{ type: 'cardLink', attrs: { id: 'secret', label: 'Secret plan' } }] }] };
+    await push(ann.cookie, [rec(ann.vault, 'a1', { payload: note('Open', { content }) })]);
+    const { links } = await json<CardShares>(send(ann.cookie, 'POST', '/api/cards/a1/links', {}));
+    const text = await (await call(`/api/public/${links[0].token}`)).text();
+    expect(text).not.toContain('Secret plan');
+  });
 });

@@ -2,7 +2,7 @@ import { Hono, type Context } from 'hono';
 import { deleteCookie, getCookie, setCookie } from 'hono/cookie';
 import type { VaultPin } from '../src/domain/pin';
 import type { CardRecord } from '../src/domain/types';
-import { PUSH_LIMIT, type Account, type ConfigResponse, type SessionInfo, type VersionResponse, type VersionsResponse } from '../src/sync/protocol';
+import { PUSH_LIMIT, type ConfigResponse, type SessionInfo, type VersionResponse, type VersionsResponse } from '../src/sync/protocol';
 import {
   createSession,
   deleteSession,
@@ -13,12 +13,13 @@ import {
   upsertUser,
   type VerifyGoogleToken,
 } from './auth';
-import type { Bindings } from './db';
+import type { AppEnv } from './db';
+import { aiPublicRoutes, aiSessionRoutes, wellKnown } from './aiApp';
 import { pullRecords, pushRecords } from './sync';
 import { createVault, listVaults, updateVault, type VaultUpdate } from './vaults';
 import { getVersion, listVersions, sealVersions } from './versions';
 
-type Env = { Bindings: Bindings; Variables: { user: Account } };
+type Env = AppEnv;
 
 export interface AppOptions {
   verifyGoogle?: VerifyGoogleToken;
@@ -81,7 +82,7 @@ function parseVaultBody(body: Record<string, unknown> | null): VaultUpdate | nul
 }
 
 export function createApp({ verifyGoogle = googleVerifier(), now = Date.now }: AppOptions = {}) {
-  const app = new Hono<Env>().basePath('/api');
+  const app = new Hono<Env>();
 
   const sendSessionCookie = (c: Context<Env>, token: string) =>
     setCookie(c, COOKIE, token, {
@@ -121,6 +122,9 @@ export function createApp({ verifyGoogle = googleVerifier(), now = Date.now }: A
     deleteCookie(c, COOKIE, { path: '/api' });
     return c.json({ ok: true });
   });
+
+  // AI apps authenticate with their own bearer tokens, not the session cookie.
+  aiPublicRoutes(app, now);
 
   // Everything registered after this requires a valid session.
   app.use(async (c, next) => {
@@ -185,10 +189,15 @@ export function createApp({ verifyGoogle = googleVerifier(), now = Date.now }: A
     return version ? c.json<VersionResponse>(version) : c.json({ error: 'Version not found' }, 404);
   });
 
+  aiSessionRoutes(app, now);
+
   app.onError((err, c) => {
     console.error(err);
     return c.json({ error: 'Server error' }, 500);
   });
 
-  return app;
+  const root = new Hono<Env>();
+  root.route('/.well-known', wellKnown());
+  root.route('/api', app);
+  return root;
 }

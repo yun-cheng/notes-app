@@ -37,3 +37,42 @@ export function setup() {
 export const rec = (vault: string, id: string, over: Partial<CardRecord> = {}): CardRecord => ({
   id, vault_id: vault, updated_at: 100, deleted: false, seq: 0, payload: `payload-${id}`, ...over,
 });
+
+export const REDIRECT = 'https://claude.ai/api/mcp/auth_callback';
+
+async function challengeFor(verifier: string) {
+  const digest = new Uint8Array(await crypto.subtle.digest('SHA-256', new TextEncoder().encode(verifier)));
+  return btoa(String.fromCharCode(...digest)).replace(/\+/g, '-').replace(/\//g, '_').replace(/=+$/, '');
+}
+
+/** Runs the whole OAuth flow an AI app goes through, approving it as the signed-in user. */
+export async function connectAi(call: ReturnType<typeof setup>['call'], cookie: string, name = 'Claude') {
+  const reg = (await (await call('/api/oauth/register', { method: 'POST', body: JSON.stringify({ client_name: name, redirect_uris: [REDIRECT] }) })).json()) as {
+    client_id: string;
+  };
+  const verifier = 'v'.repeat(20) + crypto.randomUUID();
+  const approval = await call(
+    '/api/oauth/authorize',
+    {
+      method: 'POST',
+      body: JSON.stringify({
+        client_id: reg.client_id,
+        redirect_uri: REDIRECT,
+        code_challenge: await challengeFor(verifier),
+        code_challenge_method: 'S256',
+        state: 'xyz',
+        approve: true,
+      }),
+    },
+    cookie,
+  );
+  const { redirect } = (await approval.json()) as { redirect: string };
+  const code = new URL(redirect).searchParams.get('code')!;
+  const form = new URLSearchParams({ grant_type: 'authorization_code', code, client_id: reg.client_id, redirect_uri: REDIRECT, code_verifier: verifier });
+  const tokens = (await (
+    await call('/api/oauth/token', { method: 'POST', body: form.toString(), headers: { 'content-type': 'application/x-www-form-urlencoded' } })
+  ).json()) as { access_token: string; refresh_token: string };
+  return { clientId: reg.client_id, verifier, redirect, ...tokens };
+}
+
+export { challengeFor };

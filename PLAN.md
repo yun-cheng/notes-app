@@ -106,7 +106,7 @@ Links and tag associations live inside the card payload.
 3. Private vaults: PIN, optional fingerprint, auto-lock, hidden from search. **Built and deployed.**
    - Added alongside: version history per card, and undo and redo buttons in the editor. Deployed.
 4. MCP server. **Built and tested locally against a simulated AI app; not yet tried from Claude itself.**
-5. Photos.
+5. Photos. **Built and tested locally against a simulated Google; Drive is not connected in production yet (see the setup steps below).**
 6. Sharing vaults and single notes (roles, comments, public links).
 7. End-to-end encryption for private vaults.
 
@@ -178,3 +178,21 @@ None. Defaults chosen while building are listed in the implementation notes, and
 - New diary entries are refused while the diary lives in a private vault, because AI can't reach it.
 - The MCP `instructions` tell the model to treat card text as data, not instructions.
 - To connect Claude: Backup & settings, AI apps shows the address to add as a custom connector. Turn on AI access for a vault, under Vaults or on the approval page.
+
+## Implementation notes from Milestone 5
+
+- A photo is a block node in the card body holding an attachment ID. The image itself is never in the card payload.
+- Photos are shrunk on the device (long edge 2048 px, JPEG at 85%; small GIF, PNG and WebP keep their format), saved in IndexedDB, and shown from there at once. An upload queue sends them when online, so photos work offline.
+- The server does every Drive call, holding the owner's refresh token. Devices never get Google tokens. Members of a shared vault see photos through the server, which reads them from the owner's Drive.
+- Drive access is `drive.file`, so the app sees only files it made, in a "Notes app photos" folder. Google's redirect back carries a one-time state, because the SameSite=Strict session cookie isn't sent on it.
+- A photo is checked against the vault it was added in. Moving a card to another vault doesn't move its photos' access yet; members of the new vault won't see them. Handle this with sharing.
+- Deleting a photo from a note leaves the file in Drive. A clean-up for unreferenced photos can come later.
+- Markdown export writes `![alt](attachment:id)`, but doesn't put the image files in the zip yet.
+
+### Turning on photo upload in production
+
+1. In Google Cloud project `notes-app-514219`, enable the Google Drive API.
+2. In Google Auth Platform, Clients, open the web client and add the authorized redirect URI `https://notes-app-afc.pages.dev/api/drive/callback` (and `http://localhost:8788/api/drive/callback` for local testing).
+3. In Data access, add the scope `.../auth/drive.file`.
+4. Copy the client secret and run `npx wrangler pages secret put GOOGLE_CLIENT_SECRET --project-name notes-app`, pasting it when asked. For local testing, put `GOOGLE_CLIENT_SECRET=...` in `.dev.vars` (ignored by git).
+5. In the app, Backup & settings, Photos, press Connect Google Drive.

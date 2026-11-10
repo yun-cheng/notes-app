@@ -6,3 +6,4 @@ dev-dist
 .claude/settings.local.json
 coverage
 .wrangler
+.dev.vars

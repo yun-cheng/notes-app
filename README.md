@@ -4,7 +4,7 @@ One local-first app for notes, todos and a diary, built as an installable PWA. `
 
 Decisions, the data model and the milestones are in [PLAN.md](PLAN.md).
 
-**Status:** Milestones 1 to 4 are built: notes work offline, sync between devices through a Google account, can be kept in private vaults with a PIN, and can be opened to Claude and other AI apps over MCP, vault by vault. Each card has a version history with restore, and the editor has undo and redo buttons.
+**Status:** Milestones 1 to 4 are built: notes work offline, sync between devices through a Google account, can be kept in private vaults with a PIN, and can be opened to Claude and other AI apps over MCP, vault by vault, and can hold photos, stored in Google Drive. Each card has a version history with restore, and the editor has undo and redo buttons.
 
 **Live:** https://notes-app-afc.pages.dev, deployed manually with `npm run deploy`.
 
@@ -21,7 +21,7 @@ npm run dev:api
 
 Then, in a second terminal, start the app with `npm run dev`. The API runs on port 8788 and Vite proxies `/api` to it. Rebuild only when you want `dev:api` itself to serve the latest app.
 
-Sign-in needs a Google OAuth client ID in `GOOGLE_CLIENT_ID` in `wrangler.jsonc`, with `http://localhost:5191` as an authorized origin.
+Sign-in needs a Google OAuth client ID in `GOOGLE_CLIENT_ID` in `wrangler.jsonc`, with `http://localhost:5191` as an authorized origin. Photo upload also needs the client secret in `.dev.vars` as `GOOGLE_CLIENT_SECRET`; see PLAN.md, Milestone 5.
 
 | Command | What it does |
 | --- | --- |
@@ -46,9 +46,10 @@ src/
   storage/  CardStore interface, IndexedDB and in-memory stores, CardRepository, write-ahead journal
   state/    React context that loads cards and builds the derived index
   sync/     Sync engine, HTTP transport, and the protocol shared with the server
+  photos/   Photo queue: shrink on the device, keep in IndexedDB, upload in the background
   auth/     Google sign-in screen and the account gate
   ui/       App shell, shared components, pages, and the TipTap editor
-server/     Hono API: Google token check, sessions, vaults, push and pull, card history, OAuth and MCP for AI apps
+server/     Hono API: Google token check, sessions, vaults, push and pull, card history, OAuth and MCP for AI apps, photos in Drive
 functions/  Cloudflare Pages entry points: /api and /.well-known
 migrations/ D1 schema
 ```

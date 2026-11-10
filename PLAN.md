@@ -67,7 +67,7 @@ Runs beside the sync server on the same database, using Cloudflare's MCP setup f
 - Later crypto: password through Argon2id to a key-encryption key, which wraps a random AES-GCM key per vault. Each card gets its own key wrapped by the vault key, so sharing one note means sharing only that note's key. Public links keep the key in the URL `#` fragment. Print a one-time recovery key.
 - Open vaults: server-side encryption at rest. Private vaults: end-to-end.
 
-Until encryption ships, a tech-savvy person with the unlocked laptop could read browser storage. Accepted for this threat model.
+Private vaults are end-to-end encrypted since Milestone 7. Open vaults are still readable by someone tech-savvy with the unlocked laptop, which is accepted for this threat model.
 
 ## Technical decisions
 
@@ -108,7 +108,7 @@ Links and tag associations live inside the card payload.
 4. MCP server. **Built and tested locally against a simulated AI app; not yet tried from Claude itself.**
 5. Photos. **Built and tested locally against a simulated Google; Drive is not connected in production yet (see the setup steps below).**
 6. Sharing vaults and single notes (roles, comments, public links). **Built and tested locally with two accounts.**
-7. End-to-end encryption for private vaults.
+7. End-to-end encryption for private vaults. **Built and tested locally, including encrypting an existing private vault and recovering a forgotten PIN.**
 
 Later: push reminders for todos, Tauri wrapper if PWA limits hurt.
 
@@ -209,3 +209,14 @@ None. Defaults chosen while building are listed in the implementation notes, and
 - Comments are server-only, so they need a connection. They show under a card once others can see it, or once it has comments.
 - AI apps treat shared vaults as read only (Milestone 4), so text written by other people can't steer AI edits.
 - Not done yet: notifications when something is shared, and moving a card's photos' access along with the card.
+
+## Implementation notes from Milestone 7
+
+- Each private vault has a random AES-256-GCM key, stored only wrapped: by a key derived from the PIN with Argon2id (19 MiB, 2 passes, via hash-wasm 4.12.0), and by a recovery key shown once. The server and devices never store the vault key unwrapped.
+- A card in an encrypted vault is encrypted on the device as it is written, bound to its ID and vault. IndexedDB, the server, version history and conflict copies hold only ciphertext (`e1:` payloads). The server refuses plaintext into an encrypted vault.
+- Unlocking unwraps the key, which also checks the PIN. Keys live in memory only and are forgotten when the vault locks. Fingerprint unlock keeps a non-extractable copy of the key on that device.
+- Edits to encrypted cards skip the plaintext crash journal. A crash mid-save can lose the last few hundred milliseconds of typing in a private vault, rather than leave it readable.
+- New private vaults are encrypted from the start. A private vault from before Milestone 7 shows "Encrypt this vault"; doing so re-stores every card encrypted and purges the plaintext versions from the server's history.
+- Forgot PIN: the recovery key opens the vault and sets a new PIN. Changing the PIN rewraps the same key. Removing the PIN decrypts the vault.
+- The PIN is the weak point: anyone with a copy of the server database can try PINs offline, so a 4-digit PIN falls in under an hour. A longer passphrase is much stronger. Worth a warning in the app later.
+- Not covered yet: photos in private vaults are not encrypted in Drive or on the device; cards in encrypted vaults can't be shared or published (they need per-card keys, with the key in the link's `#` fragment); open vaults rely on Cloudflare's encryption at rest rather than their own key.

@@ -71,6 +71,7 @@ export function CardRow({ card, detail }: { card: Card; detail?: string }) {
 export function TodoRow({ todo, showDue = true }: { todo: TodoCard; showDue?: boolean }) {
   const { repo } = useCards();
   const today = useToday();
+  const toast = useToast();
   const done = todo.status === 'done';
   const overdue = !done && todo.due !== null && todo.due < today;
   return (
@@ -80,7 +81,11 @@ export function TodoRow({ todo, showDue = true }: { todo: TodoCard; showDue?: bo
           type="checkbox"
           checked={done}
           aria-label={`Mark "${displayTitle(todo)}" ${done ? 'not done' : 'done'}`}
-          onChange={() => void repo.update(todo.id, { status: done ? 'open' : 'done' })}
+          onChange={() => {
+            void repo.update(todo.id, { status: done ? 'open' : 'done' });
+            // A done todo may drop out of the list, so a mistaken tap needs a way back.
+            if (!done) toast(`Done: ${displayTitle(todo)}`, { action: { label: 'Undo', run: () => void repo.update(todo.id, { status: 'open' }) } });
+          }}
         />
       </label>
       <Link className="row__body" to={cardPath(todo)}>
@@ -261,13 +266,20 @@ export function TagPicker({ tagIds, onChange }: { tagIds: string[]; onChange: (t
 /** Moves a card between the vaults that are open. Hidden when there's nowhere to move it. */
 export function VaultField({ card }: { card: Card }) {
   const { repo, vaults, locked } = useCards();
+  const toast = useToast();
   const options = vaults.filter((v) => !locked.has(v.id));
   if (options.length < 2) return null;
+  const move = (vaultId: string) => {
+    const from = card.vaultId;
+    void repo.moveToVault(card.id, vaultId);
+    const name = vaults.find((v) => v.id === vaultId)?.name ?? 'another vault';
+    toast(`Moved to ${name}`, { action: { label: 'Undo', run: () => void repo.moveToVault(card.id, from) } });
+  };
   return (
     <div className="field-row">
       <label>
         Vault
-        <select value={card.vaultId} onChange={(e) => void repo.moveToVault(card.id, e.target.value)}>
+        <select value={card.vaultId} onChange={(e) => move(e.target.value)}>
           {options.map((v) => (
             <option key={v.id} value={v.id}>
               {v.name}

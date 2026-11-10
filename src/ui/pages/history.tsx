@@ -1,5 +1,6 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
 import { Link, useNavigate, useParams } from 'react-router';
+import { permissions } from '../../domain/access';
 import { linkTitle } from '../../domain/cardIndex';
 import { displayTitle } from '../../domain/content';
 import { formatDay } from '../../domain/dates';
@@ -73,7 +74,8 @@ export function HistoryPage() {
 }
 
 function History({ card }: { card: Card }) {
-  const { index, repo } = useCards();
+  const { index, repo, vaults, shared } = useCards();
+  const canEdit = permissions(card, vaults, shared).edit;
   const toast = useToast();
   const navigate = useNavigate();
   const [versions, setVersions] = useState<VersionInfo[] | null>(null);
@@ -218,7 +220,7 @@ function History({ card }: { card: Card }) {
                   </span>
                 )}
                 <span className="card-bar__spacer" />
-                {shown && entry.info && !sameContent(card, shown) && (
+                {canEdit && shown && entry.info && !sameContent(card, shown) && (
                   <button type="button" className="btn btn--primary" onClick={() => void restore(shown, when(entry.info!.saved_at))}>
                     Restore
                   </button>

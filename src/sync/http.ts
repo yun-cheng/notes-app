@@ -2,7 +2,7 @@ import type { VaultPin } from '../domain/pin';
 import type { CardRecord, Vault } from '../domain/types';
 import type { PhotoTransport } from '../photos/types';
 import { SyncAuthExpired, SyncOffline, type SyncTransport } from './engine';
-import type { ConfigResponse, PullResponse, PushResponse, SessionInfo, VersionResponse, VersionsResponse } from './protocol';
+import type { ConfigResponse, PullResponse, PushResponse, SessionInfo, SharedCard, VersionResponse, VersionsResponse } from './protocol';
 
 async function request<T>(path: string, init?: RequestInit): Promise<T> {
   let res: Response;
@@ -21,6 +21,7 @@ export const httpTransport: SyncTransport = {
     (await request<PushResponse>('/sync/push', { method: 'POST', body: JSON.stringify({ records }) })).results,
   pull: (since) => request<PullResponse>(`/sync/pull?since=${since}`),
   vaults: async () => (await request<SessionInfo>('/me')).vaults,
+  shared: async () => (await request<{ cards: SharedCard[] }>('/shared')).cards,
 };
 
 export const fetchConfig = () => request<ConfigResponse>('/config');

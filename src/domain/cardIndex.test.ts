@@ -23,7 +23,9 @@ describe('index', () => {
   it('lists pinned tags as folders', () => expect(index.pinnedTags.map((c) => c.id)).toEqual(['t']));
   it('shows links under the current title in previews', () => {
     expect(cardText(index, a)).toBe('BA');
-    expect(cardText(buildIndex([a]), a)).toBe('old nameA');
+    // A link to a card this account can't see reads "Not shared", never its stored title.
+    expect(cardText(buildIndex([a]), a)).toBe('Not sharedA');
+    expect(cardText(buildIndex([{ ...b, deleted: true }, a]), a)).toBe('old nameA');
   });
   it('ignores deleted tags when resolving', () => {
     const i = buildIndex([{ ...t, deleted: true }, a]);

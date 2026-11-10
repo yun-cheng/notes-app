@@ -82,11 +82,15 @@ export function resolveTags(index: CardIndex, tagIds: string[]): TagCard[] {
     .filter((c): c is TagCard => !!c && c.type === 'tag' && !c.deleted);
 }
 
-/** The title to show for a linked card. A link into a locked vault must not reveal the stored title. */
+/**
+ * The title to show for a linked card. A link must not reveal its stored title when the target is in
+ * a locked vault, or isn't shared with this account at all. A deleted card keeps its stored title.
+ */
 export function linkTitle(index: CardIndex, id: string, fallback: string): string {
   if (index.lockedCards.has(id)) return 'Locked';
   const target = index.byId.get(id);
-  return target && !target.deleted ? displayTitle(target) : fallback;
+  if (!target) return 'Not shared';
+  return target.deleted ? fallback : displayTitle(target);
 }
 
 /** A card's text with links shown under their target's current title. */

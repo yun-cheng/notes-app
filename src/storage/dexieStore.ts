@@ -80,6 +80,21 @@ export class DexieStore implements CardStore, PhotoStore {
   async putVaults(vaults: Vault[]) {
     await this.db.vaults.bulkPut(vaults);
   }
+  async replaceVaults(vaults: Vault[]) {
+    await this.db.transaction('rw', this.db.vaults, async () => {
+      const keep = new Set(vaults.map((v) => v.id));
+      const gone = (await this.db.vaults.toCollection().primaryKeys()).filter((id) => !keep.has(id));
+      await this.db.vaults.bulkDelete(gone);
+      await this.db.vaults.bulkPut(vaults);
+    });
+  }
+  async deleteCards(ids: string[]) {
+    const { cards, dirty } = this.db;
+    await this.db.transaction('rw', cards, dirty, async () => {
+      await cards.bulkDelete(ids);
+      await dirty.bulkDelete(ids);
+    });
+  }
   subscribeVaults(listener: (vaults: Vault[]) => void) {
     const subscription = liveQuery(() => this.db.vaults.toArray()).subscribe({
       next: listener,

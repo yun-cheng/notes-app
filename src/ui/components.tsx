@@ -1,5 +1,6 @@
 import { useEffect, useRef, useState, type FormEvent, type ReactNode } from 'react';
 import { Link, useNavigate } from 'react-router';
+import { permissions } from '../domain/access';
 import { cardText, resolveTags, type Backlink } from '../domain/cardIndex';
 import { displayTitle } from '../domain/content';
 import { relativeDay } from '../domain/dates';
@@ -69,7 +70,8 @@ export function CardRow({ card, detail }: { card: Card; detail?: string }) {
 }
 
 export function TodoRow({ todo, showDue = true }: { todo: TodoCard; showDue?: boolean }) {
-  const { repo } = useCards();
+  const { repo, vaults, shared } = useCards();
+  const { edit } = permissions(todo, vaults, shared);
   const today = useToday();
   const toast = useToast();
   const done = todo.status === 'done';
@@ -80,6 +82,7 @@ export function TodoRow({ todo, showDue = true }: { todo: TodoCard; showDue?: bo
         <input
           type="checkbox"
           checked={done}
+          disabled={!edit}
           aria-label={`Mark "${displayTitle(todo)}" ${done ? 'not done' : 'done'}`}
           onChange={() => {
             void repo.update(todo.id, { status: done ? 'open' : 'done' });
@@ -127,7 +130,7 @@ export function QuickAddTodo({ due, placeholder }: { due: string | null; placeho
   );
 }
 
-export function TitleField({ value, onSave, autoFocus }: { value: string; onSave: (title: string) => void; autoFocus?: boolean }) {
+export function TitleField({ value, onSave, autoFocus, readOnly }: { value: string; onSave: (title: string) => void; autoFocus?: boolean; readOnly?: boolean }) {
   const [draft, setDraft] = useState(value);
   const focused = useRef(false);
   const timer = useRef<ReturnType<typeof setTimeout> | null>(null);
@@ -167,7 +170,8 @@ export function TitleField({ value, onSave, autoFocus }: { value: string; onSave
       className="title-field"
       rows={1}
       value={draft}
-      autoFocus={autoFocus}
+      readOnly={readOnly}
+      autoFocus={autoFocus && !readOnly}
       placeholder="Untitled"
       aria-label="Title"
       onFocus={() => (focused.current = true)}
@@ -265,10 +269,11 @@ export function TagPicker({ tagIds, onChange }: { tagIds: string[]; onChange: (t
 
 /** Moves a card between the vaults that are open. Hidden when there's nowhere to move it. */
 export function VaultField({ card }: { card: Card }) {
-  const { repo, vaults, locked } = useCards();
+  const { repo, vaults, locked, shared } = useCards();
   const toast = useToast();
-  const options = vaults.filter((v) => !locked.has(v.id));
-  if (options.length < 2) return null;
+  // Only into vaults this account can write to.
+  const options = vaults.filter((v) => !locked.has(v.id) && (v.role ?? 'owner') !== 'viewer');
+  if (options.length < 2 || !permissions(card, vaults, shared).manage) return null;
   const move = (vaultId: string) => {
     const from = card.vaultId;
     void repo.moveToVault(card.id, vaultId);

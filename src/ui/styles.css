@@ -312,3 +312,6 @@ body:has(.title-field:focus) .tabbar { display: none; }
 .photo img { display: block; max-width: 100%; max-height: 70dvh; height: auto; margin: 0 auto; border-radius: 10px; }
 .photo.is-selected { outline: 2px solid var(--accent); outline-offset: 2px; }
 .photo__placeholder { line-height: 1.5; padding: 28px 16px; text-align: center; color: var(--muted); font-size: 14px; background: var(--sunken); border-radius: 10px; }
+
+/* Sharing */
+.access-note { margin: -4px 0 10px; padding: 8px 12px; border-radius: 9px; background: var(--accent-soft); font-size: 14px; }

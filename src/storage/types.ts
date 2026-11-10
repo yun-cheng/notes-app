@@ -17,6 +17,10 @@ export interface CardStore {
   setMeta(key: string, value: unknown): Promise<void>;
   listVaults(): Promise<Vault[]>;
   putVaults(vaults: Vault[]): Promise<void>;
+  /** Makes `vaults` the whole list, dropping any others. */
+  replaceVaults(vaults: Vault[]): Promise<void>;
+  /** Removes cards outright, with any unpushed state. For cards this account can no longer see. */
+  deleteCards(ids: string[]): Promise<void>;
   /** Calls back with every vault now and after any change. */
   subscribeVaults(listener: (vaults: Vault[]) => void): () => void;
   /** Calls back with every record now and after any change, including from other tabs. */

@@ -6,7 +6,7 @@ import { MemoryStore } from '../storage/memoryStore';
 import { CardRepository } from '../storage/repository';
 import { jsonCodec } from '../storage/types';
 import { describeSync, SyncAuthExpired, SyncEngine, SyncOffline, type SyncTransport } from './engine';
-import { PUSH_LIMIT, type PullResponse, type PushResult, type SessionInfo } from './protocol';
+import { PUSH_LIMIT, type PullResponse, type PushResult, type SessionInfo, type SharedCard } from './protocol';
 
 const doc = (t: string): JSONNode => ({ type: 'doc', content: [{ type: 'paragraph', content: [{ type: 'text', text: t }] }] });
 
@@ -43,6 +43,12 @@ function createServer() {
         const res = await app.request('/api/me', { headers: { cookie } }, env);
         if (res.status === 401) throw new SyncAuthExpired();
         return ((await res.json()) as SessionInfo).vaults;
+      },
+      async shared() {
+        if (!t.online) throw new SyncOffline();
+        const res = await app.request('/api/shared', { headers: { cookie } }, env);
+        if (res.status === 401) throw new SyncAuthExpired();
+        return ((await res.json()) as { cards: SharedCard[] }).cards;
       },
     };
     return t;
@@ -294,7 +300,9 @@ describe('safety while syncing', () => {
     await intruder.repo.createNote({ title: 'fine' });
     await intruder.store.putCards([{ id: 'x', vault_id: info.vaults[0].id, updated_at: 1, deleted: false, seq: 0, payload: JSON.stringify({ type: 'note', title: 'bad', content: doc('x'), tags: [], createdAt: 1 }) }]);
     await intruder.engine.sync();
-    expect(intruder.engine.getStatus()).toMatchObject({ state: 'error', pending: 1 });
+    // Refused, then dropped from the device, since it is in a vault this account can't see.
+    expect(intruder.engine.getStatus()).toMatchObject({ state: 'error', pending: 0 });
+    expect(await intruder.titles()).toEqual(['fine']);
     expect(await server.transport(cookie).pull(0)).toMatchObject({ records: [] });
   });
 
@@ -339,6 +347,56 @@ describe('separate accounts', () => {
     await a.engine.sync();
     expect(await a.titles()).toEqual(['Ann private']);
     expect(await b.titles()).toEqual(['Bob private']);
+  });
+});
+
+describe('sharing', () => {
+  async function annAndBen() {
+    const server = createServer();
+    const ann = await server.signIn('ann');
+    const ben = await server.signIn('ben');
+    const a = await createDevice(ann.info.vaults, server.transport(ann.cookie));
+    const b = await createDevice(ben.info.vaults, server.transport(ben.cookie));
+    const call = (cookie: string, method: string, path: string, body?: unknown) =>
+      server.app.request(path, { method, headers: { cookie }, ...(body ? { body: JSON.stringify(body) } : {}) }, server.env);
+    return { server, ann, ben, a, b, call };
+  }
+
+  it("brings in a vault's older cards when it is shared, and removes them when access ends", async () => {
+    const { ann, ben, a, b, call } = await annAndBen();
+    await a.repo.createNote({ title: 'Family recipe' });
+    await a.engine.sync();
+    await b.repo.createNote({ title: 'Ben note' });
+    await b.engine.sync();
+    expect(await b.titles()).toEqual(['Ben note']);
+
+    const vault = ann.info.vaults[0].id;
+    await call(ann.cookie, 'POST', `/api/vaults/${vault}/members`, { email: 'ben@x.y', role: 'viewer' });
+    await b.engine.sync();
+    expect(await b.titles()).toEqual(['Ben note', 'Family recipe']);
+    expect((await b.store.listVaults()).find((v) => v.id === vault)?.role).toBe('viewer');
+
+    await call(ann.cookie, 'DELETE', `/api/vaults/${vault}/members/${ben.info.user.id}`);
+    await b.engine.sync();
+    expect(await b.titles()).toEqual(['Ben note']);
+    expect((await b.store.listVaults()).map((v) => v.id)).toEqual([ben.info.vaults[0].id]);
+  });
+  it("syncs a single shared card and keeps new cards in the account's own vault", async () => {
+    const { ann, ben, a, b, call } = await annAndBen();
+    const card = await a.repo.createNote({ title: 'Recipe' });
+    await a.repo.createNote({ title: 'Diary-ish' });
+    await a.engine.sync();
+    await call(ann.cookie, 'POST', `/api/cards/${card.id}/shares`, { email: 'ben@x.y', role: 'edit' });
+    await b.engine.sync();
+    expect(await b.titles()).toEqual(['Recipe']);
+    expect(await b.store.getMeta('shared')).toEqual([{ card_id: card.id, role: 'edit', shared_by: 'ann' }]);
+
+    await b.repo.update(card.id, { title: 'Recipe, improved' });
+    await b.engine.sync();
+    await a.engine.sync();
+    expect(await a.titles()).toEqual(['Diary-ish', 'Recipe, improved']);
+    const fresh = await b.repo.createNote({ title: 'Mine' });
+    expect(fresh.vaultId).toBe(ben.info.vaults[0].id);
   });
 });
 

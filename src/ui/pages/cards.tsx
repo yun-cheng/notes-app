@@ -4,7 +4,8 @@ import { diaryVault } from '../../domain/locks';
 import { todosDueOn } from '../../domain/todos';
 import { EMPTY_DOC, type Card } from '../../domain/types';
 import { useCards, useToday } from '../../state/CardsContext';
-import { Backlinks, Empty, Page, QuickAddTodo, Section, TagPicker, TitleField, TodoList, useDeleteCard, useNewNote, VaultField } from '../components';
+import { permissions } from '../../domain/access';
+import { Backlinks, Empty, Page, QuickAddTodo, Section, TagChips, TagPicker, TitleField, TodoList, useDeleteCard, useNewNote, VaultField } from '../components';
 import { Editor } from '../editor/Editor';
 import { LockPanel } from '../LockPanel';
 import { Icon } from '../Icon';
@@ -47,7 +48,8 @@ export function CardPage() {
 }
 
 function CardDetail({ card }: { card: Exclude<Card, { type: 'diary' }> }) {
-  const { repo } = useCards();
+  const { repo, vaults, shared } = useCards();
+  const can = permissions(card, vaults, shared);
   const remove = useDeleteCard();
   const newNote = useNewNote();
   const today = useToday();
@@ -62,7 +64,7 @@ function CardDetail({ card }: { card: Exclude<Card, { type: 'diary' }> }) {
         </button>
         <span className="card-bar__type">{LABEL[card.type]}</span>
         <span className="card-bar__spacer" />
-        {card.type === 'tag' && (
+        {card.type === 'tag' && can.edit && (
           <>
             <button type="button" className="btn" onClick={() => void newNote([card.id])}>
               New note here
@@ -82,10 +84,13 @@ function CardDetail({ card }: { card: Exclude<Card, { type: 'diary' }> }) {
         <Link className="icon-btn" to={`/card/${card.id}/history`} aria-label="Version history" title="Version history">
           <Icon name="history" />
         </Link>
-        <button type="button" className="icon-btn" aria-label="Move to Trash" title="Move to Trash" onClick={() => remove(card, HOME[card.type])}>
-          <Icon name="trash" />
-        </button>
+        {can.manage && (
+          <button type="button" className="icon-btn" aria-label="Move to Trash" title="Move to Trash" onClick={() => remove(card, HOME[card.type])}>
+            <Icon name="trash" />
+          </button>
+        )}
       </div>
+      {can.note && <p className="access-note">{can.note}</p>}
 
       <div className="title-row">
         {card.type === 'todo' && (
@@ -93,22 +98,23 @@ function CardDetail({ card }: { card: Exclude<Card, { type: 'diary' }> }) {
             <input
               type="checkbox"
               checked={card.status === 'done'}
+              disabled={!can.edit}
               aria-label="Done"
               onChange={() => void repo.update(card.id, { status: card.status === 'done' ? 'open' : 'done' })}
             />
           </label>
         )}
-        <TitleField value={card.title} autoFocus={fresh} onSave={(title) => void repo.update(card.id, { title })} />
+        <TitleField value={card.title} autoFocus={fresh} readOnly={!can.edit} onSave={(title) => void repo.update(card.id, { title })} />
       </div>
 
       {card.type === 'todo' && (
         <div className="field-row">
           <label>
             Due
-            <input type="date" value={card.due ?? ''} onChange={(e) => void repo.update(card.id, { due: e.target.value || null })} />
+            <input type="date" value={card.due ?? ''} disabled={!can.edit} onChange={(e) => void repo.update(card.id, { due: e.target.value || null })} />
           </label>
           {card.due && <span className="field-row__hint">{relativeDay(card.due, today)}</span>}
-          {card.due && (
+          {card.due && can.edit && (
             <button type="button" className="btn btn--quiet" onClick={() => void repo.update(card.id, { due: null })}>
               Clear
             </button>
@@ -118,12 +124,13 @@ function CardDetail({ card }: { card: Exclude<Card, { type: 'diary' }> }) {
 
       <VaultField card={card} />
 
-      {card.type !== 'tag' && <TagPicker tagIds={card.tags} onChange={(tags) => void repo.update(card.id, { tags })} />}
+      {card.type !== 'tag' && (can.edit ? <TagPicker tagIds={card.tags} onChange={(tags) => void repo.update(card.id, { tags })} /> : <TagChips tagIds={card.tags} />)}
 
       <Editor
         content={card.content}
         selfId={card.id}
         vaultId={card.vaultId}
+        editable={can.edit}
         placeholder={card.type === 'tag' ? 'Describe this tag. Type [[ to link a card.' : 'Write something. Type [[ to link a card.'}
         onChange={(content) => void repo.update(card.id, { content })}
       />
@@ -135,7 +142,7 @@ function CardDetail({ card }: { card: Exclude<Card, { type: 'diary' }> }) {
 
 export function DayPage() {
   const { date } = useParams();
-  const { index, repo, vaults, locked } = useCards();
+  const { index, repo, vaults, locked, shared } = useCards();
   const today = useToday();
   const remove = useDeleteCard();
 
@@ -185,6 +192,7 @@ export function DayPage() {
             content={card?.content ?? EMPTY_DOC}
             selfId={card?.id}
             vaultId={card?.vaultId ?? privateVault?.id}
+            editable={!card || permissions(card, vaults, shared).edit}
             placeholder={date === today ? 'How was today?' : 'Write about this day.'}
             onChange={(content) => void repo.saveDiary(date, { content }, card?.id, privateVault?.id)}
           />

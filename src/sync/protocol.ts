@@ -32,6 +32,13 @@ export interface PushResponse {
   results: PushResult[];
 }
 
+/** A card shared with this account from outside its vaults, and the strongest role it has. */
+export interface SharedCard {
+  card_id: string;
+  role: 'view' | 'comment' | 'edit';
+  shared_by: string;
+}
+
 export interface PullResponse {
   records: CardRecord[];
   next: number;

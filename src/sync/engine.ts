@@ -1,6 +1,6 @@
 import type { CardRecord, Vault } from '../domain/types';
 import type { CardRepository } from '../storage/repository';
-import { PUSH_LIMIT, type PullResponse, type PushResult } from './protocol';
+import { PUSH_LIMIT, type PullResponse, type PushResult, type SharedCard } from './protocol';
 
 export class SyncOffline extends Error {}
 export class SyncAuthExpired extends Error {}
@@ -9,6 +9,7 @@ export interface SyncTransport {
   push(records: CardRecord[]): Promise<PushResult[]>;
   pull(since: number): Promise<PullResponse>;
   vaults(): Promise<Vault[]>;
+  shared(): Promise<SharedCard[]>;
 }
 
 export type SyncState = 'idle' | 'syncing' | 'offline' | 'expired' | 'error';
@@ -77,7 +78,9 @@ export class SyncEngine {
     try {
       const failed = await this.push();
       // Vaults first, so a card in a newly private vault is never shown before its lock is known.
-      await this.repo.putVaults(await this.transport.vaults());
+      const [vaults, shared] = await Promise.all([this.transport.vaults(), this.transport.shared()]);
+      // Newly shared cards can be older than the cursor, so pull everything again when access grows.
+      if (await this.repo.applyAccess(vaults, shared)) await this.repo.setCursor(0);
       await this.pull();
       if (failed) state = 'error';
       else this.publish({ lastSyncedAt: this.now() });

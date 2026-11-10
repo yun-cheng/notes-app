@@ -28,7 +28,15 @@ function CardLinkView({ node }: ReactNodeViewProps) {
       </NodeViewWrapper>
     );
   }
-  if (!card || card.deleted) {
+  // Sharing a card doesn't share what it links to, and the stored label would give away the title.
+  if (!card) {
+    return (
+      <NodeViewWrapper as="span" className="card-link card-link--dead" title="This card isn't shared with you">
+        Not shared
+      </NodeViewWrapper>
+    );
+  }
+  if (card.deleted) {
     return (
       <NodeViewWrapper as="span" className="card-link card-link--dead" title="This card was deleted">
         {label}

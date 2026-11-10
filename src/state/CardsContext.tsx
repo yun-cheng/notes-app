@@ -8,6 +8,7 @@ import { localStorageJournal } from '../storage/journal';
 import { CardRepository } from '../storage/repository';
 import { jsonCodec } from '../storage/types';
 import { SyncEngine, type SyncStatus } from '../sync/engine';
+import type { SharedCard } from '../sync/protocol';
 import { httpTransport, photoTransport } from '../sync/http';
 import { preparePhoto } from '../photos/prepare';
 import { PhotoService, type PhotoState } from '../photos/service';
@@ -15,7 +16,7 @@ import { PhotoService, type PhotoState } from '../photos/service';
 /** Each account has its own database and journal, so accounts on one browser stay apart. */
 export function openAccountStorage(accountId: string) {
   const store = new DexieStore(`notes-app:user:${accountId}`);
-  const repo = new CardRepository(store, jsonCodec, undefined, undefined, localStorageJournal(`notes-app:journal:${accountId}`));
+  const repo = new CardRepository(store, jsonCodec, undefined, undefined, localStorageJournal(`notes-app:journal:${accountId}`), `vault-${accountId}`);
   return { store, repo };
 }
 
@@ -33,6 +34,9 @@ interface CardsValue {
   vaults: Vault[];
   locks: VaultLocks;
   photos: PhotoService;
+  accountId: string;
+  /** Cards shared with this account from outside its vaults, by card ID. */
+  shared: ReadonlyMap<string, SharedCard>;
   /** Vaults with a PIN that aren't open on this device. */
   locked: ReadonlySet<string>;
 }
@@ -48,6 +52,20 @@ export function CardsProvider({ accountId, children }: { accountId: string; chil
   // Waits for the vault list, so a locked card can't flash up before its lock is known.
   const index = useMemo<CardIndex | null>(() => (cards && vaults ? buildIndex(cards, locked) : null), [cards, vaults, locked]);
   const [error, setError] = useState<string | null>(null);
+  const [shared, setShared] = useState<ReadonlyMap<string, SharedCard>>(new Map());
+
+  // The shared list changes only when a sync brings a new one.
+  useEffect(() => {
+    let live = true;
+    const read = () =>
+      void repo.getMeta('shared').then((list) => live && setShared(new Map(((list as SharedCard[] | undefined) ?? []).map((s) => [s.card_id, s]))));
+    read();
+    const stop = engine.subscribe(() => engine.getStatus().state !== 'syncing' && read());
+    return () => {
+      live = false;
+      stop();
+    };
+  }, [repo, engine]);
 
   useEffect(() => {
     let active = true;
@@ -104,7 +122,7 @@ export function CardsProvider({ accountId, children }: { accountId: string; chil
     );
   }
   if (!index || !vaults) return <div className="boot" aria-busy="true" />;
-  return <CardsContext.Provider value={{ index, repo, engine, vaults, locks, locked, photos }}>{children}</CardsContext.Provider>;
+  return <CardsContext.Provider value={{ index, repo, engine, vaults, locks, locked, photos, accountId, shared }}>{children}</CardsContext.Provider>;
 }
 
 export function useCards(): CardsValue {

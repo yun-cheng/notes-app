@@ -3,6 +3,7 @@ import { EditorContent, useEditor, type Editor as TiptapEditor } from '@tiptap/r
 import { StarterKit } from '@tiptap/starter-kit';
 import { Placeholder } from '@tiptap/extensions';
 import type { SuggestionKeyDownProps, SuggestionProps } from '@tiptap/suggestion';
+import { mainVault } from '../../domain/access';
 import { displayTitle } from '../../domain/content';
 import type { CardIndex } from '../../domain/cardIndex';
 import type { JSONNode } from '../../domain/types';
@@ -19,6 +20,8 @@ interface EditorProps {
   selfId?: string;
   /** The vault new photos belong to. Defaults to the account's main vault. */
   vaultId?: string;
+  /** False for a card this account may only view. */
+  editable?: boolean;
 }
 
 const SAVE_DELAY = 300;
@@ -106,14 +109,15 @@ function Toolbar({ editor, onPhotos }: { editor: TiptapEditor; onPhotos: (files:
   );
 }
 
-export function Editor({ content, onChange, placeholder, selfId, vaultId }: EditorProps) {
-  const { index, repo, photos, vaults } = useCards();
+export function Editor({ content, onChange, placeholder, selfId, vaultId, editable = true }: EditorProps) {
+  const { index, repo, photos, vaults, accountId } = useCards();
   const toast = useToast();
   const [menu, setMenu] = useState<MenuState | null>(null);
   const [, redraw] = useState(0);
 
-  const latest = useRef({ index, onChange, menu, selfId, vaultId: vaultId ?? vaults[0]?.id });
-  latest.current = { index, onChange, menu, selfId, vaultId: vaultId ?? vaults[0]?.id };
+  const photoVault = vaultId ?? mainVault(vaults, accountId)?.id;
+  const latest = useRef({ index, onChange, menu, selfId, vaultId: photoVault });
+  latest.current = { index, onChange, menu, selfId, vaultId: photoVault };
   const editorRef = useRef<TiptapEditor | null>(null);
 
   /** Saves each image on the device and puts it in the text, at `at` or the cursor. */
@@ -222,6 +226,7 @@ export function Editor({ content, onChange, placeholder, selfId, vaultId }: Edit
       }),
     ],
     content,
+    editable,
     editorProps: {
       attributes: { class: 'prose' },
       handlePaste: (_view, event) => {
@@ -276,11 +281,15 @@ export function Editor({ content, onChange, placeholder, selfId, vaultId }: Edit
     }
   }, [editor, content]);
 
+  useEffect(() => {
+    if (editor && editor.isEditable !== editable) editor.setEditable(editable);
+  }, [editor, editable]);
+
   editorRef.current = editor;
   if (!editor) return null;
   return (
     <div className="editor">
-      <Toolbar editor={editor} onPhotos={(files) => void addPhotos(files)} />
+      {editable && <Toolbar editor={editor} onPhotos={(files) => void addPhotos(files)} />}
       <EditorContent editor={editor} />
       {menu && (
         <ul className="link-menu" role="listbox" aria-label="Link to a card" style={{ left: menu.left, top: menu.top }}>

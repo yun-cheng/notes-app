@@ -113,9 +113,9 @@ export function lockedVaultIds(vaults: Vault[], open: ReadonlySet<string>): Set<
   return new Set(vaults.filter((v) => v.lock === 'pin' && !open.has(v.id)).map((v) => v.id));
 }
 
-/** The vault new diary entries go into: the first private one, if there is one. */
+/** The vault new diary entries go into: this account's first private one, if there is one. */
 export function diaryVault(vaults: Vault[]): Vault | null {
-  return [...vaults].filter((v) => v.lock === 'pin').sort((a, b) => a.created_at - b.created_at)[0] ?? null;
+  return [...vaults].filter((v) => v.lock === 'pin' && (v.role ?? 'owner') === 'owner').sort((a, b) => a.created_at - b.created_at)[0] ?? null;
 }
 
 /** Each account's first vault. It holds new cards, so it always stays open. */

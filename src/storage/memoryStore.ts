@@ -60,6 +60,17 @@ export class MemoryStore implements CardStore {
     const all = [...this.vaults.values()];
     this.vaultListeners.forEach((l) => l(all));
   }
+  async replaceVaults(vaults: Vault[]) {
+    this.vaults.clear();
+    await this.putVaults(vaults);
+  }
+  async deleteCards(ids: string[]) {
+    ids.forEach((id) => {
+      this.cards.delete(id);
+      this.dirty.delete(id);
+    });
+    this.notify();
+  }
   subscribeVaults(listener: (vaults: Vault[]) => void) {
     this.vaultListeners.add(listener);
     listener([...this.vaults.values()]);

@@ -3,6 +3,7 @@ import type { Backup } from '../domain/backup';
 import { isBlank } from '../domain/content';
 import { diaryId, rehomeCards } from '../domain/rehome';
 import { noJournal, type CardPatch, type DiaryPatch, type Journal, type JournalOp } from './journal';
+import type { SharedCard } from '../sync/protocol';
 import type { CardStore, PayloadCodec } from './types';
 
 export interface ImportResult {
@@ -25,6 +26,8 @@ export class CardRepository {
     private now: () => number = Date.now,
     readonly newId: () => string = () => crypto.randomUUID(),
     private journal: Journal = noJournal,
+    /** The account's own main vault, which new cards go into. Other vaults may be older, if shared. */
+    private mainVaultId?: string,
   ) {}
 
   private enqueue<T>(work: () => Promise<T>): Promise<T> {
@@ -36,7 +39,7 @@ export class CardRepository {
   private async defaultVault(): Promise<Vault> {
     if (this.vault) return this.vault;
     const vaults = await this.store.listVaults();
-    let vault = vaults.sort((a, b) => a.created_at - b.created_at)[0];
+    let vault = vaults.find((v) => v.id === this.mainVaultId) ?? vaults.sort((a, b) => a.created_at - b.created_at)[0];
     if (!vault) {
       vault = { id: this.newId(), name: 'Personal', owner_id: 'local', lock: 'none', ai_access: 'off', created_at: this.now(), pin: null, hidden: false };
       await this.store.putVaults([vault]);
@@ -235,6 +238,25 @@ export class CardRepository {
         out.push(record);
       }
       return out;
+    });
+  }
+
+  /**
+   * Takes the server's word on what this account can see: its vaults, and cards shared with it.
+   * Cards it can no longer see are removed from the device. Returns true if access grew.
+   */
+  applyAccess(vaults: Vault[], shared: SharedCard[]): Promise<boolean> {
+    return this.enqueue(async () => {
+      const before = new Set([...(await this.store.listVaults()).map((v) => `v:${v.id}`), ...((await this.store.getMeta('shared')) as SharedCard[] | undefined ?? []).map((s) => `c:${s.card_id}`)]);
+      const after = [...vaults.map((v) => `v:${v.id}`), ...shared.map((s) => `c:${s.card_id}`)];
+      const vaultIds = new Set(vaults.map((v) => v.id));
+      const sharedIds = new Set(shared.map((s) => s.card_id));
+      const gone = (await this.store.listCards()).filter((r) => !vaultIds.has(r.vault_id) && !sharedIds.has(r.id)).map((r) => r.id);
+      await this.store.replaceVaults(vaults);
+      await this.store.setMeta('shared', shared);
+      if (gone.length) await this.store.deleteCards(gone);
+      if (this.vault && !vaultIds.has(this.vault.id)) this.vault = null;
+      return after.some((key) => !before.has(key));
     });
   }
 

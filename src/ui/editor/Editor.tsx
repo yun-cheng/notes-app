@@ -7,6 +7,7 @@ import { displayTitle } from '../../domain/content';
 import type { CardIndex } from '../../domain/cardIndex';
 import type { JSONNode } from '../../domain/types';
 import { useCards } from '../../state/CardsContext';
+import { Icon, type IconName } from '../Icon';
 import { CardLink, insertCardLink, type LinkOption } from './cardLink';
 
 interface EditorProps {
@@ -42,8 +43,28 @@ interface MenuState {
   top: number;
 }
 
+interface Tool {
+  label: string;
+  title: string;
+  run: () => void;
+  icon?: IconName;
+  active?: boolean;
+  disabled?: boolean;
+  className?: string;
+}
+
 function Toolbar({ editor }: { editor: TiptapEditor }) {
-  const tools: { label: string; title: string; run: () => void; active?: boolean; className?: string }[] = [
+  const mod = /Mac|iPhone|iPad/.test(navigator.platform) ? '⌘' : 'Ctrl+';
+  const tools: Tool[] = [
+    { label: 'Undo', title: `Undo (${mod}Z)`, icon: 'undo', run: () => editor.chain().focus().undo().run(), disabled: !editor.can().undo() },
+    {
+      label: 'Redo',
+      title: `Redo (${mod}Shift+Z)`,
+      icon: 'redo',
+      className: 'tool-sep',
+      run: () => editor.chain().focus().redo().run(),
+      disabled: !editor.can().redo(),
+    },
     { label: 'B', title: 'Bold', className: 'tool-b', run: () => editor.chain().focus().toggleBold().run(), active: editor.isActive('bold') },
     { label: 'I', title: 'Italic', className: 'tool-i', run: () => editor.chain().focus().toggleItalic().run(), active: editor.isActive('italic') },
     { label: 'H', title: 'Heading', run: () => editor.chain().focus().toggleHeading({ level: 2 }).run(), active: editor.isActive('heading') },
@@ -59,13 +80,14 @@ function Toolbar({ editor }: { editor: TiptapEditor }) {
           key={t.title}
           type="button"
           title={t.title}
-          aria-label={t.title}
-          aria-pressed={t.active}
+          aria-label={t.icon ? t.label : t.title}
+          aria-pressed={t.icon ? undefined : t.active}
+          disabled={t.disabled}
           className={`${t.className ?? ''}${t.active ? ' is-active' : ''}`}
           onMouseDown={(e) => e.preventDefault()}
           onClick={t.run}
         >
-          {t.label}
+          {t.icon ? <Icon name={t.icon} size={18} /> : t.label}
         </button>
       ))}
     </div>
@@ -199,7 +221,8 @@ export function Editor({ content, onChange, placeholder, selfId }: EditorProps) 
     if (incoming === JSON.stringify(editor.getJSON()) || sent.current.includes(incoming)) return;
     const { from, to } = editor.state.selection;
     const focused = editor.isFocused;
-    editor.commands.setContent(content, { emitUpdate: false });
+    // Not undoable here: undo would otherwise revert a change made on another device.
+    editor.chain().setMeta('addToHistory', false).setContent(content, { emitUpdate: false }).run();
     if (focused) {
       const end = editor.state.doc.content.size;
       editor.commands.setTextSelection({ from: Math.min(from, end), to: Math.min(to, end) });

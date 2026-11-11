@@ -151,10 +151,10 @@ export class CardRepository {
     return { id, vaultId: target, updatedAt: at, createdAt: at, deleted: false, seq: 0 };
   }
 
-  createNote(init: { id?: string; title?: string; tags?: string[]; vaultId?: string } = {}): Promise<Card> {
+  createNote(init: { id?: string; title?: string; content?: JSONNode; tags?: string[]; vaultId?: string } = {}): Promise<Card> {
     const id = init.id ?? this.newId();
     return this.enqueue(async () =>
-      this.write({ ...(await this.newEnvelope(id, init.vaultId)), type: 'note', title: init.title ?? '', content: EMPTY_DOC, tags: init.tags ?? [] }),
+      this.write({ ...(await this.newEnvelope(id, init.vaultId)), type: 'note', title: init.title ?? '', content: init.content ?? EMPTY_DOC, tags: init.tags ?? [] }),
     );
   }
 

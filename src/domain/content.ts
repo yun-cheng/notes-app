@@ -31,9 +31,67 @@ export function plainText(content: JSONNode, titleOf?: (id: string, label: strin
   return parts.join('').replace(/\s+/g, ' ').trim();
 }
 
+/** The title, or for a card without one, its first line of text. */
 export function displayTitle(card: Card): string {
   if (card.type === 'diary') return card.date;
-  return card.title.trim() || 'Untitled';
+  return card.title.trim() || firstLine(card.content) || 'Untitled';
+}
+
+const FIRST_LINE_MAX = 80;
+
+/** The first line of text in the body, shortened to fit a title. */
+export function firstLine(content: JSONNode): string {
+  const line = previewLines(content).find((l) => l.trim())?.replace(/^(• |\d+\. )/, '').trim() ?? '';
+  return line.length > FIRST_LINE_MAX ? `${line.slice(0, FIRST_LINE_MAX - 1).trimEnd()}…` : line;
+}
+
+function inlineText(node: JSONNode, titleOf?: (id: string, label: string) => string): string {
+  if (node.type === 'text') return node.text ?? '';
+  if (node.type === 'hardBreak') return '\n';
+  if (node.type === 'cardLink') {
+    const label = String(node.attrs?.label ?? '');
+    return titleOf ? titleOf(String(node.attrs?.id), label) : label;
+  }
+  return (node.content ?? []).map((n) => inlineText(n, titleOf)).join('');
+}
+
+/** The body as short lines of plain text, one per paragraph or list item, for compact previews. Photos are left out. */
+export function previewLines(content: JSONNode, titleOf?: (id: string, label: string) => string): string[] {
+  const lines: string[] = [];
+  const block = (node: JSONNode, prefix = '') => {
+    switch (node.type) {
+      case 'bulletList':
+      case 'orderedList': {
+        const start = Number(node.attrs?.start ?? 1);
+        (node.content ?? []).forEach((item, i) => {
+          const marker = node.type === 'bulletList' ? '• ' : `${start + i}. `;
+          (item.content ?? []).forEach((child, j) => block(child, j === 0 ? prefix + marker : `${prefix}  `));
+        });
+        return;
+      }
+      case 'blockquote':
+      case 'doc':
+        (node.content ?? []).forEach((child) => block(child, prefix));
+        return;
+      case 'photo':
+      case 'horizontalRule':
+        return;
+      default:
+        lines.push(...`${prefix}${inlineText(node, titleOf)}`.split('\n'));
+    }
+  };
+  block(content);
+  while (lines.length && !lines[lines.length - 1].trim()) lines.pop();
+  return lines;
+}
+
+/** A body made from typed text: one paragraph per line. */
+export function textToDoc(text: string): JSONNode {
+  const lines = text.replace(/\r\n?/g, '\n').replace(/^\n+|\n+$/g, '').split('\n');
+  return {
+    type: 'doc',
+    content: lines.map((line) => (line ? { type: 'paragraph', content: [{ type: 'text', text: line }] } : { type: 'paragraph' })),
+  };
 }
 
 /** IDs of photos in the body, in order. */

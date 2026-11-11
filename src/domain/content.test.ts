@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { displayTitle, isBlank, linkedCardIds, photoIds, plainText } from './content';
+import { displayTitle, isBlank, linkedCardIds, photoIds, plainText, previewLines, textToDoc } from './content';
 import { doc, link, note, p, tag, text } from './testFixtures';
 
 describe('content', () => {
@@ -18,6 +18,31 @@ describe('content', () => {
   it('names cards for display', () => {
     expect(displayTitle(note('n', '  '))).toBe('Untitled');
     expect(displayTitle(note('n', 'Plan'))).toBe('Plan');
+  });
+  it('names a card without a title by its first line', () => {
+    expect(displayTitle(note('n', '', { content: doc(p(), p(text('Buy milk')), p(text('and eggs'))) }))).toBe('Buy milk');
+    const list = { type: 'bulletList', content: [{ type: 'listItem', content: [p(text('first item'))] }] };
+    expect(displayTitle(note('n', '', { content: doc(list) }))).toBe('first item');
+    expect(displayTitle(note('n', '', { content: doc(p(text('x'.repeat(100)))) }))).toHaveLength(80);
+  });
+});
+
+describe('previews', () => {
+  it('gives one line per paragraph and list item, with markers', () => {
+    const body = doc(
+      p(text('Groceries')),
+      { type: 'bulletList', content: [{ type: 'listItem', content: [p(text('milk'))] }, { type: 'listItem', content: [p(text('eggs'))] }] },
+      { type: 'orderedList', attrs: { start: 3 }, content: [{ type: 'listItem', content: [p(text('three'))] }] },
+      { type: 'photo', attrs: { id: 'p-1' } },
+      p(text('see '), link('a', 'Old')),
+      p(),
+    );
+    expect(previewLines(body, () => 'New')).toEqual(['Groceries', '• milk', '• eggs', '3. three', 'see New']);
+  });
+  it('turns typed text into paragraphs and back', () => {
+    const body = textToDoc('one\n\ntwo\n');
+    expect(body).toEqual(doc(p(text('one')), { type: 'paragraph' }, p(text('two'))));
+    expect(previewLines(body)).toEqual(['one', '', 'two']);
   });
 });
 

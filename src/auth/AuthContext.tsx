@@ -53,7 +53,7 @@ export function AuthGate({ children }: { children: ReactNode }) {
 
   const value = useMemo(() => (account ? { account, signOut } : null), [account, signOut]);
 
-  if (!value) return <SignInScreen onCredential={signIn} onSession={finish} />;
+  if (!value) return <SignInScreen onCredential={signIn} />;
   return (
     <AuthContext.Provider value={value}>
       <CardsProvider key={value.account.id} accountId={value.account.id}>

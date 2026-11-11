@@ -21,6 +21,14 @@ npm run dev:api
 
 Then, in a second terminal, start the app with `npm run dev`. The API runs on port 8788 and Vite proxies `/api` to it. Rebuild only when you want `dev:api` itself to serve the latest app.
 
+To try the app without signing in, fill the local server with a demo account and open it:
+
+```bash
+npm run demo
+```
+
+Then open http://localhost:5191/demo while `npm run dev` is running. It signs this browser in as "Demo", with folders, tags, a week of notes, todos, a Family vault shared with a second demo user (Sam, who comments and shares a note), and a Private vault whose diary is encrypted. The Private vault's PIN is `1234`. Running `npm run demo` again starts the demo over, with dates moved to today. `/demo` exists only in the dev server, never in a build.
+
 Sign-in needs a Google OAuth client ID in `GOOGLE_CLIENT_ID` in `wrangler.jsonc`, with `http://localhost:5191` as an authorized origin. Photo upload also needs the client secret in `.dev.vars` as `GOOGLE_CLIENT_SECRET`; see PLAN.md, Milestone 5.
 
 | Command | What it does |
@@ -34,6 +42,7 @@ Sign-in needs a Google OAuth client ID in `GOOGLE_CLIENT_ID` in `wrangler.jsonc`
 | `npm run dev:api` | Run the API and a local D1 database |
 | `npm run db:migrate:local` | Apply database migrations locally |
 | `npm run db:migrate:remote` | Apply database migrations to production |
+| `npm run demo` | Fill the local server with a demo account (see above) |
 | `npm run icons` | Regenerate the PWA icons from `public/icon.svg` |
 
 The service worker only runs in the built app, so use `build` then `preview` to test offline behaviour. Installing on a phone needs HTTPS.

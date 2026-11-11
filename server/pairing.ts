@@ -30,9 +30,12 @@ export function pairingPublicRoutes(app: Hono<AppEnv>, sendSession: (c: Context<
     return c.json({ pair, code });
   });
 
-  /** Called by the app every couple of seconds until the browser has approved it. */
+  /**
+   * Called by the app every couple of seconds until the browser has approved it.
+   * A native app asks for `token: true` and gets its session as a bearer token instead of a cookie.
+   */
   app.post('/auth/pair/claim', async (c) => {
-    const body = await c.req.json<{ pair?: unknown }>().catch(() => null);
+    const body = await c.req.json<{ pair?: unknown; token?: unknown }>().catch(() => null);
     const at = now();
     const row = await pairing(c, body?.pair, at);
     if (!row) return c.json({ error: 'expired' }, 404);
@@ -41,8 +44,11 @@ export function pairingPublicRoutes(app: Hono<AppEnv>, sendSession: (c: Context<
     if (!user) return c.json({ error: 'expired' }, 404);
     const account = await c.env.DB.prepare(`SELECT id, email, name FROM users WHERE id = ?`).bind(user.user_id).first<SessionInfo['user']>();
     if (!account) return c.json({ error: 'expired' }, 404);
-    sendSession(c, await createSession(c.env.DB, account.id, at));
-    return c.json<SessionInfo>({ user: account, vaults: await listVaults(c.env.DB, account.id) });
+    const session = await createSession(c.env.DB, account.id, at);
+    const info: SessionInfo = { user: account, vaults: await listVaults(c.env.DB, account.id) };
+    if (body?.token === true) return c.json({ ...info, token: session });
+    sendSession(c, session);
+    return c.json(info);
   });
 }
 

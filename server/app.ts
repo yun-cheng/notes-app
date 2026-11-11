@@ -36,6 +36,12 @@ export interface AppOptions {
 
 const COOKIE = 'session';
 
+/** The native apps send their session as a bearer token; browsers send the cookie. */
+function bearerToken(c: Context<Env>): string | undefined {
+  const header = c.req.header('Authorization');
+  return header?.startsWith('Bearer ') ? header.slice(7).trim() || undefined : undefined;
+}
+
 function isRecord(value: unknown): value is CardRecord {
   const r = value as Partial<CardRecord> | null;
   return (
@@ -137,7 +143,7 @@ export function createApp({ verifyGoogle = googleVerifier(), now = Date.now, goo
   });
 
   app.post('/auth/logout', async (c) => {
-    const token = getCookie(c, COOKIE);
+    const token = bearerToken(c) ?? getCookie(c, COOKIE);
     if (token) await deleteSession(c.env.DB, token);
     deleteCookie(c, COOKIE, { path: '/api' });
     return c.json({ ok: true });
@@ -151,10 +157,11 @@ export function createApp({ verifyGoogle = googleVerifier(), now = Date.now, goo
 
   // Everything registered after this requires a valid session.
   app.use(async (c, next) => {
-    const token = getCookie(c, COOKIE);
+    const bearer = bearerToken(c);
+    const token = bearer ?? getCookie(c, COOKIE);
     const session = token ? await resolveSession(c.env.DB, token, now()) : null;
     if (!session) return c.json({ error: 'Not signed in' }, 401);
-    if (session.renewed) sendSessionCookie(c, token!);
+    if (session.renewed && !bearer) sendSessionCookie(c, token!);
     c.set('user', session.user);
     return next();
   });

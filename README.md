@@ -4,7 +4,7 @@ One local-first app for notes, todos and a diary, built as an installable PWA. `
 
 Decisions, the data model and the milestones are in [PLAN.md](PLAN.md).
 
-**Status:** All seven milestones are built: notes work offline, sync between devices through a Google account, can be kept in private vaults that are end-to-end encrypted, and can be opened to Claude and other AI apps over MCP, vault by vault, can hold photos, stored in Google Drive, and can be shared: whole vaults or single cards, with comments and public links. Each card has a version history with restore, and the editor has undo and redo buttons.
+**Status:** All seven milestones are built: notes work offline, sync between devices through a Google account, can be kept in private vaults that are end-to-end encrypted, and can be opened to Claude and other AI apps over MCP, vault by vault, can hold photos, stored in Google Drive, and can be shared: whole vaults or single cards, with comments and public links. Each card has a version history with restore, and the editor has undo and redo buttons. A native app for Mac, iPhone and iPad is built in SwiftUI; an Android app in Kotlin is next.
 
 **Live:** https://notes-app-afc.pages.dev, deployed manually with `npm run deploy`.
 
@@ -40,17 +40,16 @@ The service worker only runs in the built app, so use `build` then `preview` to 
 
 ## Native apps
 
-`src-tauri/` is a Tauri 2 shell for macOS, Android and iOS. Its window loads the live site, so the apps need no separate release when the web app changes. Inside it, sign-in goes through the system browser (Google doesn't allow sign-in in embedded webviews): the app shows a code, and you confirm it in a browser where you're signed in.
+The Mac, iPhone and iPad app is a native SwiftUI app in `apple/`. It needs macOS 26 or iOS 26, Xcode 26 and XcodeGen (`brew install xcodegen`). Builds sign with the Apple development team set as `DEVELOPMENT_TEAM` in `project.yml`; change it to build under another account. An Android app in Kotlin comes next.
 
-Needs Rust (`brew install rustup`, then `rustup default stable`), plus Xcode with CocoaPods for iOS, and Android Studio's SDK and NDK for Android.
-
-| Command | What it builds |
+| Command (in `apple/`) | What it does |
 | --- | --- |
-| `npm run native:mac` | `src-tauri/target/release/bundle/macos/notes-app.app` |
-| `ANDROID_HOME=~/Library/Android/sdk NDK_HOME=~/Library/Android/sdk/ndk/28.2.13676358 JAVA_HOME="/Applications/Android Studio.app/Contents/jbr/Contents/Home" npx tauri android build --apk --debug --target aarch64` | A debug APK to install on an Android phone |
-| `npx tauri ios build --debug --target aarch64-sim` | An app for the iOS Simulator (a phone build needs an Apple developer team) |
+| `xcodegen` | Generates `Notes.xcodeproj` from `project.yml` (the project file isn't committed) |
+| `swift test --package-path NotesKit` | Tests the shared core: storage, sync, encryption, Argon2id and the rich text conversion |
+| `xcodebuild -project Notes.xcodeproj -scheme Notes -destination 'platform=macOS' -derivedDataPath build/dd build -allowProvisioningUpdates` | Builds `build/dd/Build/Products/Debug/Notes App.app` |
+| `xcodebuild -project Notes.xcodeproj -scheme Notes -destination 'platform=iOS Simulator,name=iPhone 17 Pro' -derivedDataPath build/dd build -allowProvisioningUpdates` | Builds the app for the iOS Simulator |
 
-
+Launch with `-server http://localhost:8788` to point the app at the local server. The apps sign in by pairing with the web app: the app shows a code, a sign-in sheet opens `/pair`, and once you confirm the code there the app gets its own session as a bearer token.
 
 ```
 src/
@@ -64,15 +63,14 @@ src/
   ui/       App shell, shared components, pages, and the TipTap editor
 server/     Hono API: Google token check, sessions, vaults, push and pull, card history, OAuth and MCP for AI apps, photos in Drive, sharing and comments
 functions/  Cloudflare Pages entry points: /api and /.well-known
-src-tauri/  Native shell (Tauri 2) for macOS, Android and iOS
-native/     The shell's local page, shown if the site can't be reached
+apple/      Native app for Mac, iPhone and iPad: Notes/ is the SwiftUI app, NotesKit/ its storage, sync and crypto
 migrations/ D1 schema
 ```
 
 ## How it fits together
 
-- **The UI goes through `CardRepository`.** It never touches IndexedDB, so another `CardStore` can back the same UI in a Tauri build.
-- **Stored records are opaque.** Only `id, vault_id, updated_at, deleted, seq` are plain. Everything else is a string produced by `PayloadCodec`: JSON today, ciphertext later.
+- **The UI goes through `CardRepository`.** It never touches IndexedDB, so the store can change without touching the UI.
+- **Stored records are opaque.** Only `id, vault_id, updated_at, deleted, seq` are plain. Everything else is a string produced by `PayloadCodec`: JSON in open vaults, ciphertext in encrypted private vaults.
 - **Writes run one at a time.** The repository queues them so overlapping saves can't overwrite each other.
 - **Edits are journaled.** Each edit goes to `localStorage` synchronously, is cleared once committed, and is replayed on next launch, so closing the page mid-save loses nothing.
 - **Backlinks and search are derived on each device.** `buildIndex` recomputes them from the cards, and they are never stored or synced.

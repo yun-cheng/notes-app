@@ -72,7 +72,7 @@ Private vaults are end-to-end encrypted since Milestone 7. Open vaults are still
 ## Technical decisions
 
 - **Client:** PWA first. React, TypeScript, Vite, vite-plugin-pwa, React Router, Dexie (IndexedDB), TipTap editor with `[[link]]` autocomplete, MiniSearch, fflate for zip export.
-- Keep storage and crypto behind small interfaces so the same UI can later be wrapped in Tauri 2 (macOS and Android).
+- Keep storage and crypto behind small interfaces. (Meant at first for wrapping the web UI in Tauri 2; the native apps reimplement both instead, see the native apps notes.)
 - Call `navigator.storage.persist()`. Build export/backup early, including Markdown plus image files.
 - **Note format:** TipTap JSON stored in the card, plus Markdown export. Links by card ID survive renames, and it supports comments and live co-editing through Yjs.
 - **Sync server:** hosted, not on the Mac mini. Hono with D1, running as a Pages Function (a Worker on the site's own address, so sessions can use a secure cookie). `POST /api/sync/push` assigns an increasing `seq`; `GET /api/sync/pull?since=<seq>`. Conflict: newest version per card wins, the loser is kept as a conflict copy. Avoid sync engines that need to read the data (PowerSync, Dexie Cloud); avoid Supabase free tier, which pauses when inactive.
@@ -112,7 +112,10 @@ Links and tag associations live inside the card payload.
 
 Later: push reminders for todos.
 
-Native apps: started 2026-11-10 at the owner's request, as a Tauri 2 shell around the live site (see the notes below).
+Native apps: fully native, decided 2026-11-11 after a first try with a Tauri shell around the live site was dropped.
+- Mac, iPhone and iPad: one SwiftUI app (iOS 26 and macOS 26). **Built; tested against the local server in the Simulator and on the Mac. Not yet tried on a real iPhone, or signing in with Google on the live site.** It has sign-in, sync, Today, Notes, Todos, Diary, Tags, Trash, the rich text editor and private vaults. Still to come: tags editing, search across everything, history, sharing, comments, photos, AI settings, and encrypting or creating vaults.
+- Android: a Kotlin and Jetpack Compose app, next.
+- Windows and Linux keep using the web app.
 
 ## Resolved questions
 
@@ -225,8 +228,9 @@ None. Defaults chosen while building are listed in the implementation notes, and
 
 ## Implementation notes from the native apps
 
-- One Tauri 2 project (`src-tauri/`) builds the macOS, Android and iOS apps. The window loads the live site rather than a bundled copy, so cookies, Google Drive, sharing and updates work as on the web, and the site gets no native permissions.
-- Google blocks sign-in inside embedded webviews, so the apps sign in through the system browser by pairing: the app shows a four-character code, the person confirms it on `/pair` in a signed-in browser, and the app claims its own session. Matching codes stop a link from someone else signing their app in as you.
-- Links to other sites open in the system browser.
-- Offline: the web app's own offline support depends on the webview's service worker support, which is solid on Android and limited in Apple's WKWebView. If the site can't be reached at first launch, a local page says so. A bundled copy of the web app is the fix if this matters in practice.
-- The bundle identifier is `dev.notesapp.notes` and the product name `notes-app`, until a real name is picked. Store releases need signing: an Apple developer team for iOS and macOS distribution, and a release keystore for Android.
+- The Apple app is in `apple/`: `NotesKit` is a Swift package with the models, SQLite storage, repository, sync engine, API client and crypto, tested with `swift test`; `Notes/` is the SwiftUI app. XcodeGen makes the Xcode project from `project.yml`.
+- Card payloads stay raw JSON on the device (`JSONValue`), so fields the native app doesn't know about survive its saves. The SQLite store mirrors the web store: a local write marks the card dirty, and a remote change never overwrites a dirty card.
+- Sign-in reuses browser pairing: the app starts a pairing, opens `/pair?p=…&return=app` in a web authentication sheet, and polls until it can claim the session with `token: true`. The server then returns the session as a bearer token instead of a cookie, and the app keeps it in the Keychain. After approving, the page sends the browser to `notesapp://paired`, which closes the sheet.
+- Encryption matches the web app byte for byte: AES-256-GCM through CryptoKit, and Argon2id (with BLAKE2b) written in Swift, since Apple's frameworks don't have it. Both are tested against RFC vectors and against values made by the web code.
+- The editor is SwiftUI's rich `TextEditor`. Inline formatting is real rich text; blocks are visible markers at the start of a line (`# `, `• `, `1. `, `> `, code fences, `---`). Card links are `notes-card://` links. Photos and anything else the app can't show become placeholders that keep the original node, so nothing written on the web is lost by editing natively.
+- The Mac app is called "Notes App" so it can't be confused with Apple's Notes; on the iPhone home screen it is "Notes". The bundle identifier is `dev.notesapp.notes`, signed with the owner's Apple development team.

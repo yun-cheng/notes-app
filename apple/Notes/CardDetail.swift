@@ -182,7 +182,7 @@ struct DiaryDetail: View {
 
     var body: some View {
         if model.diaryLocked, let vault = model.diaryVault {
-            ContentUnavailableView("\(vault.name) is locked", systemImage: "lock")
+            UnlockView(vault: vault)
         } else {
             let entry = model.diary[date]
             VStack(alignment: .leading, spacing: 12) {

@@ -74,7 +74,8 @@ struct MainView: View {
         } detail: {
             NavigationStack {
                 switch route {
-                case .card, .diary: ContentUnavailableView("Opening cards comes next", systemImage: "note.text")
+                case .card(let id): CardDetail(id: id, route: $route).id(id)
+                case .diary(let date): DiaryDetail(date: date).id(date)
                 case nil: ContentUnavailableView("Nothing selected", systemImage: "note.text", description: Text("Pick a card, or make a new one."))
                 }
             }

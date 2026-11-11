@@ -8,5 +8,6 @@ let package = Package(
     products: [.library(name: "NotesKit", targets: ["NotesKit"])],
     targets: [
         .target(name: "NotesKit", linkerSettings: [.linkedLibrary("sqlite3")]),
+        .testTarget(name: "NotesKitTests", dependencies: ["NotesKit"]),
     ]
 )

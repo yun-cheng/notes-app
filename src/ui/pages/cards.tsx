@@ -13,6 +13,22 @@ import { Comments } from '../Comments';
 import { Icon } from '../Icon';
 import { ShareDialog } from '../ShareDialog';
 
+function FormattingToggle({ on, onChange }: { on: boolean; onChange: (on: boolean) => void }) {
+  return (
+    <button type="button" className={`icon-btn icon-btn--text${on ? ' is-active' : ''}`} aria-pressed={on} aria-label="Formatting" title="Formatting" onClick={() => onChange(!on)}>
+      Aa
+    </button>
+  );
+}
+
+function TagsToggle({ on, onChange }: { on: boolean; onChange: (on: boolean) => void }) {
+  return (
+    <button type="button" className={`icon-btn${on ? ' is-active' : ''}`} aria-pressed={on} aria-label="Tags" title="Tags" onClick={() => onChange(!on)}>
+      <Icon name="tag" />
+    </button>
+  );
+}
+
 const HOME: Record<Card['type'], string> = { note: '/notes', todo: '/upcoming', tag: '/tags', diary: '/calendar' };
 const LABEL: Record<Card['type'], string> = { note: 'Note', todo: 'Todo', tag: 'Tag', diary: 'Diary' };
 
@@ -58,6 +74,8 @@ function CardDetail({ card }: { card: Exclude<Card, { type: 'diary' }> }) {
   const today = useToday();
   const fresh = !!(useLocation().state as { fresh?: boolean } | null)?.fresh;
   const [sharing, setSharing] = useState(false);
+  const [tools, setTools] = useState(false);
+  const [tagging, setTagging] = useState(false);
   const navigate = useNavigate();
 
   return (
@@ -85,6 +103,8 @@ function CardDetail({ card }: { card: Exclude<Card, { type: 'diary' }> }) {
             </button>
           </>
         )}
+        {can.edit && <FormattingToggle on={tools} onChange={setTools} />}
+        {can.edit && card.type !== 'tag' && <TagsToggle on={tagging} onChange={setTagging} />}
         {can.share && (
           <button type="button" className="btn" onClick={() => setSharing(true)}>
             Share
@@ -133,14 +153,24 @@ function CardDetail({ card }: { card: Exclude<Card, { type: 'diary' }> }) {
 
       <VaultField card={card} />
 
-      {card.type !== 'tag' && (can.edit ? <TagPicker tagIds={card.tags} onChange={(tags) => void repo.update(card.id, { tags })} /> : <TagChips tagIds={card.tags} />)}
+      {card.type !== 'tag' &&
+        (tagging && can.edit ? (
+          <TagPicker tagIds={card.tags} onChange={(tags) => void repo.update(card.id, { tags })} />
+        ) : (
+          card.tags.length > 0 && (
+            <div className="card-tags">
+              <TagChips tagIds={card.tags} />
+            </div>
+          )
+        ))}
 
       <Editor
         content={card.content}
         selfId={card.id}
         vaultId={card.vaultId}
         editable={can.edit}
-        placeholder={card.type === 'tag' ? 'Describe this tag. Type [[ to link a card.' : 'Write something. Type [[ to link a card.'}
+        toolbar={tools}
+        placeholder={card.type === 'tag' ? 'Describe this tag' : 'Details'}
         onChange={(content) => void repo.update(card.id, { content })}
       />
 
@@ -156,6 +186,8 @@ export function DayPage() {
   const { index, repo, vaults, locked, shared } = useCards();
   const today = useToday();
   const remove = useDeleteCard();
+  const [tools, setTools] = useState(false);
+  const [tagging, setTagging] = useState(false);
 
   if (!isDateKey(date)) {
     return (
@@ -180,6 +212,8 @@ export function DayPage() {
           <Link className="icon-btn" to={`/day/${addDays(date, 1)}`} aria-label="Next day">
             <Icon name="right" />
           </Link>
+          {!lockedIn && <FormattingToggle on={tools} onChange={setTools} />}
+          {!lockedIn && <TagsToggle on={tagging} onChange={setTagging} />}
           {card && (
             <Link className="icon-btn" to={`/day/${date}/history`} aria-label="Version history" title="Version history">
               <Icon name="history" />
@@ -204,10 +238,19 @@ export function DayPage() {
             selfId={card?.id}
             vaultId={card?.vaultId ?? privateVault?.id}
             editable={!card || permissions(card, vaults, shared).edit}
+            toolbar={tools}
             placeholder={date === today ? 'How was today?' : 'Write about this day.'}
             onChange={(content) => void repo.saveDiary(date, { content }, card?.id, privateVault?.id)}
           />
-          <TagPicker tagIds={card?.tags ?? []} onChange={(tags) => void repo.saveDiary(date, { tags }, card?.id, privateVault?.id)} />
+          {tagging ? (
+            <TagPicker tagIds={card?.tags ?? []} onChange={(tags) => void repo.saveDiary(date, { tags }, card?.id, privateVault?.id)} />
+          ) : (
+            !!card?.tags.length && (
+              <div className="card-tags">
+                <TagChips tagIds={card.tags} />
+              </div>
+            )
+          )}
         </>
       )}
 

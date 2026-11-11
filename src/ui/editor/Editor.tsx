@@ -22,6 +22,10 @@ interface EditorProps {
   vaultId?: string;
   /** False for a card this account may only view. */
   editable?: boolean;
+  /** Shows the formatting toolbar. Hidden by default, so a note is just its text. */
+  toolbar?: boolean;
+  /** Puts the cursor at the end when the editor opens. */
+  autofocus?: boolean;
 }
 
 const SAVE_DELAY = 300;
@@ -109,7 +113,7 @@ function Toolbar({ editor, onPhotos }: { editor: TiptapEditor; onPhotos: (files:
   );
 }
 
-export function Editor({ content, onChange, placeholder, selfId, vaultId, editable = true }: EditorProps) {
+export function Editor({ content, onChange, placeholder, selfId, vaultId, editable = true, toolbar = false, autofocus = false }: EditorProps) {
   const { index, repo, photos, vaults, accountId } = useCards();
   const toast = useToast();
   const [menu, setMenu] = useState<MenuState | null>(null);
@@ -227,6 +231,7 @@ export function Editor({ content, onChange, placeholder, selfId, vaultId, editab
     ],
     content,
     editable,
+    autofocus: autofocus && editable ? 'end' : false,
     editorProps: {
       attributes: { class: 'prose' },
       handlePaste: (_view, event) => {
@@ -289,7 +294,7 @@ export function Editor({ content, onChange, placeholder, selfId, vaultId, editab
   if (!editor) return null;
   return (
     <div className="editor">
-      {editable && <Toolbar editor={editor} onPhotos={(files) => void addPhotos(files)} />}
+      {editable && toolbar && <Toolbar editor={editor} onPhotos={(files) => void addPhotos(files)} />}
       <EditorContent editor={editor} />
       {menu && (
         <ul className="link-menu" role="listbox" aria-label="Link to a card" style={{ left: menu.left, top: menu.top }}>

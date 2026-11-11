@@ -116,6 +116,7 @@ body:has(.title-field:focus) .tabbar { display: none; }
 .icon-btn { display: inline-flex; align-items: center; justify-content: center; width: 40px; height: 40px; flex: none; border-radius: 9px; color: var(--muted); }
 .icon-btn:hover { background: var(--sunken); color: var(--text); }
 .icon-btn.is-active { color: var(--accent); background: var(--accent-soft); }
+.icon-btn--text { font-size: 15px; font-weight: 600; letter-spacing: -0.02em; }
 
 .section { margin-top: 24px; }
 .section h2 { font-size: 13px; font-weight: 600; color: var(--muted); margin-bottom: 6px; }
@@ -350,3 +351,5 @@ body:has(.title-field:focus) .tabbar { display: none; }
 .recovery-key { font: 600 18px/1.6 ui-monospace, "SF Mono", Menlo, monospace; letter-spacing: 0.04em; padding: 12px 14px; border-radius: 10px; background: var(--sunken); overflow-wrap: anywhere; user-select: all; }
 .encrypt-box { padding: 12px; border: 1px solid var(--line); border-radius: 10px; display: flex; flex-direction: column; gap: 8px; }
 .signin__code { font: 700 32px/1.2 ui-monospace, "SF Mono", Menlo, monospace; letter-spacing: 0.2em; margin: 6px 0; }
+
+.card-tags { margin: 2px 0 6px; }

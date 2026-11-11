@@ -5,7 +5,10 @@ import { useAccount } from './AuthContext';
 
 /** In the browser: confirm that the native app showing this code may sign in as you. */
 export function PairPage() {
-  const pair = new URLSearchParams(useLocation().search).get('p') ?? '';
+  const params = new URLSearchParams(useLocation().search);
+  const pair = params.get('p') ?? '';
+  /** The native apps open this page in a sign-in sheet that closes when it reaches their own URL scheme. */
+  const returnToApp = params.get('return') === 'app';
   const { account } = useAccount();
   const [code, setCode] = useState<string | null>(null);
   const [state, setState] = useState<'loading' | 'ready' | 'done' | 'expired'>('loading');
@@ -24,6 +27,7 @@ export function PairPage() {
     try {
       await approvePairing(pair);
       setState('done');
+      if (returnToApp) location.href = 'notesapp://paired';
     } catch {
       setState('expired');
     }

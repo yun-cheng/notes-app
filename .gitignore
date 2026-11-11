@@ -7,4 +7,3 @@ dev-dist
 coverage
 .wrangler
 .dev.vars
-native/build

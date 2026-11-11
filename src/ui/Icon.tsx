@@ -19,6 +19,9 @@ const PATHS = {
   diary: 'M6 3h12a1 1 0 0 1 1 1v16a1 1 0 0 1-1 1H6a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2ZM8 3v18M12 8h4',
   todo: 'M21 12a9 9 0 1 1-18 0 9 9 0 0 1 18 0ZM8 12l3 3 5-6',
   note: 'M7 3h7l5 5v11a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2ZM14 3v5h5',
+  send: 'M12 19V5M6 11l6-6 6 6',
+  more: 'M5 11.2a.8.8 0 1 1 0 1.6.8.8 0 0 1 0-1.6ZM12 11.2a.8.8 0 1 1 0 1.6.8.8 0 0 1 0-1.6ZM19 11.2a.8.8 0 1 1 0 1.6.8.8 0 0 1 0-1.6Z',
+  share: 'M12 15V3M7 8l5-5 5 5M5 13v6a2 2 0 0 0 2 2h10a2 2 0 0 0 2-2v-6',
 } as const;
 
 export type IconName = keyof typeof PATHS;

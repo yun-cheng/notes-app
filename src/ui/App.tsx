@@ -13,15 +13,16 @@ import { CardPage, DayPage } from './pages/cards';
 import { HistoryPage } from './pages/history';
 import { SettingsPage } from './pages/SettingsPage';
 import { VaultPage, VaultsPage } from './pages/vaults';
-import { CalendarPage, NotesPage, SearchPage, TagsPage, TodayPage, UpcomingPage } from './pages/views';
+import { NoteSheet, NotesPage } from './pages/notes';
+import { CalendarPage, SearchPage, TagsPage, TodayPage, UpcomingPage } from './pages/views';
 import { cardPath } from './paths';
 import { ToastProvider, useToast } from './Toast';
 
 const MAIN_NAV: { to: string; label: string; icon: IconName }[] = [
+  { to: '/notes', label: 'Notes', icon: 'notes' },
   { to: '/today', label: 'Today', icon: 'today' },
   { to: '/upcoming', label: 'Upcoming', icon: 'upcoming' },
   { to: '/calendar', label: 'Calendar', icon: 'calendar' },
-  { to: '/notes', label: 'Notes', icon: 'notes' },
   { to: '/search', label: 'Search', icon: 'search' },
 ];
 
@@ -155,11 +156,13 @@ function SignedInApp() {
         <Route path="oauth/authorize" element={<ConnectPage />} />
         <Route path="pair" element={<PairPage />} />
         <Route element={<Layout />}>
-          <Route index element={<Navigate to="/today" replace />} />
+          <Route index element={<Navigate to="/notes" replace />} />
           <Route path="today" element={<TodayPage />} />
           <Route path="upcoming" element={<UpcomingPage />} />
           <Route path="calendar" element={<CalendarPage />} />
-          <Route path="notes" element={<NotesPage />} />
+          <Route path="notes" element={<NotesPage />}>
+            <Route path=":id" element={<NoteSheet />} />
+          </Route>
           <Route path="tags" element={<TagsPage />} />
           <Route path="vaults" element={<VaultsPage />} />
           <Route path="vault/:id" element={<VaultPage />} />
@@ -169,7 +172,7 @@ function SignedInApp() {
           <Route path="card/:id/history" element={<HistoryPage />} />
           <Route path="day/:date" element={<DayPage />} />
           <Route path="day/:date/history" element={<HistoryPage />} />
-          <Route path="*" element={<Navigate to="/today" replace />} />
+          <Route path="*" element={<Navigate to="/notes" replace />} />
         </Route>
       </Routes>
     </AuthGate>

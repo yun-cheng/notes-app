@@ -11,6 +11,7 @@ import { Editor } from '../editor/Editor';
 import { LockPanel } from '../LockPanel';
 import { Comments } from '../Comments';
 import { Icon } from '../Icon';
+import { notePath } from '../paths';
 import { ShareDialog } from '../ShareDialog';
 
 function FormattingToggle({ on, onChange }: { on: boolean; onChange: (on: boolean) => void }) {
@@ -53,6 +54,7 @@ export function CardPage() {
     );
   }
   if (card.type === 'diary') return <Navigate to={`/day/${card.date}`} replace />;
+  if (card.type === 'note' && !card.deleted) return <Navigate to={notePath(card.id)} replace />;
   if (card.deleted) {
     return (
       <Page title={card.title || 'Untitled'}>

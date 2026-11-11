@@ -7,7 +7,7 @@ import { relativeDay } from '../domain/dates';
 import type { Card, TodoCard } from '../domain/types';
 import { useCards, useToday } from '../state/CardsContext';
 import { Icon, type IconName } from './Icon';
-import { cardPath } from './paths';
+import { cardPath, notePath } from './paths';
 import { useToast } from './Toast';
 
 export function Page({ title, actions, children }: { title: ReactNode; actions?: ReactNode; children: ReactNode }) {
@@ -347,6 +347,6 @@ export function useNewNote() {
   const navigate = useNavigate();
   return async (tags: string[] = [], vaultId?: string) => {
     const card = await repo.createNote({ tags, vaultId });
-    navigate(cardPath(card), { state: { fresh: true } });
+    navigate(notePath(card.id), { state: { fresh: true } });
   };
 }

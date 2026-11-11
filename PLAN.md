@@ -19,6 +19,9 @@ Everything is a card: `note`, `todo`, `diary`, `tag`.
 - Diary adds a date, one entry per day. Main view: Calendar / daily page. Defaults to a private vault.
 - Links and backlinks are in scope. Canvas/whiteboard is NOT needed for now.
 
+### Notes look like messages
+Decided 2026-11-12, after the full-page note editor felt too heavy. Notes is the home screen: a stream of compact bubbles, oldest at the top and newest at the bottom like a chat, with a box at the bottom to write the next note. A note has no title or tag fields by default; tapping a bubble opens it in a small sheet with just its text, and formatting, tags, a title, sharing, history and trash sit behind small buttons there. A note without a title is named by its first line.
+
 ### Labels are notes
 A label is a card of type `tag`, with its own description and links. Tagging a note is a typed link to the tag card, so the tag card's backlinks list every tagged note.
 
@@ -225,6 +228,13 @@ None. Defaults chosen while building are listed in the implementation notes, and
 - Forgot PIN: the recovery key opens the vault and sets a new PIN. Changing the PIN rewraps the same key. Removing the PIN decrypts the vault.
 - The PIN is the weak point: anyone with a copy of the server database can try PINs offline, so a 4-digit PIN falls in under an hour. A longer passphrase is much stronger. Worth a warning in the app later.
 - Not covered yet: photos in private vaults are not encrypted in Drive or on the device; cards in encrypted vaults can't be shared or published (they need per-card keys, with the key in the link's `#` fragment); open vaults rely on Cloudflare's encryption at rest rather than their own key.
+
+## Implementation notes from the notes stream
+
+- The stream sorts notes by when they were created, so editing a note doesn't move it, and groups them under day labels.
+- The box at the bottom saves on Enter on a computer (Shift+Enter for a new line). On a phone, Return makes a new line and the send button saves.
+- An opened note lives at `/notes/:id` over the stream, so the back button closes it. Old `/card/:id` links to notes redirect there; todos and tags keep their own pages, with the same hidden toolbar and tag box.
+- The native apps still have the earlier layout; they follow once the web design settles.
 
 ## Implementation notes from the native apps
 

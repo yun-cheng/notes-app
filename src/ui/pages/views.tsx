@@ -1,11 +1,11 @@
 import { useMemo, useState, type FormEvent } from 'react';
-import { Link, NavLink, useSearchParams } from 'react-router';
+import { Link, useSearchParams } from 'react-router';
 import { displayTitle } from '../../domain/content';
 import { addMonths, formatMonth, monthGrid, monthKey, parseDateKey, relativeDay } from '../../domain/dates';
 import { buildSearch } from '../../domain/search';
 import { todayView, upcomingView } from '../../domain/todos';
 import { useCards, useToday } from '../../state/CardsContext';
-import { CardRow, Empty, Page, QuickAddTodo, Section, TodoList, useNewNote } from '../components';
+import { CardRow, Empty, Page, QuickAddTodo, Section, TodoList } from '../components';
 import { Icon } from '../Icon';
 import { cardPath } from '../paths';
 
@@ -130,50 +130,6 @@ export function CalendarPage() {
           );
         })}
       </div>
-    </Page>
-  );
-}
-
-export function NotesPage() {
-  const { index } = useCards();
-  const newNote = useNewNote();
-  const notes = index.live.filter((c) => c.type === 'note');
-  return (
-    <Page
-      title="Notes"
-      actions={
-        <>
-          <NavLink className="icon-btn only-mobile" to="/settings" aria-label="Backup and settings">
-            <Icon name="settings" />
-          </NavLink>
-          <button type="button" className="btn btn--primary" onClick={() => void newNote()}>
-            New note
-          </button>
-        </>
-      }
-    >
-      <div className="chips chips--scroll only-mobile">
-        {index.pinnedTags.map((t) => (
-          <Link className="chip chip--nav" key={t.id} to={cardPath(t)}>
-            {t.title}
-          </Link>
-        ))}
-        <Link className="chip chip--nav chip--quiet" to="/tags">
-          All tags
-        </Link>
-        <Link className="chip chip--nav chip--quiet" to="/vaults">
-          Vaults
-        </Link>
-      </div>
-      {notes.length ? (
-        <div className="list">
-          {notes.map((c) => (
-            <CardRow key={c.id} card={c} />
-          ))}
-        </div>
-      ) : (
-        <Empty>No notes yet.</Empty>
-      )}
     </Page>
   );
 }

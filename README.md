@@ -4,7 +4,7 @@ One local-first app for notes, todos and a diary, built as an installable PWA. `
 
 Decisions, the data model and the milestones are in [PLAN.md](PLAN.md).
 
-**Status:** All seven milestones are built: notes work offline, sync between devices through a Google account, can be kept in private vaults that are end-to-end encrypted, and can be opened to Claude and other AI apps over MCP, vault by vault, can hold photos, stored in Google Drive, and can be shared: whole vaults or single cards, with comments and public links. Each card has a version history with restore, and the editor has undo and redo buttons. A native app for Mac, iPhone and iPad is built in SwiftUI; an Android app in Kotlin is next.
+**Status:** All seven milestones are built: notes work offline, sync between devices through a Google account, can be kept in private vaults that are end-to-end encrypted, and can be opened to Claude and other AI apps over MCP, vault by vault, can hold photos, stored in Google Drive, and can be shared: whole vaults or single cards, with comments and public links. Notes show as a stream of compact bubbles, like a chat, with a box to write the next one. Each card has a version history with restore, and the editor has undo and redo buttons. A native app for Mac, iPhone and iPad is built in SwiftUI; an Android app in Kotlin is next.
 
 **Live:** https://notes-app-afc.pages.dev, deployed manually with `npm run deploy`.
 

@@ -648,6 +648,11 @@ body:has(.batch) .toast-slot { bottom: calc(var(--tabbar) + env(safe-area-inset-
 .swatch { width: 22px; height: 22px; padding: 0; border: 1px solid color-mix(in srgb, var(--tint, var(--line)) 70%, var(--text)); border-radius: 50%; background: var(--tint); cursor: pointer; }
 .swatch[aria-checked="true"] { outline: 2px solid var(--text); outline-offset: 2px; }
 .swatch--none { background: linear-gradient(135deg, var(--surface) 45%, var(--alert) 45%, var(--alert) 55%, var(--surface) 55%); border-color: var(--line); }
+/* The style menu's button: a circle filled with the entry's color, or empty for none. */
+.color-dot { display: block; width: 12px; height: 12px; border: 1.5px solid var(--muted); border-radius: 50%; background: transparent; }
+.color-dot[class*="tint--"] { border-color: color-mix(in srgb, var(--tint) 70%, var(--text)); background: var(--tint); }
+.color-dot--bar { width: 18px; height: 18px; }
+.bubble__add.bubble__color { width: 18px; border: 0; border-radius: 50%; }
 .tint--red { --tint: #d4574a; }
 .tint--orange { --tint: #de8a3a; }
 .tint--yellow { --tint: #d6b236; }

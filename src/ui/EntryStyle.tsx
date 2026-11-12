@@ -2,7 +2,6 @@ import { linkUrls, photoIds } from '../domain/content';
 import { CARD_COLORS, isCardColor, type CardColor, type DiaryCard, type NoteCard, type PreviewStyle, type TodoCard } from '../domain/types';
 import { useCards } from '../state/CardsContext';
 import { LINK_STYLES, PHOTO_STYLES, useDisplayPrefs } from './displayPrefs';
-import { Icon } from './Icon';
 import { usePopover } from './usePopover';
 
 type Entry = NoteCard | TodoCard | DiaryCard;
@@ -81,14 +80,15 @@ export function StyleMenu({ card, inBar = false }: { card: Entry; inBar?: boolea
     <div ref={root} className={`entry-style${open ? ' is-open' : ''}`} onClick={(e) => e.stopPropagation()}>
       <button
         type="button"
-        className={inBar ? `icon-btn${open ? ' is-active' : ''}` : 'bubble__add'}
+        className={inBar ? `icon-btn${open ? ' is-active' : ''}` : 'bubble__add bubble__color'}
         aria-haspopup="menu"
         aria-expanded={!!open}
         aria-label="Color and previews"
         title="Color and previews"
         onClick={toggle}
       >
-        <Icon name="color" size={inBar ? 20 : 12} />
+        {/* A circle filled with the entry's color, or empty for none. */}
+        <span className={`color-dot${isCardColor(card.color) ? ` tint--${card.color}` : ''}${inBar ? ' color-dot--bar' : ''}`} />
       </button>
       {open && (
         // Fixed beside the button, so a sheet that scrolls or a bubble's row can't clip it.

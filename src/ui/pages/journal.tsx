@@ -10,7 +10,7 @@ import { useCards, useToday } from '../../state/CardsContext';
 import { Comments } from '../Comments';
 import { Backlinks, Empty, Page, TagChips, TagPicker, TitleField, useDeleteCard, VaultField } from '../components';
 import { Editor } from '../editor/Editor';
-import { FilterPanel, useFilterTitle, useJournalFilter } from '../FilterPanel';
+import { FilterPanel, SortMenu, useFilterTitle, useJournalFilter } from '../FilterPanel';
 import { Icon } from '../Icon';
 import { MOD } from '../Shortcuts';
 import { LockPanel } from '../LockPanel';
@@ -69,6 +69,7 @@ export function JournalPage() {
   );
   const actions = (
     <>
+      {!vaultLocked && <SortMenu filter={filter} />}
       {tag && (
         <Link className="icon-btn" to={`/card/${tag.id}`} aria-label={`About the ${tag.title} tag`} title="Rename, describe or pin this tag">
           <Icon name="tag" />
@@ -86,9 +87,9 @@ export function JournalPage() {
       )}
       <button
         type="button"
-        className={`icon-btn only-mobile${filtered || filter.sort ? ' is-active' : ''}`}
-        aria-label="Filter and sort"
-        title="Filter and sort"
+        className={`icon-btn only-mobile${filtered ? ' is-active' : ''}`}
+        aria-label="Filter"
+        title="Filter"
         onClick={() => setFiltering(true)}
       >
         <Icon name="filter" />
@@ -131,7 +132,7 @@ export function JournalPage() {
         )}
         {filtering && (
           <div className="dialog-backdrop" onClick={(e) => e.target === e.currentTarget && setFiltering(false)}>
-            <div className="dialog filter-sheet" role="dialog" aria-label="Filter and sort">
+            <div className="dialog filter-sheet" role="dialog" aria-label="Filter">
               <FilterPanel onPick={() => setFiltering(false)} />
               <div className="note-sheet__bar">
                 <span className="note-sheet__spacer" />

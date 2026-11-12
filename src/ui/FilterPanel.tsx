@@ -52,18 +52,48 @@ export function useFilterTitle(filter: StreamFilter): string {
   return title ? title[0].toUpperCase() + title.slice(1) : 'Journal';
 }
 
+/**
+ * The journal's order, in its top bar: the order in use, named, over a native menu of the others, so a phone
+ * shows its own picker. On a narrow screen only the icon shows.
+ */
+export function SortMenu({ filter }: { filter: StreamFilter }) {
+  const { index } = useCards();
+  const navigate = useNavigate();
+  const sort = filter.sort ?? 'written';
+  const label = sortLabel(sort, index.tagGroups.groups);
+  return (
+    <label className="sort-menu btn btn--quiet" title={`Sort: ${label}`}>
+      <Icon name="sort" size={16} />
+      <span className="sort-menu__label">{label}</span>
+      <select aria-label="Sort" value={sort} onChange={(e) => void navigate(journalPath({ ...filter, sort: e.target.value as StreamSort }))}>
+        {(Object.keys(SORT_LABEL) as BaseSort[]).map((s) => (
+          <option key={s} value={s}>
+            {SORT_LABEL[s]}
+          </option>
+        ))}
+        {index.tagGroups.groups
+          .filter((g) => g.ordered)
+          .map((g) => (
+            <option key={g.id} value={`group:${g.id}`}>
+              {sortLabel(`group:${g.id}`, index.tagGroups.groups)}
+            </option>
+          ))}
+      </select>
+    </label>
+  );
+}
+
 const TYPE_ICON: Record<EntryType, IconName> = { note: 'note', todo: 'todo', diary: 'diary' };
 const STATUSES: TodoStatus[] = ['open', 'today', 'upcoming', 'undated', 'done'];
 
 /**
- * Every way to narrow and order the journal, in the sidebar on a computer and in a sheet on a phone.
+ * Every way to narrow the journal, in the sidebar on a computer and in a sheet on a phone. Its order is `SortMenu`, in the top bar.
  * Each choice toggles: picking the chosen one again turns it off. Choices in different groups combine.
  */
 export function FilterPanel({ onPick }: { onPick?: () => void }) {
   const { index, vaults, locked } = useCards();
   const today = useToday();
   const filter = useJournalFilter();
-  const navigate = useNavigate();
   const { pathname } = useLocation();
   const onJournal = pathname === '/journal';
 
@@ -99,30 +129,6 @@ export function FilterPanel({ onPick }: { onPick?: () => void }) {
       <nav aria-label="Journal">
         {item('all', 'Journal', { sort: filter.sort }, onJournal && !isFiltered(filter), 'notes')}
       </nav>
-
-      <label className="filters__sort">
-        <span>Sort</span>
-        <select
-          value={filter.sort ?? 'written'}
-          onChange={(e) => {
-            void navigate(journalPath({ ...filter, sort: e.target.value as StreamSort }));
-            onPick?.();
-          }}
-        >
-          {(Object.keys(SORT_LABEL) as BaseSort[]).map((s) => (
-            <option key={s} value={s}>
-              {SORT_LABEL[s]}
-            </option>
-          ))}
-          {index.tagGroups.groups
-            .filter((g) => g.ordered)
-            .map((g) => (
-              <option key={g.id} value={`group:${g.id}`}>
-                {sortLabel(`group:${g.id}`, index.tagGroups.groups)}
-              </option>
-            ))}
-        </select>
-      </label>
 
       <FilterSection id="type" title="Type">
         {(Object.keys(TYPE_LABEL) as EntryType[]).map((t) =>

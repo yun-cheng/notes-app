@@ -77,5 +77,7 @@ export default defineConfig({
   test: {
     environment: 'node',
     include: ['src/**/*.test.ts', 'server/**/*.test.ts'],
+    // Cloudflare's build machines are slower than a laptop, and the first date formatting there can take seconds.
+    testTimeout: 30_000,
   },
 });

@@ -61,11 +61,6 @@ export function JournalPage() {
   );
   const actions = (
     <>
-      {!vaultLocked && items.length > 0 && (
-        <button type="button" className="btn btn--quiet" onClick={selection.start} title="Pick entries to tag, finish, copy, move or trash together">
-          Select
-        </button>
-      )}
       {tag && (
         <Link className="icon-btn" to={`/card/${tag.id}`} aria-label={`About the ${tag.title} tag`} title="Rename, describe or pin this tag">
           <Icon name="tag" />
@@ -99,7 +94,7 @@ export function JournalPage() {
   return (
     <SelectionProvider value={selection}>
       <Page
-        title={selecting ? (selection.ids.length ? `${selection.ids.length} selected` : 'Select entries') : title}
+        title={selecting ? `${selection.ids.length} selected` : title}
         actions={selecting ? pickingActions : actions}
       >
         {vault && vaultLocked ? (

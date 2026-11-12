@@ -3,7 +3,7 @@ import { rangeBetween } from '../domain/batch';
 
 /** Entries picked in the journal for a batch change. */
 export interface Selection {
-  /** On while picking, even with nothing picked yet. Clicking a bubble then picks it instead of opening it. */
+  /** On while anything on screen is picked; unpicking the last one stops it. Clicking a bubble then picks it instead of opening it. */
   selecting: boolean;
   /** Picked IDs that are still on screen, in stream order. */
   ids: string[];
@@ -12,7 +12,6 @@ export interface Selection {
   toggle: (id: string, range?: boolean) => void;
   /** Picks these entries; `add` keeps what was picked before, otherwise they replace it. */
   setMany: (ids: string[], add: boolean) => void;
-  start: () => void;
   selectAll: () => void;
   clear: () => void;
 }
@@ -23,10 +22,18 @@ export const useSelection = () => useContext(SelectionContext);
 
 /** Selection over the entries in `order`. Picks that scroll out of a filter are kept but not counted. */
 export function useSelectionState(order: string[]): Selection {
-  const [selecting, setSelecting] = useState(false);
   const [picked, setPicked] = useState<ReadonlySet<string>>(new Set());
   const anchor = useRef<string | null>(null);
   const ids = order.filter((id) => picked.has(id));
+  const selecting = ids.length > 0;
+
+  // Nothing picked left on screen (unpicked, trashed, or filtered away): picking stops, and hidden picks go with it.
+  useEffect(() => {
+    if (!selecting && picked.size) {
+      setPicked(new Set());
+      anchor.current = null;
+    }
+  }, [selecting, picked]);
 
   const selection: Selection = {
     selecting,
@@ -35,7 +42,6 @@ export function useSelectionState(order: string[]): Selection {
     toggle: (id, range) => {
       // Read the last pick now; the update below runs after it has moved on to this one.
       const from = range ? anchor.current : null;
-      setSelecting(true);
       setPicked((now) => {
         const next = new Set(now);
         if (from) rangeBetween(order, from, id).forEach((x) => next.add(x));
@@ -46,17 +52,11 @@ export function useSelectionState(order: string[]): Selection {
       anchor.current = id;
     },
     setMany: (ids, add) => {
-      setSelecting(true);
       setPicked((now) => new Set(add ? [...now, ...ids] : ids));
       if (ids.length) anchor.current = ids[ids.length - 1];
     },
-    start: () => setSelecting(true),
-    selectAll: () => {
-      setSelecting(true);
-      setPicked(new Set(order));
-    },
+    selectAll: () => setPicked(new Set(order)),
     clear: () => {
-      setSelecting(false);
       setPicked(new Set());
       anchor.current = null;
     },

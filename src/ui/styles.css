@@ -374,7 +374,11 @@ body:has(.composer:focus-within) .tabbar { display: none; }
 .bubble__text.is-folded { display: -webkit-box; -webkit-box-orient: vertical; -webkit-line-clamp: 6; overflow: hidden; }
 .bubble__fold { display: inline-flex; align-items: center; gap: 2px; padding: 0 6px 0 2px; border: 0; border-radius: 6px; background: none; color: var(--accent); font: inherit; font-size: 12px; font-weight: 600; cursor: pointer; }
 .bubble__fold:hover { background: var(--accent-soft); }
-.bubble__meta { display: flex; flex-wrap: wrap; align-items: center; justify-content: flex-end; gap: 6px; color: var(--muted); font-size: 11px; line-height: 1.6; }
+.bubble__meta { display: flex; flex-wrap: wrap; align-items: center; gap: 6px; color: var(--muted); font-size: 11px; line-height: 1.6; }
+/* The due date and tags start at the left; More or Less and the time keep to the right. */
+.bubble__meta time, .bubble__fold { margin-left: auto; }
+.bubble__fold + time { margin-left: 0; }
+.bubble__meta time { padding-left: 4px; }
 .bubble__meta .chip--small { min-height: 18px; }
 .stream--top { justify-content: flex-start; }
 .bubble--todo { flex-direction: row; align-items: flex-start; gap: 4px; padding-left: 6px; }

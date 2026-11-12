@@ -281,6 +281,8 @@ export function Editor({ content, onChange, placeholder, selfId, vaultId, editab
       if (timer.current) clearTimeout(timer.current);
       timer.current = setTimeout(flush, SAVE_DELAY);
     },
+    // Saved as soon as the text loses focus, so a button clicked next works on what was just typed.
+    onBlur: () => flush(),
     onSelectionUpdate: () => redraw((n) => n + 1),
     onTransaction: () => redraw((n) => n + 1),
   });

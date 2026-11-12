@@ -1,5 +1,5 @@
 import type { CardIndex } from './cardIndex';
-import { linkUrls, photoIds } from './content';
+import { hasPhoto, linkUrls } from './content';
 import { addDays, isDateKey, parseDateKey, relativeDay, toDateKey } from './dates';
 import { rankIn, type TagGroup } from './tagGroups';
 import type { DiaryCard, NoteCard, TodoCard } from './types';
@@ -141,7 +141,7 @@ export function streamItems(index: CardIndex, filter: StreamFilter = {}, today =
     (!tagId || card.tags.includes(tagId)) &&
     (!vaultId || card.vaultId === vaultId) &&
     (!status || (card.type === 'todo' && matchesStatus(card, status, today))) &&
-    (!has || (has === 'link' ? linkUrls(card.content) : photoIds(card.content)).length > 0) &&
+    (!has || (has === 'link' ? linkUrls(card.content).length > 0 : hasPhoto(card.content))) &&
     inRange(day);
 
   const items: StreamItem[] = [];

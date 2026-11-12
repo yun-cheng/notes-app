@@ -77,9 +77,11 @@ describe('entries with links or photos', () => {
   const linked = note('linked', 'L', { createdAt: 1, content: doc(p(text('https://example.com', [{ type: 'link', attrs: { href: 'https://example.com' } }]))) });
   const plainUrl = todo('plain', null, { createdAt: 2, content: doc(p(text('see http://a.example'))) });
   const photo = note('photo', 'P', { createdAt: 3, content: doc({ type: 'photo', attrs: { id: 'p-1' } }) });
-  const ids = (has: 'link' | 'photo') => streamItems(buildIndex([linked, plainUrl, photo, note('n', 'N')]), { has }, TODAY).map((i) => (i.kind === 'card' ? i.card.id : ''));
-  it('keeps entries with a web address, linked or typed', () => expect(ids('link')).toEqual(['linked', 'plain']));
-  it('keeps entries with a photo', () => expect(ids('photo')).toEqual(['photo']));
+  const picture = note('picture', '', { createdAt: 4, content: doc(p(text('look https://img.example/cat.JPG?w=600'))) });
+  const ids = (has: 'link' | 'photo') => streamItems(buildIndex([linked, plainUrl, photo, picture, note('n', 'N')]), { has }, TODAY).map((i) => (i.kind === 'card' ? i.card.id : ''));
+  it('keeps entries with a web address, linked or typed', () => expect(ids('link')).toEqual(['linked', 'plain', 'picture']));
+  it("keeps entries with a photo, or a link straight to a picture, but not a page's link that only previews with one", () =>
+    expect(ids('photo')).toEqual(['photo', 'picture']));
 });
 
 describe('sorting', () => {

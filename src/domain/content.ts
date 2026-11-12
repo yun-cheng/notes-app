@@ -148,6 +148,22 @@ export function siteName(url: string): string {
   }
 }
 
+const IMAGE_PATH = /\.(jpe?g|png|gif|webp|avif|heic|heif|bmp|svg)$/i;
+
+/** Whether a web address points straight at a picture (a .jpg, .png and the like), not at a page that has one. */
+export function isImageUrl(url: string): boolean {
+  try {
+    return IMAGE_PATH.test(new URL(url).pathname);
+  } catch {
+    return false;
+  }
+}
+
+/** Whether the body holds a photo: one of its own, or a link straight to a picture. A page's preview image isn't one. */
+export function hasPhoto(content: JSONNode): boolean {
+  return photoIds(content).length > 0 || linkUrls(content).some(isImageUrl);
+}
+
 /** IDs of photos in the body, in order. */
 export function photoIds(content: JSONNode): string[] {
   const ids: string[] = [];

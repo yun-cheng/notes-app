@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { displayTitle, isBlank, linkedCardIds, linkUrls, photoIds, plainText, previewLines, siteName, splitLinks, textToDoc } from './content';
+import { displayTitle, hasPhoto, isBlank, isImageUrl, linkedCardIds, linkUrls, photoIds, plainText, previewLines, siteName, splitLinks, textToDoc } from './content';
 import { doc, link, note, p, tag, text } from './testFixtures';
 
 describe('content', () => {
@@ -84,5 +84,22 @@ describe('photos', () => {
     expect(photoIds(withPhoto.content)).toEqual(['p-12345678']);
     expect(isBlank(withPhoto)).toBe(false);
     expect(isBlank(note('m', ''))).toBe(true);
+  });
+});
+
+describe('pictures by address', () => {
+  it('knows a link straight to a picture from a page', () => {
+    expect(isImageUrl('https://img.example/a/cat.jpeg')).toBe(true);
+    expect(isImageUrl('https://img.example/cat.PNG?w=600#top')).toBe(true);
+    expect(isImageUrl('https://github.com/yun-cheng/notes-app')).toBe(false);
+    expect(isImageUrl('https://example.com/?file=cat.jpg')).toBe(false);
+    expect(isImageUrl('not a url.png')).toBe(false);
+  });
+
+  it('counts a photo of its own or a picture link as a photo, and a page link not', () => {
+    const linked = (href: string) => ({ type: 'doc', content: [{ type: 'paragraph', content: [{ type: 'text', text: href, marks: [{ type: 'link', attrs: { href } }] }] }] });
+    expect(hasPhoto(linked('https://img.example/cat.webp'))).toBe(true);
+    expect(hasPhoto(linked('https://developer.mozilla.org/en-US/docs/Web/HTML'))).toBe(false);
+    expect(hasPhoto({ type: 'doc', content: [{ type: 'photo', attrs: { id: 'p' } }] })).toBe(true);
   });
 });

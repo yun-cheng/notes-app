@@ -5,9 +5,11 @@ import type { TagGroup } from '../../domain/tagGroups';
 import type { TagCard } from '../../domain/types';
 import { useCards } from '../../state/CardsContext';
 import { Empty, Page, Section } from '../components';
+import { colorClass, ColorSwatches } from '../EntryStyle';
 import { Icon } from '../Icon';
 import { journalPath } from '../paths';
 import { useToast } from '../Toast';
+import { usePopover } from '../usePopover';
 
 /** Moving tags in and out of groups, and making groups. A tag is in one group at most. */
 function useGroupEdits() {
@@ -115,6 +117,7 @@ export function TagsPage() {
           <div className="list">
             {loose.map((t) => (
               <div className="row" key={t.id}>
+                <TagColor tag={t} />
                 <TagLink tag={t} />
                 <button
                   type="button"
@@ -134,6 +137,28 @@ export function TagsPage() {
         )}
       </Section>
     </Page>
+  );
+}
+
+/** A tag's color, shown on its chips: a dot that opens the colors. */
+function TagColor({ tag }: { tag: TagCard }) {
+  const { repo } = useCards();
+  const { open, root, toggle, close } = usePopover();
+  return (
+    <div ref={root} className="tag-color">
+      <button type="button" className={`tag-color__dot${colorClass(tag)}`} aria-haspopup="menu" aria-expanded={!!open} aria-label={`Color of ${tag.title}`} title="Color" onClick={toggle} />
+      {open && (
+        <div className={`style-menu tag-color__menu${open === 'up' ? ' style-menu--up' : ''}`} role="menu" aria-label={`Color of ${tag.title}`}>
+          <ColorSwatches
+            value={tag.color}
+            onPick={(color) => {
+              void repo.update(tag.id, { color });
+              close();
+            }}
+          />
+        </div>
+      )}
+    </div>
   );
 }
 
@@ -202,6 +227,7 @@ function GroupBlock({ group }: { group: TagGroup }) {
           {group.members.map((t, i) => (
             <div className="row" key={t.id}>
               {group.ordered && <span className="tag-group__rank">{i + 1}</span>}
+              <TagColor tag={t} />
               <TagLink tag={t} />
               <button type="button" className="icon-btn" aria-label={`Move ${t.title} up`} disabled={i === 0} onClick={() => edits.move(group, t.id, -1)}>
                 <Icon name="up" />

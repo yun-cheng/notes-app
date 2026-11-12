@@ -9,8 +9,21 @@ type Entry = NoteCard | TodoCard | DiaryCard;
 
 const COLOR_NAMES: Record<CardColor, string> = { red: 'Red', orange: 'Orange', yellow: 'Yellow', green: 'Green', blue: 'Blue', purple: 'Purple', pink: 'Pink', gray: 'Gray' };
 
-/** The class that tints a bubble, or nothing for none (or a color from a newer app this one doesn't know). */
-export const colorClass = (card: Entry) => (isCardColor(card.color) ? ` tint tint--${card.color}` : '');
+/** The class that tints a bubble or a tag's chip, or nothing for none (or a color from a newer app this one doesn't know). */
+export const colorClass = (card: { color?: CardColor | null }) => (isCardColor(card.color) ? ` tint tint--${card.color}` : '');
+
+/** No color, or one of the tints, to pick from. */
+export function ColorSwatches({ value, onPick }: { value: CardColor | null | undefined; onPick: (color: CardColor | null) => void }) {
+  const color = isCardColor(value) ? value : null;
+  return (
+    <div className="swatches" role="radiogroup" aria-label="Color">
+      <button type="button" role="radio" className="swatch swatch--none" aria-checked={!color} aria-label="No color" title="No color" onClick={() => onPick(null)} />
+      {CARD_COLORS.map((c) => (
+        <button key={c} type="button" role="radio" className={`swatch tint--${c}`} aria-checked={color === c} aria-label={COLOR_NAMES[c]} title={COLOR_NAMES[c]} onClick={() => onPick(c)} />
+      ))}
+    </div>
+  );
+}
 
 /**
  * One entry's look: its color, and, when it has them, how its link and photo previews show. Previews not set
@@ -22,7 +35,6 @@ export function StyleOptions({ card }: { card: Entry }) {
   const own = card.preview ?? {};
   const links = linkUrls(card.content).length > 0;
   const photos = photoIds(card.content).length > 0;
-  const color = isCardColor(card.color) ? card.color : null;
 
   const setPreview = (kind: keyof PreviewStyle, value?: string) => {
     const next: PreviewStyle = { ...own };
@@ -47,14 +59,9 @@ export function StyleOptions({ card }: { card: Entry }) {
 
   return (
     <>
-      <div role="radiogroup" aria-label="Color" className="style-menu__group">
+      <div className="style-menu__group">
         <span className="style-menu__label">Color</span>
-        <div className="swatches">
-          <button type="button" role="radio" className="swatch swatch--none" aria-checked={!color} aria-label="No color" title="No color" onClick={() => void repo.update(card.id, { color: null })} />
-          {CARD_COLORS.map((c) => (
-            <button key={c} type="button" role="radio" className={`swatch tint--${c}`} aria-checked={color === c} aria-label={COLOR_NAMES[c]} title={COLOR_NAMES[c]} onClick={() => void repo.update(card.id, { color: c })} />
-          ))}
-        </div>
+        <ColorSwatches value={card.color} onPick={(color) => void repo.update(card.id, { color })} />
       </div>
       {links && previewGroup('links', 'Link previews', LINK_STYLES)}
       {photos && previewGroup('photos', 'Photos', PHOTO_STYLES)}

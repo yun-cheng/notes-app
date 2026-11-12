@@ -11,6 +11,7 @@ import { Icon, type IconName } from './Icon';
 import { cardPath, entryPath, journalPath, sheetState } from './paths';
 import { useToast } from './Toast';
 import { usePopover } from './usePopover';
+import { colorClass } from './EntryStyle';
 
 export function Page({ title, actions, children }: { title: ReactNode; actions?: ReactNode; children: ReactNode }) {
   return (
@@ -55,7 +56,7 @@ export function TagChips({ tagIds, onChange }: { tagIds: string[]; onChange?: (t
       {tags.map((t) => {
         const group = groupOf.get(t.id);
         const clash = clashes.has(t.id);
-        const className = `chip chip--small${group ? ' chip--grouped' : ''}${clash ? ' chip--clash' : ''}`;
+        const className = `chip chip--small${colorClass(t)}${group ? ' chip--grouped' : ''}${clash ? ' chip--clash' : ''}`;
         const title = group ? `${group.title}: ${t.title}${clash ? ` (more than one ${group.title.toLowerCase()})` : ''}` : undefined;
         if (group && onChange) return <GroupChip key={t.id} tag={t} group={group} tagIds={tagIds} className={className} title={title!} onChange={onChange} />;
         return (
@@ -285,7 +286,7 @@ export function TagPicker({ tagIds, onChange }: { tagIds: string[]; onChange: (t
     <div className="tag-picker">
       <div className="chips">
         {current.map((t) => (
-          <span className="chip" key={t.id}>
+          <span className={`chip${colorClass(t)}`} key={t.id}>
             <Link to={journalPath({ tagId: t.id })}>{t.title}</Link>
             <button type="button" aria-label={`Remove tag ${t.title}`} onClick={() => onChange(tagIds.filter((x) => x !== t.id))}>
               ×

@@ -5,6 +5,7 @@ import { addDays } from '../domain/dates';
 import type { Card } from '../domain/types';
 import { useCards, useToday } from '../state/CardsContext';
 import { entries, useEntryActions } from './entryActions';
+import { colorClass } from './EntryStyle';
 import { Icon } from './Icon';
 import type { Selection } from './selection';
 import { MOD } from './Shortcuts';
@@ -136,7 +137,7 @@ function BatchTags({ cards, onEdit }: { cards: Card[]; onEdit: (edit: BatchEdit,
       {counts.length > 0 && (
         <div className="chips">
           {counts.map(({ tagId, count }) => (
-            <span className="chip" key={tagId}>
+            <span className={`chip${colorClass(index.byId.get(tagId) ?? {})}`} key={tagId}>
               #{title(tagId)}
               {count < cards.length && <span className="batch__of">{count}</span>}
               <button

@@ -19,6 +19,7 @@ import {
   type TodoStatus,
 } from '../domain/stream';
 import { useCards, useToday } from '../state/CardsContext';
+import { colorClass } from './EntryStyle';
 import { Icon, type IconName } from './Icon';
 import { journalPath } from './paths';
 
@@ -66,9 +67,15 @@ export function FilterPanel({ onPick }: { onPick?: () => void }) {
   const { pathname } = useLocation();
   const onJournal = pathname === '/journal';
 
-  const item = (key: string, label: ReactNode, next: StreamFilter, active: boolean, icon?: IconName, count?: number) => (
+  const item = (key: string, label: ReactNode, next: StreamFilter, active: boolean, icon?: IconName, count?: number, tint = '') => (
     <Link key={key} to={journalPath(next)} className={`nav-item${active ? ' active' : ''}`} aria-current={active ? 'page' : undefined} onClick={onPick}>
-      {icon ? <Icon name={icon} /> : <span className="nav-item__pad" />}
+      {icon ? (
+        <i className={`nav-item__icon${tint}`}>
+          <Icon name={icon} />
+        </i>
+      ) : (
+        <span className="nav-item__pad" />
+      )}
       <span>{label}</span>
       {count !== undefined && <span className="nav-item__count">{count}</span>}
     </Link>
@@ -151,13 +158,13 @@ export function FilterPanel({ onPick }: { onPick?: () => void }) {
         .map((g) => (
           <nav key={g.id} aria-label={g.title} className="sidebar__group">
             <h2>{g.title}</h2>
-            {g.members.map((t) => item(t.id, t.title, toggle('tagId', t.id), filter.tagId === t.id, 'tag', tagCount(t.id)))}
+            {g.members.map((t) => item(t.id, t.title, toggle('tagId', t.id), filter.tagId === t.id, 'tag', tagCount(t.id), colorClass(t)))}
           </nav>
         ))}
 
       <nav aria-label="Tags" className="sidebar__group">
         <h2>Tags</h2>
-        {tags.map((t) => item(t.id, t.title, toggle('tagId', t.id), filter.tagId === t.id, 'tag', tagCount(t.id)))}
+        {tags.map((t) => item(t.id, t.title, toggle('tagId', t.id), filter.tagId === t.id, 'tag', tagCount(t.id), colorClass(t)))}
         <Link to="/tags" className={`nav-item nav-item--quiet${pathname === '/tags' ? ' active' : ''}`} onClick={onPick}>
           <span className="nav-item__pad" />
           <span>All tags</span>

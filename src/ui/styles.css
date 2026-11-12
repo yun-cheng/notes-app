@@ -532,3 +532,7 @@ body:has(.batch) .toast-slot { bottom: calc(var(--tabbar) + env(safe-area-inset-
 .bubble__open:hover { color: var(--text); border-color: var(--muted); }
 .stream__entry:hover .bubble__open, .bubble:focus-within .bubble__open { opacity: 1; }
 @media (pointer: coarse) { .bubble__open { display: none; } }
+/* A row beside its bubble is clickable too, to pick it. */
+.stream__entry { border-radius: 12px; }
+@media (pointer: fine) { .stream__entry:hover { background: color-mix(in srgb, var(--sunken) 55%, transparent); } }
+.stream__entry:has(.bubble.is-selected) { background: color-mix(in srgb, var(--accent) 8%, transparent); }

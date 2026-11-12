@@ -173,19 +173,28 @@ interface Drag {
 const INTERACTIVE = '.bubble, .attachments, .pick, a, button, input, textarea, select, label, [contenteditable="true"]';
 
 /**
- * Box-selecting: pressing on the stream's empty space and dragging picks every entry the box touches, as it
- * moves. Shift or Cmd/Ctrl adds to what was picked. Entries are found by `[data-entry-id]` inside `root`.
+ * Picking from the stream's empty space. A click (or tap) on a row beside its bubble picks or unpicks that entry,
+ * Shift-click a range. Pressing there and dragging picks every entry the box touches, as it moves; Shift or
+ * Cmd/Ctrl adds to what was picked. Entries are found by `[data-entry-id]` inside `root`.
  */
 export function useBoxSelect(root: RefObject<HTMLElement | null>, selection: Selection | null) {
   const [drag, setDrag] = useState<Drag | null>(null);
   const latest = useRef({ drag, selection });
   latest.current = { drag, selection };
+  // Set once a press has moved far enough to be a drag, so the click that ends it doesn't also pick a row.
+  const dragged = useRef(false);
 
   useEffect(() => {
     const el = root.current;
     if (!el || !selection) return;
 
+    const onClick = (e: MouseEvent) => {
+      if (dragged.current || !(e.target instanceof Element) || e.target.closest(INTERACTIVE)) return;
+      const row = e.target.closest<HTMLElement>('[data-entry-id]');
+      if (row?.dataset.entryId) latest.current.selection?.toggle(row.dataset.entryId, e.shiftKey);
+    };
     const onDown = (e: PointerEvent) => {
+      dragged.current = false;
       if (e.pointerType !== 'mouse' || e.button !== 0) return;
       if (e.target instanceof Element && e.target.closest(INTERACTIVE)) return;
       e.preventDefault();
@@ -195,7 +204,11 @@ export function useBoxSelect(root: RefObject<HTMLElement | null>, selection: Sel
       setDrag({ x0: x, y0: y, x1: x, y1: y, add, before: add ? (latest.current.selection?.ids ?? []) : [] });
     };
     el.addEventListener('pointerdown', onDown);
-    return () => el.removeEventListener('pointerdown', onDown);
+    el.addEventListener('click', onClick);
+    return () => {
+      el.removeEventListener('pointerdown', onDown);
+      el.removeEventListener('click', onClick);
+    };
   }, [root, selection !== null]);
 
   const dragging = drag !== null;
@@ -210,6 +223,7 @@ export function useBoxSelect(root: RefObject<HTMLElement | null>, selection: Sel
       const next = { ...d, x1: e.clientX + window.scrollX, y1: e.clientY + window.scrollY };
       // A small wobble is a click, not a drag.
       if (Math.hypot(next.x1 - d.x0, next.y1 - d.y0) < 6) return setDrag(next);
+      dragged.current = true;
       updateFrom(next);
     };
     const scroll = () => {

@@ -34,7 +34,7 @@ In a note, `/` adds a heading, list, quote, code, divider, photo or link to anot
 
 Cmd+K (Ctrl+K elsewhere), or `/` anywhere outside a text box, opens a command box for doing anything from the keyboard: every filter, sort and page, new notes, locking vaults, finding notes by their text, and saving what's typed straight to the journal with the same markers. Starting with `/` lists only commands.
 
-Several entries can be changed at once. A circle beside each entry (shown on hover) picks it, and so do Cmd-click (Ctrl-click) and a long press; Shift-click picks a range, dragging a box over entries from the empty space beside them picks every one it touches, and Select at the top starts picking. While entries are picked, the writing box becomes a bar that tags or untags them, marks todos done or not, sets their due date, moves them to another vault or trashes them, each with an undo.
+Several entries can be changed at once. A circle beside each entry (shown on hover) picks it, and so do a click on the row beside the bubble, Cmd-click (Ctrl-click) and a long press; Shift-click picks a range, dragging a box over entries from the empty space beside them picks every one it touches, and Select at the top starts picking. While entries are picked, the writing box becomes a bar that tags or untags them, marks todos done or not, sets their due date, moves them to another vault or trashes them, each with an undo.
 
 An entry's photos show as thumbnails under its bubble, opening full size in a viewer that steps through them, and its web links show as cards with the page's own title, description and image.
 

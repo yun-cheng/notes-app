@@ -226,17 +226,20 @@ function BubbleMeta({ card, at, fold }: { card: NoteCard | TodoCard | DiaryCard;
   // A grouped tag (Priority: High) can be switched right here.
   const retag = permissions(card, vaults, shared).edit ? (tags: string[]) => void repo.update(card.id, { tags }) : undefined;
   return (
+    // Tags and the vault on the left; More or Less, the due date and the time it was written on the right.
     <span className="bubble__meta">
-      {card.type === 'todo' && card.due && (retag ? <DueMenu card={card} look="label" /> : <DueLabel todo={card} className="bubble__due" />)}
       <TagChips tagIds={card.tags} onChange={retag} />
       <VaultLabel card={card} />
-      {(fold.long || fold.folded) && (
-        <button type="button" className="bubble__fold" aria-expanded={!fold.folded} onClick={fold.toggle}>
-          <Icon name={fold.folded ? 'down' : 'up'} size={14} />
-          {fold.folded ? 'More' : 'Less'}
-        </button>
-      )}
-      <time dateTime={new Date(at).toISOString()}>{time(at)}</time>
+      <span className="bubble__end">
+        {(fold.long || fold.folded) && (
+          <button type="button" className="bubble__fold" aria-expanded={!fold.folded} onClick={fold.toggle}>
+            <Icon name={fold.folded ? 'down' : 'up'} size={14} />
+            {fold.folded ? 'More' : 'Less'}
+          </button>
+        )}
+        {card.type === 'todo' && card.due && (retag ? <DueMenu card={card} look="label" /> : <DueLabel todo={card} className="bubble__due" />)}
+        <time dateTime={new Date(at).toISOString()}>{time(at)}</time>
+      </span>
     </span>
   );
 }

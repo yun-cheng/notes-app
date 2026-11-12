@@ -416,8 +416,7 @@ body:has(.composer:focus-within) .tabbar { display: none; }
 .bubble__fold:hover { background: var(--accent-soft); }
 .bubble__meta { display: flex; flex-wrap: wrap; align-items: center; gap: 6px; color: var(--muted); font-size: 11px; line-height: 1.6; }
 /* The due date and tags start at the left; More or Less and the time keep to the right. */
-.bubble__meta time, .bubble__fold { margin-left: auto; }
-.bubble__fold + time { margin-left: 0; }
+.bubble__end { display: inline-flex; flex-wrap: wrap; align-items: center; justify-content: flex-end; gap: 6px; margin-left: auto; }
 .bubble__meta time { padding-left: 4px; }
 .bubble__meta .chip--small { min-height: 18px; }
 .stream--top { justify-content: flex-start; }

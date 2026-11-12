@@ -370,7 +370,8 @@ body:has(.composer__input:focus) .tabbar { display: none; }
 .bubble--todo { flex-direction: row; align-items: flex-start; gap: 4px; padding-left: 6px; }
 .bubble--todo .check { height: 24px; margin: 0; }
 .bubble__body { display: flex; flex-direction: column; gap: 2px; min-width: 0; }
-.bubble--todo.is-done .bubble__title { color: var(--muted); text-decoration: line-through; font-weight: 400; }
+.bubble--todo .bubble__title { font-weight: 400; }
+.bubble--todo.is-done .bubble__title { color: var(--muted); text-decoration: line-through; }
 .bubble--diary { background: var(--sunken); }
 .bubble__kind { display: inline-flex; align-items: center; gap: 4px; color: var(--muted); font-size: 12px; font-weight: 600; }
 .bubble__due { font-weight: 600; }
@@ -395,6 +396,7 @@ body:has(.composer__input:focus) .composer { bottom: 8px; }
 .note-sheet { gap: 6px; padding-top: 14px; }
 .note-sheet > * { flex-shrink: 0; }
 .note-sheet .title-field { font: 600 19px/1.3 var(--sans); }
+.note-sheet .title-row--todo .title-field { font-weight: 400; }
 .note-sheet .editor { margin-top: 0; }
 .note-sheet .prose { min-height: 5em; padding: 2px 0 8px; font-size: 16px; line-height: 1.55; }
 .note-sheet .toolbar { background: var(--surface); top: -14px; }

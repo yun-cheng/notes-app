@@ -404,7 +404,7 @@ function EntryDetail({ card, fresh, onClose }: { card: NoteCard | TodoCard; fres
     <>
       {can.note && <p className="access-note">{can.note}</p>}
       {showTitle && (
-        <div className="title-row">
+        <div className={`title-row${isTodo ? ' title-row--todo' : ''}`}>
           {isTodo && (
             <label className="check check--large">
               <input

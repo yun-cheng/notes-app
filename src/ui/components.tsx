@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState, type FormEvent, type ReactNode } from 'react';
-import { Link, useNavigate } from 'react-router';
+import { Link, useLocation, useNavigate } from 'react-router';
 import { permissions } from '../domain/access';
 import { cardText, resolveTags, type Backlink } from '../domain/cardIndex';
 import { displayTitle } from '../domain/content';
@@ -7,7 +7,7 @@ import { relativeDay } from '../domain/dates';
 import type { Card, TodoCard } from '../domain/types';
 import { useCards, useToday } from '../state/CardsContext';
 import { Icon, type IconName } from './Icon';
-import { cardPath, notePath } from './paths';
+import { cardPath, entryPath, sheetState } from './paths';
 import { useToast } from './Toast';
 
 export function Page({ title, actions, children }: { title: ReactNode; actions?: ReactNode; children: ReactNode }) {
@@ -52,11 +52,21 @@ export function TagChips({ tagIds }: { tagIds: string[] }) {
   );
 }
 
+/** A link to a card. Notes and todos open in a sheet over the current page. */
+export function CardLink({ card, className, children }: { card: Card; className?: string; children: ReactNode }) {
+  const location = useLocation();
+  return (
+    <Link className={className} to={cardPath(card)} state={sheetState(location, card)}>
+      {children}
+    </Link>
+  );
+}
+
 export function CardRow({ card, detail }: { card: Card; detail?: string }) {
   const { index } = useCards();
   const preview = detail ?? cardText(index, card).slice(0, 140);
   return (
-    <Link className="row row--link" to={cardPath(card)}>
+    <CardLink className="row row--link" card={card}>
       <span className="row__icon">
         <Icon name={TYPE_ICON[card.type]} size={18} />
       </span>
@@ -65,7 +75,7 @@ export function CardRow({ card, detail }: { card: Card; detail?: string }) {
         {preview && <span className="row__preview">{preview}</span>}
         <TagChips tagIds={card.tags} />
       </span>
-    </Link>
+    </CardLink>
   );
 }
 
@@ -91,11 +101,11 @@ export function TodoRow({ todo, showDue = true }: { todo: TodoCard; showDue?: bo
           }}
         />
       </label>
-      <Link className="row__body" to={cardPath(todo)}>
+      <CardLink className="row__body" card={todo}>
         <span className="row__title">{displayTitle(todo)}</span>
         {showDue && todo.due && <span className={`row__due${overdue ? ' is-alert' : ''}`}>{relativeDay(todo.due, today)}</span>}
         <TagChips tagIds={todo.tags} />
-      </Link>
+      </CardLink>
     </div>
   );
 }
@@ -330,23 +340,25 @@ export function Backlinks({ cardId, isTag }: { cardId: string; isTag?: boolean }
   );
 }
 
-/** Soft-deletes a card and offers an undo. */
+/** Soft-deletes a card and offers an undo. `goTo` null leaves navigation to the caller, as a sheet closes itself. */
 export function useDeleteCard() {
   const { repo } = useCards();
   const toast = useToast();
   const navigate = useNavigate();
-  return (card: Card, goTo: string) => {
+  return (card: Card, goTo: string | null) => {
     void repo.setDeleted(card.id, true);
-    navigate(goTo, { replace: true });
+    if (goTo) void navigate(goTo, { replace: true });
     toast('Moved to Trash', { action: { label: 'Undo', run: () => void repo.setDeleted(card.id, false) } });
   };
 }
 
+/** Makes an empty note and opens it in a sheet over the current page, ready to type. */
 export function useNewNote() {
   const { repo } = useCards();
   const navigate = useNavigate();
+  const location = useLocation();
   return async (tags: string[] = [], vaultId?: string) => {
     const card = await repo.createNote({ tags, vaultId });
-    navigate(notePath(card.id), { state: { fresh: true } });
+    void navigate(entryPath(card.id), { state: sheetState(location, card, { fresh: true }) });
   };
 }

@@ -1,5 +1,5 @@
 import { useEffect } from 'react';
-import { Navigate, NavLink, Outlet, Route, Routes, useNavigate } from 'react-router';
+import { Navigate, NavLink, Outlet, Route, Routes, useLocation, useNavigate } from 'react-router';
 import { registerSW } from 'virtual:pwa-register';
 import { AuthGate, useAccount } from '../auth/AuthContext';
 import { PairPage } from '../auth/PairPage';
@@ -13,13 +13,13 @@ import { CardPage, DayPage } from './pages/cards';
 import { HistoryPage } from './pages/history';
 import { SettingsPage } from './pages/SettingsPage';
 import { VaultPage, VaultsPage } from './pages/vaults';
-import { NoteSheet, NotesPage } from './pages/notes';
+import { EntrySheet, JournalPage, OldNoteRedirect } from './pages/journal';
 import { CalendarPage, SearchPage, TagsPage, TodayPage, UpcomingPage } from './pages/views';
-import { cardPath } from './paths';
+import { cardPath, type SheetState } from './paths';
 import { ToastProvider, useToast } from './Toast';
 
 const MAIN_NAV: { to: string; label: string; icon: IconName }[] = [
-  { to: '/notes', label: 'Notes', icon: 'notes' },
+  { to: '/journal', label: 'Journal', icon: 'notes' },
   { to: '/today', label: 'Today', icon: 'today' },
   { to: '/upcoming', label: 'Upcoming', icon: 'upcoming' },
   { to: '/calendar', label: 'Calendar', icon: 'calendar' },
@@ -150,19 +150,23 @@ export function App() {
 }
 
 function SignedInApp() {
+  const location = useLocation();
+  // A sheet opened from a page keeps that page underneath it.
+  const background = (location.state as SheetState | null)?.background;
   return (
     <AuthGate>
-      <Routes>
+      <Routes location={background ?? location}>
         <Route path="oauth/authorize" element={<ConnectPage />} />
         <Route path="pair" element={<PairPage />} />
         <Route element={<Layout />}>
-          <Route index element={<Navigate to="/notes" replace />} />
+          <Route index element={<Navigate to="/journal" replace />} />
           <Route path="today" element={<TodayPage />} />
           <Route path="upcoming" element={<UpcomingPage />} />
           <Route path="calendar" element={<CalendarPage />} />
-          <Route path="notes" element={<NotesPage />}>
-            <Route path=":id" element={<NoteSheet />} />
+          <Route path="journal" element={<JournalPage />}>
+            <Route path=":id" element={<EntrySheet />} />
           </Route>
+          <Route path="notes/:id?" element={<OldNoteRedirect />} />
           <Route path="tags" element={<TagsPage />} />
           <Route path="vaults" element={<VaultsPage />} />
           <Route path="vault/:id" element={<VaultPage />} />
@@ -172,9 +176,14 @@ function SignedInApp() {
           <Route path="card/:id/history" element={<HistoryPage />} />
           <Route path="day/:date" element={<DayPage />} />
           <Route path="day/:date/history" element={<HistoryPage />} />
-          <Route path="*" element={<Navigate to="/notes" replace />} />
+          <Route path="*" element={<Navigate to="/journal" replace />} />
         </Route>
       </Routes>
+      {background && (
+        <Routes>
+          <Route path="journal/:id" element={<EntrySheet />} />
+        </Routes>
+      )}
     </AuthGate>
   );
 }

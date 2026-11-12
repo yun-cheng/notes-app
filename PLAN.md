@@ -19,8 +19,14 @@ Everything is a card: `note`, `todo`, `diary`, `tag`.
 - Diary adds a date, one entry per day. Main view: Calendar / daily page. Defaults to a private vault.
 - Links and backlinks are in scope. Canvas/whiteboard is NOT needed for now.
 
-### Notes look like messages
-Decided 2026-11-12, after the full-page note editor felt too heavy. Notes is the home screen: a stream of compact bubbles, oldest at the top and newest at the bottom like a chat, with a box at the bottom to write the next note. A note has no title or tag fields by default; tapping a bubble opens it in a small sheet with just its text, and formatting, tags, a title, sharing, history and trash sit behind small buttons there. A note without a title is named by its first line.
+### One journal for everything
+Decided 2026-11-12, like Logseq's journal. There is one place where everything is written and read: the Journal, a stream of compact bubbles holding notes, todos and diary entries together, oldest at the top and newest at the bottom like a chat, with a box at the bottom to write the next one. Kinds and places come from markers in the text, not from separate screens:
+
+- `[] ` or `TODO ` at the start, or `#todo`, makes a todo; on a todo, `@today`, `@tomorrow`, `@fri` or `@2026-12-01` sets the due date.
+- `#diary` adds the text to the day's diary entry, in the private vault.
+- Any other `#tag` files it under that tag, making the tag if it's new.
+
+A bubble opens in a small sheet with just its text; formatting, tags, a title, sharing, history and trash sit behind small buttons there. A note without a title is named by its first line.
 
 ### Labels are notes
 A label is a card of type `tag`, with its own description and links. Tagging a note is a typed link to the tag card, so the tag card's backlinks list every tagged note.
@@ -34,7 +40,7 @@ A vault answers "who can see this". Topics belong in tags, not vaults.
 - Each card has exactly one home vault.
 - A vault named after a group (e.g. "High school") only makes sense if those people are members, or it needs its own PIN.
 - Set per vault: lock (none or PIN), AI access (off, read, read + write), members.
-- When locked: left out of UI, search, backlinks and the Today view. Links to its notes show as "Locked". A vault can be fully hidden until unlocked.
+- When locked: left out of UI, search, backlinks and the journal (a locked diary day shows only as a "locked" placeholder). Links to its notes show as "Locked". A vault can be fully hidden until unlocked.
 - Auto-lock on timeout or when the app goes to the background.
 - Search covers only unlocked vaults.
 
@@ -229,11 +235,15 @@ None. Defaults chosen while building are listed in the implementation notes, and
 - The PIN is the weak point: anyone with a copy of the server database can try PINs offline, so a 4-digit PIN falls in under an hour. A longer passphrase is much stronger. Worth a warning in the app later.
 - Not covered yet: photos in private vaults are not encrypted in Drive or on the device; cards in encrypted vaults can't be shared or published (they need per-card keys, with the key in the link's `#` fragment); open vaults rely on Cloudflare's encryption at rest rather than their own key.
 
-## Implementation notes from the notes stream
+## Implementation notes from the journal
 
-- The stream sorts notes by when they were created, so editing a note doesn't move it, and groups them under day labels.
-- The box at the bottom saves on Enter on a computer (Shift+Enter for a new line). On a phone, Return makes a new line and the send button saves.
-- An opened note lives at `/notes/:id` over the stream, so the back button closes it. Old `/card/:id` links to notes redirect there; todos and tags keep their own pages, with the same hidden toolbar and tag box.
+- The stream orders notes and todos by when they were created, so editing doesn't move them, and groups them under day labels. A diary entry sits at the time it was started, or at the end of its day if it was written on another day.
+- Card types stay as they were (note, todo, diary, tag), so sync, MCP and the native apps are unchanged; only the web app's screens changed. The markers are read when the box is saved (`src/domain/entry.ts`), and `#todo` and `#diary` never become tags.
+- A weekday date (`@fri`) means the next one after today, so `@thu` on a Thursday is a week away.
+- A tag created from the box goes in the default vault.
+- With the diary locked, a `#diary` line stays in the box and the vault's PIN is asked for above it.
+- Notes and todos open at `/journal/:id` in a sheet over the page they were opened from (Search, Today, a tag), so the back button closes it. Old `/notes/:id` and `/card/:id` links to notes and todos redirect there.
+- The box saves on Enter on a computer (Shift+Enter for a new line). On a phone, Return makes a new line and the send button saves.
 - The native apps still have the earlier layout; they follow once the web design settles.
 
 ## Implementation notes from the native apps

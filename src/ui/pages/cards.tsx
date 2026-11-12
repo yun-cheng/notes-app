@@ -11,7 +11,7 @@ import { Editor } from '../editor/Editor';
 import { LockPanel } from '../LockPanel';
 import { Comments } from '../Comments';
 import { Icon } from '../Icon';
-import { notePath } from '../paths';
+import { entryPath } from '../paths';
 import { ShareDialog } from '../ShareDialog';
 
 function FormattingToggle({ on, onChange }: { on: boolean; onChange: (on: boolean) => void }) {
@@ -30,7 +30,7 @@ function TagsToggle({ on, onChange }: { on: boolean; onChange: (on: boolean) => 
   );
 }
 
-const HOME: Record<Card['type'], string> = { note: '/notes', todo: '/upcoming', tag: '/tags', diary: '/calendar' };
+const HOME: Record<Card['type'], string> = { note: '/journal', todo: '/upcoming', tag: '/tags', diary: '/calendar' };
 const LABEL: Record<Card['type'], string> = { note: 'Note', todo: 'Todo', tag: 'Tag', diary: 'Diary' };
 
 export function CardPage() {
@@ -54,7 +54,7 @@ export function CardPage() {
     );
   }
   if (card.type === 'diary') return <Navigate to={`/day/${card.date}`} replace />;
-  if (card.type === 'note' && !card.deleted) return <Navigate to={notePath(card.id)} replace />;
+  if ((card.type === 'note' || card.type === 'todo') && !card.deleted) return <Navigate to={entryPath(card.id)} replace />;
   if (card.deleted) {
     return (
       <Page title={card.title || 'Untitled'}>

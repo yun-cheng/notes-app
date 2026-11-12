@@ -2,10 +2,10 @@ import { mergeAttributes, Node, type Editor as TiptapEditor } from '@tiptap/core
 import { NodeViewWrapper, ReactNodeViewRenderer, type ReactNodeViewProps } from '@tiptap/react';
 import { PluginKey } from '@tiptap/pm/state';
 import Suggestion, { type SuggestionOptions } from '@tiptap/suggestion';
-import { Link } from 'react-router';
+import { Link, useLocation } from 'react-router';
 import { displayTitle } from '../../domain/content';
 import { useCards } from '../../state/CardsContext';
-import { cardPath } from '../paths';
+import { cardPath, sheetState } from '../paths';
 
 export type LinkOption = { kind: 'card'; id: string; title: string; type: string } | { kind: 'create'; title: string };
 
@@ -18,6 +18,7 @@ const key = new PluginKey('cardLinkSuggestion');
 /** The stored label is only a fallback. The view always shows the target's current title. */
 function CardLinkView({ node }: ReactNodeViewProps) {
   const { index } = useCards();
+  const location = useLocation();
   const id = String(node.attrs.id);
   const card = index.byId.get(id);
   const label = String(node.attrs.label || 'Untitled');
@@ -45,7 +46,7 @@ function CardLinkView({ node }: ReactNodeViewProps) {
   }
   return (
     <NodeViewWrapper as="span" className="card-link-wrap">
-      <Link className="card-link" to={cardPath(card)} contentEditable={false}>
+      <Link className="card-link" to={cardPath(card)} state={sheetState(location, card)} contentEditable={false}>
         {displayTitle(card)}
       </Link>
     </NodeViewWrapper>

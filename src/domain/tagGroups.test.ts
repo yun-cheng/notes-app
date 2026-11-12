@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { buildTagGroups, clashingTags, moveMember, orderTags, rankIn, settleTags, withTag } from './tagGroups';
+import { buildTagGroups, clashingTags, moveMember, orderTags, pickInGroup, rankIn, settleTags, withTag } from './tagGroups';
 import { tag } from './testFixtures';
 import type { TagCard } from './types';
 
@@ -42,6 +42,15 @@ describe('tag groups', () => {
   it('ranks entries by an ordered group, with none last', () => {
     const prio = all.groups[0];
     expect([rankIn(prio, ['hi']), rankIn(prio, ['work', 'lo']), rankIn(prio, ['work'])]).toEqual([0, 2, 3]);
+  });
+
+  it('picks from a group’s menu: swapping in a one-choice group, toggling in another, or clearing', () => {
+    const [prio, topics] = all.groups;
+    expect(pickInGroup(['work', 'hi'], prio, 'lo')).toEqual(['work', 'lo']);
+    expect(pickInGroup(['hi', 'lo', 'work'], prio, 'med')).toEqual(['work', 'med']);
+    expect(pickInGroup(['work', 'hi'], prio, null)).toEqual(['work']);
+    expect(pickInGroup(['work'], topics, 'cook')).toEqual(['work', 'cook']);
+    expect(pickInGroup(['work', 'cook'], topics, 'cook')).toEqual(['work']);
   });
 
   it('moves a tag within its group', () => {

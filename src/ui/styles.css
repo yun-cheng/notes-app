@@ -156,6 +156,12 @@ body:has(.composer:focus-within) .tabbar { display: none; }
 .tag-group .tag-picker { margin-top: 6px; }
 .tag-group .tag-picker__input { width: 100%; }
 .chip--grouped { font-weight: 600; border-color: color-mix(in srgb, var(--accent) 45%, var(--line)); }
+.group-chip { position: relative; display: inline-flex; }
+.chip--button { display: inline-flex; align-items: center; gap: 2px; font-family: inherit; cursor: pointer; }
+.chip--button:hover { border-color: var(--accent); }
+.group-chip .group-chip__menu { top: calc(100% + 4px); left: 0; right: auto; width: 180px; }
+.group-chip .group-chip__menu.style-menu--up { top: auto; bottom: calc(100% + 4px); }
+.group-chip__none { color: var(--muted) !important; }
 .chip--clash { border-color: var(--alert); color: var(--alert); }
 .quick-add { display: flex; gap: 6px; margin: 12px 0; padding: 3px 3px 3px 12px; background: var(--surface); border: 1px solid var(--line); border-radius: 10px; }
 .quick-add:focus-within { border-color: var(--accent); }

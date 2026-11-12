@@ -220,11 +220,14 @@ function useLines(card: NoteCard | TodoCard | DiaryCard) {
 
 function BubbleMeta({ card, at, due, fold }: { card: NoteCard | TodoCard | DiaryCard; at: number; due?: string | null; fold: Fold }) {
   const today = useToday();
+  const { repo, vaults, shared } = useCards();
+  // A grouped tag (Priority: High) can be switched right here.
+  const retag = permissions(card, vaults, shared).edit ? (tags: string[]) => void repo.update(card.id, { tags }) : undefined;
   const overdue = card.type === 'todo' && card.status === 'open' && !!due && due < today;
   return (
     <span className="bubble__meta">
       {due && <span className={`bubble__due${overdue ? ' is-alert' : ''}`}>Due {relativeDayInSentence(due, today)}</span>}
-      <TagChips tagIds={card.tags} />
+      <TagChips tagIds={card.tags} onChange={retag} />
       {(fold.long || fold.folded) && (
         <button type="button" className="bubble__fold" aria-expanded={!fold.folded} onClick={fold.toggle}>
           <Icon name={fold.folded ? 'down' : 'up'} size={14} />

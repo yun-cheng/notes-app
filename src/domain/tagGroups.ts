@@ -105,3 +105,15 @@ export function isGroupName(name: string, groups: TagGroup[]): boolean {
   const key = name.trim().toLowerCase();
   return groups.some((g) => g.title.trim().toLowerCase() === key);
 }
+
+/**
+ * An entry's tags after picking `tagId` from its group's menu: in a one-choice group it takes the place of the
+ * group's tag (or of both, after a clash); in any other it's added or, if there, taken off. `null` takes every tag
+ * of the group off.
+ */
+export function pickInGroup(tags: string[], group: TagGroup, tagId: string | null): string[] {
+  const inGroup = (t: string) => group.members.some((m) => m.id === t);
+  if (tagId === null) return tags.filter((t) => !inGroup(t));
+  if (group.choice === 'one') return [...tags.filter((t) => !inGroup(t)), tagId];
+  return tags.includes(tagId) ? tags.filter((t) => t !== tagId) : [...tags, tagId];
+}

@@ -1,9 +1,9 @@
-import { useEffect, useRef, useState } from 'react';
 import { linkUrls, photoIds } from '../domain/content';
 import { CARD_COLORS, isCardColor, type CardColor, type DiaryCard, type NoteCard, type PreviewStyle, type TodoCard } from '../domain/types';
 import { useCards } from '../state/CardsContext';
 import { LINK_STYLES, PHOTO_STYLES, useDisplayPrefs } from './displayPrefs';
 import { Icon } from './Icon';
+import { usePopover } from './usePopover';
 
 type Entry = NoteCard | TodoCard | DiaryCard;
 
@@ -64,28 +64,7 @@ export function StyleOptions({ card }: { card: Entry }) {
 
 /** The style menu's button beside a bubble, shown on hover like the open button. Phones get the same choices in the entry's sheet. */
 export function StyleMenu({ card }: { card: Entry }) {
-  const [open, setOpen] = useState<'down' | 'up' | null>(null);
-  const root = useRef<HTMLDivElement>(null);
-
-  useEffect(() => {
-    if (!open) return;
-    const away = (e: PointerEvent) => {
-      if (!(e.target instanceof Node) || !root.current?.contains(e.target)) setOpen(null);
-    };
-    const onKey = (e: KeyboardEvent) => {
-      if (e.key !== 'Escape') return;
-      // Before the page's own Escape (stop picking, close a sheet), so this closes only the menu.
-      e.preventDefault();
-      e.stopImmediatePropagation();
-      setOpen(null);
-    };
-    document.addEventListener('pointerdown', away, true);
-    window.addEventListener('keydown', onKey, true);
-    return () => {
-      document.removeEventListener('pointerdown', away, true);
-      window.removeEventListener('keydown', onKey, true);
-    };
-  }, [open]);
+  const { open, root, toggle } = usePopover();
 
   return (
     // Clicks in the menu stay out of the bubble's own click handling (picking).
@@ -97,8 +76,7 @@ export function StyleMenu({ card }: { card: Entry }) {
         aria-expanded={!!open}
         aria-label="Style"
         title="Color and previews"
-        // In the lower part of the screen, up, clear of the writing box.
-        onClick={(e) => setOpen(open ? null : e.currentTarget.getBoundingClientRect().bottom > window.innerHeight * 0.55 ? 'up' : 'down')}
+        onClick={toggle}
       >
         <Icon name="more" size={16} />
       </button>

@@ -18,7 +18,7 @@ public protocol SyncAPI: Sendable {
 
 /// The notes server over HTTPS, signed in with a bearer token.
 public struct ServerAPI: SyncAPI {
-    public static let production = URL(string: "https://notes-app-afc.pages.dev")!
+    public static let production = URL(string: "https://notes-app.yuncheng-dev.workers.dev")!
 
     public let site: URL
     public let token: String?

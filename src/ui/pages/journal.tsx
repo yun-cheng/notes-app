@@ -18,7 +18,7 @@ import { ShareDialog } from '../ShareDialog';
 import { JournalBox } from '../JournalBox';
 import { Attachments } from '../Attachments';
 import { BatchBar } from '../BatchBar';
-import { SelectionProvider, useSelectable, useSelectionState } from '../selection';
+import { SelectionProvider, useBoxSelect, useSelectable, useSelection, useSelectionState } from '../selection';
 
 const time = (at: number) => new Date(at).toLocaleTimeString(undefined, { hour: 'numeric', minute: '2-digit' });
 
@@ -39,70 +39,61 @@ export function JournalPage() {
   const selection = useSelectionState(items.flatMap((i) => (i.kind === 'card' ? [i.card.id] : [])));
   const vaultLocked = !!vault && locked.has(vault.id);
 
-  if (selection.selecting) {
-    return (
-      <SelectionProvider value={selection}>
-        <Page
-          title={selection.ids.length ? `${selection.ids.length} selected` : 'Select entries'}
-          actions={
-            <>
-              <button type="button" className="btn btn--quiet" onClick={selection.selectAll}>
-                Select all
-              </button>
-              <button type="button" className="btn" onClick={selection.clear}>
-                Done
-              </button>
-            </>
-          }
-        >
-          <Stream key={`stream:${journalPath(filter)}`} items={items} sort={filter.sort ?? 'written'} empty="Nothing here to select." />
-          <BatchBar selection={selection} />
-          <Outlet />
-        </Page>
-      </SelectionProvider>
-    );
-  }
+  const selecting = selection.selecting;
+
+  // One tree whether picking or not, so the stream stays put (and its photos loaded) when picking starts.
+  const pickingActions = (
+    <>
+      <button type="button" className="btn btn--quiet" onClick={selection.selectAll}>
+        Select all
+      </button>
+      <button type="button" className="btn" onClick={selection.clear}>
+        Done
+      </button>
+    </>
+  );
+  const actions = (
+    <>
+      {!vaultLocked && items.length > 0 && (
+        <button type="button" className="btn btn--quiet" onClick={selection.start} title="Pick entries to tag, finish, move or trash together">
+          Select
+        </button>
+      )}
+      {tag && (
+        <Link className="icon-btn" to={`/card/${tag.id}`} aria-label={`About the ${tag.title} tag`} title="Rename, describe or pin this tag">
+          <Icon name="tag" />
+        </Link>
+      )}
+      {filter.when && isDateKey(filter.when) && (
+        <Link className="btn btn--quiet" to={`/day/${filter.when}`}>
+          Diary for this day
+        </Link>
+      )}
+      {filtered && (
+        <Link className="btn btn--quiet" to={journalPath({ sort: filter.sort })}>
+          Show all
+        </Link>
+      )}
+      <button
+        type="button"
+        className={`icon-btn only-mobile${filtered || filter.sort ? ' is-active' : ''}`}
+        aria-label="Filter and sort"
+        title="Filter and sort"
+        onClick={() => setFiltering(true)}
+      >
+        <Icon name="filter" />
+      </button>
+      <NavLink className="icon-btn only-mobile" to="/settings" aria-label="Backup and settings">
+        <Icon name="settings" />
+      </NavLink>
+    </>
+  );
 
   return (
     <SelectionProvider value={selection}>
       <Page
-        title={title}
-        actions={
-          <>
-            {!vaultLocked && items.length > 0 && (
-              <button type="button" className="btn btn--quiet" onClick={selection.start} title="Pick entries to tag, finish, move or trash together">
-                Select
-              </button>
-            )}
-            {tag && (
-              <Link className="icon-btn" to={`/card/${tag.id}`} aria-label={`About the ${tag.title} tag`} title="Rename, describe or pin this tag">
-                <Icon name="tag" />
-              </Link>
-            )}
-            {filter.when && isDateKey(filter.when) && (
-              <Link className="btn btn--quiet" to={`/day/${filter.when}`}>
-                Diary for this day
-              </Link>
-            )}
-            {filtered && (
-              <Link className="btn btn--quiet" to={journalPath({ sort: filter.sort })}>
-                Show all
-              </Link>
-            )}
-            <button
-              type="button"
-              className={`icon-btn only-mobile${filtered || filter.sort ? ' is-active' : ''}`}
-              aria-label="Filter and sort"
-              title="Filter and sort"
-              onClick={() => setFiltering(true)}
-            >
-              <Icon name="filter" />
-            </button>
-            <NavLink className="icon-btn only-mobile" to="/settings" aria-label="Backup and settings">
-              <Icon name="settings" />
-            </NavLink>
-          </>
-        }
+        title={selecting ? (selection.ids.length ? `${selection.ids.length} selected` : 'Select entries') : title}
+        actions={selecting ? pickingActions : actions}
       >
         {vault && vaultLocked ? (
           <div className="stream">
@@ -116,7 +107,11 @@ export function JournalPage() {
               sort={filter.sort ?? 'written'}
               empty={filtered ? 'Nothing here yet. Write below and it lands here.' : 'Nothing written yet. Write a note below, or start with [] for a todo.'}
             />
-            <JournalBox key={`composer:${journalPath({ ...filter, sort: undefined })}`} filter={filter} />
+            {selecting && <BatchBar selection={selection} />}
+            {/* Hidden, not removed, while picking, so a half-written entry survives. */}
+            <div style={{ display: selecting ? 'none' : 'contents' }}>
+              <JournalBox key={`composer:${journalPath({ ...filter, sort: undefined })}`} filter={filter} />
+            </div>
           </>
         )}
         {filtering && (
@@ -155,9 +150,13 @@ function Stream({ items, empty, sort }: { items: StreamItem[]; empty: string; so
     if (sort !== 'due') return relativeDay(day, today);
     return day ? `Due ${relativeDayInSentence(day, today)}` : 'No due date';
   };
+  const selection = useSelection();
+  const root = useRef<HTMLDivElement>(null);
+  const box = useBoxSelect(root, selection);
+
   let lastDay: string | null = null;
   return (
-    <div className={`stream${chat ? '' : ' stream--top'}`}>
+    <div ref={root} className={`stream${chat ? '' : ' stream--top'}${selection?.selecting ? ' stream--selecting' : ''}`}>
       {items.length === 0 && <Empty>{empty}</Empty>}
       {items.map((item) => {
         const separator = item.day !== lastDay;
@@ -165,12 +164,38 @@ function Stream({ items, empty, sort }: { items: StreamItem[]; empty: string; so
         return (
           <div key={item.kind === 'card' ? item.card.id : `locked-${item.date}`} className="stream__item">
             {separator && <p className="stream__day">{label(item.day)}</p>}
-            {item.kind === 'locked-diary' ? <LockedDiaryBubble date={item.date} /> : <EntryBubble card={item.card} at={item.at} />}
-            {item.kind === 'card' && <Attachments card={item.card} />}
+            {item.kind === 'locked-diary' ? (
+              <LockedDiaryBubble date={item.date} />
+            ) : (
+              <div className="stream__entry" data-entry-id={item.card.id}>
+                {selection && <PickCircle id={item.card.id} />}
+                <EntryBubble card={item.card} at={item.at} />
+                <Attachments card={item.card} />
+              </div>
+            )}
           </div>
         );
       })}
+      {box}
     </div>
+  );
+}
+
+/** The circle beside an entry that picks it: shown on hover, and always while picking. */
+function PickCircle({ id }: { id: string }) {
+  const selection = useSelection()!;
+  const on = selection.has(id);
+  return (
+    <button
+      type="button"
+      className={`pick${on ? ' is-on' : ''}`}
+      aria-pressed={on}
+      aria-label={on ? 'Unselect' : 'Select'}
+      title="Select (Shift-click for a range)"
+      onClick={(e) => selection.toggle(id, e.shiftKey)}
+    >
+      {on && <Icon name="check" size={14} />}
+    </button>
   );
 }
 

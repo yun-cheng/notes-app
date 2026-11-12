@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { addDays, addMonths, isDateKey, monthGrid, parseDateKey, relativeDay, toDateKey } from './dates';
+import { addDays, addMonths, isDateKey, monthGrid, parseDateKey, relativeDay, relativeDayInSentence, toDateKey } from './dates';
 
 describe('dates', () => {
   it('round-trips local date keys', () => {
@@ -30,5 +30,9 @@ describe('dates', () => {
     expect(relativeDay('2026-11-10', '2026-11-10')).toBe('Today');
     expect(relativeDay('2026-11-11', '2026-11-10')).toBe('Tomorrow');
     expect(relativeDay('2026-11-09', '2026-11-10')).toBe('Yesterday');
+  });
+  it('lowercases only the nearby day names inside a sentence', () => {
+    expect(relativeDayInSentence('2026-11-10', '2026-11-10')).toBe('today');
+    expect(relativeDayInSentence('2026-11-20', '2026-11-10', 'en-US')).toBe('Fri, Nov 20');
   });
 });

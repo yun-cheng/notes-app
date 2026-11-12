@@ -58,3 +58,9 @@ export function relativeDay(key: string, today: string, locale?: string): string
   if (key.slice(0, 4) !== today.slice(0, 4)) opts.year = 'numeric';
   return parseDateKey(key).toLocaleDateString(locale, opts);
 }
+
+/** `relativeDay` for the middle of a sentence: "due today", but "due Tue, Nov 10". */
+export function relativeDayInSentence(key: string, today: string, locale?: string): string {
+  const day = relativeDay(key, today, locale);
+  return /^(Today|Tomorrow|Yesterday)$/.test(day) ? day.toLowerCase() : day;
+}

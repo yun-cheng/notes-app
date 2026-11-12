@@ -3,11 +3,9 @@ import { Link, NavLink, Outlet, useLocation, useNavigate, useParams } from 'reac
 import { permissions } from '../../domain/access';
 import { linkTitle } from '../../domain/cardIndex';
 import { displayTitle, photoIds, previewLines } from '../../domain/content';
-import { isDateKey, relativeDay, toDateKey } from '../../domain/dates';
-import { appendToDoc, parseEntry } from '../../domain/entry';
-import { diaryVault } from '../../domain/locks';
+import { isDateKey, relativeDay, relativeDayInSentence, toDateKey } from '../../domain/dates';
 import { effectiveType, isFiltered, streamItems, type StreamFilter, type StreamItem, type StreamSort } from '../../domain/stream';
-import { EMPTY_DOC, type DiaryCard, type NoteCard, type TodoCard } from '../../domain/types';
+import type { DiaryCard, NoteCard, TodoCard } from '../../domain/types';
 import { useCards, useToday } from '../../state/CardsContext';
 import { Comments } from '../Comments';
 import { Backlinks, Empty, Page, TagChips, TagPicker, TitleField, useDeleteCard, VaultField } from '../components';
@@ -17,6 +15,7 @@ import { Icon } from '../Icon';
 import { LockPanel } from '../LockPanel';
 import { cardPath, entryPath, journalPath, sheetState, type SheetState } from '../paths';
 import { ShareDialog } from '../ShareDialog';
+import { useSaveEntry } from '../useSaveEntry';
 
 const time = (at: number) => new Date(at).toLocaleTimeString(undefined, { hour: 'numeric', minute: '2-digit' });
 
@@ -117,9 +116,7 @@ function Stream({ items, empty, sort }: { items: StreamItem[]; empty: string; so
 
   const label = (day: string) => {
     if (sort !== 'due') return relativeDay(day, today);
-    if (!day) return 'No due date';
-    const when = relativeDay(day, today);
-    return `Due ${/^(Today|Tomorrow|Yesterday)$/.test(when) ? when.toLowerCase() : when}`;
+    return day ? `Due ${relativeDayInSentence(day, today)}` : 'No due date';
   };
   let lastDay: string | null = null;
   return (
@@ -162,7 +159,7 @@ function BubbleMeta({ card, at, due }: { card: NoteCard | TodoCard | DiaryCard; 
           {photos > 1 && photos}
         </span>
       )}
-      {due && <span className={`bubble__due${overdue ? ' is-alert' : ''}`}>Due {relativeDay(due, today)}</span>}
+      {due && <span className={`bubble__due${overdue ? ' is-alert' : ''}`}>Due {relativeDayInSentence(due, today)}</span>}
       <TagChips tagIds={card.tags} />
       <time dateTime={new Date(at).toISOString()}>{time(at)}</time>
     </span>
@@ -233,47 +230,6 @@ function LockedDiaryBubble({ date }: { date: string }) {
 
 /** Enter saves on a computer. On a phone, Return makes a new line and the button saves. */
 const enterSaves = () => !window.matchMedia('(pointer: coarse)').matches;
-
-/** Saved, or not, with the vault to unlock first when the diary is locked. Unsaved text stays in the box. */
-type SaveResult = { saved: true } | { saved: false; unlock?: string };
-
-/** Saves typed text where its markers send it. */
-function useSaveEntry() {
-  const { repo, index, vaults, locked } = useCards();
-  const today = useToday();
-
-  return async (text: string, opts: { todo: boolean; diary?: boolean; due?: string; tagId?: string; vaultId?: string }): Promise<SaveResult> => {
-    const entry = parseEntry(opts.todo ? `[] ${text.trimStart()}` : text, today);
-    if (!entry) return { saved: false };
-    if (opts.diary && entry.kind === 'note') entry.kind = 'diary';
-    if (entry.kind === 'todo' && !entry.due && opts.due) entry.due = opts.due;
-
-    const vault = diaryVault(vaults);
-    if (entry.kind === 'diary') {
-      const lockedIn = index.lockedDiaries.get(today) ?? (vault && locked.has(vault.id) ? vault.id : undefined);
-      if (lockedIn) return { saved: false, unlock: lockedIn };
-    }
-
-    const tagIds = opts.tagId ? [opts.tagId] : [];
-    for (const name of entry.tags) {
-      const found = index.tags.find((t) => t.title.toLowerCase() === name.toLowerCase());
-      const id = found?.id ?? repo.newId();
-      if (!found) void repo.createTag({ id, title: name });
-      if (!tagIds.includes(id)) tagIds.push(id);
-    }
-
-    if (entry.kind === 'diary') {
-      const existing = index.diaryByDate.get(today);
-      const tags = [...new Set([...(existing?.tags ?? []), ...tagIds])];
-      await repo.saveDiary(today, { content: appendToDoc(existing?.content ?? EMPTY_DOC, entry.content), tags }, existing?.id, vault?.id);
-    } else if (entry.kind === 'todo') {
-      await repo.createTodo({ title: entry.title, content: entry.content, tags: tagIds, due: entry.due, vaultId: opts.vaultId });
-    } else {
-      await repo.createNote({ content: entry.content, tags: tagIds, vaultId: opts.vaultId });
-    }
-    return { saved: true };
-  };
-}
 
 /**
  * Writes into whatever the journal is narrowed to: its tag and vault, a todo when it shows todos (due today when

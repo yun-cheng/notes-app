@@ -473,16 +473,19 @@ body:has(.composer:focus-within) .composer { bottom: 8px; }
 .note-sheet .tag-picker { margin: 0; }
 .note-sheet .section { margin-top: 10px; }
 .note-sheet__tags, .card-tags { margin: 2px 0 6px; }
-.note-sheet__more { display: flex; flex-direction: column; gap: 4px; padding: 10px 0 2px; border-top: 1px solid var(--line); }
-.note-sheet__more .button-row { margin-top: 0; }
-.note-sheet__more .field-row { margin-top: 4px; }
 .note-sheet__bar {
   position: sticky; bottom: calc(-18px - env(safe-area-inset-bottom)); display: flex; align-items: center; gap: 2px;
   margin: 4px -16px calc(-18px - env(safe-area-inset-bottom)); padding: 6px 12px calc(6px + env(safe-area-inset-bottom));
   background: var(--surface); border-top: 1px solid var(--line);
 }
 .note-sheet__spacer { flex: 1; }
-.note-sheet__when { color: var(--muted); font-size: 12px; margin-right: 8px; }
+.note-sheet__when { color: var(--muted); font-size: 12px; margin-right: 8px; padding: 6px 4px; border-radius: 6px; text-decoration: underline; text-decoration-color: transparent; text-underline-offset: 2px; }
+.note-sheet__when:hover { color: var(--text); text-decoration-color: currentColor; }
+.note-sheet__bar { flex-wrap: wrap; row-gap: 4px; }
+.note-sheet__bar .icon-btn { width: 34px; }
+.note-sheet__bar > .btn:last-child { margin-left: auto; }
+.vault-select { max-width: 9em; min-height: 32px; margin-left: 4px; padding: 0 6px; border: 1px solid var(--line); border-radius: 8px; background: var(--surface); color: var(--muted); font-size: 13px; }
+
 
 /* Journal filters: in the sidebar on a computer, in a sheet on a phone */
 .filters { display: flex; flex-direction: column; gap: 2px; }
@@ -611,8 +614,6 @@ body:has(.batch) .toast-slot { bottom: calc(var(--tabbar) + env(safe-area-inset-
 .swatch { width: 22px; height: 22px; padding: 0; border: 1px solid color-mix(in srgb, var(--tint, var(--line)) 70%, var(--text)); border-radius: 50%; background: var(--tint); cursor: pointer; }
 .swatch[aria-checked="true"] { outline: 2px solid var(--text); outline-offset: 2px; }
 .swatch--none { background: linear-gradient(135deg, var(--surface) 45%, var(--alert) 45%, var(--alert) 55%, var(--surface) 55%); border-color: var(--line); }
-.note-sheet__style { display: flex; flex-direction: column; gap: 6px; margin-top: 10px; max-width: 320px; }
-.note-sheet__style .style-menu__group > button { min-height: 36px; }
 .tint--red { --tint: #d4574a; }
 .tint--orange { --tint: #de8a3a; }
 .tint--yellow { --tint: #d6b236; }

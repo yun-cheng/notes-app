@@ -18,7 +18,7 @@ import { cardPath, entryPath, journalPath, sheetState, type SheetState } from '.
 import { ShareDialog } from '../ShareDialog';
 import { JournalBox } from '../JournalBox';
 import { Attachments } from '../Attachments';
-import { colorClass, StyleMenu, StyleOptions } from '../EntryStyle';
+import { colorClass, StyleMenu } from '../EntryStyle';
 import { BatchBar } from '../BatchBar';
 import { SelectionProvider, useBoxSelect, useSelectable, useSelection, useSelectionState } from '../selection';
 import { useEntryShortcuts } from '../useEntryShortcuts';
@@ -466,7 +466,6 @@ function EntryDetail({ card, fresh, onClose }: { card: NoteCard | TodoCard; fres
   const remove = useDeleteCard();
   const [tools, setTools] = useState(false);
   const [tagging, setTagging] = useState(false);
-  const [more, setMore] = useState(false);
   const [titled, setTitled] = useState(false);
   const [sharing, setSharing] = useState(false);
   const isTodo = card.type === 'todo';
@@ -524,39 +523,6 @@ function EntryDetail({ card, fresh, onClose }: { card: NoteCard | TodoCard; fres
           </div>
         )
       )}
-      {more && (
-        <div className="note-sheet__more">
-          <div className="button-row">
-            {can.edit && !showTitle && (
-              <button type="button" className="btn" onClick={() => (setTitled(true), setMore(false))}>
-                Add title
-              </button>
-            )}
-            {can.share && (
-              <button type="button" className="btn" onClick={() => setSharing(true)}>
-                <Icon name="share" size={18} />
-                &nbsp;Share
-              </button>
-            )}
-            <Link className="btn" to={`/card/${card.id}/history`}>
-              <Icon name="history" size={18} />
-              &nbsp;History
-            </Link>
-            {can.manage && (
-              <button type="button" className="btn" onClick={() => (remove(card, null), onClose())}>
-                <Icon name="trash" size={18} />
-                &nbsp;Move to Trash
-              </button>
-            )}
-          </div>
-          <VaultField card={card} />
-          {can.edit && (
-            <div className="note-sheet__style">
-              <StyleOptions card={card} />
-            </div>
-          )}
-        </div>
-      )}
       <Comments card={card} />
       <Backlinks cardId={card.id} />
       <div className="note-sheet__bar">
@@ -584,18 +550,27 @@ function EntryDetail({ card, fresh, onClose }: { card: NoteCard | TodoCard; fres
             <Icon name="tag" />
           </button>
         )}
-        <button
-          type="button"
-          className={`icon-btn${more ? ' is-active' : ''}`}
-          aria-expanded={more}
-          aria-label="More"
-          title="More"
-          onClick={() => setMore(!more)}
-        >
-          <Icon name="more" />
-        </button>
+        {can.edit && !showTitle && (
+          <button type="button" className="icon-btn icon-btn--text" aria-label="Add title" title="Add title" onClick={() => setTitled(true)}>
+            T
+          </button>
+        )}
+        {can.edit && <StyleMenu card={card} inBar />}
+        {can.share && (
+          <button type="button" className="icon-btn" aria-label="Share" title="Share" onClick={() => setSharing(true)}>
+            <Icon name="share" />
+          </button>
+        )}
+        {can.manage && (
+          <button type="button" className="icon-btn" aria-label="Move to Trash" title="Move to Trash" onClick={() => (remove(card, null), onClose())}>
+            <Icon name="trash" />
+          </button>
+        )}
+        <VaultField card={card} compact />
         <span className="note-sheet__spacer" />
-        <span className="note-sheet__when">{edited(card)}</span>
+        <Link className="note-sheet__when" to={`/card/${card.id}/history`} title="See every version">
+          {edited(card)}
+        </Link>
         <button type="button" className="btn" onClick={onClose}>
           Done
         </button>

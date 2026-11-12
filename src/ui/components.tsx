@@ -330,8 +330,8 @@ export function TagPicker({ tagIds, onChange }: { tagIds: string[]; onChange: (t
   );
 }
 
-/** Moves a card between the vaults that are open. Hidden when there's nowhere to move it. */
-export function VaultField({ card }: { card: Card }) {
+/** Moves a card between the vaults that are open. Hidden when there's nowhere to move it. `compact` is the select alone, for a toolbar. */
+export function VaultField({ card, compact = false }: { card: Card; compact?: boolean }) {
   const { repo, vaults, locked, shared } = useCards();
   const toast = useToast();
   // Only into vaults this account can write to.
@@ -343,6 +343,16 @@ export function VaultField({ card }: { card: Card }) {
     const name = vaults.find((v) => v.id === vaultId)?.name ?? 'another vault';
     toast(`Moved to ${name}`, { action: { label: 'Undo', run: () => void repo.moveToVault(card.id, from) } });
   };
+  const select = (
+    <select className={compact ? 'vault-select' : undefined} value={card.vaultId} aria-label={compact ? 'Vault' : undefined} title={compact ? 'Move to another vault' : undefined} onChange={(e) => move(e.target.value)}>
+      {options.map((v) => (
+        <option key={v.id} value={v.id}>
+          {v.name}
+        </option>
+      ))}
+    </select>
+  );
+  if (compact) return select;
   return (
     <div className="field-row">
       <label>

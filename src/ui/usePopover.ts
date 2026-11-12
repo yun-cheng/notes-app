@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState, type MouseEvent } from 'react';
+import { useEffect, useRef, useState, type CSSProperties, type MouseEvent } from 'react';
 
 /**
  * A small menu that opens from a button: below it, or above it in the lower part of the screen so it clears the
@@ -7,6 +7,8 @@ import { useEffect, useRef, useState, type MouseEvent } from 'react';
  */
 export function usePopover<T extends HTMLElement = HTMLDivElement>() {
   const [open, setOpen] = useState<'down' | 'up' | null>(null);
+  // Where the button was when it opened, for a menu that has to sit outside a scrolling box (`fixedStyle`).
+  const [anchor, setAnchor] = useState<DOMRect | null>(null);
   const root = useRef<T>(null);
 
   useEffect(() => {
@@ -28,6 +30,19 @@ export function usePopover<T extends HTMLElement = HTMLDivElement>() {
     };
   }, [open]);
 
-  const toggle = (e: MouseEvent<HTMLElement>) => setOpen(open ? null : e.currentTarget.getBoundingClientRect().bottom > window.innerHeight * 0.55 ? 'up' : 'down');
-  return { open, root, toggle, close: () => setOpen(null) };
+  const toggle = (e: MouseEvent<HTMLElement>) => {
+    const rect = e.currentTarget.getBoundingClientRect();
+    setAnchor(rect);
+    setOpen(open ? null : rect.bottom > window.innerHeight * 0.55 ? 'up' : 'down');
+  };
+  /** A fixed position beside the button, for a menu inside a box that would clip it, like a sheet that scrolls. */
+  const fixedStyle = (width: number): CSSProperties | undefined =>
+    anchor
+      ? {
+          position: 'fixed',
+          left: Math.max(8, Math.min(anchor.left, window.innerWidth - width - 8)),
+          ...(open === 'up' ? { top: 'auto', bottom: window.innerHeight - anchor.top + 6 } : { top: anchor.bottom + 6, bottom: 'auto' }),
+        }
+      : undefined;
+  return { open, root, toggle, fixedStyle, close: () => setOpen(null) };
 }

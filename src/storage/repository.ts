@@ -162,19 +162,20 @@ export class CardRepository {
     );
   }
 
-  createTodo(init: { title: string; due?: string | null; content?: JSONNode; tags?: string[]; vaultId?: string }): Promise<Card> {
-    return this.enqueue(async () =>
-      this.write({
-        ...(await this.newEnvelope(this.newId(), init.vaultId)),
+  createTodo(init: { title: string; due?: string | null; content?: JSONNode; tags?: string[]; vaultId?: string; done?: boolean }): Promise<Card> {
+    return this.enqueue(async () => {
+      const envelope = await this.newEnvelope(this.newId(), init.vaultId);
+      return this.write({
+        ...envelope,
         type: 'todo',
         title: init.title,
         content: init.content ?? EMPTY_DOC,
         tags: init.tags ?? [],
-        status: 'open',
+        status: init.done ? 'done' : 'open',
         due: init.due ?? null,
-        completedAt: null,
-      }),
-    );
+        completedAt: init.done ? envelope.createdAt : null,
+      });
+    });
   }
 
   createTag(init: { title: string; id?: string }): Promise<Card> {

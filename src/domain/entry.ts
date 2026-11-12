@@ -1,5 +1,5 @@
 import { addDays, isDateKey, parseDateKey } from './dates';
-import { textToDoc } from './content';
+import { inlineText, photoIds, textToDoc } from './content';
 import type { JSONNode } from './types';
 
 /**
@@ -16,9 +16,13 @@ export interface Entry {
   tags: string[];
   /** A todo's due date, or null. */
   due: string | null;
+  /** A todo already ticked, typed as `[x] ` or a ticked checkbox. */
+  done?: boolean;
 }
 
-const TODO_MARKER = /^(?:\[ ?\]|TODO)\s+/;
+/** `[] `, `[ ] `, `[x] ` or `TODO ` at the start of a line. A space after the brackets is optional. */
+const TODO_MARKER = /^(?:\[[ xX]?\]\s*|TODO\s+)/;
+const DONE_MARKER = /^\[[xX]\]/;
 const TAG = /(^|\s)#([\p{L}\p{N}_-]+)/gu;
 const DUE = /(^|\s)@([\p{L}\p{N}-]+)/gu;
 const WEEKDAYS = ['sunday', 'monday', 'tuesday', 'wednesday', 'thursday', 'friday', 'saturday'];
@@ -56,9 +60,11 @@ export function parseEntry(text: string, today: string): Entry | null {
   let due: string | null = null;
   const tags: string[] = [];
 
+  let done = false;
   const first = lines.findIndex((l) => l.trim());
   if (first >= 0 && TODO_MARKER.test(lines[first].trimStart())) {
     todo = true;
+    done = DONE_MARKER.test(lines[first].trimStart());
     lines[first] = lines[first].trimStart().replace(TODO_MARKER, '');
   }
 
@@ -84,7 +90,7 @@ export function parseEntry(text: string, today: string): Entry | null {
   if (!todo) return { kind: diary ? 'diary' : 'note', title: '', content: textToDoc(body), tags, due: null };
 
   const [head, ...rest] = body.split('\n');
-  return { kind: 'todo', title: head.trim(), content: textToDoc(rest.join('\n').trim()), tags, due };
+  return { kind: 'todo', title: head.trim(), content: textToDoc(rest.join('\n').trim()), tags, due, ...(done ? { done } : {}) };
 }
 
 const TAGS_ONLY = /^\s*(#[\p{L}\p{N}_-]+\s*)+$/u;
@@ -115,6 +121,133 @@ export function parseEntries(text: string, today: string, opts: { allTodos?: boo
   // One entry keeps its tag lines in place, so a lone `#tag` line still reads as before.
   const texts = chunks.length > 1 ? chunks.map((c) => `${c.join('\n')}${tags ? `\n${tags}` : ''}`) : [`${chunks[0]?.join('\n') ?? ''}${tags ? `\n${tags}` : ''}`];
   return texts.map((t) => parseEntry(t, today)).filter((e): e is Entry => !!e);
+}
+
+/** Removes matching words from the text in some blocks. A paragraph left empty by that goes away. */
+function stripBlocks(blocks: JSONNode[], pattern: RegExp, take: (word: string) => boolean): JSONNode[] {
+  const inText = (node: JSONNode): { node: JSONNode; touched: boolean } => {
+    if (node.type === 'text') {
+      let touched = false;
+      const text = (node.text ?? '').replace(pattern, (match, space: string, word: string) => {
+        if (!take(word)) return match;
+        touched = true;
+        return space;
+      });
+      return { node: touched ? { ...node, text: text.replace(/[ \t]{2,}/g, ' ') } : node, touched };
+    }
+    if (!node.content) return { node, touched: false };
+    let touched = false;
+    const content = node.content.flatMap((child) => {
+      const r = inText(child);
+      touched ||= r.touched;
+      return r.node.type === 'text' && !r.node.text ? [] : [r.node];
+    });
+    return { node: { ...node, content }, touched };
+  };
+  return blocks.flatMap((block) => {
+    const { node, touched } = inText(block);
+    if (!touched || node.type !== 'paragraph') return [node];
+    // Trim the space a removed word leaves at either end.
+    const content = [...(node.content ?? [])];
+    const [head, last] = [content[0], content[content.length - 1]];
+    if (head?.type === 'text') content[0] = { ...head, text: head.text!.trimStart() };
+    if (last?.type === 'text') content[content.length - 1] = { ...content[content.length - 1], text: content[content.length - 1].text!.trimEnd() };
+    const kept = content.filter((n) => n.type !== 'text' || n.text);
+    return kept.length ? [{ ...node, content: kept }] : [];
+  });
+}
+
+const isEmptyBlock = (b: JSONNode) => b.type === 'paragraph' && !inlineText(b).trim() && !(b.content ?? []).some((n) => n.type !== 'text');
+const hasSubstance = (blocks: JSONNode[]) => blocks.some((b) => inlineText(b).trim() || photoIds(b).length || b.type === 'horizontalRule');
+
+/** Task items in a list, nested ones flattened after their parent, each without its nested lists. */
+function taskItems(list: JSONNode): JSONNode[] {
+  return (list.content ?? []).flatMap((item) => {
+    const own = (item.content ?? []).filter((c) => c.type !== 'taskList');
+    const nested = (item.content ?? []).filter((c) => c.type === 'taskList').flatMap(taskItems);
+    return [{ ...item, content: own }, ...nested];
+  });
+}
+
+/**
+ * Entries from the journal box's rich text. Each checkbox item is a todo, and other blocks between them make one
+ * note; a paragraph starting with `[] ` (pasted, say) is a todo too. Markers work as in `parseEntry`, and a last
+ * paragraph of only tags applies to every entry. Checkbox lists never end up inside a note.
+ */
+export function entriesFromDoc(doc: JSONNode, today: string): Entry[] {
+  const blocks = [...(doc.content ?? [])];
+  const shared: string[] = [];
+  while (blocks.length) {
+    const last = blocks[blocks.length - 1];
+    if (isEmptyBlock(last)) blocks.pop();
+    else if (last.type === 'paragraph' && TAGS_ONLY.test(inlineText(last))) {
+      blocks.pop();
+      shared.unshift(inlineText(last).trim());
+    } else break;
+  }
+
+  type Chunk = { todo: boolean; done: boolean; blocks: JSONNode[] };
+  const chunks: Chunk[] = [];
+  for (const block of blocks) {
+    if (block.type === 'taskList') {
+      for (const item of taskItems(block)) chunks.push({ todo: true, done: item.attrs?.checked === true, blocks: item.content ?? [] });
+      continue;
+    }
+    const text = block.type === 'paragraph' ? inlineText(block).trimStart() : '';
+    if (TODO_MARKER.test(text)) {
+      const done = DONE_MARKER.test(text);
+      chunks.push({ todo: true, done, blocks: stripBlocks([block], /^(\s*)(\[[ xX]?\]\s*|TODO\s+)/g, () => true) });
+      continue;
+    }
+    const last = chunks[chunks.length - 1];
+    if (last && !last.todo) last.blocks.push(block);
+    else chunks.push({ todo: false, done: false, blocks: [block] });
+  }
+
+  const sharedTags = shared.join(' ').match(/#[\p{L}\p{N}_-]+/gu)?.map((t) => t.slice(1)) ?? [];
+  const entries: Entry[] = [];
+  for (const chunk of chunks) {
+    let { todo } = chunk;
+    let diary = false;
+    let due: string | null = null;
+    const tags: string[] = [];
+    const addTag = (name: string) => {
+      const lower = name.toLowerCase();
+      if (lower === 'todo') todo = true;
+      else if (lower === 'diary') diary = true;
+      else if (!tags.some((t) => t.toLowerCase() === lower)) tags.push(name);
+    };
+    let body = stripBlocks(chunk.blocks, TAG, (name) => (addTag(name), true));
+    sharedTags.forEach(addTag);
+    if (todo) {
+      body = stripBlocks(body, DUE, (word) => {
+        const date = parseDue(word, today);
+        if (date) due = date;
+        return !!date;
+      });
+    }
+    while (body.length && isEmptyBlock(body[0])) body.shift();
+    while (body.length && isEmptyBlock(body[body.length - 1])) body.pop();
+    if (!hasSubstance(body)) continue;
+
+    if (!todo) {
+      entries.push({ kind: diary ? 'diary' : 'note', title: '', content: { type: 'doc', content: body }, tags, due: null });
+      continue;
+    }
+    // A todo is named by its first line; anything after it, or a photo in it, is its details.
+    const [head, ...rest] = body;
+    const title = inlineText(head).trim();
+    const details = title ? rest : body;
+    entries.push({
+      kind: 'todo',
+      title: title || 'Photo',
+      content: details.length ? { type: 'doc', content: details } : textToDoc(''),
+      tags,
+      due,
+      ...(chunk.done ? { done: true } : {}),
+    });
+  }
+  return entries;
 }
 
 /** Adds typed text to the end of a diary entry, after what is already there. */

@@ -1,5 +1,6 @@
 import { describe, expect, it } from 'vitest';
-import { appendToDoc, parseDue, parseEntries, parseEntry } from './entry';
+import { appendToDoc, entriesFromDoc, parseDue, parseEntries, parseEntry } from './entry';
+import type { JSONNode } from './types';
 import { textToDoc } from './content';
 import { EMPTY_DOC } from './types';
 
@@ -34,12 +35,13 @@ describe('parseEntry', () => {
   });
 
   it('makes a todo from a [] or TODO marker, or #todo', () => {
-    for (const text of ['[] Buy milk', '[ ] Buy milk', 'TODO Buy milk', 'Buy milk #todo']) {
+    for (const text of ['[] Buy milk', '[ ] Buy milk', '[]Buy milk', 'TODO Buy milk', 'Buy milk #todo']) {
       const entry = parseEntry(text, TODAY);
       expect(entry?.kind).toBe('todo');
       expect(entry?.title).toBe('Buy milk');
     }
     expect(parseEntry('todo list for the week', TODAY)?.kind).toBe('note');
+    expect(parseEntry('[x] Bought milk', TODAY)).toMatchObject({ kind: 'todo', title: 'Bought milk', done: true });
   });
 
   it('puts a todo’s later lines in its details', () => {
@@ -86,6 +88,56 @@ describe('parseEntries', () => {
 
   it('makes every line a todo when asked', () => {
     expect(titles('milk\n\neggs\n[] bread', { allTodos: true })).toEqual(['todo:milk', 'todo:eggs', 'todo:bread']);
+  });
+});
+
+describe('entriesFromDoc', () => {
+  const t = (text: string, marks?: JSONNode['marks']): JSONNode => ({ type: 'text', text, ...(marks ? { marks } : {}) });
+  const para = (...content: JSONNode[]): JSONNode => (content.length ? { type: 'paragraph', content } : { type: 'paragraph' });
+  const item = (checked: boolean, ...content: JSONNode[]): JSONNode => ({ type: 'taskItem', attrs: { checked }, content });
+  const tasks = (...items: JSONNode[]): JSONNode => ({ type: 'taskList', content: items });
+  const docOf = (...content: JSONNode[]): JSONNode => ({ type: 'doc', content });
+
+  it('makes a todo of each checkbox, and one note of the blocks between them', () => {
+    const entries = entriesFromDoc(
+      docOf(
+        para(t('Party prep')),
+        para(t('at Sam’s')),
+        tasks(item(false, para(t('cake @fri'))), item(true, para(t('balloons')))),
+        para(t('#home')),
+      ),
+      TODAY,
+    );
+    expect(entries).toEqual([
+      { kind: 'note', title: '', content: docOf(para(t('Party prep')), para(t('at Sam’s'))), tags: ['home'], due: null },
+      { kind: 'todo', title: 'cake', content: EMPTY_DOC, tags: ['home'], due: '2026-11-13' },
+      { kind: 'todo', title: 'balloons', content: EMPTY_DOC, tags: ['home'], due: null, done: true },
+    ]);
+  });
+
+  it('keeps formatting and links, and takes tags out of the text', () => {
+    const link = [{ type: 'link', attrs: { href: 'https://a.example' } }];
+    const [entry] = entriesFromDoc(docOf(para(t('Read '), t('this', link), t(' later #reading'))), TODAY);
+    expect(entry).toMatchObject({ kind: 'note', tags: ['reading'], content: docOf(para(t('Read '), t('this', link), t(' later'))) });
+  });
+
+  it('puts a checkbox’s nested items after it, and its other lines in its details', () => {
+    const nested = item(false, para(t('Trip')), para(t('passport')), tasks(item(false, para(t('book hotel')))));
+    expect(entriesFromDoc(docOf(tasks(nested)), TODAY).map((e) => [e.title, e.content])).toEqual([
+      ['Trip', docOf(para(t('passport')))],
+      ['book hotel', EMPTY_DOC],
+    ]);
+  });
+
+  it('reads pasted [] lines and #diary, and skips what holds nothing', () => {
+    expect(entriesFromDoc(docOf(para(t('[x] posted the letter'))), TODAY)).toMatchObject([{ kind: 'todo', title: 'posted the letter', done: true }]);
+    expect(entriesFromDoc(docOf(para(t('Quiet evening #diary'))), TODAY)).toMatchObject([{ kind: 'diary', content: docOf(para(t('Quiet evening'))) }]);
+    expect(entriesFromDoc(docOf(para(), tasks(item(false, para())), para(t('#work'))), TODAY)).toEqual([]);
+  });
+
+  it('keeps a photo-only entry', () => {
+    const photo = { type: 'photo', attrs: { id: 'p-1' } };
+    expect(entriesFromDoc(docOf(photo), TODAY)).toMatchObject([{ kind: 'note', content: docOf(photo) }]);
   });
 });
 

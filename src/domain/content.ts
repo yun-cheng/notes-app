@@ -45,7 +45,8 @@ export function firstLine(content: JSONNode): string {
   return line.length > FIRST_LINE_MAX ? `${line.slice(0, FIRST_LINE_MAX - 1).trimEnd()}…` : line;
 }
 
-function inlineText(node: JSONNode, titleOf?: (id: string, label: string) => string): string {
+/** A block's text on one line, with card links as their titles. */
+export function inlineText(node: JSONNode, titleOf?: (id: string, label: string) => string): string {
   if (node.type === 'text') return node.text ?? '';
   if (node.type === 'hardBreak') return '\n';
   if (node.type === 'cardLink') {

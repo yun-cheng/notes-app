@@ -1,4 +1,4 @@
-import type { DiaryCard, JSONNode } from '../domain/types';
+import type { CardColor, DiaryCard, JSONNode, PreviewStyle } from '../domain/types';
 
 export interface CardPatch {
   title?: string;
@@ -7,6 +7,10 @@ export interface CardPatch {
   status?: 'open' | 'done';
   due?: string | null;
   pinned?: boolean;
+  /** Replaces the whole style; `{}` goes back to the device's setting. */
+  preview?: PreviewStyle;
+  /** null takes the color off. */
+  color?: CardColor | null;
 }
 export type DiaryPatch = Partial<Pick<DiaryCard, 'content' | 'tags'>>;
 

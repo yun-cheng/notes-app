@@ -506,6 +506,7 @@ body:has(.batch) .toast-slot { bottom: calc(var(--tabbar) + env(safe-area-inset-
 
 /* Photos and links under a bubble, and the photo viewer */
 .attachments { display: flex; flex-direction: column; align-items: flex-start; gap: 4px; max-width: min(85%, 560px); margin-top: 3px; }
+.attachments { width: fit-content; }
 .attachments__photos { display: flex; flex-wrap: wrap; gap: 4px; }
 .thumb { position: relative; width: 112px; height: 112px; padding: 0; overflow: hidden; border: 1px solid var(--line); border-radius: 12px; background: var(--sunken); cursor: zoom-in; }
 .thumb img { width: 100%; height: 100%; object-fit: cover; display: block; }
@@ -553,10 +554,41 @@ body:has(.batch) .toast-slot { bottom: calc(var(--tabbar) + env(safe-area-inset-
 /* A bubble's text can be selected; the open button beside it, Enter, or a tap on a phone opens it. */
 .bubble { position: relative; color: var(--text); }
 .bubble:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
-.bubble__open { position: absolute; top: 2px; left: calc(100% + 4px); display: grid; place-items: center; width: 28px; height: 28px; padding: 0; border: 1px solid var(--line); border-radius: 50%; background: var(--surface); color: var(--muted); opacity: 0; cursor: pointer; transition: opacity 0.12s; }
+.bubble__tools { position: absolute; top: 2px; left: calc(100% + 4px); z-index: 5; display: flex; gap: 4px; }
+.bubble__open { display: grid; place-items: center; width: 28px; height: 28px; padding: 0; border: 1px solid var(--line); border-radius: 50%; background: var(--surface); color: var(--muted); opacity: 0; cursor: pointer; transition: opacity 0.12s; }
 .bubble__open:hover { color: var(--text); border-color: var(--muted); }
 .stream__entry:hover .bubble__open, .bubble:focus-within .bubble__open { opacity: 1; }
-@media (pointer: coarse) { .bubble__open { display: none; } }
+.entry-style { position: relative; }
+.entry-style__btn { display: grid; place-items: center; width: 28px; height: 28px; padding: 0; border: 1px solid var(--line); border-radius: 50%; background: var(--surface); color: var(--muted); opacity: 0; cursor: pointer; transition: opacity 0.12s; }
+.entry-style__btn:hover { color: var(--text); border-color: var(--muted); }
+.stream__entry:hover .entry-style__btn, .bubble:focus-within .entry-style__btn, .entry-style.is-open .entry-style__btn { opacity: 1; }
+@media (pointer: coarse) { .bubble__tools { display: none; } }
+.style-menu { position: absolute; top: 32px; left: 0; z-index: 20; width: 232px; padding: 6px; display: flex; flex-direction: column; gap: 6px; background: var(--surface); border: 1px solid var(--line); border-radius: 12px; box-shadow: var(--shadow); cursor: default; }
+.style-menu--up { top: auto; bottom: 32px; }
+@media (max-width: 1100px) { .style-menu { left: auto; right: 0; } }
+.style-menu__group { display: flex; flex-direction: column; }
+.style-menu__group + .style-menu__group { border-top: 1px solid var(--line); padding-top: 6px; }
+.style-menu__label { padding: 2px 8px 4px; color: var(--muted); font-size: 12px; font-weight: 600; }
+.style-menu__group > button { position: relative; display: flex; align-items: center; gap: 6px; min-height: 32px; padding: 0 8px 0 28px; border: 0; border-radius: 8px; background: none; color: var(--text); font: inherit; font-size: 14px; text-align: left; cursor: pointer; }
+.style-menu__group > button:hover { background: var(--sunken); }
+.style-menu__group > button[aria-checked="true"]::before { content: ''; position: absolute; left: 10px; top: 50%; width: 8px; height: 8px; margin-top: -4px; border-radius: 50%; background: var(--accent); }
+.style-menu__hint { margin-left: auto; color: var(--muted); font-size: 12px; }
+.swatches { display: flex; flex-wrap: wrap; gap: 6px; padding: 2px 8px 4px; }
+.swatch { width: 22px; height: 22px; padding: 0; border: 1px solid color-mix(in srgb, var(--tint, var(--line)) 70%, var(--text)); border-radius: 50%; background: var(--tint); cursor: pointer; }
+.swatch[aria-checked="true"] { outline: 2px solid var(--text); outline-offset: 2px; }
+.swatch--none { background: linear-gradient(135deg, var(--surface) 45%, var(--alert) 45%, var(--alert) 55%, var(--surface) 55%); border-color: var(--line); }
+.note-sheet__style { display: flex; flex-direction: column; gap: 6px; margin-top: 10px; max-width: 320px; }
+.note-sheet__style .style-menu__group > button { min-height: 36px; }
+.tint--red { --tint: #d4574a; }
+.tint--orange { --tint: #de8a3a; }
+.tint--yellow { --tint: #d6b236; }
+.tint--green { --tint: #5a9e5f; }
+.tint--blue { --tint: #4f86c6; }
+.tint--purple { --tint: #8a6cc2; }
+.tint--pink { --tint: #cf6a9b; }
+.tint--gray { --tint: #8a8f8c; }
+.bubble.tint { background: color-mix(in srgb, var(--tint) 16%, var(--surface)); border-color: color-mix(in srgb, var(--tint) 50%, var(--line)); }
+.bubble.tint.is-selected { border-color: var(--accent); background: color-mix(in srgb, var(--tint) 16%, var(--accent-soft)); }
 /* A row beside its bubble is clickable too, to pick it. */
 .stream__entry { border-radius: 12px; }
 @media (pointer: fine) { .stream__entry:hover { background: color-mix(in srgb, var(--sunken) 55%, transparent); } }

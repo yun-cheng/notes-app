@@ -3,7 +3,7 @@ import { linkUrls, photoIds, siteName } from '../domain/content';
 import type { Card } from '../domain/types';
 import { useCards } from '../state/CardsContext';
 import { usePhotoUrl } from './editor/photo';
-import { useDisplayPrefs } from './displayPrefs';
+import { previewFor, useDisplayPrefs } from './displayPrefs';
 import { Icon } from './Icon';
 import { useLinkPreview } from './useLinkPreview';
 
@@ -11,12 +11,14 @@ const MAX_PHOTOS = 4;
 const MAX_LINKS = 3;
 
 /**
- * An entry's photos and web links, shown under its bubble, as the display settings say: photos large, as
- * thumbnails or as a count; links as cards, as one line each or not at all (they stay links in the text).
+ * An entry's photos and web links, shown under its bubble: photos large, as thumbnails or as a count; links as
+ * cards, as one line each or not at all (they stay links in the text). The entry's own style, from its style
+ * menu, wins over the device's setting.
  */
 export function Attachments({ card }: { card: Card }) {
   const { vaults } = useCards();
-  const prefs = useDisplayPrefs();
+  const device = useDisplayPrefs();
+  const prefs = previewFor(card.type === 'tag' ? undefined : card.preview, device);
   // Links in an encrypted vault, or in a card from a vault this account can't see, aren't sent anywhere to preview.
   const vault = vaults.find((v) => v.id === card.vaultId);
   const previews = !!vault && !vault.encryption;

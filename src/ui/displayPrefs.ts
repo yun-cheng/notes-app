@@ -1,9 +1,7 @@
 import { useSyncExternalStore } from 'react';
+import type { LinkStyle, PhotoStyle, PreviewStyle } from '../domain/types';
 
-/** How a web link in an entry is previewed under it: a card with the page's title, description and image, one line, or not at all. */
-export type LinkStyle = 'card' | 'compact' | 'off';
-/** How an entry's photos show under it: large, as small thumbnails, or as a count that opens them. */
-export type PhotoStyle = 'large' | 'thumbs' | 'off';
+export type { LinkStyle, PhotoStyle };
 
 export interface DisplayPrefs {
   links: LinkStyle;
@@ -59,4 +57,17 @@ const subscribe = (listener: () => void) => {
 
 export function useDisplayPrefs(): DisplayPrefs {
   return useSyncExternalStore(subscribe, () => current, () => DEFAULTS);
+}
+
+/**
+ * How one entry's previews show: its own style where it has one, else this device's setting. Values from another
+ * app version that this one doesn't know fall back to the setting.
+ */
+export function previewFor(own: PreviewStyle | undefined, prefs: DisplayPrefs): DisplayPrefs {
+  const links = own?.links;
+  const photos = own?.photos;
+  return {
+    links: typeof links === 'string' && links in LINK_STYLES ? links : prefs.links,
+    photos: typeof photos === 'string' && photos in PHOTO_STYLES ? photos : prefs.photos,
+  };
 }

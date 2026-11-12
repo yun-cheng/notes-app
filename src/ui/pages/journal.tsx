@@ -18,6 +18,7 @@ import { cardPath, entryPath, journalPath, sheetState, type SheetState } from '.
 import { ShareDialog } from '../ShareDialog';
 import { JournalBox } from '../JournalBox';
 import { Attachments } from '../Attachments';
+import { colorClass, StyleMenu, StyleOptions } from '../EntryStyle';
 import { BatchBar } from '../BatchBar';
 import { SelectionProvider, useBoxSelect, useSelectable, useSelection, useSelectionState } from '../selection';
 import { useEntryShortcuts } from '../useEntryShortcuts';
@@ -308,12 +309,19 @@ function useOpen(card: NoteCard | TodoCard | DiaryCard) {
   return () => void navigate(cardPath(card), { state: sheetState(location, card) });
 }
 
-/** The button that opens an entry, beside its bubble on hover. Taps on a phone open it without one. */
-function OpenButton({ open }: { open: () => void }) {
+/**
+ * The buttons beside a bubble on hover: open it, and its color and previews. Taps on a phone open it without
+ * one, and its sheet has the style choices.
+ */
+function BubbleTools({ card, open }: { card: NoteCard | TodoCard | DiaryCard; open: () => void }) {
+  const { vaults, shared } = useCards();
   return (
-    <button type="button" className="bubble__open" aria-label="Open" title="Open (Enter)" onClick={open}>
-      <Icon name="open" size={16} />
-    </button>
+    <span className="bubble__tools">
+      <button type="button" className="bubble__open" aria-label="Open" title="Open (Enter)" onClick={open}>
+        <Icon name="open" size={16} />
+      </button>
+      {permissions(card, vaults, shared).edit && <StyleMenu card={card} />}
+    </span>
   );
 }
 
@@ -323,7 +331,7 @@ function NoteBubble({ note, at }: { note: NoteCard; at: number }) {
   const open = useOpen(note);
   const { selected, handlers } = useSelectable(note.id, open);
   return (
-    <div className={`bubble${selected ? ' is-selected' : ''}`} role="article" aria-current={selected || undefined} {...handlers}>
+    <div className={`bubble${colorClass(note)}${selected ? ' is-selected' : ''}`} role="article" aria-current={selected || undefined} {...handlers}>
       {note.title.trim() && (
         <strong className="bubble__title">
           <LinkedText text={note.title} />
@@ -331,7 +339,7 @@ function NoteBubble({ note, at }: { note: NoteCard; at: number }) {
       )}
       {text.view}
       <BubbleMeta card={note} at={at} fold={text.fold} />
-      <OpenButton open={open} />
+      <BubbleTools card={note} open={open} />
     </div>
   );
 }
@@ -344,7 +352,7 @@ function TodoBubble({ todo, at }: { todo: TodoCard; at: number }) {
   const open = useOpen(todo);
   const { selected, handlers } = useSelectable(todo.id, open);
   return (
-    <div className={`bubble bubble--todo${done ? ' is-done' : ''}${selected ? ' is-selected' : ''}`} role="article" aria-current={selected || undefined} {...handlers}>
+    <div className={`bubble bubble--todo${colorClass(todo)}${done ? ' is-done' : ''}${selected ? ' is-selected' : ''}`} role="article" aria-current={selected || undefined} {...handlers}>
       <label className="check">
         <input
           type="checkbox"
@@ -361,7 +369,7 @@ function TodoBubble({ todo, at }: { todo: TodoCard; at: number }) {
         {text.view}
         <BubbleMeta card={todo} at={at} due={todo.due} fold={text.fold} />
       </div>
-      <OpenButton open={open} />
+      <BubbleTools card={todo} open={open} />
     </div>
   );
 }
@@ -372,14 +380,14 @@ function DiaryBubble({ diary, at }: { diary: DiaryCard; at: number }) {
   const open = useOpen(diary);
   const { selected, handlers } = useSelectable(diary.id, open);
   return (
-    <div className={`bubble bubble--diary${selected ? ' is-selected' : ''}`} role="article" aria-current={selected || undefined} {...handlers}>
+    <div className={`bubble bubble--diary${colorClass(diary)}${selected ? ' is-selected' : ''}`} role="article" aria-current={selected || undefined} {...handlers}>
       <span className="bubble__kind">
         <Icon name="diary" size={14} />
         Diary
       </span>
       {text.view}
       <BubbleMeta card={diary} at={at} fold={text.fold} />
-      <OpenButton open={open} />
+      <BubbleTools card={diary} open={open} />
     </div>
   );
 }
@@ -535,6 +543,11 @@ function EntryDetail({ card, fresh, onClose }: { card: NoteCard | TodoCard; fres
             )}
           </div>
           <VaultField card={card} />
+          {can.edit && (
+            <div className="note-sheet__style">
+              <StyleOptions card={card} />
+            </div>
+          )}
         </div>
       )}
       <Comments card={card} />

@@ -20,12 +20,32 @@ interface CardEnvelope {
   seq: number;
 }
 
+/** How a web link in an entry is previewed under it: a card with the page's title, description and image, one line, or not at all. */
+export type LinkStyle = 'card' | 'compact' | 'off';
+/** How an entry's photos show under it: large, as small thumbnails, or as a count that opens them. */
+export type PhotoStyle = 'large' | 'thumbs' | 'off';
+
+/** One entry's own preview style. What it leaves out follows the device's setting. */
+export interface PreviewStyle {
+  links?: LinkStyle;
+  photos?: PhotoStyle;
+}
+
+/** A color an entry's bubble can be tinted with. */
+export const CARD_COLORS = ['red', 'orange', 'yellow', 'green', 'blue', 'purple', 'pink', 'gray'] as const;
+export type CardColor = (typeof CARD_COLORS)[number];
+export const isCardColor = (v: unknown): v is CardColor => typeof v === 'string' && (CARD_COLORS as readonly string[]).includes(v);
+
 interface CardCommon extends CardEnvelope {
   createdAt: number;
   title: string;
   content: JSONNode;
   /** IDs of tag cards. Tagging is a typed link to the tag card. */
   tags: string[];
+  /** Set from the entry's style menu; missing on most cards. */
+  preview?: PreviewStyle;
+  /** The bubble's tint, or none. */
+  color?: CardColor | null;
 }
 
 export interface NoteCard extends CardCommon {

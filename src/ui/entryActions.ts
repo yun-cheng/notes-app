@@ -23,9 +23,9 @@ if (typeof document !== 'undefined') {
 
 /**
  * Puts text and an exact copy on the clipboard. The browser's own copy command fires a copy event, which is the
- * one place a page can add a type of its own; without it, the text alone is copied.
+ * one place a page can add a type of its own; without it, the text alone is copied, which can be refused.
  */
-function writeClipboard(text: string, json: string): boolean {
+async function writeClipboard(text: string, json: string): Promise<boolean> {
   pending = { text, json };
   try {
     if (document.execCommand('copy')) return true;
@@ -34,9 +34,12 @@ function writeClipboard(text: string, json: string): boolean {
   } finally {
     pending = null;
   }
-  if (!navigator.clipboard) return false;
-  void navigator.clipboard.writeText(text);
-  return true;
+  try {
+    await navigator.clipboard.writeText(text);
+    return true;
+  } catch {
+    return false;
+  }
 }
 
 const copyable = (c: Card | undefined): c is NoteCard | TodoCard | DiaryCard => !!c && !c.deleted && c.type !== 'tag';
@@ -58,7 +61,7 @@ export function useEntryActions() {
   const copy = (ids: string[]) => {
     const cards = cardsFor(ids);
     if (!cards.length) return;
-    toast(write(cards) ? `Copied ${entries(cards.length)}` : "Couldn't copy here. Select the text instead.");
+    void write(cards).then((ok) => toast(ok ? `Copied ${entries(cards.length)}` : "Couldn't copy here. Select the text instead."));
   };
 
   /** Moves the entries this account may remove to the Trash. `verb` starts the toast ("Cut 3 entries"). */
@@ -80,7 +83,7 @@ export function useEntryActions() {
   const cut = async (ids: string[]) => {
     const cards = cardsFor(ids);
     if (!cards.length) return;
-    if (!write(cards)) return toast("Couldn't copy here, so nothing was cut.");
+    if (!(await write(cards))) return toast("Couldn't copy here, so nothing was cut.");
     await trash(ids, 'Cut');
   };
 

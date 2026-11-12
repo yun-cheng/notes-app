@@ -44,12 +44,15 @@ const TYPE_ICON: Record<Card['type'], IconName> = { note: 'note', todo: 'todo', 
  * An entry's tags, grouped ones first (Priority before Topics, in each group's order). A grouped tag is marked
  * and named with its group on hover; two tags from a one-choice group, as edits from two devices can leave, are
  * marked as a clash. With `onChange`, a grouped tag is a button that opens its group's tags, to switch it in place.
+ * In an open entry (`inSheet`), each one-choice group it has no tag from (Priority) offers itself too, to set one,
+ * and the menus sit fixed so the scrolling sheet doesn't clip them.
  */
-export function TagChips({ tagIds, onChange }: { tagIds: string[]; onChange?: (tags: string[]) => void }) {
+export function TagChips({ tagIds, onChange, inSheet = false }: { tagIds: string[]; onChange?: (tags: string[]) => void; inSheet?: boolean }) {
   const { index } = useCards();
-  const { groupOf } = index.tagGroups;
+  const { groupOf, groups } = index.tagGroups;
   const tags = resolveTags(index, orderTags(tagIds, index.tagGroups));
-  if (!tags.length) return null;
+  const unset = inSheet && onChange ? groups.filter((g) => g.choice === 'one' && g.members.length && !g.members.some((m) => tagIds.includes(m.id))) : [];
+  if (!tags.length && !unset.length) return null;
   const clashes = clashingTags(tagIds, groupOf);
   return (
     <span className="chips">
@@ -58,20 +61,41 @@ export function TagChips({ tagIds, onChange }: { tagIds: string[]; onChange?: (t
         const clash = clashes.has(t.id);
         const className = `chip chip--small${colorClass(t)}${group ? ' chip--grouped' : ''}${clash ? ' chip--clash' : ''}`;
         const title = group ? `${group.title}: ${t.title}${clash ? ` (more than one ${group.title.toLowerCase()})` : ''}` : undefined;
-        if (group && onChange) return <GroupChip key={t.id} tag={t} group={group} tagIds={tagIds} className={className} title={title!} onChange={onChange} />;
+        if (group && onChange) return <GroupChip key={t.id} tag={t} group={group} tagIds={tagIds} className={className} title={title!} onChange={onChange} fixed={inSheet} />;
         return (
           <span className={className} key={t.id} title={title}>
             {t.title}
           </span>
         );
       })}
+      {onChange &&
+        unset.map((g) => (
+          <GroupChip key={g.id} group={g} tagIds={tagIds} className="chip chip--small chip--unset" title={`No ${g.title.toLowerCase()}`} onChange={onChange} fixed={inSheet} />
+        ))}
     </span>
   );
 }
 
 /** A grouped tag that opens its group's tags: pick another to switch to it (or, in a group of any number, to add or remove it). */
-function GroupChip({ tag, group, tagIds, className, title, onChange }: { tag: TagCard; group: TagGroup; tagIds: string[]; className: string; title: string; onChange: (tags: string[]) => void }) {
-  const { open, root, toggle, close } = usePopover<HTMLSpanElement>();
+function GroupChip({
+  tag,
+  group,
+  tagIds,
+  className,
+  title,
+  onChange,
+  fixed = false,
+}: {
+  /** Missing for a group the entry has no tag from, which shows as "+ Priority". */
+  tag?: TagCard;
+  group: TagGroup;
+  tagIds: string[];
+  className: string;
+  title: string;
+  onChange: (tags: string[]) => void;
+  fixed?: boolean;
+}) {
+  const { open, root, toggle, close, fixedStyle } = usePopover<HTMLSpanElement>();
   const one = group.choice === 'one';
   const pick = (id: string | null) => {
     const next = pickInGroup(tagIds, group, id);
@@ -82,10 +106,10 @@ function GroupChip({ tag, group, tagIds, className, title, onChange }: { tag: Ta
     // Clicks here stay out of the bubble's own click handling (picking).
     <span ref={root} className="group-chip" onClick={(e) => e.stopPropagation()}>
       <button type="button" className={`${className} chip--button`} title={`${title}. Click to change`} aria-haspopup="menu" aria-expanded={!!open} onClick={toggle}>
-        {tag.title}
+        {tag ? tag.title : `+ ${group.title}`}
       </button>
       {open && (
-        <span className={`style-menu group-chip__menu${open === 'up' ? ' style-menu--up' : ''}`} role="menu" aria-label={group.title}>
+        <span className={`style-menu group-chip__menu${open === 'up' ? ' style-menu--up' : ''}`} style={fixed ? fixedStyle(200) : undefined} role="menu" aria-label={group.title}>
           <span className="style-menu__group">
             <span className="style-menu__label">{group.title}</span>
             {group.members.map((m) => (

@@ -520,9 +520,9 @@ function EntryDetail({ card, fresh, onClose }: { card: NoteCard | TodoCard; fres
       {tagging && can.edit ? (
         <TagPicker tagIds={card.tags} onChange={(tags) => void repo.update(card.id, { tags })} />
       ) : (
-        card.tags.length > 0 && (
+        (card.tags.length > 0 || can.edit) && (
           <div className="note-sheet__tags">
-            <TagChips tagIds={card.tags} />
+            <TagChips tagIds={card.tags} onChange={can.edit ? (tags) => void repo.update(card.id, { tags }) : undefined} inSheet />
           </div>
         )
       )}

@@ -159,6 +159,8 @@ body:has(.composer:focus-within) .tabbar { display: none; }
 .group-chip { position: relative; display: inline-flex; }
 .chip--button { display: inline-flex; align-items: center; gap: 2px; font-family: inherit; cursor: pointer; }
 .chip--button:hover { border-color: var(--accent); }
+.chip--unset { border-style: dashed; background: none; color: var(--muted); font-weight: 400; }
+.chip--unset:hover { color: var(--text); }
 .group-chip .group-chip__menu { top: calc(100% + 4px); left: 0; right: auto; width: 180px; }
 .group-chip .group-chip__menu.style-menu--up { top: auto; bottom: calc(100% + 4px); }
 .group-chip__none { color: var(--muted) !important; }

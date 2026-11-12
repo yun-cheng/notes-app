@@ -150,9 +150,9 @@ function CardDetail({ card }: { card: Exclude<Card, { type: 'diary' }> }) {
         (tagging && can.edit ? (
           <TagPicker tagIds={card.tags} onChange={(tags) => void repo.update(card.id, { tags })} />
         ) : (
-          card.tags.length > 0 && (
+          (card.tags.length > 0 || can.edit) && (
             <div className="card-tags">
-              <TagChips tagIds={card.tags} />
+              <TagChips tagIds={card.tags} onChange={can.edit ? (tags) => void repo.update(card.id, { tags }) : undefined} inSheet />
             </div>
           )
         ))}
@@ -240,7 +240,7 @@ export function DayPage() {
           ) : (
             !!card?.tags.length && (
               <div className="card-tags">
-                <TagChips tagIds={card.tags} />
+                <TagChips tagIds={card.tags} onChange={(tags) => void repo.saveDiary(date, { tags }, card.id, privateVault?.id)} />
               </div>
             )
           )}

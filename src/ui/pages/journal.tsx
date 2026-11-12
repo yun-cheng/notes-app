@@ -2,7 +2,7 @@ import { useEffect, useLayoutEffect, useRef, useState, type FormEvent } from 're
 import { Link, NavLink, Outlet, useLocation, useNavigate, useParams } from 'react-router';
 import { permissions } from '../../domain/access';
 import { linkTitle } from '../../domain/cardIndex';
-import { displayTitle, photoIds, previewLines } from '../../domain/content';
+import { displayTitle, previewLines } from '../../domain/content';
 import { isDateKey, relativeDay, relativeDayInSentence, toDateKey } from '../../domain/dates';
 import { effectiveType, isFiltered, streamItems, type StreamFilter, type StreamItem, type StreamSort } from '../../domain/stream';
 import type { DiaryCard, NoteCard, TodoCard } from '../../domain/types';
@@ -16,6 +16,7 @@ import { LockPanel } from '../LockPanel';
 import { cardPath, entryPath, journalPath, sheetState, type SheetState } from '../paths';
 import { ShareDialog } from '../ShareDialog';
 import { useSaveEntry } from '../useSaveEntry';
+import { Attachments } from '../Attachments';
 import { BatchBar } from '../BatchBar';
 import { SelectionProvider, useSelectable, useSelectionState } from '../selection';
 
@@ -165,6 +166,7 @@ function Stream({ items, empty, sort }: { items: StreamItem[]; empty: string; so
           <div key={item.kind === 'card' ? item.card.id : `locked-${item.date}`} className="stream__item">
             {separator && <p className="stream__day">{label(item.day)}</p>}
             {item.kind === 'locked-diary' ? <LockedDiaryBubble date={item.date} /> : <EntryBubble card={item.card} at={item.at} />}
+            {item.kind === 'card' && <Attachments card={item.card} />}
           </div>
         );
       })}
@@ -185,16 +187,9 @@ function useLines(card: NoteCard | TodoCard | DiaryCard) {
 
 function BubbleMeta({ card, at, due }: { card: NoteCard | TodoCard | DiaryCard; at: number; due?: string | null }) {
   const today = useToday();
-  const photos = photoIds(card.content).length;
   const overdue = card.type === 'todo' && card.status === 'open' && !!due && due < today;
   return (
     <span className="bubble__meta">
-      {photos > 0 && (
-        <span className="bubble__photos" aria-label={photos === 1 ? '1 photo' : `${photos} photos`}>
-          <Icon name="image" size={14} />
-          {photos > 1 && photos}
-        </span>
-      )}
       {due && <span className={`bubble__due${overdue ? ' is-alert' : ''}`}>Due {relativeDayInSentence(due, today)}</span>}
       <TagChips tagIds={card.tags} />
       <time dateTime={new Date(at).toISOString()}>{time(at)}</time>

@@ -33,6 +33,8 @@ Cmd+K (Ctrl+K elsewhere) opens a command box for doing anything from the keyboar
 
 Several entries can be changed at once: Cmd-click (Ctrl-click) or a long press picks a bubble, Shift-click picks a range, and Select at the top starts picking. While entries are picked, the writing box becomes a bar that tags or untags them, marks todos done or not, sets their due date, moves them to another vault or trashes them, each with an undo.
 
+An entry's photos show as thumbnails under its bubble, opening full size in a viewer that steps through them, and its web links show as small cards with their site.
+
 A bubble opens in a small sheet with just its text; formatting, tags, a title, sharing, history and trash sit behind small buttons there. A note without a title is named by its first line.
 
 ### Labels are notes

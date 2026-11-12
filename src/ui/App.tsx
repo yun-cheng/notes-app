@@ -96,6 +96,13 @@ function Layout() {
       if ((e.metaKey || e.ctrlKey) && !e.shiftKey && !e.altKey && e.key.toLowerCase() === 'k') {
         e.preventDefault();
         setCommands((open) => !open);
+        return;
+      }
+      // `/` opens it too, when it isn't being typed into something.
+      const typing = e.target instanceof HTMLElement && e.target.closest('input, textarea, select, [contenteditable="true"]');
+      if (e.key === '/' && !typing && !e.metaKey && !e.ctrlKey && !e.altKey && !document.querySelector('.dialog-backdrop')) {
+        e.preventDefault();
+        setCommands(true);
       }
     };
     window.addEventListener('keydown', onKey);

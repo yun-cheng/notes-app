@@ -95,13 +95,15 @@ export function CommandPalette({ onClose }: { onClose: () => void }) {
     return all;
   })();
 
-  const text = query.trim();
+  // A leading `/` asks for commands only: no notes, and nothing to save.
+  const onlyCommands = query.trimStart().startsWith('/');
+  const text = (onlyCommands ? query.trimStart().slice(1) : query).trim();
   const words = text.toLowerCase().split(/\s+/).filter(Boolean);
   // Text with markers (`[]`, `#tag`, `@friday`) is clearly something to write, so saving it comes first.
   // Otherwise commands come first, then notes that match, and saving the text comes last.
   const writes: Command[] = [];
   let writing = false;
-  const entry = text ? parseEntry(text, today) : null;
+  const entry = text && !onlyCommands ? parseEntry(text, today) : null;
   if (entry) {
     writing = entry.kind !== 'note' || entry.tags.length > 0;
     const where = entry.kind === 'todo' ? 'as a todo' : entry.kind === 'diary' ? "to today's diary" : 'as a note';
@@ -119,7 +121,7 @@ export function CommandPalette({ onClose }: { onClose: () => void }) {
     if (entry.kind === 'note') writes.push({ id: 'save-todo', group: 'Write', label: `Add todo “${text}”`, icon: 'todo', run: write(true) });
   }
 
-  const found: Command[] = text
+  const found: Command[] = text && !onlyCommands
     ? engine.search(text).slice(0, 8).map((hit) => ({
         id: `card-${hit.card.id}`,
         group: 'Notes',
@@ -154,7 +156,7 @@ export function CommandPalette({ onClose }: { onClose: () => void }) {
           className="palette__input"
           autoFocus
           value={query}
-          placeholder="Type a command, search, or write a note"
+          placeholder="Search, write a note, or type / for commands"
           aria-label="Command"
           aria-controls="palette-list"
           aria-activedescendant={items[pick] ? `palette-${items[pick].id}` : undefined}

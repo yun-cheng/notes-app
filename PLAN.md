@@ -32,7 +32,7 @@ The sidebar is the journal's filter: by type (notes, todos, diary), by todo stat
 
 In a note, `/` adds a heading, list, quote, code, divider, photo or link to another note.
 
-Cmd+K (Ctrl+K elsewhere) opens a command box for doing anything from the keyboard: every filter, sort and page, new notes, locking vaults, finding notes by their text, and saving what's typed straight to the journal with the same markers.
+Cmd+K (Ctrl+K elsewhere), or `/` anywhere outside a text box, opens a command box for doing anything from the keyboard: every filter, sort and page, new notes, locking vaults, finding notes by their text, and saving what's typed straight to the journal with the same markers. Starting with `/` lists only commands.
 
 Several entries can be changed at once: Cmd-click (Ctrl-click) or a long press picks a bubble, Shift-click picks a range, and Select at the top starts picking. While entries are picked, the writing box becomes a bar that tags or untags them, marks todos done or not, sets their due date, moves them to another vault or trashes them, each with an undo.
 

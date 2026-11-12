@@ -12,10 +12,10 @@ import { usePopover } from './usePopover';
 type Entry = NoteCard | TodoCard | DiaryCard;
 
 /**
- * The buttons beside a bubble on hover: open it, make a note a todo or a todo a note, and share it. Copying its
- * text is a button on the bubble's top right corner. Its tags, color and previews, and a todo's due date are
- * changed in its bottom row (`AddTag`, `StyleMenu` and `DueMenu`). A phone has no hover; a tap opens the entry,
- * whose sheet has them all, and a todo's due date in its bubble can be tapped.
+ * The buttons beside a bubble on hover: open it to edit, make a note a todo or a todo a note, and share it.
+ * Copying its text is a button on the bubble's top right corner. Its tags, color and previews, and a todo's due
+ * date are changed in its bottom row (`AddTag`, `StyleMenu` and `DueMenu`). A phone has no hover; a tap opens the
+ * entry, whose sheet has them all, and a todo's due date in its bubble can be tapped.
  */
 export function BubbleTools({ card, open }: { card: Entry; open: () => void }) {
   const { vaults, shared } = useCards();
@@ -24,8 +24,9 @@ export function BubbleTools({ card, open }: { card: Entry; open: () => void }) {
   return (
     <>
       <span className="bubble__tools">
-        <button type="button" className="bubble__open" aria-label="Open" title="Open (Enter)" onClick={open}>
-          <Icon name="open" size={16} />
+        {/* A pencil where the entry can be changed; an entry shared only to read just opens. */}
+        <button type="button" className="bubble__open" aria-label={can.edit ? 'Edit' : 'Open'} title={can.edit ? 'Edit (Enter)' : 'Open (Enter)'} onClick={open}>
+          <Icon name={can.edit ? 'edit' : 'open'} size={16} />
         </button>
         {can.edit && card.type !== 'diary' && <TypeSwitch card={card} className="bubble__open" size={16} />}
         {can.share && <ShareButton card={card} />}

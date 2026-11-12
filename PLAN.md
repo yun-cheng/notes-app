@@ -28,6 +28,8 @@ Decided 2026-11-12, like Logseq's journal. There is one place where everything i
 
 The sidebar is the journal's filter: by type (notes, todos, diary), by todo status (open, due today, upcoming, no date, done), by when it was written (today, the past 7 or 30 days, or a day picked in the Calendar), by tag and by vault, and it sorts by oldest first, newest first, recently edited or due date. Filters combine. Picking a locked vault asks for its PIN right there. New entries go into whatever the journal is narrowed to. On a phone, the same filters open from a button at the top of the journal.
 
+Cmd+K (Ctrl+K elsewhere) opens a command box for doing anything from the keyboard: every filter, sort and page, new notes, locking vaults, finding notes by their text, and saving what's typed straight to the journal with the same markers.
+
 A bubble opens in a small sheet with just its text; formatting, tags, a title, sharing, history and trash sit behind small buttons there. A note without a title is named by its first line.
 
 ### Labels are notes
@@ -248,6 +250,7 @@ None. Defaults chosen while building are listed in the implementation notes, and
 - With the diary locked, a `#diary` line stays in the box and the vault's PIN is asked for above it.
 - Notes and todos open at `/journal/:id` in a sheet over the page they were opened from (Search, Calendar, a filtered journal), so the back button closes it. Old `/notes/:id` and `/card/:id` links to notes and todos redirect there.
 - The box saves on Enter on a computer (Shift+Enter for a new line). On a phone, Return makes a new line and the send button saves.
+- In the command box, text with markers (`[]`, `#tag`, `@friday`) offers saving first; other text lists matching commands, then matching notes, then saving. Commands whose name matches come before ones that match by keyword.
 - The native apps still have the earlier layout; they follow once the web design settles.
 
 ## Implementation notes from the native apps

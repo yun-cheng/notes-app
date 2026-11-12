@@ -1,5 +1,5 @@
-import { useEffect } from 'react';
-import { Link, Navigate, NavLink, Outlet, Route, Routes, useLocation, useNavigate } from 'react-router';
+import { useEffect, useState } from 'react';
+import { Link, Navigate, NavLink, Outlet, Route, Routes, useLocation } from 'react-router';
 import { registerSW } from 'virtual:pwa-register';
 import { AuthGate, useAccount } from '../auth/AuthContext';
 import { PairPage } from '../auth/PairPage';
@@ -15,6 +15,7 @@ import { SettingsPage } from './pages/SettingsPage';
 import { VaultPage, VaultsPage } from './pages/vaults';
 import { EntrySheet, JournalPage, OldNoteRedirect } from './pages/journal';
 import { CalendarPage, SearchPage, TagsPage } from './pages/views';
+import { CommandPalette } from './CommandPalette';
 import { FilterPanel } from './FilterPanel';
 import { journalPath, type SheetState } from './paths';
 import { ToastProvider, useToast } from './Toast';
@@ -44,7 +45,9 @@ function TabBar() {
   );
 }
 
-function Sidebar() {
+const isMac = typeof navigator !== 'undefined' && /Mac|iPhone|iPad/.test(navigator.platform);
+
+function Sidebar({ onCommands }: { onCommands: () => void }) {
   const newNote = useNewNote();
   const sync = useSyncStatus();
   return (
@@ -53,10 +56,11 @@ function Sidebar() {
       <button type="button" className="btn btn--primary sidebar__new" onClick={() => void newNote()}>
         New note
       </button>
-      <NavLink to="/search" className="nav-item">
+      <button type="button" className="nav-item sidebar__commands" onClick={onCommands}>
         <Icon name="search" />
         <span>Search</span>
-      </NavLink>
+        <kbd>{isMac ? '⌘K' : 'Ctrl K'}</kbd>
+      </button>
       <FilterPanel />
       <p className="sidebar__sync" role="status">
         {describeSync(sync)}
@@ -84,19 +88,19 @@ function SessionBanner() {
 }
 
 function Layout() {
-  const navigate = useNavigate();
   const toast = useToast();
+  const [commands, setCommands] = useState(false);
 
   useEffect(() => {
     const onKey = (e: KeyboardEvent) => {
-      if ((e.metaKey || e.ctrlKey) && e.key.toLowerCase() === 'k') {
+      if ((e.metaKey || e.ctrlKey) && !e.shiftKey && !e.altKey && e.key.toLowerCase() === 'k') {
         e.preventDefault();
-        void navigate('/search');
+        setCommands((open) => !open);
       }
     };
     window.addEventListener('keydown', onKey);
     return () => window.removeEventListener('keydown', onKey);
-  }, [navigate]);
+  }, []);
 
   useEffect(() => {
     const onFailure = (e: PromiseRejectionEvent) => {
@@ -116,12 +120,13 @@ function Layout() {
 
   return (
     <div className="app">
-      <Sidebar />
+      <Sidebar onCommands={() => setCommands(true)} />
       <main className="main">
         <SessionBanner />
         <Outlet />
       </main>
       <TabBar />
+      {commands && <CommandPalette onClose={() => setCommands(false)} />}
     </div>
   );
 }

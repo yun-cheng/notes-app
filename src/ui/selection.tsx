@@ -1,4 +1,4 @@
-import { createContext, useContext, useEffect, useRef, useState, type MouseEvent, type PointerEvent as ReactPointerEvent, type RefObject } from 'react';
+import { createContext, useContext, useEffect, useRef, useState, type KeyboardEvent as ReactKeyboardEvent, type MouseEvent as ReactMouseEvent, type PointerEvent as ReactPointerEvent, type RefObject } from 'react';
 import { rangeBetween } from '../domain/batch';
 
 /** Entries picked in the journal for a batch change. */
@@ -86,14 +86,17 @@ export function useSelectionState(order: string[]): Selection {
 const LONG_PRESS_MS = 450;
 
 /**
- * Click and touch handling for a bubble: Cmd/Ctrl-click picks it, Shift-click picks a range, a long press on a
- * touch screen starts picking, and while picking a plain click picks instead of opening.
+ * Click, key and touch handling for a bubble. With a mouse, a click leaves the bubble alone, so its text can be
+ * selected and copied; the open button, or Enter on the focused bubble, opens it. On a touch screen a tap opens
+ * it and a long press starts picking. Cmd/Ctrl-click picks it, Shift-click picks a range, and while picking any
+ * click or tap picks.
  */
-export function useSelectable(id: string) {
+export function useSelectable(id: string, open: () => void) {
   const selection = useContext(SelectionContext);
   const timer = useRef<ReturnType<typeof setTimeout> | null>(null);
   const start = useRef<{ x: number; y: number } | null>(null);
   const pressed = useRef(false);
+  const touch = useRef(false);
 
   const cancel = () => {
     if (timer.current) clearTimeout(timer.current);
@@ -101,25 +104,41 @@ export function useSelectable(id: string) {
   };
   useEffect(() => cancel, []);
 
-  if (!selection) return { selected: false, handlers: {} };
+  const selected = !!selection?.has(id);
   return {
-    selected: selection.has(id),
+    selected,
     handlers: {
-      onClick: (e: MouseEvent) => {
+      tabIndex: 0,
+      onClick: (e: ReactMouseEvent) => {
+        if (e.target instanceof Element && e.target.closest('a, button, input, label')) return;
         if (pressed.current) {
           // The long press already picked it.
           pressed.current = false;
-          e.preventDefault();
           return;
         }
-        if (selection.selecting || e.metaKey || e.ctrlKey || e.shiftKey) {
+        if (selection && (selection.selecting || e.metaKey || e.ctrlKey || e.shiftKey)) {
+          e.preventDefault();
+          window.getSelection()?.removeAllRanges();
+          selection.toggle(id, e.shiftKey);
+          return;
+        }
+        // A tap opens; a mouse click is left for selecting text.
+        if (touch.current && !String(window.getSelection() ?? '')) open();
+      },
+      onKeyDown: (e: ReactKeyboardEvent) => {
+        if (e.target !== e.currentTarget) return;
+        if (e.key === 'Enter') {
+          e.preventDefault();
+          open();
+        } else if (e.key === ' ' && selection) {
           e.preventDefault();
           selection.toggle(id, e.shiftKey);
         }
       },
       onPointerDown: (e: ReactPointerEvent) => {
         pressed.current = false;
-        if (e.pointerType !== 'touch') return;
+        touch.current = e.pointerType !== 'mouse';
+        if (e.pointerType !== 'touch' || !selection) return;
         start.current = { x: e.clientX, y: e.clientY };
         cancel();
         timer.current = setTimeout(() => {
@@ -133,7 +152,7 @@ export function useSelectable(id: string) {
       },
       onPointerUp: cancel,
       onPointerCancel: cancel,
-      onContextMenu: (e: MouseEvent) => {
+      onContextMenu: (e: ReactMouseEvent) => {
         if (timer.current || pressed.current) e.preventDefault();
       },
     },

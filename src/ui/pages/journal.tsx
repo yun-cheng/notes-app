@@ -222,27 +222,44 @@ function BubbleMeta({ card, at, due }: { card: NoteCard | TodoCard | DiaryCard; 
   );
 }
 
-function NoteBubble({ note, at }: { note: NoteCard; at: number }) {
+/** Opens an entry: a note or todo in a sheet over this page, a diary entry on its day. */
+function useOpen(card: NoteCard | TodoCard | DiaryCard) {
+  const navigate = useNavigate();
   const location = useLocation();
-  const lines = useLines(note);
-  const { selected, handlers } = useSelectable(note.id);
+  return () => void navigate(cardPath(card), { state: sheetState(location, card) });
+}
+
+/** The button that opens an entry, beside its bubble on hover. Taps on a phone open it without one. */
+function OpenButton({ open }: { open: () => void }) {
   return (
-    <Link className={`bubble${selected ? ' is-selected' : ''}`} to={entryPath(note.id)} state={sheetState(location, note)} aria-current={selected || undefined} {...handlers}>
+    <button type="button" className="bubble__open" aria-label="Open" title="Open (Enter)" onClick={open}>
+      <Icon name="open" size={16} />
+    </button>
+  );
+}
+
+function NoteBubble({ note, at }: { note: NoteCard; at: number }) {
+  const lines = useLines(note);
+  const open = useOpen(note);
+  const { selected, handlers } = useSelectable(note.id, open);
+  return (
+    <div className={`bubble${selected ? ' is-selected' : ''}`} role="article" aria-current={selected || undefined} {...handlers}>
       {note.title.trim() && <strong className="bubble__title">{note.title}</strong>}
       {lines.length > 0 && <span className="bubble__text">{lines.join('\n')}</span>}
       <BubbleMeta card={note} at={at} />
-    </Link>
+      <OpenButton open={open} />
+    </div>
   );
 }
 
 function TodoBubble({ todo, at }: { todo: TodoCard; at: number }) {
   const { repo, vaults, shared } = useCards();
-  const location = useLocation();
   const lines = useLines(todo);
   const done = todo.status === 'done';
-  const { selected, handlers } = useSelectable(todo.id);
+  const open = useOpen(todo);
+  const { selected, handlers } = useSelectable(todo.id, open);
   return (
-    <div className={`bubble bubble--todo${done ? ' is-done' : ''}${selected ? ' is-selected' : ''}`}>
+    <div className={`bubble bubble--todo${done ? ' is-done' : ''}${selected ? ' is-selected' : ''}`} role="article" aria-current={selected || undefined} {...handlers}>
       <label className="check">
         <input
           type="checkbox"
@@ -252,27 +269,30 @@ function TodoBubble({ todo, at }: { todo: TodoCard; at: number }) {
           onChange={() => void repo.update(todo.id, { status: done ? 'open' : 'done' })}
         />
       </label>
-      <Link className="bubble__body" to={entryPath(todo.id)} state={sheetState(location, todo)} aria-current={selected || undefined} {...handlers}>
+      <div className="bubble__body">
         <span className="bubble__title">{displayTitle(todo)}</span>
         {lines.length > 0 && <span className="bubble__text">{lines.join('\n')}</span>}
         <BubbleMeta card={todo} at={at} due={todo.due} />
-      </Link>
+      </div>
+      <OpenButton open={open} />
     </div>
   );
 }
 
 function DiaryBubble({ diary, at }: { diary: DiaryCard; at: number }) {
   const lines = useLines(diary);
-  const { selected, handlers } = useSelectable(diary.id);
+  const open = useOpen(diary);
+  const { selected, handlers } = useSelectable(diary.id, open);
   return (
-    <Link className={`bubble bubble--diary${selected ? ' is-selected' : ''}`} to={cardPath(diary)} aria-current={selected || undefined} {...handlers}>
+    <div className={`bubble bubble--diary${selected ? ' is-selected' : ''}`} role="article" aria-current={selected || undefined} {...handlers}>
       <span className="bubble__kind">
         <Icon name="diary" size={14} />
         Diary
       </span>
       {lines.length > 0 && <span className="bubble__text">{lines.join('\n')}</span>}
       <BubbleMeta card={diary} at={at} />
-    </Link>
+      <OpenButton open={open} />
+    </div>
   );
 }
 

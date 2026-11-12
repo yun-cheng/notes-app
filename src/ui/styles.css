@@ -524,3 +524,11 @@ body:has(.batch) .toast-slot { bottom: calc(var(--tabbar) + env(safe-area-inset-
 .stream__entry:hover .pick, .stream--selecting .pick, .pick:focus-visible { opacity: 1; }
 .pick.is-on { border-color: var(--accent); background: var(--accent); }
 .box-select { position: fixed; z-index: 5; border: 1px solid var(--accent); border-radius: 4px; background: color-mix(in srgb, var(--accent) 14%, transparent); pointer-events: none; }
+
+/* A bubble's text can be selected; the open button beside it, Enter, or a tap on a phone opens it. */
+.bubble { position: relative; color: var(--text); }
+.bubble:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+.bubble__open { position: absolute; top: 2px; left: calc(100% + 4px); display: grid; place-items: center; width: 28px; height: 28px; padding: 0; border: 1px solid var(--line); border-radius: 50%; background: var(--surface); color: var(--muted); opacity: 0; cursor: pointer; transition: opacity 0.12s; }
+.bubble__open:hover { color: var(--text); border-color: var(--muted); }
+.stream__entry:hover .bubble__open, .bubble:focus-within .bubble__open { opacity: 1; }
+@media (pointer: coarse) { .bubble__open { display: none; } }

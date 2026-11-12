@@ -1,4 +1,4 @@
-import type { ReactNode } from 'react';
+import { Children, isValidElement, useSyncExternalStore, type ReactNode } from 'react';
 import { Link, useLocation, useNavigate, useSearchParams } from 'react-router';
 import { sortVaults } from '../domain/locks';
 import {
@@ -124,62 +124,103 @@ export function FilterPanel({ onPick }: { onPick?: () => void }) {
         </select>
       </label>
 
-      <nav aria-label="Type" className="sidebar__group">
-        <h2>Type</h2>
+      <FilterSection id="type" title="Type">
         {(Object.keys(TYPE_LABEL) as EntryType[]).map((t) =>
           item(t, TYPE_LABEL[t], { ...toggle('type', t), status: t === 'todo' ? filter.status : undefined }, filter.type === t && !filter.status, TYPE_ICON[t]),
         )}
-      </nav>
+      </FilterSection>
 
-      <nav aria-label="Todos" className="sidebar__group">
-        <h2>Todos</h2>
+      <FilterSection id="todos" title="Todos">
         {STATUSES.map((s) =>
           item(s, STATUS_LABEL[s], { ...toggle('status', s), type: undefined }, filter.status === s, s === 'today' ? 'today' : s === 'upcoming' ? 'upcoming' : undefined),
         )}
-      </nav>
+      </FilterSection>
 
-      <nav aria-label="Contains" className="sidebar__group">
-        <h2>Contains</h2>
+      <FilterSection id="contains" title="Contains">
         {(Object.keys(CONTAINS_LABEL) as Contains[]).map((h) => item(h, h === 'link' ? 'Links' : 'Photos', toggle('has', h), filter.has === h, h === 'link' ? 'link' : 'image'))}
-      </nav>
+      </FilterSection>
 
-      <nav aria-label="Written" className="sidebar__group">
-        <h2>Written</h2>
+      <FilterSection id="written" title="Written">
         {['today', 'week', 'month'].map((w) => item(w, WHEN_LABEL[w], toggle('when', w), filter.when === w))}
         {pickedDay && item('day', whenLabel(pickedDay, today), toggle('when', pickedDay), true)}
         <Link to="/calendar" className={`nav-item${pathname === '/calendar' ? ' active' : ''}`} onClick={onPick}>
           <Icon name="calendar" />
           <span>Pick a day</span>
         </Link>
-      </nav>
+      </FilterSection>
 
       {index.tagGroups.groups
         .filter((g) => g.members.length)
         .map((g) => (
-          <nav key={g.id} aria-label={g.title} className="sidebar__group">
-            <h2>{g.title}</h2>
+          <FilterSection key={g.id} id={`group:${g.id}`} title={g.title}>
             {g.members.map((t) => item(t.id, t.title, toggle('tagId', t.id), filter.tagId === t.id, 'tag', tagCount(t.id), colorClass(t)))}
-          </nav>
+          </FilterSection>
         ))}
 
-      <nav aria-label="Tags" className="sidebar__group">
-        <h2>Tags</h2>
+      <FilterSection id="tags" title="Tags">
         {tags.map((t) => item(t.id, t.title, toggle('tagId', t.id), filter.tagId === t.id, 'tag', tagCount(t.id), colorClass(t)))}
         <Link to="/tags" className={`nav-item nav-item--quiet${pathname === '/tags' ? ' active' : ''}`} onClick={onPick}>
           <span className="nav-item__pad" />
           <span>All tags</span>
         </Link>
-      </nav>
+      </FilterSection>
 
-      <nav aria-label="Vaults" className="sidebar__group">
-        <h2>Vaults</h2>
+      <FilterSection id="vaults" title="Vaults">
         {shownVaults.length > 1 &&
           shownVaults.map((v) => item(v.id, v.name, toggle('vaultId', v.id), filter.vaultId === v.id, locked.has(v.id) ? 'lock' : undefined))}
         <Link to="/vaults" className={`nav-item nav-item--quiet${pathname.startsWith('/vault') ? ' active' : ''}`} onClick={onPick}>
           <span className="nav-item__pad" />
           <span>Manage vaults</span>
         </Link>
-      </nav>
+      </FilterSection>
     </div>
+  );
+}
+
+/** Sidebar sections folded on this device, by ID. Storage can be off; then nothing stays folded after a reload. */
+const FOLDED_KEY = 'notes-app:sidebar-folded';
+let folded: ReadonlySet<string> = (() => {
+  try {
+    const raw: unknown = JSON.parse(localStorage.getItem(FOLDED_KEY) ?? '[]');
+    return new Set(Array.isArray(raw) ? raw.filter((x): x is string => typeof x === 'string') : []);
+  } catch {
+    return new Set<string>();
+  }
+})();
+const foldListeners = new Set<() => void>();
+function setFolded(id: string, on: boolean) {
+  const next = new Set(folded);
+  if (on) next.add(id);
+  else next.delete(id);
+  folded = next;
+  try {
+    localStorage.setItem(FOLDED_KEY, JSON.stringify([...next]));
+  } catch {
+    // Folded for this visit only.
+  }
+  foldListeners.forEach((l) => l());
+}
+const subscribeFolded = (l: () => void) => {
+  foldListeners.add(l);
+  return () => foldListeners.delete(l);
+};
+
+/**
+ * A sidebar section whose heading folds it. Folded, it still shows the choice in use (aria-current), so what the
+ * journal is narrowed to stays in sight.
+ */
+function FilterSection({ id, title, children }: { id: string; title: string; children: ReactNode }) {
+  const closed = useSyncExternalStore(subscribeFolded, () => folded.has(id), () => false);
+  const shown = closed ? Children.toArray(children).filter((c) => isValidElement<{ 'aria-current'?: string }>(c) && c.props['aria-current'] === 'page') : children;
+  return (
+    <nav aria-label={title} className={`sidebar__group${closed ? ' is-folded' : ''}`}>
+      <h2>
+        <button type="button" className="sidebar__fold" aria-expanded={!closed} onClick={() => setFolded(id, !closed)}>
+          {title}
+          <Icon name={closed ? 'right' : 'down'} size={12} />
+        </button>
+      </h2>
+      {shown}
+    </nav>
   );
 }

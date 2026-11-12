@@ -27,7 +27,7 @@ Decided 2026-11-12, like Logseq's journal. There is one place where everything i
 - `#diary` adds the text to the day's diary entry, in the private vault.
 - Any other `#tag` files it under that tag, making the tag if it's new.
 
-The sidebar is the journal's filter: by type (notes, todos, diary), by todo status (open, due today, upcoming, no date, done), by when it was written (today, the past 7 or 30 days, or a day picked in the Calendar), by tag and by vault, and it sorts by oldest first, newest first, recently edited or due date. Filters combine. Picking a locked vault asks for its PIN right there. New entries go into whatever the journal is narrowed to. On a phone, the same filters open from a button at the top of the journal.
+The sidebar is the journal's filter: by type (notes, todos, diary), by todo status (open, due today, upcoming, no date, done), by when it was written (today, the past 7 or 30 days, or a day picked in the Calendar), by tag, by vault, and by whether it holds links or photos, and it sorts by oldest first, newest first, recently edited or due date. Filters combine. Picking a locked vault asks for its PIN right there. New entries go into whatever the journal is narrowed to. On a phone, the same filters open from a button at the top of the journal.
 
 Cmd+K (Ctrl+K elsewhere) opens a command box for doing anything from the keyboard: every filter, sort and page, new notes, locking vaults, finding notes by their text, and saving what's typed straight to the journal with the same markers.
 
@@ -246,6 +246,7 @@ None. Defaults chosen while building are listed in the implementation notes, and
 
 - The stream orders notes and todos by when they were created, so editing doesn't move them, and groups them under day labels. A diary entry sits at the time it was started, or at the end of its day if it was written on another day.
 - Card types stay as they were (note, todo, diary, tag), so sync, MCP and the native apps are unchanged; only the web app's screens changed. The markers are read when the box is saved (`src/domain/entry.ts`), and `#todo` and `#diary` never become tags.
+- Web addresses typed in the box become links. The links filter finds addresses in links and in plain text alike (`linkUrls`), so older notes count too.
 - A weekday date (`@fri`) means the next one after today, so `@thu` on a Thursday is a week away.
 - The filter lives in the address (`/journal?type=todo&status=today&tag=…&vault=…&when=week&sort=due`), so the back button and bookmarks work. `/today` and `/upcoming` redirect to their filters, and Calendar days open the journal for that day.
 - A tag's own page (rename, describe, pin) is still at `/card/:id`, reached from the tag button at the top of a tag-filtered journal or from All tags.

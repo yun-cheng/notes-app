@@ -5,7 +5,7 @@ import { relativeDayInSentence } from '../domain/dates';
 import { parseEntry } from '../domain/entry';
 import { sortVaults } from '../domain/locks';
 import { buildSearch } from '../domain/search';
-import { SORT_LABEL, STATUS_LABEL, TYPE_LABEL, WHEN_LABEL, type EntryType, type StreamFilter, type StreamSort, type TodoStatus } from '../domain/stream';
+import { CONTAINS_LABEL, SORT_LABEL, STATUS_LABEL, TYPE_LABEL, WHEN_LABEL, type Contains, type EntryType, type StreamFilter, type StreamSort, type TodoStatus } from '../domain/stream';
 import type { Card } from '../domain/types';
 import { useCards, useToday } from '../state/CardsContext';
 import { useNewNote } from './components';
@@ -72,6 +72,9 @@ export function CommandPalette({ onClose }: { onClose: () => void }) {
     }
     for (const status of Object.keys(STATUS_LABEL) as TodoStatus[]) {
       all.push({ id: `status-${status}`, group: 'Filter', label: `Todos: ${STATUS_LABEL[status].toLowerCase()}`, icon: 'todo', keywords: 'todo task status due', run: narrow({ status, type: undefined }) });
+    }
+    for (const has of Object.keys(CONTAINS_LABEL) as Contains[]) {
+      all.push({ id: `has-${has}`, group: 'Filter', label: `Show entries ${CONTAINS_LABEL[has].toLowerCase()}`, icon: has === 'link' ? 'link' : 'image', keywords: 'contains url web pictures images', run: narrow({ has }) });
     }
     for (const when of Object.keys(WHEN_LABEL)) {
       all.push({ id: `when-${when}`, group: 'Filter', label: WHEN_LABEL[when], icon: 'calendar', keywords: 'written date when', run: narrow({ when }) });

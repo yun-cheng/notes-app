@@ -73,6 +73,15 @@ describe('stream', () => {
   });
 });
 
+describe('entries with links or photos', () => {
+  const linked = note('linked', 'L', { createdAt: 1, content: doc(p(text('https://example.com', [{ type: 'link', attrs: { href: 'https://example.com' } }]))) });
+  const plainUrl = todo('plain', null, { createdAt: 2, content: doc(p(text('see http://a.example'))) });
+  const photo = note('photo', 'P', { createdAt: 3, content: doc({ type: 'photo', attrs: { id: 'p-1' } }) });
+  const ids = (has: 'link' | 'photo') => streamItems(buildIndex([linked, plainUrl, photo, note('n', 'N')]), { has }, TODAY).map((i) => (i.kind === 'card' ? i.card.id : ''));
+  it('keeps entries with a web address, linked or typed', () => expect(ids('link')).toEqual(['linked', 'plain']));
+  it('keeps entries with a photo', () => expect(ids('photo')).toEqual(['photo']));
+});
+
 describe('sorting', () => {
   const ids = (items: ReturnType<typeof streamItems>) => items.map((i) => (i.kind === 'card' ? `${i.card.id}@${i.day}` : i.date));
   const cards = [
@@ -90,7 +99,7 @@ describe('sorting', () => {
 
 describe('filter in the address', () => {
   it('round-trips, and drops values it does not know', () => {
-    const filter = { sort: 'due', type: 'todo', status: 'today', when: '2026-11-11', tagId: 'work', vaultId: 'v' } as const;
+    const filter = { sort: 'due', type: 'todo', status: 'today', when: '2026-11-11', tagId: 'work', vaultId: 'v', has: 'photo' } as const;
     expect(parseFilter(filterParams(filter))).toEqual(filter);
     expect(parseFilter(new URLSearchParams('type=card&status=x&when=soon'))).toEqual({});
   });

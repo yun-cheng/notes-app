@@ -2,6 +2,7 @@ import type { ReactNode } from 'react';
 import { Link, useLocation, useNavigate, useSearchParams } from 'react-router';
 import { sortVaults } from '../domain/locks';
 import {
+  CONTAINS_LABEL,
   isFiltered,
   parseFilter,
   SORT_LABEL,
@@ -9,6 +10,7 @@ import {
   TYPE_LABEL,
   WHEN_LABEL,
   whenLabel,
+  type Contains,
   type EntryType,
   type StreamFilter,
   type StreamSort,
@@ -36,8 +38,10 @@ export function useFilterTitle(filter: StreamFilter): string {
     filter.when && whenLabel(filter.when, today),
     filter.tagId && `#${index.tags.find((t) => t.id === filter.tagId)?.title ?? 'tag'}`,
     filter.vaultId && vaults.find((v) => v.id === filter.vaultId)?.name,
+    filter.has && CONTAINS_LABEL[filter.has].toLowerCase(),
   ].filter(Boolean);
-  return parts.length ? parts.join(', ') : 'Journal';
+  const title = parts.join(', ');
+  return title ? title[0].toUpperCase() + title.slice(1) : 'Journal';
 }
 
 const TYPE_ICON: Record<EntryType, IconName> = { note: 'note', todo: 'todo', diary: 'diary' };
@@ -107,6 +111,11 @@ export function FilterPanel({ onPick }: { onPick?: () => void }) {
         {STATUSES.map((s) =>
           item(s, STATUS_LABEL[s], { ...toggle('status', s), type: undefined }, filter.status === s, s === 'today' ? 'today' : s === 'upcoming' ? 'upcoming' : undefined),
         )}
+      </nav>
+
+      <nav aria-label="Contains" className="sidebar__group">
+        <h2>Contains</h2>
+        {(Object.keys(CONTAINS_LABEL) as Contains[]).map((h) => item(h, h === 'link' ? 'Links' : 'Photos', toggle('has', h), filter.has === h, h === 'link' ? 'link' : 'image'))}
       </nav>
 
       <nav aria-label="Written" className="sidebar__group">

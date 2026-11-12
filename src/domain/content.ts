@@ -85,13 +85,52 @@ export function previewLines(content: JSONNode, titleOf?: (id: string, label: st
   return lines;
 }
 
-/** A body made from typed text: one paragraph per line. */
+/** A web address in text. It stops before trailing punctuation, so "see https://a.com." links just the address. */
+const URL_IN_TEXT = /\bhttps?:\/\/[^\s<>"']*[^\s<>"'.,;:!?)\]}]/g;
+
+/** A line of typed text as text nodes, with web addresses made into links. */
+function inlineWithLinks(line: string): JSONNode[] {
+  const nodes: JSONNode[] = [];
+  let at = 0;
+  for (const match of line.matchAll(URL_IN_TEXT)) {
+    const start = match.index ?? 0;
+    if (start > at) nodes.push({ type: 'text', text: line.slice(at, start) });
+    nodes.push({ type: 'text', text: match[0], marks: [{ type: 'link', attrs: { href: match[0] } }] });
+    at = start + match[0].length;
+  }
+  if (at < line.length) nodes.push({ type: 'text', text: line.slice(at) });
+  return nodes;
+}
+
+/** A body made from typed text: one paragraph per line, with web addresses as links. */
 export function textToDoc(text: string): JSONNode {
   const lines = text.replace(/\r\n?/g, '\n').replace(/^\n+|\n+$/g, '').split('\n');
   return {
     type: 'doc',
-    content: lines.map((line) => (line ? { type: 'paragraph', content: [{ type: 'text', text: line }] } : { type: 'paragraph' })),
+    content: lines.map((line) => (line ? { type: 'paragraph', content: inlineWithLinks(line) } : { type: 'paragraph' })),
   };
+}
+
+/** Web addresses in the body, from links and from addresses typed as plain text, each once and in order. */
+export function linkUrls(content: JSONNode): string[] {
+  const urls = new Set<string>();
+  walk(content, (n) => {
+    if (n.type !== 'text') return;
+    const link = n.marks?.find((m) => m.type === 'link');
+    const href = link?.attrs?.href;
+    if (typeof href === 'string' && /^https?:\/\//i.test(href)) urls.add(href);
+    else for (const match of (n.text ?? '').matchAll(URL_IN_TEXT)) urls.add(match[0]);
+  });
+  return [...urls];
+}
+
+/** The site's name for display: "github.com" for "https://www.github.com/a/b". */
+export function siteName(url: string): string {
+  try {
+    return new URL(url).hostname.replace(/^www\./, '');
+  } catch {
+    return url;
+  }
 }
 
 /** IDs of photos in the body, in order. */

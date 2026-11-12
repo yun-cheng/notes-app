@@ -1,4 +1,5 @@
 import type { CardIndex } from './cardIndex';
+import { linkUrls, photoIds } from './content';
 import { addDays, isDateKey, parseDateKey, relativeDay, toDateKey } from './dates';
 import type { DiaryCard, NoteCard, TodoCard } from './types';
 
@@ -16,6 +17,9 @@ export type TodoStatus = 'open' | 'done' | 'today' | 'upcoming' | 'undated';
 /** When it was written: today, the past 7 or 30 days, or one day (a date key). */
 export type When = 'today' | 'week' | 'month' | string;
 
+/** Entries holding something besides text: web links or photos. */
+export type Contains = 'link' | 'photo';
+
 /** Oldest first like a chat (the default), newest first, most recently edited last, or by due date. */
 export type StreamSort = 'written' | 'newest' | 'edited' | 'due';
 
@@ -27,12 +31,14 @@ export interface StreamFilter {
   when?: When;
   tagId?: string;
   vaultId?: string;
+  has?: Contains;
 }
 
 const TYPES: EntryType[] = ['note', 'todo', 'diary'];
 const STATUSES: TodoStatus[] = ['open', 'done', 'today', 'upcoming', 'undated'];
 const WHENS = ['today', 'week', 'month'];
 const SORTS: StreamSort[] = ['written', 'newest', 'edited', 'due'];
+const CONTAINS: Contains[] = ['link', 'photo'];
 
 export function parseFilter(params: URLSearchParams): StreamFilter {
   const pick = <T extends string>(key: string, allowed: readonly string[]) => {
@@ -48,6 +54,7 @@ export function parseFilter(params: URLSearchParams): StreamFilter {
     when: when && (WHENS.includes(when) || isDateKey(when)) ? when : undefined,
     tagId: params.get('tag') || undefined,
     vaultId: params.get('vault') || undefined,
+    has: pick<Contains>('has', CONTAINS),
   };
 }
 
@@ -59,10 +66,11 @@ export function filterParams(filter: StreamFilter): URLSearchParams {
   if (filter.when) params.set('when', filter.when);
   if (filter.tagId) params.set('tag', filter.tagId);
   if (filter.vaultId) params.set('vault', filter.vaultId);
+  if (filter.has) params.set('has', filter.has);
   return params;
 }
 
-export const isFiltered = (f: StreamFilter) => !!(f.type || f.status || f.when || f.tagId || f.vaultId);
+export const isFiltered = (f: StreamFilter) => !!(f.type || f.status || f.when || f.tagId || f.vaultId || f.has);
 
 /** A todo status only makes sense for todos, so it narrows to them. */
 export const effectiveType = (f: StreamFilter): EntryType | undefined => (f.status ? 'todo' : f.type);
@@ -75,6 +83,7 @@ export function whenRange(when: When, today: string): [string, string] {
   return [when, when];
 }
 
+export const CONTAINS_LABEL: Record<Contains, string> = { link: 'With links', photo: 'With photos' };
 export const SORT_LABEL: Record<StreamSort, string> = { written: 'Oldest first', newest: 'Newest first', edited: 'Recently edited', due: 'Due date' };
 export const STATUS_LABEL: Record<TodoStatus, string> = { open: 'Open', done: 'Done', today: 'Due today', upcoming: 'Upcoming', undated: 'No date' };
 export const TYPE_LABEL: Record<EntryType, string> = { note: 'Notes', todo: 'Todos', diary: 'Diary' };
@@ -106,7 +115,7 @@ function diaryTime(card: DiaryCard): number {
  * Locked diary entries show as placeholders when nothing rules them out; their tags can't be read, so a tag hides them.
  */
 export function streamItems(index: CardIndex, filter: StreamFilter = {}, today = toDateKey(new Date())): StreamItem[] {
-  const { tagId, vaultId, status } = filter;
+  const { tagId, vaultId, status, has } = filter;
   const type = effectiveType(filter);
   const [from, to] = filter.when ? whenRange(filter.when, today) : ['', '9999'];
   const inRange = (day: string) => day >= from && day <= to;
@@ -115,6 +124,7 @@ export function streamItems(index: CardIndex, filter: StreamFilter = {}, today =
     (!tagId || card.tags.includes(tagId)) &&
     (!vaultId || card.vaultId === vaultId) &&
     (!status || (card.type === 'todo' && matchesStatus(card, status, today))) &&
+    (!has || (has === 'link' ? linkUrls(card.content) : photoIds(card.content)).length > 0) &&
     inRange(day);
 
   const items: StreamItem[] = [];
@@ -126,7 +136,7 @@ export function streamItems(index: CardIndex, filter: StreamFilter = {}, today =
   for (const card of index.diaryByDate.values()) {
     if (keep(card, card.date)) items.push({ kind: 'card', card, day: card.date, at: diaryTime(card) });
   }
-  if (!tagId && (!type || type === 'diary')) {
+  if (!tagId && !has && (!type || type === 'diary')) {
     for (const [date, locked] of index.lockedDiaries) {
       if (index.diaryByDate.has(date) || !inRange(date) || (vaultId && vaultId !== locked)) continue;
       items.push({ kind: 'locked-diary', date, vaultId: locked, day: date, at: endOfDay(date) });

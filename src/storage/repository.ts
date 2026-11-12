@@ -158,14 +158,14 @@ export class CardRepository {
     );
   }
 
-  createTodo(init: { title: string; due?: string | null }): Promise<Card> {
+  createTodo(init: { title: string; due?: string | null; content?: JSONNode; tags?: string[]; vaultId?: string }): Promise<Card> {
     return this.enqueue(async () =>
       this.write({
-        ...(await this.newEnvelope(this.newId())),
+        ...(await this.newEnvelope(this.newId(), init.vaultId)),
         type: 'todo',
         title: init.title,
-        content: EMPTY_DOC,
-        tags: [],
+        content: init.content ?? EMPTY_DOC,
+        tags: init.tags ?? [],
         status: 'open',
         due: init.due ?? null,
         completedAt: null,

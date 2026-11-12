@@ -1,6 +1,7 @@
 import type { CardIndex } from './cardIndex';
 import { linkUrls, photoIds } from './content';
 import { addDays, isDateKey, parseDateKey, relativeDay, toDateKey } from './dates';
+import { rankIn, type TagGroup } from './tagGroups';
 import type { DiaryCard, NoteCard, TodoCard } from './types';
 
 /**
@@ -20,8 +21,12 @@ export type When = 'today' | 'week' | 'month' | string;
 /** Entries holding something besides text: web links or photos. */
 export type Contains = 'link' | 'photo';
 
-/** Oldest first like a chat (the default), newest first, most recently edited last, or by due date. */
-export type StreamSort = 'written' | 'newest' | 'edited' | 'due';
+/**
+ * Oldest first like a chat (the default), newest first, most recently edited last, by due date, or by an ordered
+ * tag group (`group:<id>`), like Priority, highest first.
+ */
+export type StreamSort = 'written' | 'newest' | 'edited' | 'due' | `group:${string}`;
+export type BaseSort = Exclude<StreamSort, `group:${string}`>;
 
 /** What the journal is narrowed to, and how it's ordered. Every field is optional and they combine. */
 export interface StreamFilter {
@@ -37,7 +42,7 @@ export interface StreamFilter {
 const TYPES: EntryType[] = ['note', 'todo', 'diary'];
 const STATUSES: TodoStatus[] = ['open', 'done', 'today', 'upcoming', 'undated'];
 const WHENS = ['today', 'week', 'month'];
-const SORTS: StreamSort[] = ['written', 'newest', 'edited', 'due'];
+const SORTS: BaseSort[] = ['written', 'newest', 'edited', 'due'];
 const CONTAINS: Contains[] = ['link', 'photo'];
 
 export function parseFilter(params: URLSearchParams): StreamFilter {
@@ -46,7 +51,8 @@ export function parseFilter(params: URLSearchParams): StreamFilter {
     return v && allowed.includes(v) ? (v as T) : undefined;
   };
   const when = params.get('when');
-  const sort = pick<StreamSort>('sort', SORTS);
+  const rawSort = params.get('sort');
+  const sort = rawSort && /^group:./.test(rawSort) ? (rawSort as StreamSort) : pick<StreamSort>('sort', SORTS);
   return {
     sort: sort === 'written' ? undefined : sort,
     type: pick<EntryType>('type', TYPES),
@@ -84,10 +90,21 @@ export function whenRange(when: When, today: string): [string, string] {
 }
 
 export const CONTAINS_LABEL: Record<Contains, string> = { link: 'With links', photo: 'With photos' };
-export const SORT_LABEL: Record<StreamSort, string> = { written: 'Oldest first', newest: 'Newest first', edited: 'Recently edited', due: 'Due date' };
+export const SORT_LABEL: Record<BaseSort, string> = { written: 'Oldest first', newest: 'Newest first', edited: 'Recently edited', due: 'Due date' };
 export const STATUS_LABEL: Record<TodoStatus, string> = { open: 'Open', done: 'Done', today: 'Due today', upcoming: 'Upcoming', undated: 'No date' };
 export const TYPE_LABEL: Record<EntryType, string> = { note: 'Notes', todo: 'Todos', diary: 'Diary' };
 export const WHEN_LABEL: Record<string, string> = { today: 'Written today', week: 'Past 7 days', month: 'Past 30 days' };
+
+/** The group a sort orders by, if it's a group sort and the group is still there. */
+export function sortGroup(sort: StreamSort | undefined, groups: TagGroup[]): TagGroup | undefined {
+  return sort?.startsWith('group:') ? groups.find((g) => `group:${g.id}` === sort) : undefined;
+}
+
+export function sortLabel(sort: StreamSort, groups: TagGroup[]): string {
+  const group = sortGroup(sort, groups);
+  if (group) return `By ${group.title.toLowerCase()}`;
+  return SORT_LABEL[sort as BaseSort] ?? SORT_LABEL.written;
+}
 
 export function whenLabel(when: When, today: string): string {
   return WHEN_LABEL[when] ?? relativeDay(when, today);
@@ -142,10 +159,23 @@ export function streamItems(index: CardIndex, filter: StreamFilter = {}, today =
       items.push({ kind: 'locked-diary', date, vaultId: locked, day: date, at: endOfDay(date) });
     }
   }
-  return sortItems(items, filter.sort ?? 'written');
+  const group = sortGroup(filter.sort, index.tagGroups.groups);
+  if (group) return sortByGroup(items, group);
+  // A sort by a group that's gone falls back to the usual order.
+  const sort = filter.sort && filter.sort in SORT_LABEL ? (filter.sort as BaseSort) : 'written';
+  return sortItems(items, sort);
 }
 
-function sortItems(items: StreamItem[], sort: StreamSort): StreamItem[] {
+/** Highest in the group first, each of its tags under its own heading (`day` is the tag's ID), then entries with none. */
+function sortByGroup(items: StreamItem[], group: TagGroup): StreamItem[] {
+  const ranked = items.map((i) => {
+    const rank = i.kind === 'card' ? rankIn(group, i.card.tags) : group.members.length;
+    return { item: { ...i, day: group.members[rank]?.id ?? '' }, rank };
+  });
+  return ranked.sort((a, b) => a.rank - b.rank || a.item.at - b.item.at).map((r) => r.item);
+}
+
+function sortItems(items: StreamItem[], sort: BaseSort): StreamItem[] {
   if (sort === 'written') return items.sort((a, b) => a.at - b.at);
   if (sort === 'newest') return items.sort((a, b) => b.at - a.at);
   if (sort === 'edited') {

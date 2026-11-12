@@ -95,6 +95,13 @@ describe('sorting', () => {
     expect(run('edited')).toEqual(['later@2026-11-09', 'soon@2026-11-11', `old@${TODAY}`]);
   });
   it('can order by due date, with undated entries after', () => expect(run('due')).toEqual([`soon@${TODAY}`, 'later@2026-11-20', 'old@']));
+  it('can order by an ordered tag group, highest first, each under its tag, then entries with none', () => {
+    const prio = { ...tag('p', 'Priority'), members: ['hi', 'lo'], choice: 'one' as const, ordered: true };
+    const tagged = [tag('hi', 'High'), tag('lo', 'Low'), prio, { ...cards[0], tags: ['lo'] }, cards[1], { ...cards[2], tags: ['hi'] }];
+    expect(ids(streamItems(buildIndex(tagged), { sort: 'group:p' }, TODAY))).toEqual(['later@hi', 'old@lo', 'soon@']);
+    // A group that's gone leaves the usual order.
+    expect(ids(streamItems(buildIndex(cards), { sort: 'group:p' }, TODAY))).toEqual(['later@2026-11-09', 'old@2026-11-10', 'soon@2026-11-11']);
+  });
 });
 
 describe('filter in the address', () => {
@@ -102,5 +109,6 @@ describe('filter in the address', () => {
     const filter = { sort: 'due', type: 'todo', status: 'today', when: '2026-11-11', tagId: 'work', vaultId: 'v', has: 'photo' } as const;
     expect(parseFilter(filterParams(filter))).toEqual(filter);
     expect(parseFilter(new URLSearchParams('type=card&status=x&when=soon'))).toEqual({});
+    expect(parseFilter(new URLSearchParams('sort=group:p'))).toEqual({ sort: 'group:p' });
   });
 });

@@ -4,7 +4,7 @@ import { permissions } from '../../domain/access';
 import { linkTitle } from '../../domain/cardIndex';
 import { displayTitle, previewLines, splitLinks } from '../../domain/content';
 import { isDateKey, relativeDay, relativeDayInSentence, toDateKey } from '../../domain/dates';
-import { isFiltered, streamItems, type StreamItem, type StreamSort } from '../../domain/stream';
+import { isFiltered, sortGroup, streamItems, type StreamItem, type StreamSort } from '../../domain/stream';
 import type { DiaryCard, NoteCard, TodoCard } from '../../domain/types';
 import { useCards, useToday } from '../../state/CardsContext';
 import { Comments } from '../Comments';
@@ -150,7 +150,11 @@ function Stream({ items, empty, sort }: { items: StreamItem[]; empty: string; so
     window.scrollTo(0, chat ? document.documentElement.scrollHeight : 0);
   }, [items.length, chat]);
 
+  const { index } = useCards();
+  const group = sortGroup(sort, index.tagGroups.groups);
   const label = (day: string) => {
+    // Sorted by a tag group, a heading is one of its tags.
+    if (group) return day ? (index.byId.get(day)?.title ?? '') : `No ${group.title.toLowerCase()}`;
     if (sort !== 'due') return relativeDay(day, today);
     return day ? `Due ${relativeDayInSentence(day, today)}` : 'No due date';
   };

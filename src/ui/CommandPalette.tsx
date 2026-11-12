@@ -5,7 +5,7 @@ import { relativeDayInSentence } from '../domain/dates';
 import { parseEntry } from '../domain/entry';
 import { sortVaults } from '../domain/locks';
 import { buildSearch } from '../domain/search';
-import { CONTAINS_LABEL, SORT_LABEL, STATUS_LABEL, TYPE_LABEL, WHEN_LABEL, type Contains, type EntryType, type StreamFilter, type StreamSort, type TodoStatus } from '../domain/stream';
+import { CONTAINS_LABEL, SORT_LABEL, STATUS_LABEL, TYPE_LABEL, WHEN_LABEL, type Contains, type EntryType, type BaseSort, type StreamFilter, type TodoStatus } from '../domain/stream';
 import type { Card } from '../domain/types';
 import { useCards, useToday } from '../state/CardsContext';
 import { useNewNote } from './components';
@@ -94,8 +94,11 @@ export function CommandPalette({ onClose, onShortcuts }: { onClose: () => void; 
     for (const photos of Object.keys(PHOTO_STYLES) as PhotoStyle[]) {
       all.push({ id: `photos-${photos}`, group: 'Display', label: `Photos: ${PHOTO_STYLES[photos].toLowerCase()}`, icon: 'image', keywords: 'pictures images preview style size', run: () => setDisplayPrefs({ photos }) });
     }
-    for (const sort of Object.keys(SORT_LABEL) as StreamSort[]) {
+    for (const sort of Object.keys(SORT_LABEL) as BaseSort[]) {
       all.push({ id: `sort-${sort}`, group: 'Sort', label: `Sort: ${SORT_LABEL[sort].toLowerCase()}`, icon: 'upcoming', keywords: 'order', run: narrow({ sort }) });
+    }
+    for (const g of index.tagGroups.groups.filter((x) => x.ordered)) {
+      all.push({ id: `sort-group-${g.id}`, group: 'Sort', label: `Sort: by ${g.title.toLowerCase()}`, icon: 'upcoming', keywords: 'order group rank', run: narrow({ sort: `group:${g.id}` }) });
     }
     const unlocked = vaults.filter((v) => v.lock === 'pin' && !locked.has(v.id));
     if (unlocked.length) {

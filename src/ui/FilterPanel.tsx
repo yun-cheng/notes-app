@@ -6,10 +6,12 @@ import {
   isFiltered,
   parseFilter,
   SORT_LABEL,
+  sortLabel,
   STATUS_LABEL,
   TYPE_LABEL,
   WHEN_LABEL,
   whenLabel,
+  type BaseSort,
   type Contains,
   type EntryType,
   type StreamFilter,
@@ -100,11 +102,18 @@ export function FilterPanel({ onPick }: { onPick?: () => void }) {
             onPick?.();
           }}
         >
-          {(Object.keys(SORT_LABEL) as StreamSort[]).map((s) => (
+          {(Object.keys(SORT_LABEL) as BaseSort[]).map((s) => (
             <option key={s} value={s}>
               {SORT_LABEL[s]}
             </option>
           ))}
+          {index.tagGroups.groups
+            .filter((g) => g.ordered)
+            .map((g) => (
+              <option key={g.id} value={`group:${g.id}`}>
+                {sortLabel(`group:${g.id}`, index.tagGroups.groups)}
+              </option>
+            ))}
         </select>
       </label>
 

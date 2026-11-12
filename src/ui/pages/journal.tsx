@@ -3,76 +3,134 @@ import { Link, NavLink, Outlet, useLocation, useNavigate, useParams } from 'reac
 import { permissions } from '../../domain/access';
 import { linkTitle } from '../../domain/cardIndex';
 import { displayTitle, photoIds, previewLines } from '../../domain/content';
-import { relativeDay, toDateKey } from '../../domain/dates';
+import { isDateKey, relativeDay, toDateKey } from '../../domain/dates';
 import { appendToDoc, parseEntry } from '../../domain/entry';
 import { diaryVault } from '../../domain/locks';
-import { streamItems, type StreamItem } from '../../domain/stream';
+import { effectiveType, isFiltered, streamItems, type StreamFilter, type StreamItem, type StreamSort } from '../../domain/stream';
 import { EMPTY_DOC, type DiaryCard, type NoteCard, type TodoCard } from '../../domain/types';
 import { useCards, useToday } from '../../state/CardsContext';
 import { Comments } from '../Comments';
 import { Backlinks, Empty, Page, TagChips, TagPicker, TitleField, useDeleteCard, VaultField } from '../components';
 import { Editor } from '../editor/Editor';
+import { FilterPanel, useFilterTitle, useJournalFilter } from '../FilterPanel';
 import { Icon } from '../Icon';
 import { LockPanel } from '../LockPanel';
-import { cardPath, entryPath, sheetState, type SheetState } from '../paths';
+import { cardPath, entryPath, journalPath, sheetState, type SheetState } from '../paths';
 import { ShareDialog } from '../ShareDialog';
 
 const time = (at: number) => new Date(at).toLocaleTimeString(undefined, { hour: 'numeric', minute: '2-digit' });
 
-/** Everything written, notes, todos and diary entries, in one stream like a chat. */
+/**
+ * The one place for everything written: notes, todos and diary entries in a stream like a chat. The sidebar's
+ * filters narrow and order it, and a locked vault asks for its PIN right here.
+ */
 export function JournalPage() {
-  const { index } = useCards();
+  const { index, vaults, locked } = useCards();
   const today = useToday();
+  const filter = useJournalFilter();
+  const title = useFilterTitle(filter);
+  const [filtering, setFiltering] = useState(false);
+  const tag = index.tags.find((t) => t.id === filter.tagId);
+  const vault = vaults.find((v) => v.id === filter.vaultId);
+  const filtered = isFiltered(filter);
+
   return (
     <Page
-      title="Journal"
+      title={title}
       actions={
-        <NavLink className="icon-btn only-mobile" to="/settings" aria-label="Backup and settings">
-          <Icon name="settings" />
-        </NavLink>
+        <>
+          {tag && (
+            <Link className="icon-btn" to={`/card/${tag.id}`} aria-label={`About the ${tag.title} tag`} title="Rename, describe or pin this tag">
+              <Icon name="tag" />
+            </Link>
+          )}
+          {filter.when && isDateKey(filter.when) && (
+            <Link className="btn btn--quiet" to={`/day/${filter.when}`}>
+              Diary for this day
+            </Link>
+          )}
+          {filtered && (
+            <Link className="btn btn--quiet" to={journalPath({ sort: filter.sort })}>
+              Show all
+            </Link>
+          )}
+          <button
+            type="button"
+            className={`icon-btn only-mobile${filtered || filter.sort ? ' is-active' : ''}`}
+            aria-label="Filter and sort"
+            title="Filter and sort"
+            onClick={() => setFiltering(true)}
+          >
+            <Icon name="filter" />
+          </button>
+          <NavLink className="icon-btn only-mobile" to="/settings" aria-label="Backup and settings">
+            <Icon name="settings" />
+          </NavLink>
+        </>
       }
     >
-      {index.pinnedTags.length > 0 && (
-        <div className="chips chips--scroll only-mobile">
-          {index.pinnedTags.map((t) => (
-            <Link className="chip chip--nav" key={t.id} to={cardPath(t)}>
-              {t.title}
-            </Link>
-          ))}
-          <Link className="chip chip--nav chip--quiet" to="/tags">
-            All tags
-          </Link>
+      {vault && locked.has(vault.id) ? (
+        <div className="stream">
+          <LockPanel vaultId={vault.id} />
+        </div>
+      ) : (
+        <>
+          <Stream
+            key={`stream:${journalPath(filter)}`}
+            items={streamItems(index, filter, today)}
+            sort={filter.sort ?? 'written'}
+            empty={filtered ? 'Nothing here yet. Write below and it lands here.' : 'Nothing written yet. Write a note below, or start with [] for a todo.'}
+          />
+          <Composer key={`composer:${journalPath({ ...filter, sort: undefined })}`} filter={filter} />
+        </>
+      )}
+      {filtering && (
+        <div className="dialog-backdrop" onClick={(e) => e.target === e.currentTarget && setFiltering(false)}>
+          <div className="dialog filter-sheet" role="dialog" aria-label="Filter and sort">
+            <FilterPanel onPick={() => setFiltering(false)} />
+            <div className="note-sheet__bar">
+              <span className="note-sheet__spacer" />
+              <button type="button" className="btn" onClick={() => setFiltering(false)}>
+                Done
+              </button>
+            </div>
+          </div>
         </div>
       )}
-      <Stream items={streamItems(index, {}, today)} empty="Nothing written yet. Write a note below, or start with [] for a todo." />
-      <Composer />
       <Outlet />
     </Page>
   );
 }
 
-/** Bubbles grouped by day, opening at the newest like a chat. */
-function Stream({ items, empty }: { items: StreamItem[]; empty: string }) {
+/** Bubbles grouped by day. Written order opens at the newest, at the bottom, like a chat; other orders open at the top. */
+function Stream({ items, empty, sort }: { items: StreamItem[]; empty: string; sort: StreamSort }) {
   const today = useToday();
+  const chat = sort === 'written';
 
-  // Once, when the first entries show: they can arrive after the page does.
+  // Once, when the first entries show: they can arrive after the page does. The stream remounts when the filter changes.
   const scrolled = useRef(false);
   useLayoutEffect(() => {
     if (scrolled.current || !items.length) return;
     scrolled.current = true;
-    window.scrollTo(0, document.documentElement.scrollHeight);
-  }, [items.length]);
+    window.scrollTo(0, chat ? document.documentElement.scrollHeight : 0);
+  }, [items.length, chat]);
 
-  let lastDay = '';
+  const label = (day: string) => {
+    if (sort !== 'due') return relativeDay(day, today);
+    if (!day) return 'No due date';
+    const when = relativeDay(day, today);
+    return `Due ${/^(Today|Tomorrow|Yesterday)$/.test(when) ? when.toLowerCase() : when}`;
+  };
+  let lastDay: string | null = null;
   return (
-    <div className="stream">
+    <div className={`stream${chat ? '' : ' stream--top'}`}>
       {items.length === 0 && <Empty>{empty}</Empty>}
       {items.map((item) => {
         const separator = item.day !== lastDay;
         lastDay = item.day;
         return (
           <div key={item.kind === 'card' ? item.card.id : `locked-${item.date}`} className="stream__item">
-            {separator && <p className="stream__day">{relativeDay(item.day, today)}</p>}
+            {separator && <p className="stream__day">{label(item.day)}</p>}
             {item.kind === 'locked-diary' ? <LockedDiaryBubble date={item.date} /> : <EntryBubble card={item.card} at={item.at} />}
           </div>
         );
@@ -184,9 +242,11 @@ function useSaveEntry() {
   const { repo, index, vaults, locked } = useCards();
   const today = useToday();
 
-  return async (text: string, opts: { todo: boolean }): Promise<SaveResult> => {
+  return async (text: string, opts: { todo: boolean; diary?: boolean; due?: string; tagId?: string; vaultId?: string }): Promise<SaveResult> => {
     const entry = parseEntry(opts.todo ? `[] ${text.trimStart()}` : text, today);
     if (!entry) return { saved: false };
+    if (opts.diary && entry.kind === 'note') entry.kind = 'diary';
+    if (entry.kind === 'todo' && !entry.due && opts.due) entry.due = opts.due;
 
     const vault = diaryVault(vaults);
     if (entry.kind === 'diary') {
@@ -194,7 +254,7 @@ function useSaveEntry() {
       if (lockedIn) return { saved: false, unlock: lockedIn };
     }
 
-    const tagIds: string[] = [];
+    const tagIds = opts.tagId ? [opts.tagId] : [];
     for (const name of entry.tags) {
       const found = index.tags.find((t) => t.title.toLowerCase() === name.toLowerCase());
       const id = found?.id ?? repo.newId();
@@ -207,17 +267,21 @@ function useSaveEntry() {
       const tags = [...new Set([...(existing?.tags ?? []), ...tagIds])];
       await repo.saveDiary(today, { content: appendToDoc(existing?.content ?? EMPTY_DOC, entry.content), tags }, existing?.id, vault?.id);
     } else if (entry.kind === 'todo') {
-      await repo.createTodo({ title: entry.title, content: entry.content, tags: tagIds, due: entry.due });
+      await repo.createTodo({ title: entry.title, content: entry.content, tags: tagIds, due: entry.due, vaultId: opts.vaultId });
     } else {
-      await repo.createNote({ content: entry.content, tags: tagIds });
+      await repo.createNote({ content: entry.content, tags: tagIds, vaultId: opts.vaultId });
     }
     return { saved: true };
   };
 }
 
-/** The box at the bottom of the journal. What's typed goes where its markers send it. */
-function Composer() {
+/**
+ * Writes into whatever the journal is narrowed to: its tag and vault, a todo when it shows todos (due today when
+ * it shows what's due today), and the diary when it shows the diary.
+ */
+function Composer({ filter }: { filter: StreamFilter }) {
   const save = useSaveEntry();
+  const today = useToday();
   const { locked } = useCards();
   const [text, setText] = useState('');
   // The vault to unlock before a diary line can be saved; its PIN is asked for right above the box.
@@ -227,21 +291,24 @@ function Composer() {
   useEffect(() => {
     if (unlocked) input.current?.focus();
   }, [unlocked]);
-  const [todo, setTodo] = useState(false);
+  const [todo, setTodo] = useState(effectiveType(filter) === 'todo');
+  const diary = filter.type === 'diary';
+  const { tagId, vaultId } = filter;
 
   const submit = (e?: FormEvent) => {
     e?.preventDefault();
     if (!text.trim()) return;
     const typed = text;
     setText('');
-    void save(typed, { todo }).then((result) => {
+    const due = filter.status === 'today' ? today : undefined;
+    void save(typed, { todo, diary: diary && !todo, due, tagId, vaultId }).then((result) => {
       setUnlock(result.saved ? null : (result.unlock ?? null));
       if (!result.saved) setText((now) => now || typed);
-      else requestAnimationFrame(() => window.scrollTo({ top: document.documentElement.scrollHeight, behavior: 'smooth' }));
+      else if (!filter.sort) requestAnimationFrame(() => window.scrollTo({ top: document.documentElement.scrollHeight, behavior: 'smooth' }));
     });
   };
 
-  const placeholder = todo ? 'Add a todo, @tomorrow for a due date' : 'Write a note · [] todo · #tag';
+  const placeholder = todo ? 'Add a todo, @tomorrow for a due date' : diary ? "Write in today's diary" : 'Write a note · [] todo · #tag';
   return (
     <>
       {unlock && locked.has(unlock) && (

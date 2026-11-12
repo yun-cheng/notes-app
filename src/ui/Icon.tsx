@@ -3,6 +3,7 @@ const PATHS = {
   upcoming: 'M4 7h16M4 12h10M4 17h6M16 15l3 3 3-3M19 11v7',
   calendar: 'M4 9h16M8 3v4M16 3v4M6 5h12a2 2 0 0 1 2 2v12a2 2 0 0 1-2 2H6a2 2 0 0 1-2-2V7a2 2 0 0 1 2-2Z',
   notes: 'M7 3h7l5 5v11a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2ZM14 3v5h5M9 13h6M9 17h6',
+  filter: 'M4 6h16M7 12h10M10 18h4',
   search: 'M20 20l-4.2-4.2M18 11a7 7 0 1 1-14 0 7 7 0 0 1 14 0Z',
   tag: 'M3 12V5a2 2 0 0 1 2-2h7l9 9-9 9-9-9ZM8 8h.01',
   settings: 'M4 7h9M17 7h3M4 17h3M11 17h9M15 5v4M9 15v4',

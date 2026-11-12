@@ -1,68 +1,12 @@
 import { useMemo, useState, type FormEvent } from 'react';
 import { Link, useSearchParams } from 'react-router';
 import { displayTitle } from '../../domain/content';
-import { addMonths, formatMonth, monthGrid, monthKey, parseDateKey, relativeDay } from '../../domain/dates';
+import { addMonths, formatMonth, monthGrid, monthKey, parseDateKey } from '../../domain/dates';
 import { buildSearch } from '../../domain/search';
-import { todayView, upcomingView } from '../../domain/todos';
 import { useCards, useToday } from '../../state/CardsContext';
-import { CardRow, Empty, Page, QuickAddTodo, Section, TodoList } from '../components';
+import { CardRow, Empty, Page } from '../components';
 import { Icon } from '../Icon';
-import { cardPath } from '../paths';
-
-export function TodayPage() {
-  const { index } = useCards();
-  const today = useToday();
-  const view = todayView(index.todos, today);
-  const diary = index.diaryByDate.get(today);
-  const nothing = !view.overdue.length && !view.today.length;
-  return (
-    <Page title="Today">
-      <Link className="diary-link" to={`/day/${today}`}>
-        <Icon name="diary" />
-        <span>{diary ? "Continue today's diary" : "Write today's diary"}</span>
-      </Link>
-      <QuickAddTodo due={today} placeholder="Add a todo for today" />
-      {view.overdue.length > 0 && (
-        <Section title="Overdue" tone="alert">
-          <TodoList todos={view.overdue} />
-        </Section>
-      )}
-      {view.today.length > 0 && (
-        <Section title="Due today">
-          <TodoList todos={view.today} showDue={false} />
-        </Section>
-      )}
-      {nothing && <Empty>Nothing due today.</Empty>}
-      {view.doneToday.length > 0 && (
-        <Section title="Done today">
-          <TodoList todos={view.doneToday} showDue={false} />
-        </Section>
-      )}
-    </Page>
-  );
-}
-
-export function UpcomingPage() {
-  const { index } = useCards();
-  const today = useToday();
-  const view = upcomingView(index.todos, today);
-  return (
-    <Page title="Upcoming">
-      <QuickAddTodo due={null} placeholder="Add a todo with no date" />
-      {view.days.map((d) => (
-        <Section key={d.date} title={relativeDay(d.date, today)}>
-          <TodoList todos={d.todos} showDue={false} />
-        </Section>
-      ))}
-      {view.noDate.length > 0 && (
-        <Section title="No date">
-          <TodoList todos={view.noDate} showDue={false} />
-        </Section>
-      )}
-      {!view.days.length && !view.noDate.length && <Empty>No upcoming todos.</Empty>}
-    </Page>
-  );
-}
+import { journalPath } from '../paths';
 
 function firstDayOfWeek(): number {
   try {
@@ -120,7 +64,7 @@ export function CalendarPage() {
           const cls = ['calendar__day', monthKey(d) !== month && 'is-outside', d === today && 'is-today'].filter(Boolean).join(' ');
           const label = `${parseDateKey(d).toLocaleDateString(undefined, { month: 'long', day: 'numeric' })}${hasDiary ? ', diary entry' : ''}${count ? `, ${count} todo${count > 1 ? 's' : ''} due` : ''}`;
           return (
-            <Link key={d} className={cls} to={`/day/${d}`} aria-label={label}>
+            <Link key={d} className={cls} to={journalPath({ when: d })} aria-label={label}>
               <span className="calendar__num">{Number(d.slice(8))}</span>
               <span className="calendar__marks">
                 {hasDiary && <span className="dot" />}
@@ -158,7 +102,7 @@ export function TagsPage() {
             const count = (index.backlinks.get(t.id) ?? []).filter((l) => l.kind === 'tag').length;
             return (
               <div className="row" key={t.id}>
-                <Link className="row__body" to={cardPath(t)}>
+                <Link className="row__body" to={journalPath({ tagId: t.id })}>
                   <span className="row__title">{displayTitle(t)}</span>
                   <span className="row__preview">
                     {count} {count === 1 ? 'card' : 'cards'}

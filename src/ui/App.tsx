@@ -1,9 +1,9 @@
 import { useEffect } from 'react';
-import { Navigate, NavLink, Outlet, Route, Routes, useLocation, useNavigate } from 'react-router';
+import { Link, Navigate, NavLink, Outlet, Route, Routes, useLocation, useNavigate } from 'react-router';
 import { registerSW } from 'virtual:pwa-register';
 import { AuthGate, useAccount } from '../auth/AuthContext';
 import { PairPage } from '../auth/PairPage';
-import { useCards, useSyncStatus } from '../state/CardsContext';
+import { useSyncStatus } from '../state/CardsContext';
 import { describeSync } from '../sync/engine';
 import { useNewNote } from './components';
 import { Icon, type IconName } from './Icon';
@@ -14,20 +14,37 @@ import { HistoryPage } from './pages/history';
 import { SettingsPage } from './pages/SettingsPage';
 import { VaultPage, VaultsPage } from './pages/vaults';
 import { EntrySheet, JournalPage, OldNoteRedirect } from './pages/journal';
-import { CalendarPage, SearchPage, TagsPage, TodayPage, UpcomingPage } from './pages/views';
-import { cardPath, type SheetState } from './paths';
+import { CalendarPage, SearchPage, TagsPage } from './pages/views';
+import { FilterPanel } from './FilterPanel';
+import { journalPath, type SheetState } from './paths';
 import { ToastProvider, useToast } from './Toast';
 
-const MAIN_NAV: { to: string; label: string; icon: IconName }[] = [
+/** The phone's tab bar. Today is a journal filter: open todos due by today. */
+const TABS: { to: string; label: string; icon: IconName }[] = [
   { to: '/journal', label: 'Journal', icon: 'notes' },
-  { to: '/today', label: 'Today', icon: 'today' },
-  { to: '/upcoming', label: 'Upcoming', icon: 'upcoming' },
+  { to: journalPath({ status: 'today' }), label: 'Today', icon: 'today' },
   { to: '/calendar', label: 'Calendar', icon: 'calendar' },
   { to: '/search', label: 'Search', icon: 'search' },
 ];
 
+function TabBar() {
+  const { pathname, search } = useLocation();
+  const here = pathname + search;
+  // The journal tab stays lit for any filter except the one that has its own tab.
+  const active = (to: string) => (to === '/journal' ? pathname === '/journal' && !TABS.some((t) => t.to === here && t.to !== to) : here === to || pathname === to);
+  return (
+    <nav className="tabbar" aria-label="Main">
+      {TABS.map((n) => (
+        <Link key={n.to} to={n.to} className={active(n.to) ? 'active' : undefined} aria-current={active(n.to) ? 'page' : undefined}>
+          <Icon name={n.icon} size={22} />
+          <span>{n.label}</span>
+        </Link>
+      ))}
+    </nav>
+  );
+}
+
 function Sidebar() {
-  const { index } = useCards();
   const newNote = useNewNote();
   const sync = useSyncStatus();
   return (
@@ -36,32 +53,11 @@ function Sidebar() {
       <button type="button" className="btn btn--primary sidebar__new" onClick={() => void newNote()}>
         New note
       </button>
-      <nav aria-label="Main">
-        {MAIN_NAV.map((n) => (
-          <NavLink key={n.to} to={n.to} className="nav-item">
-            <Icon name={n.icon} />
-            <span>{n.label}</span>
-          </NavLink>
-        ))}
-      </nav>
-      <nav aria-label="Folders" className="sidebar__group">
-        <h2>Folders</h2>
-        {index.pinnedTags.map((t) => (
-          <NavLink key={t.id} to={cardPath(t)} className="nav-item">
-            <Icon name="tag" />
-            <span>{t.title}</span>
-            <span className="nav-item__count">{(index.backlinks.get(t.id) ?? []).filter((l) => l.kind === 'tag').length}</span>
-          </NavLink>
-        ))}
-        <NavLink to="/tags" className="nav-item nav-item--quiet">
-          <span className="nav-item__pad" />
-          <span>All tags</span>
-        </NavLink>
-        <NavLink to="/vaults" className="nav-item nav-item--quiet">
-          <Icon name="lock" />
-          <span>Vaults</span>
-        </NavLink>
-      </nav>
+      <NavLink to="/search" className="nav-item">
+        <Icon name="search" />
+        <span>Search</span>
+      </NavLink>
+      <FilterPanel />
       <p className="sidebar__sync" role="status">
         {describeSync(sync)}
       </p>
@@ -125,14 +121,7 @@ function Layout() {
         <SessionBanner />
         <Outlet />
       </main>
-      <nav className="tabbar" aria-label="Main">
-        {MAIN_NAV.map((n) => (
-          <NavLink key={n.to} to={n.to}>
-            <Icon name={n.icon} size={22} />
-            <span>{n.label}</span>
-          </NavLink>
-        ))}
-      </nav>
+      <TabBar />
     </div>
   );
 }
@@ -160,8 +149,8 @@ function SignedInApp() {
         <Route path="pair" element={<PairPage />} />
         <Route element={<Layout />}>
           <Route index element={<Navigate to="/journal" replace />} />
-          <Route path="today" element={<TodayPage />} />
-          <Route path="upcoming" element={<UpcomingPage />} />
+          <Route path="today" element={<Navigate to={journalPath({ status: 'today' })} replace />} />
+          <Route path="upcoming" element={<Navigate to={journalPath({ status: 'upcoming' })} replace />} />
           <Route path="calendar" element={<CalendarPage />} />
           <Route path="journal" element={<JournalPage />}>
             <Route path=":id" element={<EntrySheet />} />

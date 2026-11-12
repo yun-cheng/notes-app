@@ -6,12 +6,12 @@ import { todosDueOn } from '../../domain/todos';
 import { EMPTY_DOC, type Card } from '../../domain/types';
 import { useCards, useToday } from '../../state/CardsContext';
 import { permissions } from '../../domain/access';
-import { Backlinks, Empty, Page, QuickAddTodo, Section, TagChips, TagPicker, TitleField, TodoList, useDeleteCard, useNewNote, VaultField } from '../components';
+import { Backlinks, Empty, Page, QuickAddTodo, Section, TagChips, TagPicker, TitleField, TodoList, useDeleteCard, VaultField } from '../components';
 import { Editor } from '../editor/Editor';
 import { LockPanel } from '../LockPanel';
 import { Comments } from '../Comments';
 import { Icon } from '../Icon';
-import { entryPath } from '../paths';
+import { entryPath, journalPath } from '../paths';
 import { ShareDialog } from '../ShareDialog';
 
 function FormattingToggle({ on, onChange }: { on: boolean; onChange: (on: boolean) => void }) {
@@ -30,7 +30,7 @@ function TagsToggle({ on, onChange }: { on: boolean; onChange: (on: boolean) => 
   );
 }
 
-const HOME: Record<Card['type'], string> = { note: '/journal', todo: '/upcoming', tag: '/tags', diary: '/calendar' };
+const HOME: Record<Card['type'], string> = { note: '/journal', todo: '/journal', tag: '/tags', diary: '/journal' };
 const LABEL: Record<Card['type'], string> = { note: 'Note', todo: 'Todo', tag: 'Tag', diary: 'Diary' };
 
 export function CardPage() {
@@ -72,7 +72,6 @@ function CardDetail({ card }: { card: Exclude<Card, { type: 'diary' }> }) {
   const { repo, vaults, shared } = useCards();
   const can = permissions(card, vaults, shared);
   const remove = useDeleteCard();
-  const newNote = useNewNote();
   const today = useToday();
   const fresh = !!(useLocation().state as { fresh?: boolean } | null)?.fresh;
   const [sharing, setSharing] = useState(false);
@@ -88,11 +87,13 @@ function CardDetail({ card }: { card: Exclude<Card, { type: 'diary' }> }) {
         </button>
         <span className="card-bar__type">{LABEL[card.type]}</span>
         <span className="card-bar__spacer" />
+        {card.type === 'tag' && (
+          <Link className="btn" to={journalPath({ tagId: card.id })}>
+            Show in Journal
+          </Link>
+        )}
         {card.type === 'tag' && can.edit && (
           <>
-            <button type="button" className="btn" onClick={() => void newNote([card.id])}>
-              New note here
-            </button>
             <button
               type="button"
               className={`icon-btn${card.pinned ? ' is-active' : ''}`}

@@ -1,8 +1,15 @@
 import type { Location } from 'react-router';
+import { filterParams, type StreamFilter } from '../domain/stream';
 import type { Card } from '../domain/types';
 
 /** Notes and todos open in a sheet, over whatever page they were opened from. */
 export const entryPath = (id: string) => `/journal/${id}`;
+
+/** The journal, narrowed by a filter. */
+export function journalPath(filter: StreamFilter): string {
+  const query = filterParams(filter).toString();
+  return query ? `/journal?${query}` : '/journal';
+}
 
 export const opensInSheet = (card: Card) => card.type === 'note' || card.type === 'todo';
 

@@ -7,7 +7,7 @@ import { relativeDay } from '../domain/dates';
 import type { Card, TodoCard } from '../domain/types';
 import { useCards, useToday } from '../state/CardsContext';
 import { Icon, type IconName } from './Icon';
-import { cardPath, entryPath, sheetState } from './paths';
+import { cardPath, entryPath, journalPath, sheetState } from './paths';
 import { useToast } from './Toast';
 
 export function Page({ title, actions, children }: { title: ReactNode; actions?: ReactNode; children: ReactNode }) {
@@ -234,7 +234,7 @@ export function TagPicker({ tagIds, onChange }: { tagIds: string[]; onChange: (t
       <div className="chips">
         {current.map((t) => (
           <span className="chip" key={t.id}>
-            <Link to={cardPath(t)}>{t.title}</Link>
+            <Link to={journalPath({ tagId: t.id })}>{t.title}</Link>
             <button type="button" aria-label={`Remove tag ${t.title}`} onClick={() => onChange(tagIds.filter((x) => x !== t.id))}>
               ×
             </button>

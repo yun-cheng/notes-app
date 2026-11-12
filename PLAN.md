@@ -15,7 +15,7 @@ Existing apps were considered (Notesnook is the closest, then Anytype, then Obsi
 ### Cards
 Everything is a card: `note`, `todo`, `diary`, `tag`.
 
-- Todo adds status and due date. Main views: Today, Upcoming.
+- Todo adds status and due date. Today and Upcoming are filters on the journal.
 - Diary adds a date, one entry per day. Main view: Calendar / daily page. Defaults to a private vault.
 - Links and backlinks are in scope. Canvas/whiteboard is NOT needed for now.
 
@@ -25,6 +25,8 @@ Decided 2026-11-12, like Logseq's journal. There is one place where everything i
 - `[] ` or `TODO ` at the start, or `#todo`, makes a todo; on a todo, `@today`, `@tomorrow`, `@fri` or `@2026-12-01` sets the due date.
 - `#diary` adds the text to the day's diary entry, in the private vault.
 - Any other `#tag` files it under that tag, making the tag if it's new.
+
+The sidebar is the journal's filter: by type (notes, todos, diary), by todo status (open, due today, upcoming, no date, done), by when it was written (today, the past 7 or 30 days, or a day picked in the Calendar), by tag and by vault, and it sorts by oldest first, newest first, recently edited or due date. Filters combine. Picking a locked vault asks for its PIN right there. New entries go into whatever the journal is narrowed to. On a phone, the same filters open from a button at the top of the journal.
 
 A bubble opens in a small sheet with just its text; formatting, tags, a title, sharing, history and trash sit behind small buttons there. A note without a title is named by its first line.
 
@@ -110,7 +112,7 @@ Links and tag associations live inside the card payload.
 
 ## Milestones
 
-1. Works on one device: notes, todos, diary; tags, links and backlinks; search; Today and Calendar views; installable PWA. **Built and deployed; not yet tried on a real Android phone.**
+1. Works on one device: notes, todos, diary; tags, links and backlinks; search; Today and Calendar views (now journal filters); installable PWA. **Built and deployed; not yet tried on a real Android phone.**
 2. Sync and accounts: Worker and D1, Google sign-in, multi-user data model (only the owner using it). **Built and deployed; real Google sign-in works.**
 3. Private vaults: PIN, optional fingerprint, auto-lock, hidden from search. **Built and deployed.**
    - Added alongside: version history per card, and undo and redo buttons in the editor. Deployed.
@@ -240,9 +242,11 @@ None. Defaults chosen while building are listed in the implementation notes, and
 - The stream orders notes and todos by when they were created, so editing doesn't move them, and groups them under day labels. A diary entry sits at the time it was started, or at the end of its day if it was written on another day.
 - Card types stay as they were (note, todo, diary, tag), so sync, MCP and the native apps are unchanged; only the web app's screens changed. The markers are read when the box is saved (`src/domain/entry.ts`), and `#todo` and `#diary` never become tags.
 - A weekday date (`@fri`) means the next one after today, so `@thu` on a Thursday is a week away.
-- A tag created from the box goes in the default vault.
+- The filter lives in the address (`/journal?type=todo&status=today&tag=…&vault=…&when=week&sort=due`), so the back button and bookmarks work. `/today` and `/upcoming` redirect to their filters, and Calendar days open the journal for that day.
+- A tag's own page (rename, describe, pin) is still at `/card/:id`, reached from the tag button at the top of a tag-filtered journal or from All tags.
+- New entries take the filter's tag and vault; a todo filter makes the box write todos, and "Due today" makes them due today. A tag created from the box goes in the default vault.
 - With the diary locked, a `#diary` line stays in the box and the vault's PIN is asked for above it.
-- Notes and todos open at `/journal/:id` in a sheet over the page they were opened from (Search, Today, a tag), so the back button closes it. Old `/notes/:id` and `/card/:id` links to notes and todos redirect there.
+- Notes and todos open at `/journal/:id` in a sheet over the page they were opened from (Search, Calendar, a filtered journal), so the back button closes it. Old `/notes/:id` and `/card/:id` links to notes and todos redirect there.
 - The box saves on Enter on a computer (Shift+Enter for a new line). On a phone, Return makes a new line and the send button saves.
 - The native apps still have the earlier layout; they follow once the web design settles.
 

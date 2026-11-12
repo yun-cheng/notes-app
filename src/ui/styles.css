@@ -92,8 +92,6 @@ body:has(.composer__input:focus) .tabbar { display: none; }
   }
   .sidebar__brand { font: 600 20px/1.2 var(--serif); padding: 0 10px 12px; }
   .sidebar__new { margin: 0 4px 12px; }
-  .sidebar__group { margin-top: 18px; }
-  .sidebar__group h2 { font-size: 12px; font-weight: 600; color: var(--muted); padding: 0 10px 4px; }
   .sidebar__sync { margin-top: auto; padding: 8px 10px 4px; font-size: 12px; color: var(--muted); }
 }
 
@@ -369,6 +367,7 @@ body:has(.composer__input:focus) .tabbar { display: none; }
 .bubble__meta { display: flex; flex-wrap: wrap; align-items: center; justify-content: flex-end; gap: 6px; color: var(--muted); font-size: 11px; line-height: 1.6; }
 .bubble__meta .chip--small { min-height: 18px; }
 .bubble__photos { display: inline-flex; align-items: center; gap: 2px; }
+.stream--top { justify-content: flex-start; }
 .bubble--todo { flex-direction: row; align-items: flex-start; gap: 4px; padding-left: 6px; }
 .bubble--todo .check { height: 24px; margin: 0; }
 .bubble__body { display: flex; flex-direction: column; gap: 2px; min-width: 0; }
@@ -414,6 +413,14 @@ body:has(.composer__input:focus) .composer { bottom: 8px; }
 .note-sheet__spacer { flex: 1; }
 .note-sheet__when { color: var(--muted); font-size: 12px; margin-right: 8px; }
 
+/* Journal filters: in the sidebar on a computer, in a sheet on a phone */
+.filters { display: flex; flex-direction: column; gap: 2px; }
+.filters .sidebar__group { margin-top: 14px; }
+.filters .sidebar__group h2 { font-size: 12px; font-weight: 600; color: var(--muted); padding: 0 10px 4px; }
+.filters .nav-item { padding: 5px 10px; font-size: 14px; }
+.filters__sort { display: flex; align-items: center; gap: 8px; padding: 8px 10px 0; font-size: 13px; color: var(--muted); }
+.filters__sort select { flex: 1; min-width: 0; padding: 4px 6px; border: 1px solid var(--line); border-radius: 8px; background: var(--surface); color: var(--text); font: inherit; }
+.filter-sheet { gap: 0; }
 .composer__unlock { position: sticky; bottom: calc(var(--tabbar) + env(safe-area-inset-bottom) + 64px); z-index: 6; margin-top: 8px; padding: 12px 14px; background: var(--surface); border: 1px solid var(--line); border-radius: 16px; box-shadow: 0 2px 10px rgb(0 0 0 / 6%); }
 .composer__unlock > p { margin: 0 0 8px; color: var(--muted); font-size: 13px; }
 @media (min-width: 860px) { .composer__unlock { bottom: 72px; } }

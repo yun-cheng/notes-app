@@ -2,7 +2,7 @@ import type { VaultPin } from '../domain/pin';
 import type { CardRecord, JSONNode, Vault } from '../domain/types';
 import type { PhotoTransport } from '../photos/types';
 import { SyncAuthExpired, SyncOffline, type SyncTransport } from './engine';
-import type { ConfigResponse, PullResponse, PushResponse, SessionInfo, SharedCard, VersionResponse, VersionsResponse } from './protocol';
+import type { ConfigResponse, LinkPreview, PullResponse, PushResponse, SessionInfo, SharedCard, VersionResponse, VersionsResponse } from './protocol';
 
 async function request<T>(path: string, init?: RequestInit): Promise<T> {
   let res: Response;
@@ -25,6 +25,9 @@ export const httpTransport: SyncTransport = {
 };
 
 export const fetchConfig = () => request<ConfigResponse>('/config');
+
+/** What a web page says about itself, read by the server. The address goes in the body, not the query string. */
+export const fetchLinkPreview = (url: string) => request<LinkPreview>('/unfurl', { method: 'POST', body: JSON.stringify({ url }) });
 
 export const signInWithGoogle = (credential: string) =>
   request<SessionInfo>('/auth/google', { method: 'POST', body: JSON.stringify({ credential }) });

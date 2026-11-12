@@ -3,20 +3,21 @@ import type { CardRecord } from '../src/domain/types';
 import type { PullResponse, PushResult, SessionInfo } from '../src/sync/protocol';
 import { createApp } from './app';
 import type { GoogleFetch } from './drive';
+import type { WebFetch } from './unfurl';
 import { InvalidGoogleToken, type VerifyGoogleToken } from './auth';
 import { createTestDb } from './testDb';
 
 export const CLIENT_ID = 'test-client';
 export const DAY = 86_400_000;
 
-export function setup(options: { googleFetch?: GoogleFetch; clientSecret?: string } = {}) {
+export function setup(options: { googleFetch?: GoogleFetch; webFetch?: WebFetch; clientSecret?: string } = {}) {
   const db = createTestDb();
   let clock = 1_000_000;
   const verifyGoogle: VerifyGoogleToken = async (credential) => {
     if (credential === 'bad') throw new InvalidGoogleToken('no');
     return { sub: credential, email: `${credential}@example.com`, name: credential };
   };
-  const app = createApp({ verifyGoogle, now: () => clock, googleFetch: options.googleFetch });
+  const app = createApp({ verifyGoogle, now: () => clock, googleFetch: options.googleFetch, webFetch: options.webFetch });
   const env = { DB: db, GOOGLE_CLIENT_ID: CLIENT_ID, GOOGLE_CLIENT_SECRET: options.clientSecret };
   const call = (path: string, init: RequestInit = {}, cookie?: string) =>
     app.request(path, { ...init, headers: { 'content-type': 'application/json', ...(cookie ? { cookie } : {}), ...init.headers } }, env);

@@ -33,7 +33,7 @@ Cmd+K (Ctrl+K elsewhere) opens a command box for doing anything from the keyboar
 
 Several entries can be changed at once: Cmd-click (Ctrl-click) or a long press picks a bubble, Shift-click picks a range, and Select at the top starts picking. While entries are picked, the writing box becomes a bar that tags or untags them, marks todos done or not, sets their due date, moves them to another vault or trashes them, each with an undo.
 
-An entry's photos show as thumbnails under its bubble, opening full size in a viewer that steps through them, and its web links show as small cards with their site.
+An entry's photos show as thumbnails under its bubble, opening full size in a viewer that steps through them, and its web links show as cards with the page's own title, description and image.
 
 A bubble opens in a small sheet with just its text; formatting, tags, a title, sharing, history and trash sit behind small buttons there. A note without a title is named by its first line.
 
@@ -258,6 +258,8 @@ None. Defaults chosen while building are listed in the implementation notes, and
 - Notes and todos open at `/journal/:id` in a sheet over the page they were opened from (Search, Calendar, a filtered journal), so the back button closes it. Old `/notes/:id` and `/card/:id` links to notes and todos redirect there.
 - The box saves on Enter on a computer (Shift+Enter for a new line). On a phone, Return makes a new line and the send button saves.
 - A batch change skips entries it doesn't apply to (a due date on a note) or that already match, and entries this account can't change, which the toast counts. Undo puts back each entry's own earlier value. Picks that fall outside a new filter are kept but not counted or changed.
+- Link previews come from `POST /api/unfurl {url}`: the server reads at most 256 KB of the page within 5 seconds, takes its Open Graph tags or `<title>`, and caches the result for a day. It fetches only public web addresses on ports 80 and 443, following up to three redirects itself and checking each one, so it can't be pointed at the server's own network. The address goes in the request body so it stays out of logs.
+- The app keeps each preview on the device for a week (a page that gave nothing is asked again after an hour). Links in encrypted vaults are never previewed, so those addresses don't leave the device. A preview's image loads straight from the page's site, with no referrer.
 - In the command box, text with markers (`[]`, `#tag`, `@friday`) offers saving first; other text lists matching commands, then matching notes, then saving. Commands whose name matches come before ones that match by keyword.
 - The native apps still have the earlier layout; they follow once the web design settles.
 

@@ -24,6 +24,7 @@ import { publicRoutes, shareRoutes } from './shares';
 import { pullRecords, pushRecords } from './sync';
 import { createVault, listVaults, updateVault, type VaultUpdate } from './vaults';
 import { getVersion, listVersions, sealVersions } from './versions';
+import { unfurlRoutes, type WebFetch } from './unfurl';
 
 type Env = AppEnv;
 
@@ -32,6 +33,8 @@ export interface AppOptions {
   now?: () => number;
   /** Calls to Google's token and Drive APIs, replaced in tests. */
   googleFetch?: GoogleFetch;
+  /** Fetches web pages for link previews, replaced in tests. */
+  webFetch?: WebFetch;
 }
 
 const COOKIE = 'session';
@@ -107,7 +110,12 @@ function parseVaultBody(body: Record<string, unknown> | null): VaultUpdate | nul
   return out;
 }
 
-export function createApp({ verifyGoogle = googleVerifier(), now = Date.now, googleFetch = (input, init) => fetch(input, init) }: AppOptions = {}) {
+export function createApp({
+  verifyGoogle = googleVerifier(),
+  now = Date.now,
+  googleFetch = (input, init) => fetch(input, init),
+  webFetch = (input, init) => fetch(input, init),
+}: AppOptions = {}) {
   const app = new Hono<Env>();
 
   const sendSessionCookie = (c: Context<Env>, token: string) =>
@@ -244,6 +252,7 @@ export function createApp({ verifyGoogle = googleVerifier(), now = Date.now, goo
 
   aiSessionRoutes(app, now);
   photoRoutes(app, googleFetch, now);
+  unfurlRoutes(app, webFetch);
   memberRoutes(app, now);
   shareRoutes(app, now);
   commentRoutes(app, now);

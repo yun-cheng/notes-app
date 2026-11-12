@@ -63,3 +63,13 @@ export interface VersionsResponse {
 export interface VersionResponse extends VersionInfo {
   payload: string;
 }
+
+/** What a link's page says about itself, for a preview card. Only `url` is certain. */
+export interface LinkPreview {
+  url: string;
+  title?: string;
+  description?: string;
+  /** An https image address from the page. */
+  image?: string;
+  site?: string;
+}

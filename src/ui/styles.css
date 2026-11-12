@@ -427,6 +427,8 @@ body:has(.composer:focus-within) .tabbar { display: none; }
 .bubble--diary { background: var(--sunken); }
 .bubble__kind { display: inline-flex; align-items: center; gap: 4px; color: var(--muted); font-size: 12px; font-weight: 600; }
 .bubble__due { font-weight: 600; }
+.bubble__vault { display: inline-flex; align-items: center; gap: 3px; color: var(--muted); text-decoration: underline; text-decoration-color: transparent; text-underline-offset: 2px; }
+.bubble__vault:hover { color: var(--text); text-decoration-color: currentColor; }
 .due-label { display: inline-flex; align-items: center; gap: 6px; }
 .repeat-label { display: inline-flex; align-items: center; gap: 3px; color: var(--muted); font-size: 12px; }
 .due-fields select { max-width: 11em; }

@@ -229,6 +229,7 @@ function BubbleMeta({ card, at, fold }: { card: NoteCard | TodoCard | DiaryCard;
     <span className="bubble__meta">
       {card.type === 'todo' && card.due && (retag ? <DueMenu card={card} look="label" /> : <DueLabel todo={card} className="bubble__due" />)}
       <TagChips tagIds={card.tags} onChange={retag} />
+      <VaultLabel card={card} />
       {(fold.long || fold.folded) && (
         <button type="button" className="bubble__fold" aria-expanded={!fold.folded} onClick={fold.toggle}>
           <Icon name={fold.folded ? 'down' : 'up'} size={14} />
@@ -237,6 +238,32 @@ function BubbleMeta({ card, at, fold }: { card: NoteCard | TodoCard | DiaryCard;
       )}
       <time dateTime={new Date(at).toISOString()}>{time(at)}</time>
     </span>
+  );
+}
+
+/**
+ * The vault an entry is in, which filters the journal to it. Left out with only one vault, or when the journal
+ * already shows one. An entry shared from someone else's vault says so.
+ */
+function VaultLabel({ card }: { card: NoteCard | TodoCard | DiaryCard }) {
+  const { vaults, shared } = useCards();
+  const filter = useJournalFilter();
+  if (filter.vaultId) return null;
+  const vault = vaults.find((v) => v.id === card.vaultId);
+  if (!vault) {
+    return shared.has(card.id) ? (
+      <span className="bubble__vault" title="Shared with you from someone else's vault">
+        <Icon name="share" size={11} />
+        Shared with you
+      </span>
+    ) : null;
+  }
+  if (vaults.length < 2) return null;
+  return (
+    <Link className="bubble__vault" to={journalPath({ vaultId: vault.id })} title={`In ${vault.name}. Show only this vault`}>
+      {vault.lock === 'pin' && <Icon name="lock" size={11} />}
+      {vault.name}
+    </Link>
   );
 }
 

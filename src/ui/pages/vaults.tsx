@@ -12,6 +12,7 @@ import { CardRow, Empty, Page, Section, useNewNote } from '../components';
 import { Icon } from '../Icon';
 import { LockPanel } from '../LockPanel';
 import { useToast } from '../Toast';
+import { PIN_FIELD } from '../pinField';
 import { RecoveryKeyDialog } from '../RecoveryKeyDialog';
 import { NeedsPin, useVaultEncryption } from '../useVaultEncryption';
 import { VaultPeopleSection } from './people';
@@ -58,7 +59,7 @@ function CreateVaultForm() {
   return (
     <form className="vault-form" onSubmit={(e) => void submit(e)}>
       <input className="text-input" value={name} placeholder="Vault name" aria-label="Vault name" maxLength={80} onChange={(e) => setName(e.target.value)} />
-      <input className="text-input" type="password" value={pin} placeholder="PIN (optional, makes it private)" aria-label="PIN" autoComplete="new-password" onChange={(e) => setPin(e.target.value)} />
+      <input {...PIN_FIELD} value={pin} placeholder="PIN (optional, makes it private)" aria-label="PIN" onChange={(e) => setPin(e.target.value)} />
       <button type="submit" className="btn btn--primary" disabled={!name.trim()}>
         Create vault
       </button>
@@ -85,7 +86,7 @@ function UnlockHiddenForm() {
 
   return (
     <form className="lock-panel__row" onSubmit={(e) => void submit(e)}>
-      <input className="text-input" type="password" value={pin} placeholder="PIN" aria-label="PIN for a hidden vault" autoComplete="off" onChange={(e) => setPin(e.target.value)} />
+      <input {...PIN_FIELD} value={pin} placeholder="PIN" aria-label="PIN for a hidden vault" onChange={(e) => setPin(e.target.value)} />
       <button type="submit" className="btn" disabled={!pin}>
         Unlock
       </button>
@@ -240,7 +241,7 @@ function VaultSettings({ vault }: { vault: Vault }) {
       {!isDefaultVault(vault) && (vault.members ?? 1) <= 1 && (
         <>
           <form className="lock-panel__row vault-gap" onSubmit={(e) => void submitPin(e)}>
-            <input className="text-input" type="password" value={pin} placeholder={isPrivate ? 'New PIN' : 'PIN'} aria-label={isPrivate ? 'New PIN' : 'PIN'} autoComplete="new-password" onChange={(e) => setPin(e.target.value)} />
+            <input {...PIN_FIELD} value={pin} placeholder={isPrivate ? 'New PIN' : 'PIN'} aria-label={isPrivate ? 'New PIN' : 'PIN'} onChange={(e) => setPin(e.target.value)} />
             <button type="submit" className="btn" disabled={!pin || !!busy}>
               {isPrivate ? 'Change PIN' : 'Make private'}
             </button>
@@ -257,7 +258,7 @@ function VaultSettings({ vault }: { vault: Vault }) {
         <form className="encrypt-box vault-gap" onSubmit={(e) => void encryptNow(e)}>
           <p className="prose-note">This vault was made before encryption. Its PIN only hides it in the app; the server and this device can still read its cards.</p>
           <div className="lock-panel__row">
-            <input className="text-input" type="password" value={currentPin} placeholder="Current PIN" aria-label="Current PIN to encrypt with" autoComplete="off" onChange={(e) => setCurrentPin(e.target.value)} />
+            <input {...PIN_FIELD} value={currentPin} placeholder="Current PIN" aria-label="Current PIN to encrypt with" onChange={(e) => setCurrentPin(e.target.value)} />
             <button type="submit" className="btn btn--primary" disabled={!currentPin || !!busy}>
               Encrypt this vault
             </button>

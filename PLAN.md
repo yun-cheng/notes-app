@@ -177,6 +177,7 @@ None. Defaults chosen while building are listed in the implementation notes, and
 
 - A PIN is stored as a salted PBKDF2 verifier and syncs with the vault, so one PIN works on every device. It gates the app and is not encryption, so it doesn't protect against someone reading browser storage or the server's database until Milestone 7.
 - Open vaults are held in memory only. They lock when the app goes to the background, after five idle minutes, and on reload. After five wrong PINs, attempts wait 30 seconds.
+- A PIN is typed into a text box with its letters masked, not a password box, so the browser's password manager and password-manager extensions leave it alone. In Chrome, their popup on a focused password box swallowed scrolling, so the sidebar wouldn't scroll beside a locked vault's PIN box.
 - Locked cards are removed where the index is built, so lists, search, backlinks, Today, Calendar and Markdown export can't reach them. Links into a locked vault read "Locked", and a JSON backup leaves locked vaults out.
 - Each account's default vault can't be locked, because new cards go there.
 - New diary entries go to the oldest private vault if there is one, otherwise the default vault. Existing entries stay where they are unless moved.

@@ -3,6 +3,7 @@ import { biometricKey, verifyBiometric } from '../auth/biometric';
 import { useCards } from '../state/CardsContext';
 import { Icon } from './Icon';
 import { MIN_PIN_LENGTH } from '../domain/pin';
+import { PIN_FIELD } from './pinField';
 import { useVaultEncryption } from './useVaultEncryption';
 
 /** Asks for a vault's PIN. A hidden vault's name is never shown here. */
@@ -63,7 +64,7 @@ export function LockPanel({ vaultId }: { vaultId: string }) {
           <span>Use your recovery key</span>
         </div>
         <input className="text-input" value={recoveryKey} autoComplete="off" placeholder="XXXX-XXXX-…" aria-label="Recovery key" onChange={(e) => setRecoveryKey(e.target.value)} />
-        <input className="text-input vault-gap" type="password" value={newPin} autoComplete="new-password" placeholder="New PIN" aria-label="New PIN" onChange={(e) => setNewPin(e.target.value)} />
+        <input {...PIN_FIELD} className={`${PIN_FIELD.className} vault-gap`} value={newPin} placeholder="New PIN" aria-label="New PIN" onChange={(e) => setNewPin(e.target.value)} />
         <div className="button-row vault-gap">
           <button type="submit" className="btn btn--primary" disabled={!recoveryKey || !newPin || busy}>
             Unlock and set PIN
@@ -89,11 +90,9 @@ export function LockPanel({ vaultId }: { vaultId: string }) {
       </div>
       <div className="lock-panel__row">
         <input
-          className="text-input"
-          type="password"
+          {...PIN_FIELD}
           value={pin}
           autoFocus
-          autoComplete="off"
           placeholder="PIN"
           aria-label="PIN"
           enterKeyHint="done"

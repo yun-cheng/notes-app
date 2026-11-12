@@ -1,0 +1,44 @@
+import { describe, expect, it } from 'vitest';
+import { planBatch, rangeBetween, tagCounts } from './batch';
+import { note, tag, todo } from './testFixtures';
+
+describe('batch edits', () => {
+  const a = note('a', 'A', { tags: ['work'] });
+  const b = note('b', 'B');
+  const t = todo('t', '2026-11-12', { tags: ['work', 'home'] });
+  const done = todo('d', null, { status: 'done' });
+
+  it('adds a tag only where it is missing, with an undo', () => {
+    expect(planBatch([a, b, t], { kind: 'add-tag', tagId: 'work' })).toEqual([{ id: 'b', patch: { tags: ['work'] }, undo: { tags: [] } }]);
+  });
+
+  it('removes a tag only where it is', () => {
+    expect(planBatch([a, b, t], { kind: 'remove-tag', tagId: 'work' })).toEqual([
+      { id: 'a', patch: { tags: [] }, undo: { tags: ['work'] } },
+      { id: 't', patch: { tags: ['home'] }, undo: { tags: ['work', 'home'] } },
+    ]);
+  });
+
+  it('changes status and due dates on todos only', () => {
+    expect(planBatch([a, t, done], { kind: 'status', status: 'done' }).map((s) => s.id)).toEqual(['t']);
+    expect(planBatch([a, t, done], { kind: 'due', due: null })).toEqual([{ id: 't', patch: { due: null }, undo: { due: '2026-11-12' } }]);
+  });
+
+  it('never touches tag cards', () => {
+    expect(planBatch([tag('x', 'X')], { kind: 'add-tag', tagId: 'work' })).toEqual([]);
+  });
+
+  it('counts tags across the selection, most common first', () => {
+    expect(tagCounts([a, b, t])).toEqual([
+      { tagId: 'work', count: 2 },
+      { tagId: 'home', count: 1 },
+    ]);
+  });
+
+  it('selects a range in either direction', () => {
+    const order = ['a', 'b', 'c', 'd'];
+    expect(rangeBetween(order, 'b', 'd')).toEqual(['b', 'c', 'd']);
+    expect(rangeBetween(order, 'd', 'b')).toEqual(['b', 'c', 'd']);
+    expect(rangeBetween(order, 'gone', 'c')).toEqual(['c']);
+  });
+});

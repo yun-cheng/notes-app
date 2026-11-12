@@ -31,6 +31,8 @@ The sidebar is the journal's filter: by type (notes, todos, diary), by todo stat
 
 Cmd+K (Ctrl+K elsewhere) opens a command box for doing anything from the keyboard: every filter, sort and page, new notes, locking vaults, finding notes by their text, and saving what's typed straight to the journal with the same markers.
 
+Several entries can be changed at once: Cmd-click (Ctrl-click) or a long press picks a bubble, Shift-click picks a range, and Select at the top starts picking. While entries are picked, the writing box becomes a bar that tags or untags them, marks todos done or not, sets their due date, moves them to another vault or trashes them, each with an undo.
+
 A bubble opens in a small sheet with just its text; formatting, tags, a title, sharing, history and trash sit behind small buttons there. A note without a title is named by its first line.
 
 ### Labels are notes
@@ -252,6 +254,7 @@ None. Defaults chosen while building are listed in the implementation notes, and
 - One text can hold several entries (`parseEntries`). A new tag typed in several of them is made once, `#diary` parts go into the diary in one save, and if part of the text can't be saved (the diary is locked) none of it is. Cards made together get creation times a millisecond apart, so they keep the order they were typed in.
 - Notes and todos open at `/journal/:id` in a sheet over the page they were opened from (Search, Calendar, a filtered journal), so the back button closes it. Old `/notes/:id` and `/card/:id` links to notes and todos redirect there.
 - The box saves on Enter on a computer (Shift+Enter for a new line). On a phone, Return makes a new line and the send button saves.
+- A batch change skips entries it doesn't apply to (a due date on a note) or that already match, and entries this account can't change, which the toast counts. Undo puts back each entry's own earlier value. Picks that fall outside a new filter are kept but not counted or changed.
 - In the command box, text with markers (`[]`, `#tag`, `@friday`) offers saving first; other text lists matching commands, then matching notes, then saving. Commands whose name matches come before ones that match by keyword.
 - The native apps still have the earlier layout; they follow once the web design settles.
 

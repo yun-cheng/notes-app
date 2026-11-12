@@ -443,3 +443,21 @@ kbd { padding: 1px 5px; border: 1px solid var(--line); border-radius: 5px; backg
 .palette__empty { margin: 12px; color: var(--muted); }
 .palette__keys { margin: 0; padding: 8px 14px; border-top: 1px solid var(--line); color: var(--muted); font-size: 12px; }
 @media (pointer: coarse) { .palette__keys { display: none; } }
+
+/* Picking entries for a batch change */
+.bubble { -webkit-touch-callout: none; }
+.bubble.is-selected { border-color: var(--accent); box-shadow: 0 0 0 2px var(--accent-soft); background: var(--accent-soft); }
+.batch { position: sticky; bottom: calc(var(--tabbar) + env(safe-area-inset-bottom) + 8px); z-index: 6; margin: 4px 0 8px; background: var(--surface); border: 1px solid var(--line); border-radius: 18px; box-shadow: 0 2px 10px rgb(0 0 0 / 6%); }
+.batch__bar { display: flex; flex-wrap: wrap; align-items: center; gap: 4px; padding: 6px 8px 6px 14px; }
+.batch__count { margin-right: 6px; font-weight: 600; font-size: 14px; }
+.batch__vault { padding: 6px 8px; border: 1px solid var(--line); border-radius: 8px; background: var(--surface); color: var(--text); font: inherit; font-size: 14px; }
+.batch__panel { display: flex; flex-direction: column; gap: 8px; padding: 12px 14px; border-bottom: 1px solid var(--line); }
+.batch__due { flex-direction: row; flex-wrap: wrap; align-items: center; }
+.batch__due input { padding: 6px 8px; border: 1px solid var(--line); border-radius: 8px; background: var(--surface); color: var(--text); font: inherit; }
+.batch__of { margin-left: 4px; color: var(--muted); font-size: 12px; }
+.batch .icon-btn:disabled { opacity: 0.4; }
+@media (min-width: 860px) { .batch { bottom: 16px; margin-bottom: 16px; } }
+/* Toasts sit above the action bar, so its buttons stay reachable while one shows. */
+body:has(.batch) .toast-slot { bottom: calc(var(--tabbar) + env(safe-area-inset-bottom) + 76px); }
+@media (min-width: 860px) { body:has(.batch) .toast-slot { bottom: 84px; } }
+.batch__close { font-size: 22px; line-height: 1; }

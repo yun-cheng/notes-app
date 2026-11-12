@@ -16,6 +16,8 @@ import { LockPanel } from '../LockPanel';
 import { cardPath, entryPath, journalPath, sheetState, type SheetState } from '../paths';
 import { ShareDialog } from '../ShareDialog';
 import { useSaveEntry } from '../useSaveEntry';
+import { BatchBar } from '../BatchBar';
+import { SelectionProvider, useSelectable, useSelectionState } from '../selection';
 
 const time = (at: number) => new Date(at).toLocaleTimeString(undefined, { hour: 'numeric', minute: '2-digit' });
 
@@ -32,72 +34,106 @@ export function JournalPage() {
   const tag = index.tags.find((t) => t.id === filter.tagId);
   const vault = vaults.find((v) => v.id === filter.vaultId);
   const filtered = isFiltered(filter);
+  const items = streamItems(index, filter, today);
+  const selection = useSelectionState(items.flatMap((i) => (i.kind === 'card' ? [i.card.id] : [])));
+  const vaultLocked = !!vault && locked.has(vault.id);
 
-  return (
-    <Page
-      title={title}
-      actions={
-        <>
-          {tag && (
-            <Link className="icon-btn" to={`/card/${tag.id}`} aria-label={`About the ${tag.title} tag`} title="Rename, describe or pin this tag">
-              <Icon name="tag" />
-            </Link>
-          )}
-          {filter.when && isDateKey(filter.when) && (
-            <Link className="btn btn--quiet" to={`/day/${filter.when}`}>
-              Diary for this day
-            </Link>
-          )}
-          {filtered && (
-            <Link className="btn btn--quiet" to={journalPath({ sort: filter.sort })}>
-              Show all
-            </Link>
-          )}
-          <button
-            type="button"
-            className={`icon-btn only-mobile${filtered || filter.sort ? ' is-active' : ''}`}
-            aria-label="Filter and sort"
-            title="Filter and sort"
-            onClick={() => setFiltering(true)}
-          >
-            <Icon name="filter" />
-          </button>
-          <NavLink className="icon-btn only-mobile" to="/settings" aria-label="Backup and settings">
-            <Icon name="settings" />
-          </NavLink>
-        </>
-      }
-    >
-      {vault && locked.has(vault.id) ? (
-        <div className="stream">
-          <LockPanel vaultId={vault.id} />
-        </div>
-      ) : (
-        <>
-          <Stream
-            key={`stream:${journalPath(filter)}`}
-            items={streamItems(index, filter, today)}
-            sort={filter.sort ?? 'written'}
-            empty={filtered ? 'Nothing here yet. Write below and it lands here.' : 'Nothing written yet. Write a note below, or start with [] for a todo.'}
-          />
-          <Composer key={`composer:${journalPath({ ...filter, sort: undefined })}`} filter={filter} />
-        </>
-      )}
-      {filtering && (
-        <div className="dialog-backdrop" onClick={(e) => e.target === e.currentTarget && setFiltering(false)}>
-          <div className="dialog filter-sheet" role="dialog" aria-label="Filter and sort">
-            <FilterPanel onPick={() => setFiltering(false)} />
-            <div className="note-sheet__bar">
-              <span className="note-sheet__spacer" />
-              <button type="button" className="btn" onClick={() => setFiltering(false)}>
+  if (selection.selecting) {
+    return (
+      <SelectionProvider value={selection}>
+        <Page
+          title={selection.ids.length ? `${selection.ids.length} selected` : 'Select entries'}
+          actions={
+            <>
+              <button type="button" className="btn btn--quiet" onClick={selection.selectAll}>
+                Select all
+              </button>
+              <button type="button" className="btn" onClick={selection.clear}>
                 Done
               </button>
+            </>
+          }
+        >
+          <Stream key={`stream:${journalPath(filter)}`} items={items} sort={filter.sort ?? 'written'} empty="Nothing here to select." />
+          <BatchBar selection={selection} />
+          <Outlet />
+        </Page>
+      </SelectionProvider>
+    );
+  }
+
+  return (
+    <SelectionProvider value={selection}>
+      <Page
+        title={title}
+        actions={
+          <>
+            {!vaultLocked && items.length > 0 && (
+              <button type="button" className="btn btn--quiet" onClick={selection.start} title="Pick entries to tag, finish, move or trash together">
+                Select
+              </button>
+            )}
+            {tag && (
+              <Link className="icon-btn" to={`/card/${tag.id}`} aria-label={`About the ${tag.title} tag`} title="Rename, describe or pin this tag">
+                <Icon name="tag" />
+              </Link>
+            )}
+            {filter.when && isDateKey(filter.when) && (
+              <Link className="btn btn--quiet" to={`/day/${filter.when}`}>
+                Diary for this day
+              </Link>
+            )}
+            {filtered && (
+              <Link className="btn btn--quiet" to={journalPath({ sort: filter.sort })}>
+                Show all
+              </Link>
+            )}
+            <button
+              type="button"
+              className={`icon-btn only-mobile${filtered || filter.sort ? ' is-active' : ''}`}
+              aria-label="Filter and sort"
+              title="Filter and sort"
+              onClick={() => setFiltering(true)}
+            >
+              <Icon name="filter" />
+            </button>
+            <NavLink className="icon-btn only-mobile" to="/settings" aria-label="Backup and settings">
+              <Icon name="settings" />
+            </NavLink>
+          </>
+        }
+      >
+        {vault && vaultLocked ? (
+          <div className="stream">
+            <LockPanel vaultId={vault.id} />
+          </div>
+        ) : (
+          <>
+            <Stream
+              key={`stream:${journalPath(filter)}`}
+              items={items}
+              sort={filter.sort ?? 'written'}
+              empty={filtered ? 'Nothing here yet. Write below and it lands here.' : 'Nothing written yet. Write a note below, or start with [] for a todo.'}
+            />
+            <Composer key={`composer:${journalPath({ ...filter, sort: undefined })}`} filter={filter} />
+          </>
+        )}
+        {filtering && (
+          <div className="dialog-backdrop" onClick={(e) => e.target === e.currentTarget && setFiltering(false)}>
+            <div className="dialog filter-sheet" role="dialog" aria-label="Filter and sort">
+              <FilterPanel onPick={() => setFiltering(false)} />
+              <div className="note-sheet__bar">
+                <span className="note-sheet__spacer" />
+                <button type="button" className="btn" onClick={() => setFiltering(false)}>
+                  Done
+                </button>
+              </div>
             </div>
           </div>
-        </div>
-      )}
-      <Outlet />
-    </Page>
+        )}
+        <Outlet />
+      </Page>
+    </SelectionProvider>
   );
 }
 
@@ -169,8 +205,9 @@ function BubbleMeta({ card, at, due }: { card: NoteCard | TodoCard | DiaryCard; 
 function NoteBubble({ note, at }: { note: NoteCard; at: number }) {
   const location = useLocation();
   const lines = useLines(note);
+  const { selected, handlers } = useSelectable(note.id);
   return (
-    <Link className="bubble" to={entryPath(note.id)} state={sheetState(location, note)}>
+    <Link className={`bubble${selected ? ' is-selected' : ''}`} to={entryPath(note.id)} state={sheetState(location, note)} aria-current={selected || undefined} {...handlers}>
       {note.title.trim() && <strong className="bubble__title">{note.title}</strong>}
       {lines.length > 0 && <span className="bubble__text">{lines.join('\n')}</span>}
       <BubbleMeta card={note} at={at} />
@@ -183,8 +220,9 @@ function TodoBubble({ todo, at }: { todo: TodoCard; at: number }) {
   const location = useLocation();
   const lines = useLines(todo);
   const done = todo.status === 'done';
+  const { selected, handlers } = useSelectable(todo.id);
   return (
-    <div className={`bubble bubble--todo${done ? ' is-done' : ''}`}>
+    <div className={`bubble bubble--todo${done ? ' is-done' : ''}${selected ? ' is-selected' : ''}`}>
       <label className="check">
         <input
           type="checkbox"
@@ -194,7 +232,7 @@ function TodoBubble({ todo, at }: { todo: TodoCard; at: number }) {
           onChange={() => void repo.update(todo.id, { status: done ? 'open' : 'done' })}
         />
       </label>
-      <Link className="bubble__body" to={entryPath(todo.id)} state={sheetState(location, todo)}>
+      <Link className="bubble__body" to={entryPath(todo.id)} state={sheetState(location, todo)} aria-current={selected || undefined} {...handlers}>
         <span className="bubble__title">{displayTitle(todo)}</span>
         {lines.length > 0 && <span className="bubble__text">{lines.join('\n')}</span>}
         <BubbleMeta card={todo} at={at} due={todo.due} />
@@ -205,8 +243,9 @@ function TodoBubble({ todo, at }: { todo: TodoCard; at: number }) {
 
 function DiaryBubble({ diary, at }: { diary: DiaryCard; at: number }) {
   const lines = useLines(diary);
+  const { selected, handlers } = useSelectable(diary.id);
   return (
-    <Link className="bubble bubble--diary" to={cardPath(diary)}>
+    <Link className={`bubble bubble--diary${selected ? ' is-selected' : ''}`} to={cardPath(diary)} aria-current={selected || undefined} {...handlers}>
       <span className="bubble__kind">
         <Icon name="diary" size={14} />
         Diary

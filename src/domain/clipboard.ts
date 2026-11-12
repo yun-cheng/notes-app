@@ -1,6 +1,6 @@
 import { isDateKey, isTimeKey } from './dates';
 import type { Entry } from './entry';
-import { toMarkdown, type TitleResolver } from './markdown';
+import { toMarkdown, toPlainText, type TitleResolver } from './markdown';
 import { isRepeat, repeatWord } from './repeat';
 import type { DiaryCard, JSONNode, NoteCard, TodoCard } from './types';
 
@@ -59,6 +59,14 @@ export function entriesText(cards: Copyable[], tagName: TagName, linkTitle: Titl
   });
   // Todos of one line each stay together as a list.
   return parts.map((p, i) => (i === 0 ? '' : p.line && parts[i - 1].line ? '\n' : '\n\n') + p.text).join('');
+}
+
+/**
+ * Just an entry's words, for a quick copy into another app: its title, then its body as plain text, with lines
+ * and list markers kept and links as their addresses. No checkbox, tags, due date, formatting or photos.
+ */
+export function entryText(card: Copyable, linkTitle: TitleResolver): string {
+  return [card.type === 'diary' ? '' : card.title.trim(), toPlainText(card.content, linkTitle)].filter(Boolean).join('\n\n');
 }
 
 export function encodeEntries(entries: Entry[]): string {

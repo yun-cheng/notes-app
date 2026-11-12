@@ -1,6 +1,6 @@
 import { permissions } from '../domain/access';
 import { linkTitle } from '../domain/cardIndex';
-import { encodeEntries, entriesText, ENTRIES_TYPE, toEntries } from '../domain/clipboard';
+import { encodeEntries, entriesText, entryText, ENTRIES_TYPE, toEntries } from '../domain/clipboard';
 import type { Entry } from '../domain/entry';
 import type { Card, DiaryCard, NoteCard, TodoCard } from '../domain/types';
 import { useCards } from '../state/CardsContext';
@@ -64,6 +64,16 @@ export function useEntryActions() {
     void write(cards).then((ok) => toast(ok ? `Copied ${entries(cards.length)}` : "Couldn't copy here. Select the text instead."));
   };
 
+  /** One entry's words alone, for pasting into another app; pasted back into the journal, it's the whole entry. */
+  const copyText = (id: string) => {
+    const card = index.byId.get(id);
+    if (!copyable(card)) return;
+    const tagName = (tag: string) => index.tags.find((t) => t.id === tag)?.title;
+    void writeClipboard(entryText(card, (cardId, label) => linkTitle(index, cardId, label)), encodeEntries(toEntries([card], tagName))).then((ok) =>
+      toast(ok ? 'Copied the text' : "Couldn't copy here. Select the text instead."),
+    );
+  };
+
   /** Moves the entries this account may remove to the Trash. `verb` starts the toast ("Cut 3 entries"). */
   const trash = async (ids: string[], verb = 'Moved') => {
     const cards = cardsFor(ids);
@@ -96,5 +106,5 @@ export function useEntryActions() {
     toast(`Pasted ${entries(result.saved)}`, { action: undo });
   };
 
-  return { copy, cut, trash, paste };
+  return { copy, copyText, cut, trash, paste };
 }

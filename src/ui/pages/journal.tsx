@@ -21,6 +21,7 @@ import { Attachments } from '../Attachments';
 import { colorClass, StyleMenu } from '../EntryStyle';
 import { BatchBar } from '../BatchBar';
 import { SelectionProvider, useBoxSelect, useSelectable, useSelection, useSelectionState } from '../selection';
+import { useEntryActions } from '../entryActions';
 import { useEntryShortcuts } from '../useEntryShortcuts';
 import { DueLabel, DueMenu, useTickTodo } from '../TodoDue';
 
@@ -321,10 +322,24 @@ function useOpen(card: NoteCard | TodoCard | DiaryCard) {
  */
 function BubbleTools({ card, open }: { card: NoteCard | TodoCard | DiaryCard; open: () => void }) {
   const { vaults, shared } = useCards();
+  const { copyText } = useEntryActions();
   return (
     <span className="bubble__tools">
       <button type="button" className="bubble__open" aria-label="Open" title="Open (Enter)" onClick={open}>
         <Icon name="open" size={16} />
+      </button>
+      <button
+        type="button"
+        className="bubble__open"
+        aria-label="Copy text"
+        title="Copy text"
+        onClick={(e) => {
+          // A click here copies, without picking the entry.
+          e.stopPropagation();
+          copyText(card.id);
+        }}
+      >
+        <Icon name="copy" size={16} />
       </button>
       {permissions(card, vaults, shared).edit && <StyleMenu card={card} />}
     </span>
@@ -464,6 +479,7 @@ function EntryDetail({ card, fresh, onClose }: { card: NoteCard | TodoCard; fres
   const tick = useTickTodo();
   const can = permissions(card, vaults, shared);
   const remove = useDeleteCard();
+  const { copyText } = useEntryActions();
   const [tools, setTools] = useState(false);
   const [tagging, setTagging] = useState(false);
   const [titled, setTitled] = useState(false);
@@ -547,6 +563,9 @@ function EntryDetail({ card, fresh, onClose }: { card: NoteCard | TodoCard; fres
           </button>
         )}
         {can.edit && <StyleMenu card={card} inBar />}
+        <button type="button" className="icon-btn" aria-label="Copy text" title="Copy text" onClick={() => copyText(card.id)}>
+          <Icon name="copy" />
+        </button>
         {can.share && (
           <button type="button" className="icon-btn" aria-label="Share" title="Share" onClick={() => setSharing(true)}>
             <Icon name="share" />

@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { decodeEntries, encodeEntries, entriesText, toEntries } from './clipboard';
+import { decodeEntries, encodeEntries, entriesText, entryText, toEntries } from './clipboard';
 import { parseEntries } from './entry';
 import { doc, link, note, p, text, todo } from './testFixtures';
 import type { DiaryCard } from './types';
@@ -20,6 +20,32 @@ describe('copying entries', () => {
     );
     const call = todo('c', null, { title: 'Call dad' });
     expect(entriesText([done, call, plan], tagName, linkTitle)).toBe('[x] Call mum\n[ ] Call dad\n\n[ ] Plan trip @2026-11-20 #work\nBook the train');
+  });
+
+  it('copies just the words of one entry', () => {
+    expect(entryText({ ...plan, dueTime: '18:00' }, linkTitle)).toBe('Plan trip\n\nBook the train');
+    expect(entryText(done, linkTitle)).toBe('Call mum');
+    expect(entryText(idea, linkTitle)).toBe('Big idea\n\nOther note');
+    expect(entryText(day, linkTitle)).toBe('Quiet day');
+  });
+
+  it('copies plain text: links as addresses, lists with their markers, no photos or quote marks', () => {
+    const url = 'https://example.com/a';
+    const linked = (t: string, href: string) => text(t, [{ type: 'link', attrs: { href } }]);
+    const item = (t: string) => ({ type: 'listItem', content: [p(text(t))] });
+    const rich = note('r', 'Trip', {
+      content: doc(
+        p(text('See '), linked(url, url), text(' and '), linked('the map', 'https://maps.example')),
+        { type: 'bulletList', content: [item('passport'), item('charger')] },
+        { type: 'orderedList', attrs: { start: 1 }, content: [item('pack'), item('go')] },
+        { type: 'blockquote', content: [p(text('Travel light'))] },
+        { type: 'photo', attrs: { id: 'ph' } },
+        p(text('Line one'), { type: 'hardBreak' }, text('line two')),
+      ),
+    });
+    expect(entryText(rich, linkTitle)).toBe(
+      ['Trip', `See ${url} and the map (https://maps.example)`, '- passport\n- charger', '1. pack\n2. go', 'Travel light', 'Line one\nline two'].join('\n\n'),
+    );
   });
 
   it('carries a due time and repeat both ways', () => {

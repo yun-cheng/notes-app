@@ -466,7 +466,7 @@ body:has(.composer:focus-within) .composer { bottom: 8px; }
 }
 
 /* A note opened from the stream */
-.note-sheet { gap: 6px; padding-top: 14px; }
+.note-sheet { max-width: 620px; gap: 6px; padding-top: 14px; }
 .note-sheet > * { flex-shrink: 0; }
 .note-sheet .title-field { font: 600 19px/1.3 var(--sans); }
 .note-sheet .title-row--todo .title-field { font-weight: 400; }

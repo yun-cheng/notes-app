@@ -21,11 +21,20 @@ function renderText(node: JSONNode): string {
   return out;
 }
 
-function renderInline(nodes: JSONNode[] | undefined, title: TitleResolver): string {
+/** Text as read: no marks, and a link as its address, after its words when they differ. */
+function plainInline(node: JSONNode): string {
+  const text = node.text ?? '';
+  const href = node.marks?.find((m) => m.type === 'link')?.attrs?.href;
+  if (typeof href !== 'string' || !href) return text;
+  return href === text || href.replace(/^[a-z]+:\/\//i, '') === text ? href : `${text} (${href})`;
+}
+
+function renderInline(nodes: JSONNode[] | undefined, title: TitleResolver, plain = false): string {
   return (nodes ?? [])
     .map((n) => {
-      if (n.type === 'text') return renderText(n);
-      if (n.type === 'hardBreak') return '  \n';
+      if (n.type === 'text') return plain ? plainInline(n) : renderText(n);
+      if (n.type === 'hardBreak') return plain ? '\n' : '  \n';
+      if (n.type === 'cardLink' && plain) return title(String(n.attrs?.id ?? ''), String(n.attrs?.label ?? ''));
       if (n.type === 'cardLink') return `[[${title(String(n.attrs?.id ?? ''), String(n.attrs?.label ?? ''))}]]`;
       return '';
     })
@@ -33,6 +42,39 @@ function renderInline(nodes: JSONNode[] | undefined, title: TitleResolver): stri
 }
 
 const indent = (text: string, by: string) => text.split('\n').map((l, i) => (i && l ? by + l : l)).join('\n');
+
+/** A block as plain text: lines and list markers kept, formatting, quote marks, photos and rules left out. */
+function plainBlock(node: JSONNode, title: TitleResolver): string {
+  switch (node.type) {
+    case 'bulletList':
+      return (node.content ?? []).map((item) => `- ${indent(plainBlocks(item.content, title), '  ')}`).join('\n');
+    case 'orderedList': {
+      const start = Number(node.attrs?.start ?? 1);
+      return (node.content ?? []).map((item, i) => `${start + i}. ${indent(plainBlocks(item.content, title), '   ')}`).join('\n');
+    }
+    case 'blockquote':
+      return plainBlocks(node.content, title);
+    case 'codeBlock':
+      return (node.content ?? []).map((t) => t.text ?? '').join('');
+    case 'photo':
+    case 'horizontalRule':
+      return '';
+    default:
+      return renderInline(node.content, title, true);
+  }
+}
+
+function plainBlocks(nodes: JSONNode[] | undefined, title: TitleResolver): string {
+  return (nodes ?? [])
+    .map((n) => plainBlock(n, title))
+    .filter(Boolean)
+    .join('\n\n');
+}
+
+/** A document as plain text, for pasting into apps that don't read Markdown. */
+export function toPlainText(doc: JSONNode, title: TitleResolver): string {
+  return plainBlocks(doc.content, title).trim();
+}
 
 function renderBlock(node: JSONNode, title: TitleResolver): string {
   switch (node.type) {

@@ -169,6 +169,9 @@ interface Drag {
   before: string[];
 }
 
+/** Where a click doesn't end picking: the entries, the bar acting on them, and the page's own controls. */
+const KEEPS_PICKING = '.stream__entry, .batch, .page__head, .sidebar, .tabbar, .dialog-backdrop, .toast-slot, .link-menu';
+
 /** Things a drag can't start on, so clicks on them still work. */
 const INTERACTIVE = '.bubble, .attachments, .pick, a, button, input, textarea, select, label, [contenteditable="true"]';
 
@@ -194,7 +197,6 @@ export function useBoxSelect(root: RefObject<HTMLElement | null>, selection: Sel
       if (row?.dataset.entryId) latest.current.selection?.toggle(row.dataset.entryId, e.shiftKey);
     };
     const onDown = (e: PointerEvent) => {
-      dragged.current = false;
       if (e.pointerType !== 'mouse' || e.button !== 0) return;
       if (e.target instanceof Element && e.target.closest(INTERACTIVE)) return;
       e.preventDefault();
@@ -203,11 +205,25 @@ export function useBoxSelect(root: RefObject<HTMLElement | null>, selection: Sel
       const y = e.clientY + window.scrollY;
       setDrag({ x0: x, y0: y, x1: x, y1: y, add, before: add ? (latest.current.selection?.ids ?? []) : [] });
     };
+    // A click anywhere else ends picking.
+    const onPress = () => {
+      dragged.current = false;
+    };
+    const onOutside = (e: MouseEvent) => {
+      const current = latest.current.selection;
+      if (!current?.selecting || dragged.current) return;
+      if (e.target instanceof Element && (e.target.closest(KEEPS_PICKING) || !e.target.isConnected)) return;
+      current.clear();
+    };
     el.addEventListener('pointerdown', onDown);
     el.addEventListener('click', onClick);
+    document.addEventListener('pointerdown', onPress, true);
+    document.addEventListener('click', onOutside);
     return () => {
       el.removeEventListener('pointerdown', onDown);
       el.removeEventListener('click', onClick);
+      document.removeEventListener('pointerdown', onPress, true);
+      document.removeEventListener('click', onOutside);
     };
   }, [root, selection !== null]);
 

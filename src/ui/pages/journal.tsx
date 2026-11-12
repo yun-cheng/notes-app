@@ -468,6 +468,8 @@ function EntryDetail({ card, fresh, onClose }: { card: NoteCard | TodoCard; fres
   const [tagging, setTagging] = useState(false);
   const [titled, setTitled] = useState(false);
   const [sharing, setSharing] = useState(false);
+  // The formatting toolbar shows in the bottom bar, by the other tools, not over the text.
+  const [toolbarHost, setToolbarHost] = useState<HTMLDivElement | null>(null);
   const isTodo = card.type === 'todo';
   const showTitle = isTodo || !!card.title.trim() || titled;
 
@@ -496,6 +498,7 @@ function EntryDetail({ card, fresh, onClose }: { card: NoteCard | TodoCard; fres
         vaultId={card.vaultId}
         editable={can.edit}
         toolbar={tools}
+        toolbarHost={toolbarHost}
         autofocus={fresh && !isTodo}
         placeholder={isTodo ? 'Details' : 'Note'}
         onChange={(content) => void repo.update(card.id, { content })}
@@ -512,6 +515,7 @@ function EntryDetail({ card, fresh, onClose }: { card: NoteCard | TodoCard; fres
       <Comments card={card} />
       <Backlinks cardId={card.id} />
       <div className="note-sheet__bar">
+        <div ref={setToolbarHost} className="note-sheet__format" />
         {isTodo && can.edit && <DueMenu card={card} />}
         {can.edit && (
           <button

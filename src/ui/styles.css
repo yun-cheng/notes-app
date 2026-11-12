@@ -487,6 +487,9 @@ body:has(.composer:focus-within) .composer { bottom: 8px; }
 .note-sheet__bar { flex-wrap: wrap; row-gap: 4px; }
 .note-sheet__bar .icon-btn { width: 34px; }
 .note-sheet__bar > .btn:last-child { margin-left: auto; }
+.note-sheet__format { flex: 0 0 100%; min-width: 0; }
+.note-sheet__format:empty { display: none; }
+.note-sheet__format .toolbar { position: static; margin: 0 0 2px; padding: 0 0 6px; background: none; }
 .due-menu { position: relative; }
 .due-menu__btn { display: inline-flex; align-items: center; gap: 4px; height: 34px; padding: 0 6px; border-radius: 8px; color: var(--muted); font-size: 13px; white-space: nowrap; }
 .due-menu__btn:hover, .due-menu__btn.is-active { background: var(--sunken); color: var(--text); }

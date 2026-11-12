@@ -1,4 +1,5 @@
 import { useEffect, useRef, useState, type ChangeEvent } from 'react';
+import { createPortal } from 'react-dom';
 import { EditorContent, useEditor, type Editor as TiptapEditor } from '@tiptap/react';
 import { StarterKit } from '@tiptap/starter-kit';
 import { Placeholder } from '@tiptap/extensions';
@@ -25,6 +26,8 @@ interface EditorProps {
   editable?: boolean;
   /** Shows the formatting toolbar. Hidden by default, so a note is just its text. */
   toolbar?: boolean;
+  /** Where the toolbar goes instead of above the text, like an entry sheet's bottom bar. */
+  toolbarHost?: HTMLElement | null;
   /** Puts the cursor at the end when the editor opens. */
   autofocus?: boolean;
 }
@@ -114,7 +117,7 @@ function Toolbar({ editor, onPhotos }: { editor: TiptapEditor; onPhotos: (files:
   );
 }
 
-export function Editor({ content, onChange, placeholder, selfId, vaultId, editable = true, toolbar = false, autofocus = false }: EditorProps) {
+export function Editor({ content, onChange, placeholder, selfId, vaultId, editable = true, toolbar = false, toolbarHost, autofocus = false }: EditorProps) {
   const { index, repo, photos, vaults, accountId } = useCards();
   const toast = useToast();
   const [menu, setMenu] = useState<MenuState | null>(null);
@@ -319,7 +322,11 @@ export function Editor({ content, onChange, placeholder, selfId, vaultId, editab
   if (!editor) return null;
   return (
     <div className="editor">
-      {editable && toolbar && <Toolbar editor={editor} onPhotos={(files) => void addPhotos(files)} />}
+      {editable &&
+        toolbar &&
+        (toolbarHost
+          ? createPortal(<Toolbar editor={editor} onPhotos={(files) => void addPhotos(files)} />, toolbarHost)
+          : <Toolbar editor={editor} onPhotos={(files) => void addPhotos(files)} />)}
       <EditorContent editor={editor} />
       {slash.view}
       <input

@@ -370,7 +370,10 @@ body:has(.composer:focus-within) .tabbar { display: none; }
 }
 .bubble:hover { border-color: var(--muted); }
 .bubble__title { font-weight: 600; }
-.bubble__text { white-space: pre-line; display: -webkit-box; -webkit-box-orient: vertical; -webkit-line-clamp: 10; overflow: hidden; }
+.bubble__text { white-space: pre-line; }
+.bubble__text.is-folded { display: -webkit-box; -webkit-box-orient: vertical; -webkit-line-clamp: 6; overflow: hidden; }
+.bubble__fold { display: inline-flex; align-items: center; gap: 2px; padding: 0 6px 0 2px; border: 0; border-radius: 6px; background: none; color: var(--accent); font: inherit; font-size: 12px; font-weight: 600; cursor: pointer; }
+.bubble__fold:hover { background: var(--accent-soft); }
 .bubble__meta { display: flex; flex-wrap: wrap; align-items: center; justify-content: flex-end; gap: 6px; color: var(--muted); font-size: 11px; line-height: 1.6; }
 .bubble__meta .chip--small { min-height: 18px; }
 .stream--top { justify-content: flex-start; }

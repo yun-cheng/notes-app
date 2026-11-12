@@ -210,16 +210,75 @@ function useLines(card: NoteCard | TodoCard | DiaryCard) {
   return previewLines(card.content, (id, label) => linkTitle(index, id, label));
 }
 
-function BubbleMeta({ card, at, due }: { card: NoteCard | TodoCard | DiaryCard; at: number; due?: string | null }) {
+function BubbleMeta({ card, at, due, fold }: { card: NoteCard | TodoCard | DiaryCard; at: number; due?: string | null; fold: Fold }) {
   const today = useToday();
   const overdue = card.type === 'todo' && card.status === 'open' && !!due && due < today;
   return (
     <span className="bubble__meta">
       {due && <span className={`bubble__due${overdue ? ' is-alert' : ''}`}>Due {relativeDayInSentence(due, today)}</span>}
       <TagChips tagIds={card.tags} />
+      {(fold.long || fold.folded) && (
+        <button type="button" className="bubble__fold" aria-expanded={!fold.folded} onClick={fold.toggle}>
+          <Icon name={fold.folded ? 'down' : 'up'} size={14} />
+          {fold.folded ? 'More' : 'Less'}
+        </button>
+      )}
       <time dateTime={new Date(at).toISOString()}>{time(at)}</time>
     </span>
   );
+}
+
+const FOLDED_LINES = 6;
+
+/** Entries folded in the stream, kept while the app is open so a filter change doesn't unfold them. */
+const foldedEntries = new Set<string>();
+
+interface Fold {
+  folded: boolean;
+  /** Long enough to be worth folding. */
+  long: boolean;
+  toggle: () => void;
+}
+
+/**
+ * A bubble's text, shown in full. A long one can be folded to its first few lines, and unfolded again, with the
+ * toggle in the bubble's bottom row (`BubbleMeta`), without opening the entry.
+ */
+function useFold(id: string, lines: string[]) {
+  const text = lines.join('\n');
+  const ref = useRef<HTMLSpanElement>(null);
+  const [folded, setFolded] = useState(() => foldedEntries.has(id));
+  const [long, setLong] = useState(false);
+
+  useLayoutEffect(() => {
+    const el = ref.current;
+    if (!el || folded) return;
+    const check = () => {
+      const style = getComputedStyle(el);
+      const lineHeight = parseFloat(style.lineHeight) || parseFloat(style.fontSize) * 1.4;
+      setLong(el.scrollHeight > lineHeight * FOLDED_LINES + 1);
+    };
+    check();
+    const watch = new ResizeObserver(check);
+    watch.observe(el);
+    return () => watch.disconnect();
+  }, [text, folded]);
+
+  const fold: Fold = {
+    folded,
+    long,
+    toggle: () => {
+      if (folded) foldedEntries.delete(id);
+      else foldedEntries.add(id);
+      setFolded(!folded);
+    },
+  };
+  const view = lines.length ? (
+    <span ref={ref} className={`bubble__text${folded ? ' is-folded' : ''}`}>
+      {text}
+    </span>
+  ) : null;
+  return { fold, view };
 }
 
 /** Opens an entry: a note or todo in a sheet over this page, a diary entry on its day. */
@@ -240,13 +299,14 @@ function OpenButton({ open }: { open: () => void }) {
 
 function NoteBubble({ note, at }: { note: NoteCard; at: number }) {
   const lines = useLines(note);
+  const text = useFold(note.id, lines);
   const open = useOpen(note);
   const { selected, handlers } = useSelectable(note.id, open);
   return (
     <div className={`bubble${selected ? ' is-selected' : ''}`} role="article" aria-current={selected || undefined} {...handlers}>
       {note.title.trim() && <strong className="bubble__title">{note.title}</strong>}
-      {lines.length > 0 && <span className="bubble__text">{lines.join('\n')}</span>}
-      <BubbleMeta card={note} at={at} />
+      {text.view}
+      <BubbleMeta card={note} at={at} fold={text.fold} />
       <OpenButton open={open} />
     </div>
   );
@@ -255,6 +315,7 @@ function NoteBubble({ note, at }: { note: NoteCard; at: number }) {
 function TodoBubble({ todo, at }: { todo: TodoCard; at: number }) {
   const { repo, vaults, shared } = useCards();
   const lines = useLines(todo);
+  const text = useFold(todo.id, lines);
   const done = todo.status === 'done';
   const open = useOpen(todo);
   const { selected, handlers } = useSelectable(todo.id, open);
@@ -271,8 +332,8 @@ function TodoBubble({ todo, at }: { todo: TodoCard; at: number }) {
       </label>
       <div className="bubble__body">
         <span className="bubble__title">{displayTitle(todo)}</span>
-        {lines.length > 0 && <span className="bubble__text">{lines.join('\n')}</span>}
-        <BubbleMeta card={todo} at={at} due={todo.due} />
+        {text.view}
+        <BubbleMeta card={todo} at={at} due={todo.due} fold={text.fold} />
       </div>
       <OpenButton open={open} />
     </div>
@@ -281,6 +342,7 @@ function TodoBubble({ todo, at }: { todo: TodoCard; at: number }) {
 
 function DiaryBubble({ diary, at }: { diary: DiaryCard; at: number }) {
   const lines = useLines(diary);
+  const text = useFold(diary.id, lines);
   const open = useOpen(diary);
   const { selected, handlers } = useSelectable(diary.id, open);
   return (
@@ -289,8 +351,8 @@ function DiaryBubble({ diary, at }: { diary: DiaryCard; at: number }) {
         <Icon name="diary" size={14} />
         Diary
       </span>
-      {lines.length > 0 && <span className="bubble__text">{lines.join('\n')}</span>}
-      <BubbleMeta card={diary} at={at} />
+      {text.view}
+      <BubbleMeta card={diary} at={at} fold={text.fold} />
       <OpenButton open={open} />
     </div>
   );

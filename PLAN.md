@@ -38,7 +38,7 @@ Several entries can be changed at once. A circle beside each entry (shown on hov
 
 An entry's photos show as thumbnails under its bubble, opening full size in a viewer that steps through them, and its web links show as cards with the page's own title, description and image.
 
-A bubble's text can be selected and copied straight from the stream. The open button beside it on hover, or Enter on a focused bubble, opens it in a small sheet with just its text (on a phone, a tap opens it); formatting, tags, a title, sharing, history and trash sit behind small buttons there. A note without a title is named by its first line.
+Bubbles show their whole text; a long one can be folded to its first six lines, and unfolded, with Less and More in its bottom row. A bubble's text can be selected and copied straight from the stream. The open button beside it on hover, or Enter on a focused bubble, opens it in a small sheet with just its text (on a phone, a tap opens it); formatting, tags, a title, sharing, history and trash sit behind small buttons there. A note without a title is named by its first line.
 
 ### Labels are notes
 A label is a card of type `tag`, with its own description and links. Tagging a note is a typed link to the tag card, so the tag card's backlinks list every tagged note.

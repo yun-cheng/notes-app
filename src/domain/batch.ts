@@ -1,3 +1,4 @@
+import { withTag, type TagGroup } from './tagGroups';
 import type { Card } from './types';
 
 /** A change applied to many entries at once. */
@@ -25,12 +26,13 @@ export interface BatchStep {
  * What a batch edit changes, card by card. Cards it doesn't apply to (a todo status on a note) or that already
  * match are left out, so the count shown and the undo cover only real changes.
  */
-export function planBatch(cards: Card[], edit: BatchEdit): BatchStep[] {
+export function planBatch(cards: Card[], edit: BatchEdit, groupOf: Map<string, TagGroup> = new Map()): BatchStep[] {
   const steps: BatchStep[] = [];
   for (const card of cards) {
     if (card.type === 'tag') continue;
     if (edit.kind === 'add-tag' && !card.tags.includes(edit.tagId)) {
-      steps.push({ id: card.id, patch: { tags: [...card.tags, edit.tagId] }, undo: { tags: card.tags } });
+      // A tag from a one-choice group (Priority) replaces the group's other tag.
+      steps.push({ id: card.id, patch: { tags: withTag(card.tags, edit.tagId, groupOf) }, undo: { tags: card.tags } });
     } else if (edit.kind === 'remove-tag' && card.tags.includes(edit.tagId)) {
       steps.push({ id: card.id, patch: { tags: card.tags.filter((t) => t !== edit.tagId) }, undo: { tags: card.tags } });
     } else if (edit.kind === 'status' && card.type === 'todo' && card.status !== edit.status) {

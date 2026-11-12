@@ -82,7 +82,8 @@ export function CommandPalette({ onClose, onShortcuts }: { onClose: () => void; 
       all.push({ id: `when-${when}`, group: 'Filter', label: WHEN_LABEL[when], icon: 'calendar', keywords: 'written date when', run: narrow({ when }) });
     }
     for (const tag of index.tags) {
-      all.push({ id: `tag-${tag.id}`, group: 'Filter', label: `#${tag.title}`, icon: 'tag', keywords: 'tag folder', run: narrow({ tagId: tag.id }) });
+      const g = index.tagGroups.groupOf.get(tag.id);
+      all.push({ id: `tag-${tag.id}`, group: 'Filter', label: g ? `${g.title}: ${tag.title}` : `#${tag.title}`, icon: 'tag', keywords: `tag folder #${tag.title}`, run: narrow({ tagId: tag.id }) });
     }
     for (const vault of sortVaults(vaults).filter((v) => !(v.hidden && locked.has(v.id)))) {
       all.push({ id: `vault-${vault.id}`, group: 'Filter', label: `Vault: ${vault.name}`, icon: locked.has(vault.id) ? 'lock' : undefined, keywords: 'vault private unlock', run: narrow({ vaultId: vault.id }) });

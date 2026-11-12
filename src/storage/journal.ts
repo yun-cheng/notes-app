@@ -11,6 +11,9 @@ export interface CardPatch {
   preview?: PreviewStyle;
   /** null takes the color off. */
   color?: CardColor | null;
+  members?: string[];
+  choice?: 'one' | 'many';
+  ordered?: boolean;
 }
 export type DiaryPatch = Partial<Pick<DiaryCard, 'content' | 'tags'>>;
 

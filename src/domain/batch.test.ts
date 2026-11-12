@@ -1,5 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import { planBatch, rangeBetween, tagCounts } from './batch';
+import { buildTagGroups } from './tagGroups';
 import { note, tag, todo } from './testFixtures';
 
 describe('batch edits', () => {
@@ -22,6 +23,12 @@ describe('batch edits', () => {
   it('changes status and due dates on todos only', () => {
     expect(planBatch([a, t, done], { kind: 'status', status: 'done' }).map((s) => s.id)).toEqual(['t']);
     expect(planBatch([a, t, done], { kind: 'due', due: null })).toEqual([{ id: 't', patch: { due: null }, undo: { due: '2026-11-12' } }]);
+  });
+
+  it('swaps a tag from a one-choice group for the one already there', () => {
+    const prio = buildTagGroups([tag('hi', 'High'), tag('lo', 'Low'), { ...tag('p', 'Priority'), members: ['hi', 'lo'], choice: 'one' }]);
+    const high = note('x', 'X', { tags: ['work', 'hi'] });
+    expect(planBatch([high], { kind: 'add-tag', tagId: 'lo' }, prio.groupOf)).toEqual([{ id: 'x', patch: { tags: ['work', 'lo'] }, undo: { tags: ['work', 'hi'] } }]);
   });
 
   it('never touches tag cards', () => {

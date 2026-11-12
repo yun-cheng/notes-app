@@ -1,3 +1,4 @@
+import { buildTagGroups, isTagGroup, type TagGroups } from './tagGroups';
 import { displayTitle, isBlank, linkedCardIds, plainText } from './content';
 import type { Card, DiaryCard, TagCard, TodoCard } from './types';
 
@@ -16,7 +17,9 @@ export interface CardIndex {
   lockedDiaries: Map<string, string>;
   /** Cards shown in lists, search and export. */
   live: Card[];
+  /** Tags that can be put on entries, by title. Tag groups aren't among them. */
   tags: TagCard[];
+  tagGroups: TagGroups;
   pinnedTags: TagCard[];
   todos: TodoCard[];
   diaryByDate: Map<string, DiaryCard>;
@@ -61,7 +64,9 @@ export function buildIndex(allCards: Card[], locked: ReadonlySet<string> = new S
     }
   }
 
-  const tags = live.filter((c): c is TagCard => c.type === 'tag').sort(byTitle);
+  const tagCards = live.filter((c): c is TagCard => c.type === 'tag').sort(byTitle);
+  const tagGroups = buildTagGroups(tagCards);
+  const tags = tagCards.filter((t) => !isTagGroup(t));
   return {
     byId,
     lockedCards,
@@ -69,6 +74,7 @@ export function buildIndex(allCards: Card[], locked: ReadonlySet<string> = new S
     live,
     tags,
     pinnedTags: tags.filter((t) => t.pinned),
+    tagGroups,
     todos: live.filter((c): c is TodoCard => c.type === 'todo'),
     diaryByDate,
     trash: cards.filter((c) => c.deleted && !isBlank(c)).sort((a, b) => b.updatedAt - a.updatedAt),

@@ -4,6 +4,7 @@ import { permissions } from '../domain/access';
 import { cardText, resolveTags, type Backlink } from '../domain/cardIndex';
 import { displayTitle } from '../domain/content';
 import { relativeDay } from '../domain/dates';
+import { clashingTags, orderTags, withTag } from '../domain/tagGroups';
 import type { Card, TodoCard } from '../domain/types';
 import { useCards, useToday } from '../state/CardsContext';
 import { Icon, type IconName } from './Icon';
@@ -37,17 +38,32 @@ export function Empty({ children }: { children: ReactNode }) {
 
 const TYPE_ICON: Record<Card['type'], IconName> = { note: 'note', todo: 'todo', diary: 'diary', tag: 'tag' };
 
+/**
+ * An entry's tags, grouped ones first (Priority before Topics, in each group's order). A grouped tag is marked
+ * and named with its group on hover; two tags from a one-choice group, as edits from two devices can leave, are
+ * marked as a clash.
+ */
 export function TagChips({ tagIds }: { tagIds: string[] }) {
   const { index } = useCards();
-  const tags = resolveTags(index, tagIds);
+  const { groupOf } = index.tagGroups;
+  const tags = resolveTags(index, orderTags(tagIds, index.tagGroups));
   if (!tags.length) return null;
+  const clashes = clashingTags(tagIds, groupOf);
   return (
     <span className="chips">
-      {tags.map((t) => (
-        <span className="chip chip--small" key={t.id}>
-          {t.title}
-        </span>
-      ))}
+      {tags.map((t) => {
+        const group = groupOf.get(t.id);
+        const clash = clashes.has(t.id);
+        return (
+          <span
+            className={`chip chip--small${group ? ' chip--grouped' : ''}${clash ? ' chip--clash' : ''}`}
+            key={t.id}
+            title={group ? `${group.title}: ${t.title}${clash ? ` (more than one ${group.title.toLowerCase()})` : ''}` : undefined}
+          >
+            {t.title}
+          </span>
+        );
+      })}
     </span>
   );
 }
@@ -213,7 +229,7 @@ export function TagPicker({ tagIds, onChange }: { tagIds: string[]; onChange: (t
   const exact = index.tags.find((t) => t.title.toLowerCase() === q);
 
   const add = (id: string) => {
-    onChange([...tagIds, id]);
+    onChange(withTag(tagIds, id, index.tagGroups.groupOf));
     setQuery('');
   };
   const submit = () => {

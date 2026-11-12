@@ -178,10 +178,12 @@ export class CardRepository {
     });
   }
 
-  createTag(init: { title: string; id?: string }): Promise<Card> {
+  /** A tag, or with `members`, a tag group. */
+  createTag(init: { title: string; id?: string; members?: string[]; choice?: 'one' | 'many'; ordered?: boolean }): Promise<Card> {
     const id = init.id ?? this.newId();
+    const group = init.members ? { members: init.members, choice: init.choice ?? 'many', ordered: init.ordered ?? false } : {};
     return this.enqueue(async () =>
-      this.write({ ...(await this.newEnvelope(id)), type: 'tag', title: init.title, content: EMPTY_DOC, tags: [], pinned: false }),
+      this.write({ ...(await this.newEnvelope(id)), type: 'tag', title: init.title, content: EMPTY_DOC, tags: [], pinned: false, ...group }),
     );
   }
 

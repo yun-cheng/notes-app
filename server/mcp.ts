@@ -1,3 +1,4 @@
+import { isGroupName, settleTags } from '../src/domain/tagGroups';
 import { buildIndex, type CardIndex } from '../src/domain/cardIndex';
 import { displayTitle, plainText } from '../src/domain/content';
 import { addDays, isDateKey } from '../src/domain/dates';
@@ -210,15 +211,22 @@ async function save(w: Writer, cards: Card[]): Promise<void> {
   if (failed) throw new ToolError(failed.status === 'too_large' ? 'That card would be too large.' : 'The card changed while saving. Read it again and retry.');
 }
 
-/** Tag IDs for these names, creating tag cards that don't exist yet in `vault`. */
+/**
+ * Tag IDs for these names, creating tag cards that don't exist yet in `vault`. A tag group's name isn't a tag and
+ * is left off, and of a one-choice group's tags (like Priority) only the last named is kept.
+ */
 function tagIds(w: Writer, wanted: string[], vault: ScopeVault, created: Card[]): string[] {
-  return wanted.map((name) => {
-    const existing = w.scope.index.tags.find((t) => t.title.trim().toLowerCase() === name.toLowerCase());
-    if (existing) return existing.id;
-    const tag: Card = { id: crypto.randomUUID(), vaultId: vault.id, type: 'tag', title: name, content: EMPTY_DOC, tags: [], pinned: false, createdAt: w.now(), updatedAt: 0, deleted: false, seq: 0 };
-    created.push(tag);
-    return tag.id;
-  });
+  const { groups, groupOf } = w.scope.index.tagGroups;
+  const ids = wanted
+    .filter((name) => !isGroupName(name, groups))
+    .map((name) => {
+      const existing = w.scope.index.tags.find((t) => t.title.trim().toLowerCase() === name.toLowerCase());
+      if (existing) return existing.id;
+      const tag: Card = { id: crypto.randomUUID(), vaultId: vault.id, type: 'tag', title: name, content: EMPTY_DOC, tags: [], pinned: false, createdAt: w.now(), updatedAt: 0, deleted: false, seq: 0 };
+      created.push(tag);
+      return tag.id;
+    });
+  return settleTags(ids, groupOf);
 }
 
 function appendDoc(content: JSONNode, extra: JSONNode): JSONNode {

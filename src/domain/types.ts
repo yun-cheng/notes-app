@@ -66,6 +66,15 @@ export interface TagCard extends CardCommon {
   type: 'tag';
   /** A pinned tag appears in the sidebar and acts as a folder. */
   pinned: boolean;
+  /**
+   * Set on a tag group, like Priority or Topics, and never on a tag put on entries: the tags in it, in order.
+   * See `tagGroups.ts`.
+   */
+  members?: string[];
+  /** A group's rule: an entry takes one of its tags (Priority) or any number (Topics). */
+  choice?: 'one' | 'many';
+  /** A group whose order ranks its tags (High before Low), so the journal can sort by it. */
+  ordered?: boolean;
 }
 
 export type Card = NoteCard | TodoCard | DiaryCard | TagCard;

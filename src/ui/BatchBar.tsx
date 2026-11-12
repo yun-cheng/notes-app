@@ -26,7 +26,7 @@ export function BatchBar({ selection }: { selection: Selection }) {
   const skipped = (n: number) => (n ? `; ${entries(n)} couldn't be changed` : '');
 
   const apply = async (edit: BatchEdit, done: (n: number) => string) => {
-    const steps = planBatch(editable, edit);
+    const steps = planBatch(editable, edit, index.tagGroups.groupOf);
     if (!steps.length) return;
     await Promise.all(steps.map((s) => repo.update(s.id, s.patch)));
     toast(`${done(steps.length)}${skipped(cards.length - editable.length)}`, {

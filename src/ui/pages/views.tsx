@@ -1,6 +1,5 @@
-import { useMemo, useState, type FormEvent } from 'react';
+import { useMemo } from 'react';
 import { Link, useSearchParams } from 'react-router';
-import { displayTitle } from '../../domain/content';
 import { addMonths, formatMonth, monthGrid, monthKey, parseDateKey } from '../../domain/dates';
 import { buildSearch } from '../../domain/search';
 import { useCards, useToday } from '../../state/CardsContext';
@@ -74,57 +73,6 @@ export function CalendarPage() {
           );
         })}
       </div>
-    </Page>
-  );
-}
-
-export function TagsPage() {
-  const { index, repo } = useCards();
-  const [title, setTitle] = useState('');
-  const submit = (e: FormEvent) => {
-    e.preventDefault();
-    const text = title.trim();
-    if (!text) return;
-    setTitle('');
-    if (!index.tags.some((t) => t.title.toLowerCase() === text.toLowerCase())) void repo.createTag({ title: text });
-  };
-  return (
-    <Page title="Tags">
-      <form className="quick-add" onSubmit={submit}>
-        <input value={title} onChange={(e) => setTitle(e.target.value)} placeholder="New tag" aria-label="New tag" enterKeyHint="done" />
-        <button type="submit" aria-label="Add tag" disabled={!title.trim()}>
-          <Icon name="plus" size={18} />
-        </button>
-      </form>
-      {index.tags.length ? (
-        <div className="list">
-          {index.tags.map((t) => {
-            const count = (index.backlinks.get(t.id) ?? []).filter((l) => l.kind === 'tag').length;
-            return (
-              <div className="row" key={t.id}>
-                <Link className="row__body" to={journalPath({ tagId: t.id })}>
-                  <span className="row__title">{displayTitle(t)}</span>
-                  <span className="row__preview">
-                    {count} {count === 1 ? 'card' : 'cards'}
-                  </span>
-                </Link>
-                <button
-                  type="button"
-                  className={`icon-btn${t.pinned ? ' is-active' : ''}`}
-                  aria-pressed={t.pinned}
-                  aria-label={`${t.pinned ? 'Unpin' : 'Pin'} ${t.title} as a folder`}
-                  title={t.pinned ? 'Unpin from sidebar' : 'Pin to sidebar as a folder'}
-                  onClick={() => void repo.update(t.id, { pinned: !t.pinned })}
-                >
-                  <Icon name="pin" />
-                </button>
-              </div>
-            );
-          })}
-        </div>
-      ) : (
-        <Empty>No tags yet. Pin a tag and it appears as a folder.</Empty>
-      )}
     </Page>
   );
 }

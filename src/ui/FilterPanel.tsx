@@ -33,10 +33,15 @@ const STATUS_TITLE: Record<TodoStatus, string> = { open: 'Open todos', done: 'Do
 export function useFilterTitle(filter: StreamFilter): string {
   const { index, vaults } = useCards();
   const today = useToday();
+  const tagTitle = (id: string) => {
+    const name = index.tags.find((t) => t.id === id)?.title ?? 'tag';
+    const group = index.tagGroups.groupOf.get(id);
+    return group ? `${group.title}: ${name}` : `#${name}`;
+  };
   const parts = [
     filter.status ? STATUS_TITLE[filter.status] : filter.type && TYPE_LABEL[filter.type],
     filter.when && whenLabel(filter.when, today),
-    filter.tagId && `#${index.tags.find((t) => t.id === filter.tagId)?.title ?? 'tag'}`,
+    filter.tagId && tagTitle(filter.tagId),
     filter.vaultId && vaults.find((v) => v.id === filter.vaultId)?.name,
     filter.has && CONTAINS_LABEL[filter.has].toLowerCase(),
   ].filter(Boolean);
@@ -73,7 +78,11 @@ export function FilterPanel({ onPick }: { onPick?: () => void }) {
 
   // A hidden vault stays out of sight until it's unlocked from Vaults.
   const shownVaults = sortVaults(vaults).filter((v) => !(v.hidden && locked.has(v.id)));
-  const tags = index.pinnedTags.some((t) => t.id === filter.tagId) ? index.pinnedTags : [...index.pinnedTags, ...index.tags.filter((t) => t.id === filter.tagId)];
+  // Grouped tags show under their group; other pinned tags, and the one filtered by, under Tags.
+  const { groupOf } = index.tagGroups;
+  const pinned = index.pinnedTags.filter((t) => !groupOf.has(t.id));
+  const tags = pinned.some((t) => t.id === filter.tagId) || groupOf.has(filter.tagId ?? '') ? pinned : [...pinned, ...index.tags.filter((t) => t.id === filter.tagId)];
+  const tagCount = (id: string) => (index.backlinks.get(id) ?? []).filter((l) => l.kind === 'tag').length;
   const pickedDay = filter.when && !WHEN_LABEL[filter.when] ? filter.when : undefined;
 
   return (
@@ -128,11 +137,18 @@ export function FilterPanel({ onPick }: { onPick?: () => void }) {
         </Link>
       </nav>
 
+      {index.tagGroups.groups
+        .filter((g) => g.members.length)
+        .map((g) => (
+          <nav key={g.id} aria-label={g.title} className="sidebar__group">
+            <h2>{g.title}</h2>
+            {g.members.map((t) => item(t.id, t.title, toggle('tagId', t.id), filter.tagId === t.id, 'tag', tagCount(t.id)))}
+          </nav>
+        ))}
+
       <nav aria-label="Tags" className="sidebar__group">
         <h2>Tags</h2>
-        {tags.map((t) =>
-          item(t.id, t.title, toggle('tagId', t.id), filter.tagId === t.id, 'tag', (index.backlinks.get(t.id) ?? []).filter((l) => l.kind === 'tag').length),
-        )}
+        {tags.map((t) => item(t.id, t.title, toggle('tagId', t.id), filter.tagId === t.id, 'tag', tagCount(t.id)))}
         <Link to="/tags" className={`nav-item nav-item--quiet${pathname === '/tags' ? ' active' : ''}`} onClick={onPick}>
           <span className="nav-item__pad" />
           <span>All tags</span>

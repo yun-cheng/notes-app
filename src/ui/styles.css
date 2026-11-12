@@ -145,6 +145,18 @@ body:has(.composer:focus-within) .tabbar { display: none; }
 .check--large { margin-top: 3px; height: 34px; }
 .check--large input { width: 24px; height: 24px; }
 
+.tag-group { margin: 10px 0 14px; padding: 10px 12px; border: 1px solid var(--line); border-radius: 12px; background: var(--surface); }
+.tag-group__head { display: flex; align-items: center; gap: 6px; }
+.tag-group__name { flex: 1; min-width: 0; min-height: 34px; padding: 0 6px; margin-left: -6px; border: 1px solid transparent; border-radius: 8px; background: none; color: var(--text); font: 600 16px/1.3 var(--sans); }
+.tag-group__name:hover, .tag-group__name:focus { border-color: var(--line); outline: none; }
+.tag-group__rules { display: flex; flex-wrap: wrap; align-items: center; gap: 8px 14px; margin: 6px 0 4px; font-size: 14px; color: var(--muted); }
+.tag-group__ordered { display: inline-flex; align-items: center; gap: 6px; }
+.tag-group__rank { align-self: center; width: 1.4em; color: var(--muted); font-size: 13px; text-align: right; }
+.tag-group .row { align-items: center; }
+.tag-group .tag-picker { margin-top: 6px; }
+.tag-group .tag-picker__input { width: 100%; }
+.chip--grouped { font-weight: 600; border-color: color-mix(in srgb, var(--accent) 45%, var(--line)); }
+.chip--clash { border-color: var(--alert); color: var(--alert); }
 .quick-add { display: flex; gap: 6px; margin: 12px 0; padding: 3px 3px 3px 12px; background: var(--surface); border: 1px solid var(--line); border-radius: 10px; }
 .quick-add:focus-within { border-color: var(--accent); }
 .quick-add input { flex: 1; min-width: 0; min-height: 38px; border: 0; background: none; outline: none; }

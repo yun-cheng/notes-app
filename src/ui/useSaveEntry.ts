@@ -1,6 +1,7 @@
 import { appendToDoc, parseEntries, type Entry } from '../domain/entry';
 import { diaryVault } from '../domain/locks';
 import type { StreamFilter } from '../domain/stream';
+import { isGroupName, settleTags } from '../domain/tagGroups';
 import { EMPTY_DOC, type JSONNode } from '../domain/types';
 import { useCards, useToday } from '../state/CardsContext';
 
@@ -48,9 +49,11 @@ export function useSaveEntries() {
 
     // Tags typed in several entries are made once.
     const made = new Map<string, string>();
+    const { groups, groupOf } = index.tagGroups;
     const tagIdsFor = (names: string[]) => {
       const ids = opts.tagId ? [opts.tagId] : [];
       for (const name of names) {
+        if (isGroupName(name, groups)) continue;
         const key = name.toLowerCase();
         let id = index.tags.find((t) => t.title.toLowerCase() === key)?.id ?? made.get(key);
         if (!id) {
@@ -60,7 +63,8 @@ export function useSaveEntries() {
         }
         if (!ids.includes(id)) ids.push(id);
       }
-      return ids;
+      // A one-choice group (Priority) keeps the last of its tags: what was typed wins over the journal's filter.
+      return settleTags(ids, groupOf);
     };
 
     // Diary parts go in together, in one save, so one can't overwrite another.

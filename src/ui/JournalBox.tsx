@@ -9,6 +9,7 @@ import { useEffect, useRef, useState, type ChangeEvent } from 'react';
 import { mainVault } from '../domain/access';
 import { addDays, parseDateKey, relativeDay } from '../domain/dates';
 import { entriesFromDoc, parseDue } from '../domain/entry';
+import { isGroupName } from '../domain/tagGroups';
 import { effectiveType, type StreamFilter } from '../domain/stream';
 import type { JSONNode } from '../domain/types';
 import { useCards, useToday } from '../state/CardsContext';
@@ -157,8 +158,15 @@ export function JournalBox({ filter }: { filter: StreamFilter }) {
       .filter((t) => t.title.toLowerCase().includes(q))
       .sort((a, b) => Number(b.title.toLowerCase().startsWith(q)) - Number(a.title.toLowerCase().startsWith(q)) || Number(b.pinned) - Number(a.pinned))
       .slice(0, 6)
-      .map<MenuItem>((t) => ({ id: t.id, label: `#${t.title}`, icon: 'tag', run: (e, range) => e.chain().focus().insertContentAt(range, `#${t.title} `).run() }));
-    const exact = tags.some((t) => t.title.toLowerCase() === q) || ['todo', 'diary'].includes(q);
+      .map<MenuItem>((t) => ({
+        id: t.id,
+        label: `#${t.title}`,
+        hint: latest.current.index.tagGroups.groupOf.get(t.id)?.title,
+        icon: 'tag',
+        run: (e, range) => e.chain().focus().insertContentAt(range, `#${t.title} `).run(),
+      }));
+    // A group's name (Priority) isn't a tag, so it isn't offered as a new one.
+    const exact = tags.some((t) => t.title.toLowerCase() === q) || ['todo', 'diary'].includes(q) || isGroupName(q, latest.current.index.tagGroups.groups);
     if (q && !exact && /^[\p{L}\p{N}_-]+$/u.test(q)) {
       found.push({ id: 'new', label: `#${query.trim()}`, hint: 'new tag', icon: 'plus', run: (e, range) => e.chain().focus().insertContentAt(range, `#${query.trim()} `).run() });
     }

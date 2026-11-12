@@ -2,7 +2,7 @@ import { useEffect, useLayoutEffect, useRef, useState } from 'react';
 import { Link, NavLink, Outlet, useLocation, useNavigate, useParams } from 'react-router';
 import { permissions } from '../../domain/access';
 import { linkTitle } from '../../domain/cardIndex';
-import { displayTitle, previewLines } from '../../domain/content';
+import { displayTitle, previewLines, splitLinks } from '../../domain/content';
 import { isDateKey, relativeDay, relativeDayInSentence, toDateKey } from '../../domain/dates';
 import { isFiltered, streamItems, type StreamItem, type StreamSort } from '../../domain/stream';
 import type { DiaryCard, NoteCard, TodoCard } from '../../domain/types';
@@ -278,10 +278,27 @@ function useFold(id: string, lines: string[]) {
   };
   const view = lines.length ? (
     <span ref={ref} className={`bubble__text${folded ? ' is-folded' : ''}`}>
-      {text}
+      <LinkedText text={text} />
     </span>
   ) : null;
   return { fold, view };
+}
+
+/** Text with its web addresses as links that open in a new tab. Clicking one doesn't open or pick the entry. */
+function LinkedText({ text }: { text: string }) {
+  return (
+    <>
+      {splitLinks(text).map((part, i) =>
+        part.href ? (
+          <a key={i} className="bubble__link" href={part.href} target="_blank" rel="noopener noreferrer" referrerPolicy="no-referrer">
+            {part.text}
+          </a>
+        ) : (
+          part.text
+        ),
+      )}
+    </>
+  );
 }
 
 /** Opens an entry: a note or todo in a sheet over this page, a diary entry on its day. */
@@ -307,7 +324,11 @@ function NoteBubble({ note, at }: { note: NoteCard; at: number }) {
   const { selected, handlers } = useSelectable(note.id, open);
   return (
     <div className={`bubble${selected ? ' is-selected' : ''}`} role="article" aria-current={selected || undefined} {...handlers}>
-      {note.title.trim() && <strong className="bubble__title">{note.title}</strong>}
+      {note.title.trim() && (
+        <strong className="bubble__title">
+          <LinkedText text={note.title} />
+        </strong>
+      )}
       {text.view}
       <BubbleMeta card={note} at={at} fold={text.fold} />
       <OpenButton open={open} />
@@ -334,7 +355,9 @@ function TodoBubble({ todo, at }: { todo: TodoCard; at: number }) {
         />
       </label>
       <div className="bubble__body">
-        <span className="bubble__title">{displayTitle(todo)}</span>
+        <span className="bubble__title">
+          <LinkedText text={displayTitle(todo)} />
+        </span>
         {text.view}
         <BubbleMeta card={todo} at={at} due={todo.due} fold={text.fold} />
       </div>

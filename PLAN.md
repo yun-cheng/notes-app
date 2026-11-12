@@ -38,7 +38,7 @@ Outside text boxes, the journal takes keys for entries: Cmd+A selects all shown,
 
 Several entries can be changed at once. A circle beside each entry (shown on hover) picks it, and so do a click on the row beside the bubble, Cmd-click (Ctrl-click) and a long press; Shift-click picks a range, dragging a box over entries from any empty space around them, in the margins too, picks every one it touches, and Select at the top starts picking. Escape, Done or a click outside the entries stops it. While entries are picked, the writing box becomes a bar that tags or untags them, marks todos done or not, sets their due date, moves them to another vault or trashes them, each with an undo.
 
-An entry's photos show as thumbnails under its bubble, opening full size in a viewer that steps through them, and its web links show as cards with the page's own title, description and image.
+Web addresses in an entry's text are links that open in a new tab, without opening or picking the entry. An entry's photos show as thumbnails under its bubble, opening full size in a viewer that steps through them, and its web links show as cards with the page's own title, description and image.
 
 Bubbles show their whole text; a long one can be folded to its first six lines, and unfolded, with Less and More in its bottom row. A bubble's text can be selected and copied straight from the stream. The open button beside it on hover, or Enter on a focused bubble, opens it in a small sheet with just its text (on a phone, a tap opens it); formatting, tags, a title, sharing, history and trash sit behind small buttons there. A note without a title is named by its first line.
 

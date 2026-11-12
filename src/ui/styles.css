@@ -374,6 +374,8 @@ body:has(.composer:focus-within) .tabbar { display: none; }
 .bubble:hover { border-color: var(--muted); }
 .bubble__title { font-weight: 600; }
 .bubble__text { white-space: pre-line; }
+.bubble__link { color: var(--accent); text-decoration: underline; text-decoration-color: color-mix(in srgb, var(--accent) 45%, transparent); text-underline-offset: 2px; overflow-wrap: anywhere; }
+.bubble__link:hover { text-decoration-color: currentColor; }
 .bubble__text.is-folded { display: -webkit-box; -webkit-box-orient: vertical; -webkit-line-clamp: 6; overflow: hidden; }
 .bubble__fold { display: inline-flex; align-items: center; gap: 2px; padding: 0 6px 0 2px; border: 0; border-radius: 6px; background: none; color: var(--accent); font: inherit; font-size: 12px; font-weight: 600; cursor: pointer; }
 .bubble__fold:hover { background: var(--accent-soft); }

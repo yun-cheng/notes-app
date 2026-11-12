@@ -89,6 +89,20 @@ export function previewLines(content: JSONNode, titleOf?: (id: string, label: st
 /** A web address in text. It stops before trailing punctuation, so "see https://a.com." links just the address. */
 const URL_IN_TEXT = /\bhttps?:\/\/[^\s<>"']*[^\s<>"'.,;:!?)\]}]/g;
 
+/** Text cut into plain runs and web addresses, so the addresses can be shown as links. */
+export function splitLinks(text: string): { text: string; href?: string }[] {
+  const parts: { text: string; href?: string }[] = [];
+  let at = 0;
+  for (const match of text.matchAll(URL_IN_TEXT)) {
+    const start = match.index ?? 0;
+    if (start > at) parts.push({ text: text.slice(at, start) });
+    parts.push({ text: match[0], href: match[0] });
+    at = start + match[0].length;
+  }
+  if (at < text.length || !parts.length) parts.push({ text: text.slice(at) });
+  return parts;
+}
+
 /** A line of typed text as text nodes, with web addresses made into links. */
 function inlineWithLinks(line: string): JSONNode[] {
   const nodes: JSONNode[] = [];

@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { displayTitle, isBlank, linkedCardIds, linkUrls, photoIds, plainText, previewLines, siteName, textToDoc } from './content';
+import { displayTitle, isBlank, linkedCardIds, linkUrls, photoIds, plainText, previewLines, siteName, splitLinks, textToDoc } from './content';
 import { doc, link, note, p, tag, text } from './testFixtures';
 
 describe('content', () => {
@@ -47,6 +47,18 @@ describe('previews', () => {
 });
 
 describe('web links', () => {
+  it('cuts text into plain runs and addresses, leaving trailing punctuation out', () => {
+    expect(splitLinks('See https://a.example/x?y=1, and http://b.example.')).toEqual([
+      { text: 'See ' },
+      { text: 'https://a.example/x?y=1', href: 'https://a.example/x?y=1' },
+      { text: ', and ' },
+      { text: 'http://b.example', href: 'http://b.example' },
+      { text: '.' },
+    ]);
+    expect(splitLinks('no links')).toEqual([{ text: 'no links' }]);
+    expect(splitLinks('')).toEqual([{ text: '' }]);
+  });
+
   it('makes typed web addresses into links, leaving trailing punctuation out', () => {
     expect(textToDoc('see https://example.com/a?b=1. ok')).toEqual(
       doc(p(text('see '), text('https://example.com/a?b=1', [{ type: 'link', attrs: { href: 'https://example.com/a?b=1' } }]), text('. ok'))),

@@ -156,6 +156,31 @@ export function diffLines(before: string[], after: string[]): DiffLine[] {
   return out;
 }
 
+/** Where unchanged lines were left out of a comparison, and how many. */
+export type DiffGap = { kind: 'gap'; count: number };
+
+/** Only the lines that changed, each with a line or so of what's around it, for showing a change in a long card. */
+export function diffExcerpt(lines: DiffLine[], context = 1): (DiffLine | DiffGap)[] {
+  const keep = lines.map(() => false);
+  lines.forEach((line, i) => {
+    if (line.kind === 'same') return;
+    for (let k = Math.max(0, i - context); k <= Math.min(lines.length - 1, i + context); k++) keep[k] = true;
+  });
+  const out: (DiffLine | DiffGap)[] = [];
+  let skipped = 0;
+  const gap = () => {
+    if (skipped) out.push({ kind: 'gap', count: skipped });
+    skipped = 0;
+  };
+  lines.forEach((line, i) => {
+    if (!keep[i]) return void skipped++;
+    gap();
+    out.push(line);
+  });
+  gap();
+  return out;
+}
+
 /** Counts of words added and removed, for a version's summary line. */
 export function changeSize(diff: DiffLine[]): { added: number; removed: number } {
   const words = (text: string) => (text.match(TOKEN) ?? []).filter((t) => t.trim()).length;

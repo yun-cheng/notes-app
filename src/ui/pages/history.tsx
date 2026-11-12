@@ -11,6 +11,7 @@ import { SyncAuthExpired, SyncOffline } from '../../sync/engine';
 import { fetchVersion, fetchVersions, sealVersions } from '../../sync/http';
 import type { VersionInfo } from '../../sync/protocol';
 import { Empty, Page } from '../components';
+import { Diff } from '../Diff';
 import { ReadOnlyDoc } from '../editor/ReadOnlyDoc';
 import { Icon } from '../Icon';
 import { LockPanel } from '../LockPanel';
@@ -243,26 +244,5 @@ function History({ card }: { card: Card }) {
         </div>
       )}
     </Page>
-  );
-}
-
-function Diff({ lines }: { lines: DiffLine[] }) {
-  if (!lines.length) return <Empty>This version is empty.</Empty>;
-  return (
-    <div className="diff">
-      {lines.map((line, i) =>
-        line.kind === 'changed' ? (
-          <p key={i} className="diff__line">
-            {line.pieces.map((piece, j) =>
-              piece.kind === 'same' ? piece.text : piece.kind === 'added' ? <ins key={j}>{piece.text}</ins> : <del key={j}>{piece.text}</del>,
-            )}
-          </p>
-        ) : (
-          <p key={i} className={`diff__line diff__line--${line.kind}`}>
-            {line.kind === 'added' ? <ins>{line.text}</ins> : line.kind === 'removed' ? <del>{line.text}</del> : line.text || ' '}
-          </p>
-        ),
-      )}
-    </div>
   );
 }

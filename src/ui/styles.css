@@ -335,6 +335,7 @@ body:has(.composer:focus-within) .tabbar { display: none; }
 .diff ins { background: var(--added); text-decoration: none; border-radius: 3px; }
 .diff del { background: var(--removed); text-decoration: line-through; text-decoration-color: color-mix(in srgb, var(--text) 45%, transparent); border-radius: 3px; }
 .diff__line--added ins, .diff__line--removed del { background: none; }
+.diff__gap { color: var(--muted); padding: 0 6px; line-height: 1.2; }
 .prose--readonly { min-height: 0; }
 @media (min-width: 860px) {
   .history { grid-template-columns: minmax(0, 1fr) 260px; align-items: start; }

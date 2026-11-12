@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { cardLines, changeSize, diffLines, diffWords, restorePatch, sameContent } from './history';
+import { cardLines, changeSize, diffExcerpt, diffLines, diffWords, restorePatch, sameContent } from './history';
 import { doc, link, note, p, text, todo } from './testFixtures';
 import type { DiaryCard, JSONNode } from './types';
 
@@ -59,6 +59,21 @@ describe('diffs', () => {
       { kind: 'removed', text: 'recent edit' },
       { kind: 'added', text: 'old text' },
     ]);
+  });
+  it('excerpts a long comparison to the changed lines and what is around them', () => {
+    const before = ['a', 'b', 'c', 'd', 'e', 'f', 'g'];
+    const diff = diffLines(before, ['a', 'b', 'c', 'd', 'e', 'f', 'g', 'new']);
+    expect(diffExcerpt(diff)).toEqual([{ kind: 'gap', count: 6 }, { kind: 'same', text: 'g' }, { kind: 'added', text: 'new' }]);
+    const middle = diffExcerpt(diffLines(before, ['a', 'b', 'c', 'e', 'f', 'g']));
+    expect(middle).toEqual([
+      { kind: 'gap', count: 2 },
+      { kind: 'same', text: 'c' },
+      { kind: 'removed', text: 'd' },
+      { kind: 'same', text: 'e' },
+      { kind: 'gap', count: 2 },
+    ]);
+    expect(diffExcerpt(diffLines(before, before))).toEqual([{ kind: 'gap', count: 7 }]);
+    expect(diffExcerpt([])).toEqual([]);
   });
   it('handles empty versions', () => {
     expect(diffLines([], ['hi'])).toEqual([{ kind: 'added', text: 'hi' }]);

@@ -251,7 +251,7 @@ export function TitleField({ value, onSave, autoFocus, readOnly }: { value: stri
   );
 }
 
-export function TagPicker({ tagIds, onChange }: { tagIds: string[]; onChange: (tags: string[]) => void }) {
+export function TagPicker({ tagIds, onChange, autoFocus = false }: { tagIds: string[]; onChange: (tags: string[]) => void; autoFocus?: boolean }) {
   const { index, repo } = useCards();
   const [query, setQuery] = useState('');
   const [open, setOpen] = useState(false);
@@ -293,6 +293,7 @@ export function TagPicker({ tagIds, onChange }: { tagIds: string[]; onChange: (t
           value={query}
           placeholder="Add tag"
           aria-label="Add tag"
+          autoFocus={autoFocus}
           enterKeyHint="done"
           onChange={(e) => setQuery(e.target.value)}
           onFocus={() => setOpen(true)}

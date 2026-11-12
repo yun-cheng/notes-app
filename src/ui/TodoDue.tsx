@@ -94,10 +94,11 @@ function useDueEdits(card: TodoCard) {
 }
 
 /**
- * An open todo's due date, in its bottom bar: a calendar button showing when it's due, which opens the date,
- * time and repeat. The menu sits fixed beside the button, since the sheet scrolls and would clip it.
+ * A todo's due date, time and repeat, in a menu. Its button is, by `look`: a calendar showing when it's due, in an
+ * open todo's bottom bar; a round calendar button beside a bubble, on hover; or the "Due today" in a bubble,
+ * which a phone can tap too. The menu sits fixed beside the button, so a sheet that scrolls doesn't clip it.
  */
-export function DueMenu({ card }: { card: TodoCard }) {
+export function DueMenu({ card, look = 'bar' }: { card: TodoCard; look?: 'bar' | 'tool' | 'label' }) {
   const { open, root, toggle, fixedStyle, close } = usePopover();
   const edits = useDueEdits(card);
   const { today } = edits;
@@ -106,20 +107,37 @@ export function DueMenu({ card }: { card: TodoCard }) {
     ['Tomorrow', addDays(today, 1)],
     ['In a week', addDays(today, 7)],
   ] as const;
+  const overdue = isOverdue(card, today) ? ' is-alert' : '';
+  const looks = { bar: `due-menu__btn${open ? ' is-active' : ''}${overdue}`, tool: 'bubble__open', label: `due-menu__label bubble__due${overdue}` };
   return (
-    <div ref={root} className="due-menu">
+    // Clicks in the menu stay out of a bubble's own click handling (picking, opening).
+    <div ref={root} className={`due-menu${open ? ' is-open' : ''}`} onClick={(e) => e.stopPropagation()}>
       <button
         type="button"
-        className={`due-menu__btn${open ? ' is-active' : ''}${isOverdue(card, today) ? ' is-alert' : ''}`}
+        className={looks[look]}
         aria-haspopup="dialog"
         aria-expanded={!!open}
         aria-label={card.due ? `${dueText(card, today)}${card.repeat ? `, ${repeatLabel(card.repeat).toLowerCase()}` : ''}` : 'Set a due date'}
         title="Due date, time and repeat"
         onClick={toggle}
       >
-        <Icon name="calendar" size={18} />
-        {card.due && <span>{dueText(card, today, true)}</span>}
-        {card.repeat && <Icon name="repeat" size={12} />}
+        {look === 'label' ? (
+          <>
+            {dueText(card, today)}
+            {card.repeat && (
+              <span className="repeat-label">
+                <Icon name="repeat" size={12} />
+                {repeatLabel(card.repeat)}
+              </span>
+            )}
+          </>
+        ) : (
+          <>
+            <Icon name="calendar" size={look === 'tool' ? 16 : 18} />
+            {look === 'bar' && card.due && <span>{dueText(card, today, true)}</span>}
+            {look === 'bar' && card.repeat && <Icon name="repeat" size={12} />}
+          </>
+        )}
       </button>
       {open && (
         <div className={`style-menu due-menu__panel${open === 'up' ? ' style-menu--up' : ''}`} style={fixedStyle(260)} role="dialog" aria-label="Due date">

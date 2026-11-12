@@ -23,6 +23,7 @@ import { BatchBar } from '../BatchBar';
 import { SelectionProvider, useBoxSelect, useSelectable, useSelection, useSelectionState } from '../selection';
 import { useEntryActions } from '../entryActions';
 import { useEntryShortcuts } from '../useEntryShortcuts';
+import { BubbleTools } from '../BubbleTools';
 import { DueLabel, DueMenu, useTickTodo } from '../TodoDue';
 
 const time = (at: number) => new Date(at).toLocaleTimeString(undefined, { hour: 'numeric', minute: '2-digit' });
@@ -226,7 +227,7 @@ function BubbleMeta({ card, at, fold }: { card: NoteCard | TodoCard | DiaryCard;
   const retag = permissions(card, vaults, shared).edit ? (tags: string[]) => void repo.update(card.id, { tags }) : undefined;
   return (
     <span className="bubble__meta">
-      {card.type === 'todo' && <DueLabel todo={card} className="bubble__due" />}
+      {card.type === 'todo' && card.due && (retag ? <DueMenu card={card} look="label" /> : <DueLabel todo={card} className="bubble__due" />)}
       <TagChips tagIds={card.tags} onChange={retag} />
       {(fold.long || fold.folded) && (
         <button type="button" className="bubble__fold" aria-expanded={!fold.folded} onClick={fold.toggle}>
@@ -314,36 +315,6 @@ function useOpen(card: NoteCard | TodoCard | DiaryCard) {
   const navigate = useNavigate();
   const location = useLocation();
   return () => void navigate(cardPath(card), { state: sheetState(location, card) });
-}
-
-/**
- * The buttons beside a bubble on hover: open it, and its color and previews. Taps on a phone open it without
- * one, and its sheet has the style choices.
- */
-function BubbleTools({ card, open }: { card: NoteCard | TodoCard | DiaryCard; open: () => void }) {
-  const { vaults, shared } = useCards();
-  const { copyText } = useEntryActions();
-  return (
-    <span className="bubble__tools">
-      <button type="button" className="bubble__open" aria-label="Open" title="Open (Enter)" onClick={open}>
-        <Icon name="open" size={16} />
-      </button>
-      <button
-        type="button"
-        className="bubble__open"
-        aria-label="Copy text"
-        title="Copy text"
-        onClick={(e) => {
-          // A click here copies, without picking the entry.
-          e.stopPropagation();
-          copyText(card.id);
-        }}
-      >
-        <Icon name="copy" size={16} />
-      </button>
-      {permissions(card, vaults, shared).edit && <StyleMenu card={card} />}
-    </span>
-  );
 }
 
 function NoteBubble({ note, at }: { note: NoteCard; at: number }) {

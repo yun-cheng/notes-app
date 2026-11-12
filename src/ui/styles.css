@@ -608,7 +608,15 @@ body:has(.batch) .toast-slot { bottom: calc(var(--tabbar) + env(safe-area-inset-
 /* A bubble's text can be selected; the open button beside it, Enter, or a tap on a phone opens it. */
 .bubble { position: relative; color: var(--text); }
 .bubble:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
-.bubble__tools { position: absolute; top: 2px; left: calc(100% + 4px); z-index: 5; display: flex; gap: 4px; }
+.bubble__tools { position: absolute; top: 2px; left: calc(100% + 4px); z-index: 5; display: grid; grid-template-columns: repeat(3, 28px); gap: 4px; }
+.bubble-menu { position: relative; }
+.bubble__tools .is-open .bubble__open, .bubble__tools .entry-style.is-open .entry-style__btn { opacity: 1; }
+.style-menu.tag-menu { width: 280px; padding: 8px 10px; }
+.tag-menu .tag-picker { margin: 0; }
+.tag-menu .tag-picker__input, .tag-menu .tag-picker__input:focus { width: 100%; }
+.due-menu__label { display: inline-flex; align-items: center; gap: 6px; padding: 0; border: 0; background: none; color: inherit; font: inherit; font-weight: 600; cursor: pointer; text-decoration: underline; text-decoration-color: transparent; text-underline-offset: 2px; }
+.due-menu__label:hover { text-decoration-color: currentColor; }
+.due-menu__label .repeat-label { font-weight: 400; }
 .bubble__open { display: grid; place-items: center; width: 28px; height: 28px; padding: 0; border: 1px solid var(--line); border-radius: 50%; background: var(--surface); color: var(--muted); opacity: 0; cursor: pointer; transition: opacity 0.12s; }
 .bubble__open:hover { color: var(--text); border-color: var(--muted); }
 .stream__entry:hover .bubble__open, .bubble:focus-within .bubble__open { opacity: 1; }

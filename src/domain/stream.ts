@@ -2,7 +2,7 @@ import type { CardIndex } from './cardIndex';
 import { hasPhoto, linkUrls } from './content';
 import { addDays, isDateKey, parseDateKey, relativeDay, toDateKey } from './dates';
 import { rankIn, type TagGroup } from './tagGroups';
-import type { DiaryCard, NoteCard, TodoCard } from './types';
+import type { Card, DiaryCard, NoteCard, TodoCard } from './types';
 
 /**
  * One bubble in the journal stream. `day` is the date it's grouped under: the day it was written, or with other
@@ -127,22 +127,35 @@ function diaryTime(card: DiaryCard): number {
   return toDateKey(new Date(card.createdAt)) === card.date ? card.createdAt : endOfDay(card.date);
 }
 
-/**
- * Notes, todos and diary entries in the order they were written, oldest first, like messages in a chat.
- * Locked diary entries show as placeholders when nothing rules them out; their tags can't be read, so a tag hides them.
- */
-export function streamItems(index: CardIndex, filter: StreamFilter = {}, today = toDateKey(new Date())): StreamItem[] {
+/** The day an entry belongs to: the one a diary entry is about, or the one a note or todo was written on. */
+const entryDay = (card: Card) => (card.type === 'diary' ? card.date : toDateKey(new Date(card.createdAt)));
+
+/** Whether an entry passes a filter. Tags aren't entries, so none does. */
+export function entryMatcher(filter: StreamFilter, today: string): (card: Card, day?: string) => boolean {
   const { tagId, vaultId, status, has } = filter;
   const type = effectiveType(filter);
   const [from, to] = filter.when ? whenRange(filter.when, today) : ['', '9999'];
-  const inRange = (day: string) => day >= from && day <= to;
-  const keep = (card: NoteCard | TodoCard | DiaryCard, day: string) =>
+  return (card, day = entryDay(card)) =>
+    card.type !== 'tag' &&
     (!type || card.type === type) &&
     (!tagId || card.tags.includes(tagId)) &&
     (!vaultId || card.vaultId === vaultId) &&
     (!status || (card.type === 'todo' && matchesStatus(card, status, today))) &&
     (!has || (has === 'link' ? linkUrls(card.content).length > 0 : hasPhoto(card.content))) &&
-    inRange(day);
+    day >= from &&
+    day <= to;
+}
+
+/**
+ * Notes, todos and diary entries in the order they were written, oldest first, like messages in a chat.
+ * Locked diary entries show as placeholders when nothing rules them out; their tags can't be read, so a tag hides them.
+ */
+export function streamItems(index: CardIndex, filter: StreamFilter = {}, today = toDateKey(new Date())): StreamItem[] {
+  const { tagId, vaultId, has } = filter;
+  const type = effectiveType(filter);
+  const [from, to] = filter.when ? whenRange(filter.when, today) : ['', '9999'];
+  const inRange = (day: string) => day >= from && day <= to;
+  const keep = entryMatcher(filter, today);
 
   const items: StreamItem[] = [];
   for (const card of index.live) {

@@ -58,9 +58,14 @@ h1, h2, p { margin: 0; }
 
 .app { min-height: 100dvh; }
 .main { padding: 0 16px calc(var(--tabbar) + 32px + env(safe-area-inset-bottom)); }
-.page { max-width: 720px; margin: 0 auto; padding-top: max(20px, env(safe-area-inset-top)); }
-.page__head { display: flex; align-items: center; gap: 12px; margin-bottom: 18px; }
-.page__head h1 { flex: 1; min-width: 0; font: 600 28px/1.2 var(--serif); letter-spacing: -0.01em; }
+.page { max-width: 720px; margin: 0 auto; padding-top: max(10px, env(safe-area-inset-top)); }
+/* The title and its buttons stay at the top while the page scrolls. */
+.page__head {
+  position: sticky; top: 0; z-index: 7; display: flex; align-items: center; gap: 12px;
+  margin: 0 -16px 14px; padding: max(10px, env(safe-area-inset-top)) 16px 10px;
+  background: var(--bg); box-shadow: 0 1px 0 var(--line);
+}
+.page__head h1 { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font: 600 28px/1.2 var(--serif); letter-spacing: -0.01em; }
 .page__actions { display: flex; align-items: center; gap: 6px; flex: none; }
 
 .sidebar { display: none; }

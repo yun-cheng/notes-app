@@ -13,8 +13,8 @@ import { usePopover } from './usePopover';
 type Entry = NoteCard | TodoCard | DiaryCard;
 
 /**
- * The buttons beside a bubble on hover: open it, make a note a todo or a todo a note, share it, copy its text, and
- * its color and previews. Its tags
+ * The buttons beside a bubble on hover: open it, make a note a todo or a todo a note, share it, and its color and
+ * previews. Copying its text is a button on the bubble's top right corner. Its tags
  * and a todo's due date are changed in its bottom row, where they show (`AddTag`, and `DueMenu`). A phone has no
  * hover; a tap opens the entry, whose sheet has them all, and a todo's due date in its bubble can be tapped.
  */
@@ -23,17 +23,20 @@ export function BubbleTools({ card, open }: { card: Entry; open: () => void }) {
   const { copyText } = useEntryActions();
   const can = permissions(card, vaults, shared);
   return (
-    <span className="bubble__tools">
-      <button type="button" className="bubble__open" aria-label="Open" title="Open (Enter)" onClick={open}>
-        <Icon name="open" size={16} />
+    <>
+      <span className="bubble__tools">
+        <button type="button" className="bubble__open" aria-label="Open" title="Open (Enter)" onClick={open}>
+          <Icon name="open" size={16} />
+        </button>
+        {can.edit && card.type !== 'diary' && <TypeSwitch card={card} className="bubble__open" size={16} />}
+        {can.share && <ShareButton card={card} />}
+        {can.edit && <StyleMenu card={card} />}
+      </span>
+      {/* In the bubble's top right corner, in room the bubble keeps for it, so it covers none of the text. */}
+      <button type="button" className="bubble__copy" aria-label="Copy text" title="Copy text" onClick={() => copyText(card.id)}>
+        <Icon name="copy" size={14} />
       </button>
-      {can.edit && card.type !== 'diary' && <TypeSwitch card={card} className="bubble__open" size={16} />}
-      {can.share && <ShareButton card={card} />}
-      <button type="button" className="bubble__open" aria-label="Copy text" title="Copy text" onClick={() => copyText(card.id)}>
-        <Icon name="copy" size={16} />
-      </button>
-      {can.edit && <StyleMenu card={card} />}
-    </span>
+    </>
   );
 }
 

@@ -3,28 +3,39 @@ import { linkUrls, photoIds, siteName } from '../domain/content';
 import type { Card } from '../domain/types';
 import { useCards } from '../state/CardsContext';
 import { usePhotoUrl } from './editor/photo';
+import { useDisplayPrefs } from './displayPrefs';
 import { Icon } from './Icon';
 import { useLinkPreview } from './useLinkPreview';
 
 const MAX_PHOTOS = 4;
 const MAX_LINKS = 3;
 
-/** An entry's photos and web links, shown under its bubble: photos as thumbnails, links as small cards. */
+/**
+ * An entry's photos and web links, shown under its bubble, as the display settings say: photos large, as
+ * thumbnails or as a count; links as cards, as one line each or not at all (they stay links in the text).
+ */
 export function Attachments({ card }: { card: Card }) {
   const { vaults } = useCards();
+  const prefs = useDisplayPrefs();
   // Links in an encrypted vault, or in a card from a vault this account can't see, aren't sent anywhere to preview.
   const vault = vaults.find((v) => v.id === card.vaultId);
   const previews = !!vault && !vault.encryption;
   const photos = photoIds(card.content);
-  const links = linkUrls(card.content);
+  const links = prefs.links === 'off' ? [] : linkUrls(card.content);
   const [viewing, setViewing] = useState<number | null>(null);
   if (!photos.length && !links.length) return null;
   const extra = photos.length - MAX_PHOTOS;
 
   return (
     <div className="attachments">
-      {photos.length > 0 && (
-        <div className="attachments__photos">
+      {photos.length > 0 && prefs.photos === 'off' && (
+        <button type="button" className="attachments__count" onClick={() => setViewing(0)}>
+          <Icon name="image" size={16} />
+          {photos.length === 1 ? '1 photo' : `${photos.length} photos`}
+        </button>
+      )}
+      {photos.length > 0 && prefs.photos !== 'off' && (
+        <div className={`attachments__photos${prefs.photos === 'large' ? ' attachments__photos--large' : ''}`}>
           {photos.slice(0, MAX_PHOTOS).map((id, i) => (
             <button key={id} type="button" className="thumb" aria-label={`Open photo ${i + 1} of ${photos.length}`} onClick={() => setViewing(i)}>
               <Thumb id={id} />
@@ -34,7 +45,7 @@ export function Attachments({ card }: { card: Card }) {
         </div>
       )}
       {links.slice(0, MAX_LINKS).map((url) => (
-        <LinkCard key={url} url={url} preview={previews} />
+        <LinkCard key={url} url={url} preview={previews} compact={prefs.links === 'compact'} />
       ))}
       {links.length > MAX_LINKS && <span className="attachments__more">and {links.length - MAX_LINKS} more links</span>}
       {viewing !== null && <PhotoViewer ids={photos} start={viewing} onClose={() => setViewing(null)} />}
@@ -51,7 +62,7 @@ function Thumb({ id }: { id: string }) {
  * A link as a card opening in a new tab: the page's own title, description and image when it can be previewed,
  * or else its site and path. The image loads from the page's site, with no referrer.
  */
-export function LinkCard({ url, preview: allowed }: { url: string; preview: boolean }) {
+export function LinkCard({ url, preview: allowed, compact = false }: { url: string; preview: boolean; compact?: boolean }) {
   const preview = useLinkPreview(url, allowed);
   const [imageFailed, setImageFailed] = useState(false);
   let path = '';
@@ -60,6 +71,15 @@ export function LinkCard({ url, preview: allowed }: { url: string; preview: bool
     path = decodeURI(u.pathname + u.search).replace(/\/$/, '');
   } catch {
     // Shown as typed.
+  }
+  if (compact) {
+    return (
+      <a className="link-card link-card--compact" href={url} target="_blank" rel="noopener noreferrer" referrerPolicy="no-referrer" title={url}>
+        <Icon name="link" size={14} />
+        <span className="link-card__title">{preview?.title ?? (path ? `${siteName(url)}${path}` : siteName(url))}</span>
+        {preview?.title && <span className="link-card__site">{preview.site ?? siteName(url)}</span>}
+      </a>
+    );
   }
   return (
     <a className={`link-card${preview?.title ? ' link-card--rich' : ''}`} href={url} target="_blank" rel="noopener noreferrer" referrerPolicy="no-referrer">

@@ -9,6 +9,7 @@ import { CONTAINS_LABEL, SORT_LABEL, STATUS_LABEL, TYPE_LABEL, WHEN_LABEL, type 
 import type { Card } from '../domain/types';
 import { useCards, useToday } from '../state/CardsContext';
 import { useNewNote } from './components';
+import { LINK_STYLES, PHOTO_STYLES, setDisplayPrefs, type LinkStyle, type PhotoStyle } from './displayPrefs';
 import { useJournalFilter } from './FilterPanel';
 import { Icon, type IconName } from './Icon';
 import { cardPath, journalPath, sheetState } from './paths';
@@ -85,6 +86,12 @@ export function CommandPalette({ onClose, onShortcuts }: { onClose: () => void; 
     }
     for (const vault of sortVaults(vaults).filter((v) => !(v.hidden && locked.has(v.id)))) {
       all.push({ id: `vault-${vault.id}`, group: 'Filter', label: `Vault: ${vault.name}`, icon: locked.has(vault.id) ? 'lock' : undefined, keywords: 'vault private unlock', run: narrow({ vaultId: vault.id }) });
+    }
+    for (const links of Object.keys(LINK_STYLES) as LinkStyle[]) {
+      all.push({ id: `links-${links}`, group: 'Display', label: `Link previews: ${LINK_STYLES[links].toLowerCase()}`, icon: 'link', keywords: 'url web card preview style', run: () => setDisplayPrefs({ links }) });
+    }
+    for (const photos of Object.keys(PHOTO_STYLES) as PhotoStyle[]) {
+      all.push({ id: `photos-${photos}`, group: 'Display', label: `Photos: ${PHOTO_STYLES[photos].toLowerCase()}`, icon: 'image', keywords: 'pictures images preview style size', run: () => setDisplayPrefs({ photos }) });
     }
     for (const sort of Object.keys(SORT_LABEL) as StreamSort[]) {
       all.push({ id: `sort-${sort}`, group: 'Sort', label: `Sort: ${SORT_LABEL[sort].toLowerCase()}`, icon: 'upcoming', keywords: 'order', run: narrow({ sort }) });

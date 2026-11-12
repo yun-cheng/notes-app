@@ -21,7 +21,7 @@ import { Attachments } from '../Attachments';
 import { colorClass, StyleMenu } from '../EntryStyle';
 import { BatchBar } from '../BatchBar';
 import { SelectionProvider, useBoxSelect, useSelectable, useSelection, useSelectionState } from '../selection';
-import { useEntryActions } from '../entryActions';
+import { entries, useEntryActions } from '../entryActions';
 import { useEntryShortcuts } from '../useEntryShortcuts';
 import { AddTag, BubbleTools, TypeSwitch } from '../BubbleTools';
 import { DueLabel, DueMenu, useTickTodo } from '../TodoDue';
@@ -42,11 +42,19 @@ export function JournalPage() {
   const vault = vaults.find((v) => v.id === filter.vaultId);
   const filtered = isFiltered(filter);
   const items = streamItems(index, filter, today);
-  const selection = useSelectionState(items.flatMap((i) => (i.kind === 'card' ? [i.card.id] : [])));
+  const order = items.flatMap((i) => (i.kind === 'card' ? [i.card.id] : []));
+  const selection = useSelectionState(order);
   const vaultLocked = !!vault && locked.has(vault.id);
   useEntryShortcuts(selection, filter, !vaultLocked);
 
   const selecting = selection.selecting;
+  // How many entries are on screen, beside the title; while picking, the title says how many are picked.
+  const shown = vaultLocked ? 0 : order.length;
+  const count = shown > 0 && (
+    <span className="page__count" title={entries(shown)}>
+      {selecting ? `of ${shown}` : shown}
+    </span>
+  );
 
   // One tree whether picking or not, so the stream stays put (and its photos loaded) when picking starts.
   const pickingActions = (
@@ -94,7 +102,12 @@ export function JournalPage() {
   return (
     <SelectionProvider value={selection}>
       <Page
-        title={selecting ? `${selection.ids.length} selected` : title}
+        title={
+          <>
+            {selecting ? `${selection.ids.length} selected` : title}
+            {count}
+          </>
+        }
         actions={selecting ? pickingActions : actions}
       >
         {vault && vaultLocked ? (

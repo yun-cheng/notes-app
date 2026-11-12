@@ -12,6 +12,7 @@ import { Icon, type IconName } from '../Icon';
 import { useToast } from '../Toast';
 import { CardLink, insertCardLink, type LinkOption } from './cardLink';
 import { Photo } from './photo';
+import { typeahead, useTypeaheadMenu, type MenuItem } from './suggest';
 
 interface EditorProps {
   content: JSONNode;
@@ -117,6 +118,8 @@ export function Editor({ content, onChange, placeholder, selfId, vaultId, editab
   const { index, repo, photos, vaults, accountId } = useCards();
   const toast = useToast();
   const [menu, setMenu] = useState<MenuState | null>(null);
+  const slash = useTypeaheadMenu();
+  const picker = useRef<HTMLInputElement>(null);
   const [, redraw] = useState(0);
 
   const photoVault = vaultId ?? mainVault(vaults, accountId)?.id;
@@ -168,11 +171,33 @@ export function Editor({ content, onChange, placeholder, selfId, vaultId, editab
     });
   };
 
+  /** What `/` offers: blocks, a photo, or a link to another card. */
+  const slashItems = (query: string): MenuItem[] => {
+    const block = (fn: (ed: TiptapEditor) => void) => (ed: TiptapEditor, range: { from: number; to: number }) => {
+      ed.chain().focus().deleteRange(range).run();
+      fn(ed);
+    };
+    const all: (MenuItem & { words: string })[] = [
+      { id: 'h2', label: 'Heading', hint: '##', words: 'heading title', run: block((ed) => ed.chain().focus().toggleHeading({ level: 2 }).run()) },
+      { id: 'h3', label: 'Small heading', hint: '###', words: 'heading subheading', run: block((ed) => ed.chain().focus().toggleHeading({ level: 3 }).run()) },
+      { id: 'bullets', label: 'Bullet list', hint: '-', words: 'bullet list', run: block((ed) => ed.chain().focus().toggleBulletList().run()) },
+      { id: 'numbers', label: 'Numbered list', hint: '1.', words: 'numbered ordered list', run: block((ed) => ed.chain().focus().toggleOrderedList().run()) },
+      { id: 'quote', label: 'Quote', hint: '>', words: 'quote blockquote', run: block((ed) => ed.chain().focus().toggleBlockquote().run()) },
+      { id: 'code', label: 'Code', hint: '```', words: 'code block', run: block((ed) => ed.chain().focus().toggleCodeBlock().run()) },
+      { id: 'divider', label: 'Divider', hint: '---', words: 'divider line rule', run: block((ed) => ed.chain().focus().setHorizontalRule().run()) },
+      { id: 'photo', label: 'Photo', icon: 'image', words: 'photo image picture', run: block(() => picker.current?.click()) },
+      { id: 'link', label: 'Link to a note', hint: '[[', icon: 'link', words: 'link card note', run: (ed, range) => ed.chain().focus().insertContentAt(range, '[[').run() },
+    ];
+    const q = query.trim().toLowerCase();
+    return all.filter((i) => `${i.label} ${i.words}`.toLowerCase().includes(q));
+  };
+
   const editor = useEditor({
     extensions: [
       StarterKit.configure({ heading: { levels: [1, 2, 3] } }),
       Placeholder.configure({ placeholder }),
       Photo,
+      typeahead('slashMenu', '/', slashItems, slash.render('Add')),
       CardLink.configure({
         suggestion: {
           char: '[[',
@@ -296,6 +321,19 @@ export function Editor({ content, onChange, placeholder, selfId, vaultId, editab
     <div className="editor">
       {editable && toolbar && <Toolbar editor={editor} onPhotos={(files) => void addPhotos(files)} />}
       <EditorContent editor={editor} />
+      {slash.view}
+      <input
+        ref={picker}
+        type="file"
+        accept="image/*"
+        multiple
+        hidden
+        onChange={(e) => {
+          const files = [...(e.target.files ?? [])];
+          e.target.value = '';
+          if (files.length) void addPhotos(files);
+        }}
+      />
       {menu && (
         <ul className="link-menu" role="listbox" aria-label="Link to a card" style={{ left: menu.left, top: menu.top }}>
           {menu.items.length === 0 && <li className="link-menu__hint">Type a title to link or create a note</li>}

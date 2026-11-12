@@ -19,7 +19,15 @@ npm run build
 npm run dev:api
 ```
 
-Then, in a second terminal, start the app with `npm run dev`. The API runs on port 8788 and Vite proxies `/api` to it. Rebuild only when you want `dev:api` itself to serve the latest app.
+Then, in a second terminal, start the app with `npm run dev`. The app runs on port 5191, the API on port 8788, and Vite proxies `/api` to it. Rebuild only when you want `dev:api` itself to serve the latest app.
+
+To keep both running after the terminal closes, start them in tmux:
+
+```bash
+tmux new-session -d -s notes-app -n api 'npm run dev:api' \; new-window -n web 'npm run dev'
+```
+
+`tmux attach -t notes-app` shows their output and `tmux kill-session -t notes-app` stops both.
 
 To try the app without signing in, fill the local server with a demo account and open it:
 

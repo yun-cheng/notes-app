@@ -71,7 +71,8 @@ export default defineConfig({
       },
     }),
   ],
-  server: { proxy: { '/api': 'http://localhost:8788' } },
+  // Google sign-in allows this origin, so the port is fixed.
+  server: { port: 5191, strictPort: true, proxy: { '/api': 'http://localhost:8788' } },
   preview: { proxy: { '/api': 'http://localhost:8788' } },
   test: {
     environment: 'node',

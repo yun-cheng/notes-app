@@ -1,0 +1,97 @@
+import { permissions } from '../domain/access';
+import { linkTitle } from '../domain/cardIndex';
+import { encodeEntries, entriesText, ENTRIES_TYPE, toEntries } from '../domain/clipboard';
+import type { Entry } from '../domain/entry';
+import type { Card, DiaryCard, NoteCard, TodoCard } from '../domain/types';
+import { useCards } from '../state/CardsContext';
+import { useToast } from './Toast';
+import { useSaveEntries, type SaveOptions } from './useSaveEntry';
+
+export const entries = (n: number) => `${n} ${n === 1 ? 'entry' : 'entries'}`;
+
+/** What the clipboard should get on the next copy, set just before asking the browser to copy. */
+let pending: { text: string; json: string } | null = null;
+
+if (typeof document !== 'undefined') {
+  document.addEventListener('copy', (e) => {
+    if (!pending || !e.clipboardData) return;
+    e.preventDefault();
+    e.clipboardData.setData('text/plain', pending.text);
+    e.clipboardData.setData(ENTRIES_TYPE, pending.json);
+  });
+}
+
+/**
+ * Puts text and an exact copy on the clipboard. The browser's own copy command fires a copy event, which is the
+ * one place a page can add a type of its own; without it, the text alone is copied.
+ */
+function writeClipboard(text: string, json: string): boolean {
+  pending = { text, json };
+  try {
+    if (document.execCommand('copy')) return true;
+  } catch {
+    // Not allowed here; try the newer way below.
+  } finally {
+    pending = null;
+  }
+  if (!navigator.clipboard) return false;
+  void navigator.clipboard.writeText(text);
+  return true;
+}
+
+const copyable = (c: Card | undefined): c is NoteCard | TodoCard | DiaryCard => !!c && !c.deleted && c.type !== 'tag';
+
+/** Copy, cut, trash and paste for journal entries, each with a toast and, where it changes something, an undo. */
+export function useEntryActions() {
+  const { index, repo, vaults, shared } = useCards();
+  const toast = useToast();
+  const { saveEntries } = useSaveEntries();
+
+  const cardsFor = (ids: string[]) => ids.map((id) => index.byId.get(id)).filter(copyable);
+
+  const write = (cards: (NoteCard | TodoCard | DiaryCard)[]) => {
+    const tagName = (id: string) => index.tags.find((t) => t.id === id)?.title;
+    const text = entriesText(cards, tagName, (id, label) => linkTitle(index, id, label));
+    return writeClipboard(text, encodeEntries(toEntries(cards, tagName)));
+  };
+
+  const copy = (ids: string[]) => {
+    const cards = cardsFor(ids);
+    if (!cards.length) return;
+    toast(write(cards) ? `Copied ${entries(cards.length)}` : "Couldn't copy here. Select the text instead.");
+  };
+
+  /** Moves the entries this account may remove to the Trash. `verb` starts the toast ("Cut 3 entries"). */
+  const trash = async (ids: string[], verb = 'Moved') => {
+    const cards = cardsFor(ids);
+    const removable = cards.filter((c) => permissions(c, vaults, shared).manage).map((c) => c.id);
+    const skipped = cards.length - removable.length;
+    const note = skipped ? `; ${entries(skipped)} couldn't be removed` : '';
+    if (!removable.length) {
+      if (skipped) toast(`${entries(skipped)} couldn't be removed`);
+      return;
+    }
+    await Promise.all(removable.map((id) => repo.setDeleted(id, true)));
+    toast(`${verb} ${entries(removable.length)}${verb === 'Moved' ? ' to Trash' : ''}${note}`, {
+      action: { label: 'Undo', run: () => removable.forEach((id) => void repo.setDeleted(id, false)) },
+    });
+  };
+
+  const cut = async (ids: string[]) => {
+    const cards = cardsFor(ids);
+    if (!cards.length) return;
+    if (!write(cards)) return toast("Couldn't copy here, so nothing was cut.");
+    await trash(ids, 'Cut');
+  };
+
+  /** Makes copied entries again, as new entries written now, in whatever the journal is narrowed to. */
+  const paste = async (list: Entry[], opts: SaveOptions) => {
+    const result = await saveEntries(list, opts);
+    if (result.unlock) return toast('Unlock the diary to paste into it.');
+    if (!result.saved) return;
+    const undo = result.ids.length && !result.diary ? { label: 'Undo', run: () => result.ids.forEach((id) => void repo.setDeleted(id, true)) } : undefined;
+    toast(`Pasted ${entries(result.saved)}`, { action: undo });
+  };
+
+  return { copy, cut, trash, paste };
+}

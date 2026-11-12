@@ -62,19 +62,14 @@ export function useSelectionState(order: string[]): Selection {
     },
   };
 
-  // Escape stops selecting, unless a dialog is open to take it. Cmd+A picks everything shown.
+  // Escape stops selecting, unless a dialog is open to take it. The other keys are in `useEntryShortcuts`.
   const latest = useRef(selection);
   latest.current = selection;
   useEffect(() => {
     if (!selecting) return;
     const onKey = (e: KeyboardEvent) => {
       if (document.querySelector('.dialog-backdrop') || e.defaultPrevented) return;
-      const typing = e.target instanceof HTMLElement && e.target.closest('input, textarea, select, [contenteditable="true"]');
       if (e.key === 'Escape') latest.current.clear();
-      else if ((e.metaKey || e.ctrlKey) && e.key.toLowerCase() === 'a' && !typing) {
-        e.preventDefault();
-        latest.current.selectAll();
-      }
     };
     window.addEventListener('keydown', onKey);
     return () => window.removeEventListener('keydown', onKey);
@@ -89,7 +84,7 @@ const LONG_PRESS_MS = 450;
  * Click, key and touch handling for a bubble. With a mouse, a click leaves the bubble alone, so its text can be
  * selected and copied; the open button, or Enter on the focused bubble, opens it. On a touch screen a tap opens
  * it and a long press starts picking. Cmd/Ctrl-click picks it, Shift-click picks a range, and while picking any
- * click or tap picks.
+ * click or tap picks. Up and down arrows move between bubbles, picking along the way with Shift.
  */
 export function useSelectable(id: string, open: () => void) {
   const selection = useContext(SelectionContext);
@@ -133,6 +128,19 @@ export function useSelectable(id: string, open: () => void) {
         } else if (e.key === ' ' && selection) {
           e.preventDefault();
           selection.toggle(id, e.shiftKey);
+        } else if ((e.key === 'ArrowDown' || e.key === 'ArrowUp') && !e.metaKey && !e.ctrlKey && !e.altKey) {
+          // To the next or previous bubble; with Shift, picking from here to there.
+          const bubbles = [...(e.currentTarget.closest('.stream')?.querySelectorAll<HTMLElement>('[data-entry-id] > [role="article"]') ?? [])];
+          const next = bubbles[bubbles.indexOf(e.currentTarget as HTMLElement) + (e.key === 'ArrowDown' ? 1 : -1)];
+          const nextId = next?.closest<HTMLElement>('[data-entry-id]')?.dataset.entryId;
+          if (!next || !nextId) return;
+          e.preventDefault();
+          next.focus();
+          next.scrollIntoView({ block: 'nearest' });
+          if (e.shiftKey && selection) {
+            if (!selection.has(id)) selection.toggle(id);
+            selection.toggle(nextId, true);
+          }
         }
       },
       onPointerDown: (e: ReactPointerEvent) => {

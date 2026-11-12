@@ -12,6 +12,7 @@ import { Backlinks, Empty, Page, TagChips, TagPicker, TitleField, useDeleteCard,
 import { Editor } from '../editor/Editor';
 import { FilterPanel, useFilterTitle, useJournalFilter } from '../FilterPanel';
 import { Icon } from '../Icon';
+import { MOD } from '../Shortcuts';
 import { LockPanel } from '../LockPanel';
 import { cardPath, entryPath, journalPath, sheetState, type SheetState } from '../paths';
 import { ShareDialog } from '../ShareDialog';
@@ -19,6 +20,7 @@ import { JournalBox } from '../JournalBox';
 import { Attachments } from '../Attachments';
 import { BatchBar } from '../BatchBar';
 import { SelectionProvider, useBoxSelect, useSelectable, useSelection, useSelectionState } from '../selection';
+import { useEntryShortcuts } from '../useEntryShortcuts';
 
 const time = (at: number) => new Date(at).toLocaleTimeString(undefined, { hour: 'numeric', minute: '2-digit' });
 
@@ -38,13 +40,14 @@ export function JournalPage() {
   const items = streamItems(index, filter, today);
   const selection = useSelectionState(items.flatMap((i) => (i.kind === 'card' ? [i.card.id] : [])));
   const vaultLocked = !!vault && locked.has(vault.id);
+  useEntryShortcuts(selection, filter, !vaultLocked);
 
   const selecting = selection.selecting;
 
   // One tree whether picking or not, so the stream stays put (and its photos loaded) when picking starts.
   const pickingActions = (
     <>
-      <button type="button" className="btn btn--quiet" onClick={selection.selectAll}>
+      <button type="button" className="btn btn--quiet" onClick={selection.selectAll} title={`Select all (${MOD}A)`}>
         Select all
       </button>
       <button type="button" className="btn" onClick={selection.clear}>
@@ -55,7 +58,7 @@ export function JournalPage() {
   const actions = (
     <>
       {!vaultLocked && items.length > 0 && (
-        <button type="button" className="btn btn--quiet" onClick={selection.start} title="Pick entries to tag, finish, move or trash together">
+        <button type="button" className="btn btn--quiet" onClick={selection.start} title="Pick entries to tag, finish, copy, move or trash together">
           Select
         </button>
       )}

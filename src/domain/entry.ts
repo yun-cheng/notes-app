@@ -9,7 +9,7 @@ import type { JSONNode } from './types';
  */
 export interface Entry {
   kind: 'note' | 'todo' | 'diary';
-  /** A todo's first line. Empty for notes and diary entries, which are named by their first line. */
+  /** A todo's first line. Typed notes and diary entries have none and are named by their first line; a copied note keeps its title. */
   title: string;
   content: JSONNode;
   /** Tag names as typed, without `#`, each once. Never `todo` or `diary`. */

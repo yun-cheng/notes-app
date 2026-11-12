@@ -18,6 +18,7 @@ import { CalendarPage, SearchPage, TagsPage } from './pages/views';
 import { CommandPalette } from './CommandPalette';
 import { FilterPanel } from './FilterPanel';
 import { journalPath, type SheetState } from './paths';
+import { isMac, ShortcutsDialog } from './Shortcuts';
 import { ToastProvider, useToast } from './Toast';
 
 /** The phone's tab bar. Today is a journal filter: open todos due by today. */
@@ -44,8 +45,6 @@ function TabBar() {
     </nav>
   );
 }
-
-const isMac = typeof navigator !== 'undefined' && /Mac|iPhone|iPad/.test(navigator.platform);
 
 function Sidebar({ onCommands }: { onCommands: () => void }) {
   const newNote = useNewNote();
@@ -90,6 +89,7 @@ function SessionBanner() {
 function Layout() {
   const toast = useToast();
   const [commands, setCommands] = useState(false);
+  const [shortcuts, setShortcuts] = useState(false);
 
   useEffect(() => {
     const onKey = (e: KeyboardEvent) => {
@@ -98,11 +98,13 @@ function Layout() {
         setCommands((open) => !open);
         return;
       }
-      // `/` opens it too, when it isn't being typed into something.
+      // `/` opens it too, and `?` the list of shortcuts, when they aren't being typed into something.
       const typing = e.target instanceof HTMLElement && e.target.closest('input, textarea, select, [contenteditable="true"]');
-      if (e.key === '/' && !typing && !e.metaKey && !e.ctrlKey && !e.altKey && !document.querySelector('.dialog-backdrop')) {
+      if (typing || e.metaKey || e.ctrlKey || e.altKey || document.querySelector('.dialog-backdrop')) return;
+      if (e.key === '/' || e.key === '?') {
         e.preventDefault();
-        setCommands(true);
+        if (e.key === '/') setCommands(true);
+        else setShortcuts(true);
       }
     };
     window.addEventListener('keydown', onKey);
@@ -133,7 +135,8 @@ function Layout() {
         <Outlet />
       </main>
       <TabBar />
-      {commands && <CommandPalette onClose={() => setCommands(false)} />}
+      {commands && <CommandPalette onClose={() => setCommands(false)} onShortcuts={() => setShortcuts(true)} />}
+      {shortcuts && <ShortcutsDialog onClose={() => setShortcuts(false)} />}
     </div>
   );
 }

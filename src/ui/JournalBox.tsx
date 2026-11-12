@@ -17,7 +17,8 @@ import { typeahead, useTypeaheadMenu, type MenuItem } from './editor/suggest';
 import { Icon } from './Icon';
 import { LockPanel } from './LockPanel';
 import { useToast } from './Toast';
-import { useSaveEntries } from './useSaveEntry';
+import { BOX_PASTE, type ForwardedPaste } from './useEntryShortcuts';
+import { journalDefaults, useSaveEntries } from './useSaveEntry';
 
 /** Enter saves on a computer. On a phone, Return makes a new line and the button saves. */
 const enterSaves = () => !window.matchMedia('(pointer: coarse)').matches;
@@ -116,12 +117,7 @@ export function JournalBox({ filter }: { filter: StreamFilter }) {
     if (!entries.length) return;
     setSaving(true);
     try {
-      const result = await saveEntries(entries, {
-        diary: latest.current.diary,
-        due: f.status === 'today' ? day : undefined,
-        tagId: f.tagId,
-        vaultId: f.vaultId,
-      });
+      const result = await saveEntries(entries, journalDefaults(f, day));
       setUnlock(result.saved ? null : (result.unlock ?? null));
       if (result.saved) {
         editor.commands.setContent(start, { emitUpdate: false });
@@ -233,6 +229,20 @@ export function JournalBox({ filter }: { filter: StreamFilter }) {
     onTransaction: () => redraw((n) => n + 1),
   });
   editorRef.current = editor;
+
+  // Pasted outside the box (not copied entries, which are pasted as they are): into the box, at the end.
+  useEffect(() => {
+    if (!editor) return;
+    const take = (e: Event) => {
+      const { text, html, files } = (e as CustomEvent<ForwardedPaste>).detail;
+      editor.commands.focus('end');
+      if (files.length) void addPhotosRef.current(files);
+      else if (html) editor.view.pasteHTML(html);
+      else editor.view.pasteText(text);
+    };
+    window.addEventListener(BOX_PASTE, take);
+    return () => window.removeEventListener(BOX_PASTE, take);
+  }, [editor]);
 
   // After unlocking the diary, back to the box to save again.
   const unlocked = !!unlock && !locked.has(unlock);

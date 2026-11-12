@@ -39,7 +39,7 @@ function matches(command: Command, words: string[]): boolean {
  * Cmd+K (Ctrl+K): one box for doing anything. With nothing typed it lists every action; typing narrows them,
  * offers to save the text to the journal (markers like `[]` and `#tag` work), and finds notes by their text.
  */
-export function CommandPalette({ onClose }: { onClose: () => void }) {
+export function CommandPalette({ onClose, onShortcuts }: { onClose: () => void; onShortcuts: () => void }) {
   const { index, vaults, locked, locks } = useCards();
   const today = useToday();
   const navigate = useNavigate();
@@ -65,6 +65,7 @@ export function CommandPalette({ onClose }: { onClose: () => void }) {
       { id: 'go-tags', group: 'Go to', label: 'All tags', icon: 'tag', keywords: 'labels folders', run: go('/tags') },
       { id: 'go-vaults', group: 'Go to', label: 'Vaults', icon: 'lock', keywords: 'private pin members', run: go('/vaults') },
       { id: 'go-settings', group: 'Go to', label: 'Backup & settings', icon: 'settings', keywords: 'trash export import ai photos account sign out', run: go('/settings') },
+      { id: 'shortcuts', group: 'Help', label: 'Keyboard shortcuts', hint: '?', keywords: 'keys help copy paste select', run: onShortcuts },
       { id: 'show-all', group: 'Filter', label: 'Show everything', icon: 'notes', keywords: 'clear reset all', run: go(journalPath({ sort: current.sort })) },
     ];
     for (const type of Object.keys(TYPE_LABEL) as EntryType[]) {

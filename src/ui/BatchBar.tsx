@@ -4,19 +4,20 @@ import { planBatch, tagCounts, type BatchEdit } from '../domain/batch';
 import { addDays } from '../domain/dates';
 import type { Card } from '../domain/types';
 import { useCards, useToday } from '../state/CardsContext';
+import { entries, useEntryActions } from './entryActions';
 import { Icon } from './Icon';
 import type { Selection } from './selection';
+import { MOD } from './Shortcuts';
 import { useToast } from './Toast';
 
-const entries = (n: number) => `${n} ${n === 1 ? 'entry' : 'entries'}`;
-
 /**
- * Takes the writing box's place while entries are picked: tag, finish, date, move or trash them all at once.
+ * Takes the writing box's place while entries are picked: tag, finish, date, copy, move or trash them all at once.
  * Every change can be undone from its toast. Entries this account can't change are left alone and counted.
  */
 export function BatchBar({ selection }: { selection: Selection }) {
   const { index, repo, vaults, locked, shared } = useCards();
   const toast = useToast();
+  const actions = useEntryActions();
   const [panel, setPanel] = useState<'tags' | 'due' | null>(null);
   const cards = selection.ids.map((id) => index.byId.get(id)).filter((c): c is Card => !!c && !c.deleted);
   const editable = cards.filter((c) => permissions(c, vaults, shared).edit);
@@ -33,13 +34,10 @@ export function BatchBar({ selection }: { selection: Selection }) {
     });
   };
 
-  const trash = async () => {
-    const ids = manageable.map((c) => c.id);
-    await Promise.all(ids.map((id) => repo.setDeleted(id, true)));
+  const trash = () => {
+    const ids = selection.ids;
     selection.clear();
-    toast(`Moved ${entries(ids.length)} to Trash${skipped(cards.length - ids.length)}`, {
-      action: { label: 'Undo', run: () => ids.forEach((id) => void repo.setDeleted(id, false)) },
-    });
+    void actions.trash(ids);
   };
 
   const targets = vaults.filter((v) => !locked.has(v.id) && (v.role ?? 'owner') !== 'viewer');
@@ -95,7 +93,10 @@ export function BatchBar({ selection }: { selection: Selection }) {
             ))}
           </select>
         )}
-        <button type="button" className="icon-btn" disabled={!manageable.length} aria-label="Move to Trash" title="Move to Trash" onClick={() => void trash()}>
+        <button type="button" className="icon-btn" disabled={none} aria-label="Copy" title={`Copy (${MOD}C)`} onClick={() => actions.copy(selection.ids)}>
+          <Icon name="copy" />
+        </button>
+        <button type="button" className="icon-btn" disabled={!manageable.length} aria-label="Move to Trash" title="Move to Trash (Delete)" onClick={trash}>
           <Icon name="trash" />
         </button>
         <span className="note-sheet__spacer" />

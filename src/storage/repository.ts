@@ -145,9 +145,13 @@ export class CardRepository {
     return card;
   }
 
+  private lastCreated = 0;
+
+  /** Creation times never repeat, so entries saved together keep the order they were typed in. */
   private async newEnvelope(id: string, vaultId?: string) {
     const target = vaultId ?? (await this.defaultVault()).id;
-    const at = this.now();
+    const at = Math.max(this.now(), this.lastCreated + 1);
+    this.lastCreated = at;
     return { id, vaultId: target, updatedAt: at, createdAt: at, deleted: false, seq: 0 };
   }
 

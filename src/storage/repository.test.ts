@@ -22,6 +22,15 @@ beforeEach(async () => {
   await repo.init();
 });
 
+describe('creation order', () => {
+  it('gives cards created in the same millisecond different, increasing creation times', async () => {
+    const r = new CardRepository(new MemoryStore(), jsonCodec, () => 5000, () => `c${++n}`);
+    await r.init();
+    const made = [await r.createTodo({ title: 'milk' }), await r.createTodo({ title: 'eggs' }), await r.createNote({})];
+    expect(made.map((c) => c.createdAt)).toEqual([5000, 5001, 5002]);
+  });
+});
+
 describe('record shape', () => {
   it('keeps everything but the plain fields inside an opaque payload string', async () => {
     const card = await repo.createNote({ title: 'secret title' });

@@ -1,45 +1,73 @@
-import { appendToDoc, parseEntry } from '../domain/entry';
+import { appendToDoc, parseEntries } from '../domain/entry';
 import { diaryVault } from '../domain/locks';
-import { EMPTY_DOC } from '../domain/types';
+import { EMPTY_DOC, type JSONNode } from '../domain/types';
 import { useCards, useToday } from '../state/CardsContext';
 
-/** Saved, or not, with the vault to unlock first when the diary is locked. Unsaved text stays in the box. */
-export type SaveResult = { saved: true } | { saved: false; unlock?: string };
+/** How many entries were saved, or the vault to unlock first when the diary is locked. Unsaved text stays in the box. */
+export interface SaveResult {
+  saved: number;
+  unlock?: string;
+}
 
-/** Saves typed text where its markers send it. */
+/**
+ * Saves typed text where its markers send it. One text can hold several entries, like a list of `[] …` lines;
+ * with `todo` (the box's todo button) every line is a todo.
+ */
 export function useSaveEntry() {
   const { repo, index, vaults, locked } = useCards();
   const today = useToday();
 
   return async (text: string, opts: { todo: boolean; diary?: boolean; due?: string; tagId?: string; vaultId?: string }): Promise<SaveResult> => {
-    const entry = parseEntry(opts.todo ? `[] ${text.trimStart()}` : text, today);
-    if (!entry) return { saved: false };
-    if (opts.diary && entry.kind === 'note') entry.kind = 'diary';
-    if (entry.kind === 'todo' && !entry.due && opts.due) entry.due = opts.due;
+    const entries = parseEntries(text, today, { allTodos: opts.todo });
+    if (!entries.length) return { saved: 0 };
+    for (const entry of entries) {
+      if (opts.diary && entry.kind === 'note') entry.kind = 'diary';
+      if (entry.kind === 'todo' && !entry.due && opts.due) entry.due = opts.due;
+    }
 
+    // Nothing is saved if part of it can't be, so the whole text stays in the box.
     const vault = diaryVault(vaults);
-    if (entry.kind === 'diary') {
+    if (entries.some((e) => e.kind === 'diary')) {
       const lockedIn = index.lockedDiaries.get(today) ?? (vault && locked.has(vault.id) ? vault.id : undefined);
-      if (lockedIn) return { saved: false, unlock: lockedIn };
+      if (lockedIn) return { saved: 0, unlock: lockedIn };
     }
 
-    const tagIds = opts.tagId ? [opts.tagId] : [];
-    for (const name of entry.tags) {
-      const found = index.tags.find((t) => t.title.toLowerCase() === name.toLowerCase());
-      const id = found?.id ?? repo.newId();
-      if (!found) void repo.createTag({ id, title: name });
-      if (!tagIds.includes(id)) tagIds.push(id);
-    }
+    // Tags typed in several entries are made once.
+    const made = new Map<string, string>();
+    const tagIdsFor = (names: string[]) => {
+      const ids = opts.tagId ? [opts.tagId] : [];
+      for (const name of names) {
+        const key = name.toLowerCase();
+        let id = index.tags.find((t) => t.title.toLowerCase() === key)?.id ?? made.get(key);
+        if (!id) {
+          id = repo.newId();
+          made.set(key, id);
+          void repo.createTag({ id, title: name });
+        }
+        if (!ids.includes(id)) ids.push(id);
+      }
+      return ids;
+    };
 
-    if (entry.kind === 'diary') {
+    // Diary parts go in together, in one save, so one can't overwrite another.
+    let diary: { content: JSONNode; tags: string[] } | null = null;
+    for (const entry of entries) {
+      const tags = tagIdsFor(entry.tags);
+      if (entry.kind === 'diary') {
+        diary = diary
+          ? { content: appendToDoc(diary.content, entry.content), tags: [...new Set([...diary.tags, ...tags])] }
+          : { content: entry.content, tags };
+      } else if (entry.kind === 'todo') {
+        await repo.createTodo({ title: entry.title, content: entry.content, tags, due: entry.due, vaultId: opts.vaultId });
+      } else {
+        await repo.createNote({ content: entry.content, tags, vaultId: opts.vaultId });
+      }
+    }
+    if (diary) {
       const existing = index.diaryByDate.get(today);
-      const tags = [...new Set([...(existing?.tags ?? []), ...tagIds])];
-      await repo.saveDiary(today, { content: appendToDoc(existing?.content ?? EMPTY_DOC, entry.content), tags }, existing?.id, vault?.id);
-    } else if (entry.kind === 'todo') {
-      await repo.createTodo({ title: entry.title, content: entry.content, tags: tagIds, due: entry.due, vaultId: opts.vaultId });
-    } else {
-      await repo.createNote({ content: entry.content, tags: tagIds, vaultId: opts.vaultId });
+      const tags = [...new Set([...(existing?.tags ?? []), ...diary.tags])];
+      await repo.saveDiary(today, { content: appendToDoc(existing?.content ?? EMPTY_DOC, diary.content), tags }, existing?.id, vault?.id);
     }
-    return { saved: true };
+    return { saved: entries.length };
   };
 }

@@ -264,7 +264,7 @@ function Composer({ filter }: { filter: StreamFilter }) {
     });
   };
 
-  const placeholder = todo ? 'Add a todo, @tomorrow for a due date' : diary ? "Write in today's diary" : 'Write a note · [] todo · #tag';
+  const placeholder = todo ? 'Todos, one per line' : diary ? "Write in today's diary" : 'Write a note · [] todo · #tag';
   return (
     <>
       {unlock && locked.has(unlock) && (

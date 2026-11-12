@@ -23,6 +23,7 @@ Everything is a card: `note`, `todo`, `diary`, `tag`.
 Decided 2026-11-12, like Logseq's journal. There is one place where everything is written and read: the Journal, a stream of compact bubbles holding notes, todos and diary entries together, oldest at the top and newest at the bottom like a chat, with a box at the bottom to write the next one. Kinds and places come from markers in the text, not from separate screens:
 
 - `[] ` or `TODO ` at the start, or `#todo`, makes a todo; on a todo, `@today`, `@tomorrow`, `@fri` or `@2026-12-01` sets the due date.
+- Each line starting with `[] ` or `TODO ` starts its own entry, so a list of `[] …` lines makes a todo for each. With the box's todo button on, every line is a todo. A last line of only `#tags` applies to all of them.
 - `#diary` adds the text to the day's diary entry, in the private vault.
 - Any other `#tag` files it under that tag, making the tag if it's new.
 
@@ -248,6 +249,7 @@ None. Defaults chosen while building are listed in the implementation notes, and
 - A tag's own page (rename, describe, pin) is still at `/card/:id`, reached from the tag button at the top of a tag-filtered journal or from All tags.
 - New entries take the filter's tag and vault; a todo filter makes the box write todos, and "Due today" makes them due today. A tag created from the box goes in the default vault.
 - With the diary locked, a `#diary` line stays in the box and the vault's PIN is asked for above it.
+- One text can hold several entries (`parseEntries`). A new tag typed in several of them is made once, `#diary` parts go into the diary in one save, and if part of the text can't be saved (the diary is locked) none of it is. Cards made together get creation times a millisecond apart, so they keep the order they were typed in.
 - Notes and todos open at `/journal/:id` in a sheet over the page they were opened from (Search, Calendar, a filtered journal), so the back button closes it. Old `/notes/:id` and `/card/:id` links to notes and todos redirect there.
 - The box saves on Enter on a computer (Shift+Enter for a new line). On a phone, Return makes a new line and the send button saves.
 - In the command box, text with markers (`[]`, `#tag`, `@friday`) offers saving first; other text lists matching commands, then matching notes, then saving. Commands whose name matches come before ones that match by keyword.

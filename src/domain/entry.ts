@@ -87,6 +87,36 @@ export function parseEntry(text: string, today: string): Entry | null {
   return { kind: 'todo', title: head.trim(), content: textToDoc(rest.join('\n').trim()), tags, due };
 }
 
+const TAGS_ONLY = /^\s*(#[\p{L}\p{N}_-]+\s*)+$/u;
+
+/**
+ * Several entries from one text: each line starting with `[] ` or `TODO ` begins a new one, so a list of
+ * `[] …` lines makes a todo for each, and text before the first such line is its own entry. With `allTodos`
+ * (the box's todo button), every line is a todo. Lines of only tags at the very end apply to every entry.
+ */
+export function parseEntries(text: string, today: string, opts: { allTodos?: boolean } = {}): Entry[] {
+  const lines = text.replace(/\r\n?/g, '\n').split('\n');
+  const shared: string[] = [];
+  while (lines.length && (!lines[lines.length - 1].trim() || TAGS_ONLY.test(lines[lines.length - 1]))) {
+    const last = lines.pop()!;
+    if (last.trim()) shared.unshift(last.trim());
+  }
+
+  const chunks: string[][] = [];
+  for (const line of lines) {
+    const marked = TODO_MARKER.test(line.trimStart());
+    if (opts.allTodos) {
+      if (line.trim()) chunks.push([marked ? line : `[] ${line.trimStart()}`]);
+    } else if (marked || !chunks.length) chunks.push([line]);
+    else chunks[chunks.length - 1].push(line);
+  }
+
+  const tags = shared.join(' ');
+  // One entry keeps its tag lines in place, so a lone `#tag` line still reads as before.
+  const texts = chunks.length > 1 ? chunks.map((c) => `${c.join('\n')}${tags ? `\n${tags}` : ''}`) : [`${chunks[0]?.join('\n') ?? ''}${tags ? `\n${tags}` : ''}`];
+  return texts.map((t) => parseEntry(t, today)).filter((e): e is Entry => !!e);
+}
+
 /** Adds typed text to the end of a diary entry, after what is already there. */
 export function appendToDoc(doc: JSONNode, addition: JSONNode): JSONNode {
   const blocks = [...(doc.content ?? [])];

@@ -106,7 +106,7 @@ export function CommandPalette({ onClose }: { onClose: () => void }) {
     const due = entry.due ? `, due ${relativeDayInSentence(entry.due, today)}` : '';
     const write = (todo: boolean) => () =>
       void save(text, { todo }).then((result) => {
-        if (result.saved) toast('Saved to the journal', { action: { label: 'Show', run: () => void navigate('/journal') } });
+        if (result.saved) toast(result.saved === 1 ? 'Saved to the journal' : `Saved ${result.saved} entries to the journal`, { action: { label: 'Show', run: () => void navigate('/journal') } });
         else if (result.unlock) {
           toast('Unlock the diary first, then save it again.', { action: { label: 'Unlock', run: () => void navigate(journalPath({ vaultId: result.unlock })) } });
         }

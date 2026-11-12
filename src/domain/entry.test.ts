@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { appendToDoc, parseDue, parseEntry } from './entry';
+import { appendToDoc, parseDue, parseEntries, parseEntry } from './entry';
 import { textToDoc } from './content';
 import { EMPTY_DOC } from './types';
 
@@ -57,6 +57,35 @@ describe('parseEntry', () => {
 
   it('sends #diary text to the diary', () => {
     expect(parseEntry('Long walk by the river. #diary', TODAY)).toMatchObject({ kind: 'diary', content: textToDoc('Long walk by the river.') });
+  });
+});
+
+describe('parseEntries', () => {
+  const titles = (text: string, opts?: { allTodos?: boolean }) => parseEntries(text, TODAY, opts).map((e) => `${e.kind}:${e.title || e.content.content?.[0]?.content?.[0]?.text}`);
+
+  it('makes a todo for each [] line', () => {
+    expect(titles('[] milk\n[] eggs @tomorrow\nTODO call mom')).toEqual(['todo:milk', 'todo:eggs', 'todo:call mom']);
+    expect(parseEntries('[] milk\n[] eggs @tomorrow', TODAY)[1].due).toBe('2026-11-13');
+  });
+
+  it('keeps text before the first [] line as its own entry', () => {
+    expect(titles('Shopping for the party\n[] cake\n[] candles')).toEqual(['note:Shopping for the party', 'todo:cake', 'todo:candles']);
+  });
+
+  it('keeps a single todo’s later lines as its details', () => {
+    const [entry, ...rest] = parseEntries('[] Pack\npassport\ncharger', TODAY);
+    expect(rest).toEqual([]);
+    expect(entry.content).toEqual(textToDoc('passport\ncharger'));
+  });
+
+  it('applies a last line of tags to every entry', () => {
+    const entries = parseEntries('[] milk #dairy\n[] bread\n\n#groceries #home', TODAY);
+    expect(entries.map((e) => e.tags)).toEqual([['dairy', 'groceries', 'home'], ['groceries', 'home']]);
+    expect(parseEntries('One thought\n#ideas', TODAY)).toMatchObject([{ kind: 'note', tags: ['ideas'] }]);
+  });
+
+  it('makes every line a todo when asked', () => {
+    expect(titles('milk\n\neggs\n[] bread', { allTodos: true })).toEqual(['todo:milk', 'todo:eggs', 'todo:bread']);
   });
 });
 

@@ -70,6 +70,28 @@ describe('updates', () => {
     expect(reopened.completedAt).toBeNull();
     expect(reopened.due).toBe('2026-11-10');
   });
+  it('turns a todo into a note and back', async () => {
+    const t = await repo.createTodo({ title: 'x', due: '2026-11-10', dueTime: '09:00', done: true });
+    const n = await repo.update(t.id, { type: 'note' });
+    expect(n?.type).toBe('note');
+    expect(['status', 'due', 'dueTime', 'completedAt'].some((k) => k in n!)).toBe(false);
+    const back = (await repo.update(t.id, { type: 'todo', status: 'done', due: '2026-11-10' })) as TodoCard;
+    expect(back).toMatchObject({ type: 'todo', status: 'done', due: '2026-11-10', title: 'x' });
+    expect(back.completedAt).not.toBeNull();
+  });
+  it('moves the words as the switch lands, after edits made just before, and undoes it exactly', async () => {
+    const n = await repo.createNote({ content: doc('old') });
+    void repo.update(n.id, { content: doc('buy milk') });
+    const undo = await repo.retype(n.id, 'todo');
+    expect(await repo.decode((await store.getCard(n.id))!)).toMatchObject({ type: 'todo', title: 'buy milk', status: 'open', due: null });
+    expect(undo).toEqual({ type: 'note', title: '', content: doc('buy milk') });
+    expect(await repo.update(n.id, undo!)).toMatchObject({ type: 'note', title: '', content: doc('buy milk') });
+    expect(await repo.retype(n.id, 'note')).toBeUndefined();
+  });
+  it('never changes the type of a diary entry or tag', async () => {
+    const t = await repo.createTag({ title: 'work' });
+    expect((await repo.update(t.id, { type: 'note' }))?.type).toBe('tag');
+  });
   it('ignores updates to cards that do not exist', async () => {
     expect(await repo.update('nope', { title: 'x' })).toBeUndefined();
   });

@@ -1,16 +1,21 @@
+import { retypePatch, type EntryType } from './retype';
 import { withTag, type TagGroup } from './tagGroups';
 import { completeTodo } from './todos';
-import type { Card, Repeat } from './types';
+import type { Card, JSONNode, Repeat } from './types';
 
 /** A change applied to many entries at once. */
 export type BatchEdit =
   | { kind: 'add-tag'; tagId: string }
   | { kind: 'remove-tag'; tagId: string }
   | { kind: 'status'; status: 'open' | 'done' }
-  | { kind: 'due'; due: string | null };
+  | { kind: 'due'; due: string | null }
+  | { kind: 'type'; type: EntryType };
 
 /** The fields a batch edit touches, as the repository's update takes them. */
 export interface BatchPatch {
+  type?: EntryType;
+  title?: string;
+  content?: JSONNode;
   tags?: string[];
   status?: 'open' | 'done';
   due?: string | null;
@@ -50,6 +55,9 @@ export function planBatch(cards: Card[], edit: BatchEdit, groupOf: Map<string, T
         patch: { due: edit.due, ...(clears ? { dueTime: null, repeat: null } : {}) },
         undo: { due: card.due, ...(clears ? { dueTime: card.dueTime ?? null, repeat: card.repeat ?? null } : {}) },
       });
+    } else if (edit.kind === 'type' && (card.type === 'note' || card.type === 'todo')) {
+      const change = retypePatch(card, edit.type);
+      if (change) steps.push({ id: card.id, ...change });
     }
   }
   return steps;

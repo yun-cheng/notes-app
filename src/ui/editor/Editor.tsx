@@ -126,8 +126,8 @@ export function Editor({ content, onChange, placeholder, selfId, vaultId, editab
   const [, redraw] = useState(0);
 
   const photoVault = vaultId ?? mainVault(vaults, accountId)?.id;
-  const latest = useRef({ index, onChange, menu, selfId, vaultId: photoVault });
-  latest.current = { index, onChange, menu, selfId, vaultId: photoVault };
+  const latest = useRef({ index, onChange, menu, selfId, vaultId: photoVault, placeholder });
+  latest.current = { index, onChange, menu, selfId, vaultId: photoVault, placeholder };
   const editorRef = useRef<TiptapEditor | null>(null);
 
   /** Saves each image on the device and puts it in the text, at `at` or the cursor. */
@@ -198,7 +198,8 @@ export function Editor({ content, onChange, placeholder, selfId, vaultId, editab
   const editor = useEditor({
     extensions: [
       StarterKit.configure({ heading: { levels: [1, 2, 3] } }),
-      Placeholder.configure({ placeholder }),
+      // Read when drawn, so a note turned into a todo asks for details.
+      Placeholder.configure({ placeholder: () => latest.current.placeholder }),
       Photo,
       typeahead('slashMenu', '/', slashItems, slash.render('Add')),
       CardLink.configure({
@@ -319,6 +320,11 @@ export function Editor({ content, onChange, placeholder, selfId, vaultId, editab
   useEffect(() => {
     if (editor && editor.isEditable !== editable) editor.setEditable(editable);
   }, [editor, editable]);
+
+  useEffect(() => {
+    // An empty step redraws the placeholder.
+    if (editor && !editor.isDestroyed) editor.view.dispatch(editor.state.tr);
+  }, [editor, placeholder]);
 
   editorRef.current = editor;
   if (!editor) return null;

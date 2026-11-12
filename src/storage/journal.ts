@@ -1,6 +1,8 @@
 import type { CardColor, DiaryCard, JSONNode, PreviewStyle, Repeat } from '../domain/types';
 
 export interface CardPatch {
+  /** Turns a note into a todo or back. See `retype.ts`. */
+  type?: 'note' | 'todo';
   title?: string;
   content?: JSONNode;
   tags?: string[];

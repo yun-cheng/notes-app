@@ -13,7 +13,8 @@ import { usePopover } from './usePopover';
 type Entry = NoteCard | TodoCard | DiaryCard;
 
 /**
- * The buttons beside a bubble on hover: open it, share it, copy its text, and its color and previews. Its tags
+ * The buttons beside a bubble on hover: open it, make a note a todo or a todo a note, share it, copy its text, and
+ * its color and previews. Its tags
  * and a todo's due date are changed in its bottom row, where they show (`AddTag`, and `DueMenu`). A phone has no
  * hover; a tap opens the entry, whose sheet has them all, and a todo's due date in its bubble can be tapped.
  */
@@ -26,12 +27,25 @@ export function BubbleTools({ card, open }: { card: Entry; open: () => void }) {
       <button type="button" className="bubble__open" aria-label="Open" title="Open (Enter)" onClick={open}>
         <Icon name="open" size={16} />
       </button>
+      {can.edit && card.type !== 'diary' && <TypeSwitch card={card} className="bubble__open" size={16} />}
       {can.share && <ShareButton card={card} />}
       <button type="button" className="bubble__open" aria-label="Copy text" title="Copy text" onClick={() => copyText(card.id)}>
         <Icon name="copy" size={16} />
       </button>
       {can.edit && <StyleMenu card={card} />}
     </span>
+  );
+}
+
+/** One click turns a note into a todo, or a todo back into a note. */
+export function TypeSwitch({ card, className, size }: { card: NoteCard | TodoCard; className: string; size?: number }) {
+  const { retype } = useEntryActions();
+  const to = card.type === 'note' ? 'todo' : 'note';
+  const label = to === 'todo' ? 'Make it a todo' : 'Make it a note';
+  return (
+    <button type="button" className={className} aria-label={label} title={label} onClick={() => void retype(card.id, to)}>
+      <Icon name={to} size={size} />
+    </button>
   );
 }
 

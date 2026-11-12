@@ -2,6 +2,7 @@ import { permissions } from '../domain/access';
 import { linkTitle } from '../domain/cardIndex';
 import { encodeEntries, entriesText, entryText, ENTRIES_TYPE, toEntries } from '../domain/clipboard';
 import type { Entry } from '../domain/entry';
+import type { EntryType } from '../domain/retype';
 import type { Card, DiaryCard, NoteCard, TodoCard } from '../domain/types';
 import { useCards } from '../state/CardsContext';
 import { useToast } from './Toast';
@@ -106,5 +107,11 @@ export function useEntryActions() {
     toast(`Pasted ${entries(result.saved)}`, { action: undo });
   };
 
-  return { copy, copyText, cut, trash, paste };
+  /** Turns a note into a todo or a todo into a note, in one click, with an undo. */
+  const retype = async (id: string, type: EntryType) => {
+    const undo = await repo.retype(id, type);
+    if (undo) toast(type === 'todo' ? 'Made it a todo' : 'Made it a note', { action: { label: 'Undo', run: () => void repo.update(id, undo) } });
+  };
+
+  return { copy, copyText, cut, trash, paste, retype };
 }

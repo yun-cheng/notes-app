@@ -25,6 +25,15 @@ describe('batch edits', () => {
     expect(planBatch([a, t, done], { kind: 'due', due: null })).toEqual([{ id: 't', patch: { due: null }, undo: { due: '2026-11-12' } }]);
   });
 
+  it('switches notes to todos and back, leaving those already switched', () => {
+    const steps = planBatch([a, b, t], { kind: 'type', type: 'todo' });
+    expect(steps.map((s) => [s.id, s.patch.type, s.undo.type])).toEqual([
+      ['a', 'todo', 'note'],
+      ['b', 'todo', 'note'],
+    ]);
+    expect(planBatch([a, t], { kind: 'type', type: 'note' }).map((s) => s.id)).toEqual(['t']);
+  });
+
   it('moves a repeating todo on instead of finishing it', () => {
     const gym = todo('g', '2026-11-12', { repeat: { unit: 'day', every: 2 } });
     expect(planBatch([t, gym], { kind: 'status', status: 'done' }, new Map(), '2026-11-12')).toEqual([

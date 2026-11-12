@@ -23,7 +23,7 @@ import { BatchBar } from '../BatchBar';
 import { SelectionProvider, useBoxSelect, useSelectable, useSelection, useSelectionState } from '../selection';
 import { useEntryActions } from '../entryActions';
 import { useEntryShortcuts } from '../useEntryShortcuts';
-import { AddTag, BubbleTools } from '../BubbleTools';
+import { AddTag, BubbleTools, TypeSwitch } from '../BubbleTools';
 import { DueLabel, DueMenu, useTickTodo } from '../TodoDue';
 
 const time = (at: number) => new Date(at).toLocaleTimeString(undefined, { hour: 'numeric', minute: '2-digit' });
@@ -534,6 +534,7 @@ function EntryDetail({ card, fresh, onClose }: { card: NoteCard | TodoCard; fres
       <Backlinks cardId={card.id} />
       <div className="note-sheet__bar">
         <div ref={setToolbarHost} className="note-sheet__format" />
+        {can.edit && <TypeSwitch card={card} className="icon-btn" />}
         {isTodo && can.edit && <DueMenu card={card} />}
         {can.edit && (
           <button

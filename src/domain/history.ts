@@ -175,6 +175,7 @@ export function changeSize(diff: DiffLine[]): { added: number; removed: number }
 }
 
 export interface RestoreFields {
+  type?: 'note' | 'todo';
   title?: string;
   content?: JSONNode;
   tags?: string[];
@@ -185,13 +186,13 @@ export interface RestoreFields {
   pinned?: boolean;
 }
 
-/** The fields a restore puts back. The card's type, ID and vault stay as they are. */
+/** The fields a restore puts back, a note or todo's type among them (one can become the other). The ID and vault stay as they are. */
 export function restorePatch(version: Card): RestoreFields {
   switch (version.type) {
     case 'note':
-      return { title: version.title, content: version.content, tags: version.tags };
+      return { type: 'note', title: version.title, content: version.content, tags: version.tags };
     case 'todo':
-      return { title: version.title, content: version.content, tags: version.tags, status: version.status, due: version.due, dueTime: version.dueTime ?? null, repeat: version.repeat ?? null };
+      return { type: 'todo', title: version.title, content: version.content, tags: version.tags, status: version.status, due: version.due, dueTime: version.dueTime ?? null, repeat: version.repeat ?? null };
     case 'tag':
       return { title: version.title, content: version.content, pinned: version.pinned };
     case 'diary':

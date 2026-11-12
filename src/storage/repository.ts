@@ -2,6 +2,7 @@ import { EMPTY_DOC, type Card, type CardPayload, type CardRecord, type JSONNode,
 import type { Backup } from '../domain/backup';
 import { isBlank } from '../domain/content';
 import { diaryId, rehomeCards } from '../domain/rehome';
+import { changeType, retypePatch, type EntryType } from '../domain/retype';
 import { noJournal, type CardPatch, type DiaryPatch, type Journal, type JournalOp } from './journal';
 import type { SharedCard } from '../sync/protocol';
 import type { CardStore, PayloadCodec } from './types';
@@ -207,8 +208,29 @@ export class CardRepository {
     return this.secret(id) ? this.enqueue(work) : this.journaled({ kind: 'update', at: this.now(), id, patch }, work);
   }
 
-  private applyUpdate(card: Card, patch: CardPatch): Promise<Card> {
-    const next = { ...card, ...patch, updatedAt: this.now() } as Card;
+  /**
+   * Turns a note into a todo or back, and gives the patch that undoes it. Its words move (`retypePatch`) as the
+   * change lands, after any edit still on its way, so nothing typed just before is lost.
+   */
+  retype(id: string, type: EntryType): Promise<CardPatch | undefined> {
+    const work = async () => {
+      const card = await this.read(id);
+      const change = card && (card.type === 'note' || card.type === 'todo') ? retypePatch(card, type) : null;
+      if (!card || !change) return undefined;
+      await this.applyUpdate(card, { type });
+      return change.undo;
+    };
+    return this.secret(id) ? this.enqueue(work) : this.journaled({ kind: 'update', at: this.now(), id, patch: { type } }, work);
+  }
+
+  private applyUpdate(card: Card, { type, ...patch }: CardPatch): Promise<Card> {
+    let base = card;
+    if (type && type !== card.type && (card.type === 'note' || card.type === 'todo')) {
+      // Words move as `retypePatch` says, unless the patch brings its own (an undo, a restore).
+      const { title, content } = retypePatch(card, type)!.patch;
+      base = { ...changeType(card, type), title, content } as Card;
+    }
+    const next = { ...base, ...patch, updatedAt: this.now() } as Card;
     if (next.type === 'todo' && patch.status) next.completedAt = patch.status === 'done' ? this.now() : null;
     return this.write(next);
   }

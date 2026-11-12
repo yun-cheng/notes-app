@@ -12,7 +12,8 @@ import { MOD } from './Shortcuts';
 import { useToast } from './Toast';
 
 /**
- * Takes the writing box's place while entries are picked: tag, finish, date, copy, move or trash them all at once.
+ * Takes the writing box's place while entries are picked: tag, finish, date, switch between note and todo, copy,
+ * move or trash them all at once.
  * Every change can be undone from its toast. Entries this account can't change are left alone and counted.
  */
 export function BatchBar({ selection }: { selection: Selection }) {
@@ -77,6 +78,16 @@ export function BatchBar({ selection }: { selection: Selection }) {
               <Icon name="calendar" />
             </button>
           </>
+        )}
+        {editable.some((c) => c.type === 'note') && (
+          <button type="button" className="icon-btn" aria-label="Make them todos" title="Make the notes todos" onClick={() => void apply({ kind: 'type', type: 'todo' }, (n) => `Made ${n} into ${n === 1 ? 'a todo' : 'todos'}`)}>
+            <Icon name="todo" />
+          </button>
+        )}
+        {todos.length > 0 && (
+          <button type="button" className="icon-btn" aria-label="Make them notes" title="Make the todos notes" onClick={() => void apply({ kind: 'type', type: 'note' }, (n) => `Made ${n} into ${n === 1 ? 'a note' : 'notes'}`)}>
+            <Icon name="note" />
+          </button>
         )}
         {targets.length > 1 && manageable.length > 0 && (
           <select

@@ -8,15 +8,14 @@ import { useEntryActions } from './entryActions';
 import { StyleMenu } from './EntryStyle';
 import { Icon } from './Icon';
 import { ShareDialog } from './ShareDialog';
-import { DueMenu } from './TodoDue';
 import { usePopover } from './usePopover';
 
 type Entry = NoteCard | TodoCard | DiaryCard;
 
 /**
- * The buttons beside a bubble on hover, so an entry can be changed without opening it: open it, a todo's due
- * date, its tags, sharing, copying its text, and its color and previews. A phone has no hover; a tap opens the
- * entry, whose sheet has them all, and a todo's due date in its bubble can be tapped.
+ * The buttons beside a bubble on hover: open it, share it, copy its text, and its color and previews. Its tags
+ * and a todo's due date are changed in its bottom row, where they show (`AddTag`, and `DueMenu`). A phone has no
+ * hover; a tap opens the entry, whose sheet has them all, and a todo's due date in its bubble can be tapped.
  */
 export function BubbleTools({ card, open }: { card: Entry; open: () => void }) {
   const { vaults, shared } = useCards();
@@ -27,8 +26,6 @@ export function BubbleTools({ card, open }: { card: Entry; open: () => void }) {
       <button type="button" className="bubble__open" aria-label="Open" title="Open (Enter)" onClick={open}>
         <Icon name="open" size={16} />
       </button>
-      {card.type === 'todo' && can.edit && <DueMenu card={card} look="tool" />}
-      {can.edit && <TagMenu card={card} />}
       {can.share && <ShareButton card={card} />}
       <button type="button" className="bubble__open" aria-label="Copy text" title="Copy text" onClick={() => copyText(card.id)}>
         <Icon name="copy" size={16} />
@@ -38,15 +35,15 @@ export function BubbleTools({ card, open }: { card: Entry; open: () => void }) {
   );
 }
 
-/** An entry's tags, changed from beside its bubble. */
-function TagMenu({ card }: { card: Entry }) {
+/** A button after a bubble's tags, shown on hover, that changes them. */
+export function AddTag({ card }: { card: Entry }) {
   const { repo } = useCards();
   const { open, root, toggle, fixedStyle } = usePopover();
   return (
     // Clicks in the menu stay out of the bubble's own click handling (picking, opening).
     <div ref={root} className={`bubble-menu${open ? ' is-open' : ''}`} onClick={(e) => e.stopPropagation()}>
-      <button type="button" className="bubble__open" aria-haspopup="dialog" aria-expanded={!!open} aria-label="Tags" title="Tags" onClick={toggle}>
-        <Icon name="tag" size={16} />
+      <button type="button" className="bubble__add" aria-haspopup="dialog" aria-expanded={!!open} aria-label="Tags" title="Tags" onClick={toggle}>
+        <Icon name="tag" size={12} />
       </button>
       {open && (
         <div className={`style-menu tag-menu${open === 'up' ? ' style-menu--up' : ''}`} style={fixedStyle(280)} role="dialog" aria-label="Tags">

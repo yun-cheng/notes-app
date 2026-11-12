@@ -95,10 +95,11 @@ function useDueEdits(card: TodoCard) {
 
 /**
  * A todo's due date, time and repeat, in a menu. Its button is, by `look`: a calendar showing when it's due, in an
- * open todo's bottom bar; a round calendar button beside a bubble, on hover; or the "Due today" in a bubble,
- * which a phone can tap too. The menu sits fixed beside the button, so a sheet that scrolls doesn't clip it.
+ * open todo's bottom bar; the "Due today" in a bubble, which a phone can tap too; or, for a todo with no date, a
+ * small calendar in its bubble's bottom row, shown on hover. The menu sits fixed beside the button, so a sheet that
+ * scrolls doesn't clip it.
  */
-export function DueMenu({ card, look = 'bar' }: { card: TodoCard; look?: 'bar' | 'tool' | 'label' }) {
+export function DueMenu({ card, look = 'bar' }: { card: TodoCard; look?: 'bar' | 'add' | 'label' }) {
   const { open, root, toggle, fixedStyle, close } = usePopover();
   const edits = useDueEdits(card);
   const { today } = edits;
@@ -108,7 +109,7 @@ export function DueMenu({ card, look = 'bar' }: { card: TodoCard; look?: 'bar' |
     ['In a week', addDays(today, 7)],
   ] as const;
   const overdue = isOverdue(card, today) ? ' is-alert' : '';
-  const looks = { bar: `due-menu__btn${open ? ' is-active' : ''}${overdue}`, tool: 'bubble__open', label: `due-menu__label bubble__due${overdue}` };
+  const looks = { bar: `due-menu__btn${open ? ' is-active' : ''}${overdue}`, add: 'bubble__add', label: `due-menu__label bubble__due${overdue}` };
   return (
     // Clicks in the menu stay out of a bubble's own click handling (picking, opening).
     <div ref={root} className={`due-menu${open ? ' is-open' : ''}`} onClick={(e) => e.stopPropagation()}>
@@ -133,7 +134,7 @@ export function DueMenu({ card, look = 'bar' }: { card: TodoCard; look?: 'bar' |
           </>
         ) : (
           <>
-            <Icon name="calendar" size={look === 'tool' ? 16 : 18} />
+            <Icon name="calendar" size={look === 'add' ? 12 : 18} />
             {look === 'bar' && card.due && <span>{dueText(card, today, true)}</span>}
             {look === 'bar' && card.repeat && <Icon name="repeat" size={12} />}
           </>

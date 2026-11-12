@@ -23,7 +23,7 @@ import { BatchBar } from '../BatchBar';
 import { SelectionProvider, useBoxSelect, useSelectable, useSelection, useSelectionState } from '../selection';
 import { useEntryActions } from '../entryActions';
 import { useEntryShortcuts } from '../useEntryShortcuts';
-import { BubbleTools } from '../BubbleTools';
+import { AddTag, BubbleTools } from '../BubbleTools';
 import { DueLabel, DueMenu, useTickTodo } from '../TodoDue';
 
 const time = (at: number) => new Date(at).toLocaleTimeString(undefined, { hour: 'numeric', minute: '2-digit' });
@@ -229,6 +229,7 @@ function BubbleMeta({ card, at, fold }: { card: NoteCard | TodoCard | DiaryCard;
     // Tags and the vault on the left; More or Less, the due date and the time it was written on the right.
     <span className="bubble__meta">
       <TagChips tagIds={card.tags} onChange={retag} />
+      {retag && <AddTag card={card} />}
       <VaultLabel card={card} />
       <span className="bubble__end">
         {(fold.long || fold.folded) && (
@@ -237,7 +238,7 @@ function BubbleMeta({ card, at, fold }: { card: NoteCard | TodoCard | DiaryCard;
             {fold.folded ? 'More' : 'Less'}
           </button>
         )}
-        {card.type === 'todo' && card.due && (retag ? <DueMenu card={card} look="label" /> : <DueLabel todo={card} className="bubble__due" />)}
+        {card.type === 'todo' && (retag ? <DueMenu card={card} look={card.due ? 'label' : 'add'} /> : <DueLabel todo={card} className="bubble__due" />)}
         <time dateTime={new Date(at).toISOString()}>{time(at)}</time>
       </span>
     </span>

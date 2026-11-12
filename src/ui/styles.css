@@ -611,7 +611,11 @@ body:has(.batch) .toast-slot { bottom: calc(var(--tabbar) + env(safe-area-inset-
 /* A bubble's text can be selected; the open button beside it, Enter, or a tap on a phone opens it. */
 .bubble { position: relative; color: var(--text); }
 .bubble:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
-.bubble__tools { position: absolute; top: 2px; left: calc(100% + 4px); z-index: 5; display: grid; grid-template-columns: repeat(3, 28px); gap: 4px; }
+.bubble__tools { position: absolute; top: 2px; left: calc(100% + 4px); z-index: 5; display: grid; grid-template-columns: repeat(2, 28px); gap: 4px; }
+.bubble__add { display: inline-grid; place-items: center; width: 22px; height: 18px; padding: 0; border: 1px dashed var(--line); border-radius: 9px; background: none; color: var(--muted); opacity: 0; cursor: pointer; transition: opacity 0.12s; }
+.bubble__add:hover { color: var(--text); border-color: var(--muted); }
+.stream__entry:hover .bubble__add, .bubble:focus-within .bubble__add, .is-open > .bubble__add { opacity: 1; }
+@media (pointer: coarse) { .bubble__add { display: none; } }
 .bubble-menu { position: relative; }
 .bubble__tools .is-open .bubble__open, .bubble__tools .entry-style.is-open .entry-style__btn { opacity: 1; }
 .style-menu.tag-menu { width: 280px; padding: 8px 10px; }

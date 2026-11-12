@@ -20,12 +20,13 @@ Everything is a card: `note`, `todo`, `diary`, `tag`.
 - Links and backlinks are in scope. Canvas/whiteboard is NOT needed for now.
 
 ### One journal for everything
-Decided 2026-11-12, like Logseq's journal. There is one place where everything is written and read: the Journal, a stream of compact bubbles holding notes, todos and diary entries together, oldest at the top and newest at the bottom like a chat, with a box at the bottom to write the next one. Kinds and places come from markers in the text, not from separate screens:
+Decided 2026-11-12, like Logseq's journal. There is one place where everything is written and read: the Journal, a stream of compact bubbles holding notes, todos and diary entries together, oldest at the top and newest at the bottom like a chat, with a box at the bottom to write the next one. Kinds and places come from markers in the text, not from separate screens, and the box formats them as they're typed:
 
-- `[] ` or `TODO ` at the start, or `#todo`, makes a todo; on a todo, `@today`, `@tomorrow`, `@fri` or `@2026-12-01` sets the due date.
+- `[] ` or `TODO ` at the start turns the line into a checkbox (`#todo` makes a todo too); on a todo, `@today`, `@tomorrow`, `@fri` or `@2026-12-01` sets the due date.
 - Each line starting with `[] ` or `TODO ` starts its own entry, so a list of `[] …` lines makes a todo for each. With the box's todo button on, every line is a todo. A last line of only `#tags` applies to all of them.
 - `#diary` adds the text to the day's diary entry, in the private vault.
 - Any other `#tag` files it under that tag, making the tag if it's new.
+- `#` suggests tags, `@` suggests due dates, and `/` lists what can be added: a todo, tag, due date, the diary, a photo, a list, a quote or a heading.
 
 The sidebar is the journal's filter: by type (notes, todos, diary), by todo status (open, due today, upcoming, no date, done), by when it was written (today, the past 7 or 30 days, or a day picked in the Calendar), by tag, by vault, and by whether it holds links or photos, and it sorts by oldest first, newest first, recently edited or due date. Filters combine. Picking a locked vault asks for its PIN right there. New entries go into whatever the journal is narrowed to. On a phone, the same filters open from a button at the top of the journal.
 
@@ -254,7 +255,8 @@ None. Defaults chosen while building are listed in the implementation notes, and
 - A tag's own page (rename, describe, pin) is still at `/card/:id`, reached from the tag button at the top of a tag-filtered journal or from All tags.
 - New entries take the filter's tag and vault; a todo filter makes the box write todos, and "Due today" makes them due today. A tag created from the box goes in the default vault.
 - With the diary locked, a `#diary` line stays in the box and the vault's PIN is asked for above it.
-- One text can hold several entries (`parseEntries`). A new tag typed in several of them is made once, `#diary` parts go into the diary in one save, and if part of the text can't be saved (the diary is locked) none of it is. Cards made together get creation times a millisecond apart, so they keep the order they were typed in.
+- The box is a small TipTap editor (`JournalBox`). On saving, `entriesFromDoc` reads its rich text: each checkbox is a todo and the blocks between them one note, with formatting, links and photos kept. Checkbox lists never end up inside a note, so the note editor needn't support them. Enter saves on a computer, Shift+Enter starts a new line (the next checkbox in a list), and Cmd+Enter saves anywhere.
+- The command box still reads plain text (`parseEntries`). One text can hold several entries. A new tag typed in several of them is made once, `#diary` parts go into the diary in one save, and if part of the text can't be saved (the diary is locked) none of it is. Cards made together get creation times a millisecond apart, so they keep the order they were typed in.
 - Notes and todos open at `/journal/:id` in a sheet over the page they were opened from (Search, Calendar, a filtered journal), so the back button closes it. Old `/notes/:id` and `/card/:id` links to notes and todos redirect there.
 - The box saves on Enter on a computer (Shift+Enter for a new line). On a phone, Return makes a new line and the send button saves.
 - A batch change skips entries it doesn't apply to (a due date on a note) or that already match, and entries this account can't change, which the toast counts. Undo puts back each entry's own earlier value. Picks that fall outside a new filter are kept but not counted or changed.

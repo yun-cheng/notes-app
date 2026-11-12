@@ -1,10 +1,10 @@
-import { useEffect, useLayoutEffect, useRef, useState, type FormEvent } from 'react';
+import { useEffect, useLayoutEffect, useRef, useState } from 'react';
 import { Link, NavLink, Outlet, useLocation, useNavigate, useParams } from 'react-router';
 import { permissions } from '../../domain/access';
 import { linkTitle } from '../../domain/cardIndex';
 import { displayTitle, previewLines } from '../../domain/content';
 import { isDateKey, relativeDay, relativeDayInSentence, toDateKey } from '../../domain/dates';
-import { effectiveType, isFiltered, streamItems, type StreamFilter, type StreamItem, type StreamSort } from '../../domain/stream';
+import { isFiltered, streamItems, type StreamItem, type StreamSort } from '../../domain/stream';
 import type { DiaryCard, NoteCard, TodoCard } from '../../domain/types';
 import { useCards, useToday } from '../../state/CardsContext';
 import { Comments } from '../Comments';
@@ -15,7 +15,7 @@ import { Icon } from '../Icon';
 import { LockPanel } from '../LockPanel';
 import { cardPath, entryPath, journalPath, sheetState, type SheetState } from '../paths';
 import { ShareDialog } from '../ShareDialog';
-import { useSaveEntry } from '../useSaveEntry';
+import { JournalBox } from '../JournalBox';
 import { Attachments } from '../Attachments';
 import { BatchBar } from '../BatchBar';
 import { SelectionProvider, useSelectable, useSelectionState } from '../selection';
@@ -116,7 +116,7 @@ export function JournalPage() {
               sort={filter.sort ?? 'written'}
               empty={filtered ? 'Nothing here yet. Write below and it lands here.' : 'Nothing written yet. Write a note below, or start with [] for a todo.'}
             />
-            <Composer key={`composer:${journalPath({ ...filter, sort: undefined })}`} filter={filter} />
+            <JournalBox key={`composer:${journalPath({ ...filter, sort: undefined })}`} filter={filter} />
           </>
         )}
         {filtering && (
@@ -259,82 +259,6 @@ function LockedDiaryBubble({ date }: { date: string }) {
         Diary, locked
       </span>
     </Link>
-  );
-}
-
-/** Enter saves on a computer. On a phone, Return makes a new line and the button saves. */
-const enterSaves = () => !window.matchMedia('(pointer: coarse)').matches;
-
-/**
- * Writes into whatever the journal is narrowed to: its tag and vault, a todo when it shows todos (due today when
- * it shows what's due today), and the diary when it shows the diary.
- */
-function Composer({ filter }: { filter: StreamFilter }) {
-  const save = useSaveEntry();
-  const today = useToday();
-  const { locked } = useCards();
-  const [text, setText] = useState('');
-  // The vault to unlock before a diary line can be saved; its PIN is asked for right above the box.
-  const [unlock, setUnlock] = useState<string | null>(null);
-  const input = useRef<HTMLTextAreaElement>(null);
-  const unlocked = !!unlock && !locked.has(unlock);
-  useEffect(() => {
-    if (unlocked) input.current?.focus();
-  }, [unlocked]);
-  const [todo, setTodo] = useState(effectiveType(filter) === 'todo');
-  const diary = filter.type === 'diary';
-  const { tagId, vaultId } = filter;
-
-  const submit = (e?: FormEvent) => {
-    e?.preventDefault();
-    if (!text.trim()) return;
-    const typed = text;
-    setText('');
-    const due = filter.status === 'today' ? today : undefined;
-    void save(typed, { todo, diary: diary && !todo, due, tagId, vaultId }).then((result) => {
-      setUnlock(result.saved ? null : (result.unlock ?? null));
-      if (!result.saved) setText((now) => now || typed);
-      else if (!filter.sort) requestAnimationFrame(() => window.scrollTo({ top: document.documentElement.scrollHeight, behavior: 'smooth' }));
-    });
-  };
-
-  const placeholder = todo ? 'Todos, one per line' : diary ? "Write in today's diary" : 'Write a note · [] todo · #tag';
-  return (
-    <>
-      {unlock && locked.has(unlock) && (
-        <div className="composer__unlock">
-          <p>Your diary is locked. Unlock it, then save again.</p>
-          <LockPanel vaultId={unlock} />
-        </div>
-      )}
-      <form className="composer" onSubmit={submit}>
-        <button
-          type="button"
-          className={`composer__kind${todo ? ' is-active' : ''}`}
-          aria-pressed={todo}
-          aria-label="Todo"
-          title={todo ? 'Writing a todo' : 'Make it a todo'}
-          onClick={() => setTodo(!todo)}
-        >
-          <Icon name="todo" size={20} />
-        </button>
-        <textarea
-          ref={input}
-          className="composer__input"
-          rows={1}
-          value={text}
-          placeholder={placeholder}
-          aria-label={placeholder}
-          onChange={(e) => setText(e.target.value)}
-          onKeyDown={(e) => {
-            if (e.key === 'Enter' && !e.shiftKey && !e.nativeEvent.isComposing && enterSaves()) submit(e);
-          }}
-        />
-        <button type="submit" className="composer__send" aria-label="Save" disabled={!text.trim()}>
-          <Icon name="send" size={20} />
-        </button>
-      </form>
-    </>
   );
 }
 

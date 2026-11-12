@@ -13,7 +13,7 @@ import { useJournalFilter } from './FilterPanel';
 import { Icon, type IconName } from './Icon';
 import { cardPath, journalPath, sheetState } from './paths';
 import { useToast } from './Toast';
-import { useSaveEntry } from './useSaveEntry';
+import { useSaveEntries } from './useSaveEntry';
 
 interface Command {
   id: string;
@@ -45,7 +45,7 @@ export function CommandPalette({ onClose }: { onClose: () => void }) {
   const navigate = useNavigate();
   const location = useLocation();
   const toast = useToast();
-  const save = useSaveEntry();
+  const { saveText } = useSaveEntries();
   const newNote = useNewNote();
   const current = useJournalFilter();
   const [query, setQuery] = useState('');
@@ -108,7 +108,7 @@ export function CommandPalette({ onClose }: { onClose: () => void }) {
     const tags = entry.tags.length ? `, tagged ${entry.tags.map((t) => `#${t}`).join(' ')}` : '';
     const due = entry.due ? `, due ${relativeDayInSentence(entry.due, today)}` : '';
     const write = (todo: boolean) => () =>
-      void save(text, { todo }).then((result) => {
+      void saveText(text, { todo }).then((result) => {
         if (result.saved) toast(result.saved === 1 ? 'Saved to the journal' : `Saved ${result.saved} entries to the journal`, { action: { label: 'Show', run: () => void navigate('/journal') } });
         else if (result.unlock) {
           toast('Unlock the diary first, then save it again.', { action: { label: 'Unlock', run: () => void navigate(journalPath({ vaultId: result.unlock })) } });

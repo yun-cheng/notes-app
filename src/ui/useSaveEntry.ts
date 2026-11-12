@@ -1,4 +1,4 @@
-import { appendToDoc, parseEntries } from '../domain/entry';
+import { appendToDoc, parseEntries, type Entry } from '../domain/entry';
 import { diaryVault } from '../domain/locks';
 import { EMPTY_DOC, type JSONNode } from '../domain/types';
 import { useCards, useToday } from '../state/CardsContext';
@@ -9,16 +9,20 @@ export interface SaveResult {
   unlock?: string;
 }
 
-/**
- * Saves typed text where its markers send it. One text can hold several entries, like a list of `[] …` lines;
- * with `todo` (the box's todo button) every line is a todo.
- */
-export function useSaveEntry() {
+/** Where entries go: the journal filter's tag and vault, its diary or todo default, and "due today". */
+export interface SaveOptions {
+  diary?: boolean;
+  due?: string;
+  tagId?: string;
+  vaultId?: string;
+}
+
+/** Saves entries read from the journal box, or typed text read the same way (`saveText`). */
+export function useSaveEntries() {
   const { repo, index, vaults, locked } = useCards();
   const today = useToday();
 
-  return async (text: string, opts: { todo: boolean; diary?: boolean; due?: string; tagId?: string; vaultId?: string }): Promise<SaveResult> => {
-    const entries = parseEntries(text, today, { allTodos: opts.todo });
+  const saveEntries = async (entries: Entry[], opts: SaveOptions = {}): Promise<SaveResult> => {
     if (!entries.length) return { saved: 0 };
     for (const entry of entries) {
       if (opts.diary && entry.kind === 'note') entry.kind = 'diary';
@@ -58,7 +62,7 @@ export function useSaveEntry() {
           ? { content: appendToDoc(diary.content, entry.content), tags: [...new Set([...diary.tags, ...tags])] }
           : { content: entry.content, tags };
       } else if (entry.kind === 'todo') {
-        await repo.createTodo({ title: entry.title, content: entry.content, tags, due: entry.due, vaultId: opts.vaultId });
+        await repo.createTodo({ title: entry.title, content: entry.content, tags, due: entry.due, done: entry.done, vaultId: opts.vaultId });
       } else {
         await repo.createNote({ content: entry.content, tags, vaultId: opts.vaultId });
       }
@@ -70,4 +74,9 @@ export function useSaveEntry() {
     }
     return { saved: entries.length };
   };
+
+  /** Typed text, like the command box's. With `todo`, every line is a todo. */
+  const saveText = (text: string, opts: SaveOptions & { todo?: boolean } = {}) => saveEntries(parseEntries(text, today, { allTodos: opts.todo }), opts);
+
+  return { saveEntries, saveText };
 }

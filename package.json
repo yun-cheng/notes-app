@@ -10,8 +10,10 @@
     "typecheck": "tsc --noEmit",
     "test": "vitest run",
     "icons": "pwa-assets-generator",
-    "deploy": "npm run build && wrangler pages deploy dist --project-name notes-app --branch main",
-    "dev:api": "wrangler pages dev dist --port 8788",
+    "check": "npm test && npm run build",
+    "release": "wrangler d1 migrations apply notes-app --remote && wrangler deploy",
+    "deploy": "npm run build && npm run release",
+    "dev:api": "wrangler dev --port 8788",
     "db:migrate:local": "wrangler d1 migrations apply notes-app --local",
     "db:migrate:remote": "wrangler d1 migrations apply notes-app --remote",
     "demo": "node scripts/demo.mjs"

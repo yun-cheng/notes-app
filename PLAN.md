@@ -100,7 +100,7 @@ Private vaults are end-to-end encrypted since Milestone 7. Open vaults are still
 - Keep storage and crypto behind small interfaces. (Meant at first for wrapping the web UI in Tauri 2; the native apps reimplement both instead, see the native apps notes.)
 - Call `navigator.storage.persist()`. Build export/backup early, including Markdown plus image files.
 - **Note format:** TipTap JSON stored in the card, plus Markdown export. Links by card ID survive renames, and it supports comments and live co-editing through Yjs.
-- **Sync server:** hosted, not on the Mac mini. Hono with D1, running as a Pages Function (a Worker on the site's own address, so sessions can use a secure cookie). `POST /api/sync/push` assigns an increasing `seq`; `GET /api/sync/pull?since=<seq>`. Conflict: newest version per card wins, the loser is kept as a conflict copy. Avoid sync engines that need to read the data (PowerSync, Dexie Cloud); avoid Supabase free tier, which pauses when inactive.
+- **Sync server:** hosted, not on the Mac mini. Hono with D1, running as a Cloudflare Worker that also serves the app's files (on the site's own address, so sessions can use a secure cookie). `POST /api/sync/push` assigns an increasing `seq`; `GET /api/sync/pull?since=<seq>`. Conflict: newest version per card wins, the loser is kept as a conflict copy. Avoid sync engines that need to read the data (PowerSync, Dexie Cloud); avoid Supabase free tier, which pauses when inactive.
 - **Auth:** Google sign-in. Single user at first, but multi-user in the data model from day one; every request checks vault membership.
 - **Photos:** stored in Google Drive, behind a storage interface, with cards referencing their own attachment ID. Offline photos queue on the device and upload later, with small previews cached locally.
   - Uses the `drive.file` scope; the Worker does the one-time OAuth login and holds the refresh token, handing the app short-lived tokens so the phone isn't re-prompted hourly.
@@ -161,7 +161,7 @@ None. Defaults chosen while building are listed in the implementation notes, and
 - Each account has one default vault, with no vault UI until Milestone 3.
 - Backups are JSON and restore by merging, newest version of each card wins, and cards from other vaults move into the account's vault. Markdown export is one-way.
 - Search treats each Chinese, Japanese or Korean character as a term, so text in those scripts can be found without spaces.
-- The app is hosted on Cloudflare Pages at https://notes-app-afc.pages.dev (`npm run deploy`). It is a regular Pages project with no Git connection, so deploys are manual and pushes don't trigger them.
+- The app was first hosted on Cloudflare Pages at https://notes-app-afc.pages.dev, a Pages project with no Git connection, deployed by hand. On 2026-11-13 it moved to a Cloudflare Worker with static assets, which is where Cloudflare now puts its effort: `server/worker.ts` is the Hono app, `wrangler.jsonc` serves `dist/` and sends only `/api/*` and `/.well-known/*` to the Worker, and any other path gets the app's page. Cloudflare builds it from GitHub on every push to `main` (Workers Builds) with `npm run check` and deploys with `npm run release`, which applies new D1 migrations first; every branch gets a preview address. This needs no Cloudflare token in GitHub. The Worker's address replaces the Pages one in the Google OAuth client (origin and the Drive callback) and in the native app (`API.swift`), and sign-ins on the old address don't carry over. The old Pages project can be deleted once the Worker is live.
 
 ## Implementation notes from Milestone 2
 
@@ -198,7 +198,7 @@ None. Defaults chosen while building are listed in the implementation notes, and
 
 ## Implementation notes from Milestone 4
 
-- The MCP server is `/api/mcp` on the app's own address, using Streamable HTTP with plain JSON replies (no streaming, no sessions), so it runs as a Pages Function without Durable Objects. No MCP SDK: the server handles `initialize`, `ping`, `tools/list` and `tools/call` itself.
+- The MCP server is `/api/mcp` on the app's own address, using Streamable HTTP with plain JSON replies (no streaming, no sessions), so it runs in the Worker without Durable Objects. No MCP SDK: the server handles `initialize`, `ping`, `tools/list` and `tools/call` itself.
 - Sign-in for AI apps is OAuth 2.1, built in rather than through Cloudflare's OAuth library, so it needs no KV namespace: dynamic client registration, codes with PKCE (S256), one-hour access tokens and rotating 90-day refresh tokens. Discovery documents are under `/.well-known` at the site root. Only token hashes are stored.
 - Approval happens in the app at `/oauth/authorize`, which uses the normal session. The session cookie stays SameSite=Strict, because the page calls the API from the app's own origin.
 - What an app can reach is set per vault (off, read, read and write) and enforced on the server. Private vaults are always off. Writes also need the user to own the vault, so shared vaults stay read only to AI.

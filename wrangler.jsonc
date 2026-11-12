@@ -1,7 +1,13 @@
 {
   "name": "notes-app",
-  "pages_build_output_dir": "./dist",
+  "main": "server/worker.ts",
   "compatibility_date": "2026-11-01",
+  "assets": {
+    "directory": "./dist",
+    // Any other path is a page of the app, which finds its own way from there.
+    "not_found_handling": "single-page-application",
+    "run_worker_first": ["/api/*", "/.well-known/*"]
+  },
   "d1_databases": [
     {
       "binding": "DB",

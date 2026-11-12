@@ -611,6 +611,7 @@ body:has(.batch) .toast-slot { bottom: calc(var(--tabbar) + env(safe-area-inset-
 /* A bubble's text can be selected; the open button beside it, Enter, or a tap on a phone opens it. */
 .bubble { position: relative; color: var(--text); }
 .bubble:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+.bubble__tools .is-open .bubble__open { opacity: 1; }
 .bubble__tools { position: absolute; top: 2px; left: calc(100% + 4px); z-index: 5; display: grid; grid-template-columns: repeat(2, 28px); gap: 4px; }
 .bubble__copy { position: absolute; top: 5px; right: 5px; display: grid; place-items: center; width: 24px; height: 24px; padding: 0; border: 0; border-radius: 7px; background: none; color: var(--muted); opacity: 0; cursor: pointer; transition: opacity 0.12s; }
 .bubble__copy:hover { color: var(--text); background: color-mix(in srgb, var(--text) 8%, transparent); }
@@ -622,7 +623,6 @@ body:has(.batch) .toast-slot { bottom: calc(var(--tabbar) + env(safe-area-inset-
 .stream__entry:hover .bubble__add, .bubble:focus-within .bubble__add, .is-open > .bubble__add { opacity: 1; }
 @media (pointer: coarse) { .bubble__add { display: none; } }
 .bubble-menu { position: relative; }
-.bubble__tools .is-open .bubble__open, .bubble__tools .entry-style.is-open .entry-style__btn { opacity: 1; }
 .style-menu.tag-menu { width: 280px; padding: 8px 10px; }
 .tag-menu .tag-picker { margin: 0; }
 .tag-menu .tag-picker__input, .tag-menu .tag-picker__input:focus { width: 100%; }
@@ -633,9 +633,6 @@ body:has(.batch) .toast-slot { bottom: calc(var(--tabbar) + env(safe-area-inset-
 .bubble__open:hover { color: var(--text); border-color: var(--muted); }
 .stream__entry:hover .bubble__open, .bubble:focus-within .bubble__open { opacity: 1; }
 .entry-style { position: relative; }
-.entry-style__btn { display: grid; place-items: center; width: 28px; height: 28px; padding: 0; border: 1px solid var(--line); border-radius: 50%; background: var(--surface); color: var(--muted); opacity: 0; cursor: pointer; transition: opacity 0.12s; }
-.entry-style__btn:hover { color: var(--text); border-color: var(--muted); }
-.stream__entry:hover .entry-style__btn, .bubble:focus-within .entry-style__btn, .entry-style.is-open .entry-style__btn { opacity: 1; }
 @media (pointer: coarse) { .bubble__tools, .bubble__copy { display: none; } }
 .style-menu { position: absolute; top: 32px; left: 0; z-index: 20; width: 232px; padding: 6px; display: flex; flex-direction: column; gap: 6px; background: var(--surface); border: 1px solid var(--line); border-radius: 12px; box-shadow: var(--shadow); cursor: default; }
 .style-menu--up { top: auto; bottom: 32px; }

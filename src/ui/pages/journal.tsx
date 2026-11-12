@@ -230,6 +230,7 @@ function BubbleMeta({ card, at, fold }: { card: NoteCard | TodoCard | DiaryCard;
     <span className="bubble__meta">
       <TagChips tagIds={card.tags} onChange={retag} />
       {retag && <AddTag card={card} />}
+      {retag && <StyleMenu card={card} />}
       <VaultLabel card={card} />
       <span className="bubble__end">
         {(fold.long || fold.folded) && (

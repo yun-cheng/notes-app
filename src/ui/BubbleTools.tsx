@@ -5,7 +5,6 @@ import type { DiaryCard, NoteCard, TodoCard } from '../domain/types';
 import { useCards } from '../state/CardsContext';
 import { TagPicker } from './components';
 import { useEntryActions } from './entryActions';
-import { StyleMenu } from './EntryStyle';
 import { Icon } from './Icon';
 import { ShareDialog } from './ShareDialog';
 import { usePopover } from './usePopover';
@@ -13,10 +12,10 @@ import { usePopover } from './usePopover';
 type Entry = NoteCard | TodoCard | DiaryCard;
 
 /**
- * The buttons beside a bubble on hover: open it, make a note a todo or a todo a note, share it, and its color and
- * previews. Copying its text is a button on the bubble's top right corner. Its tags
- * and a todo's due date are changed in its bottom row, where they show (`AddTag`, and `DueMenu`). A phone has no
- * hover; a tap opens the entry, whose sheet has them all, and a todo's due date in its bubble can be tapped.
+ * The buttons beside a bubble on hover: open it, make a note a todo or a todo a note, and share it. Copying its
+ * text is a button on the bubble's top right corner. Its tags, color and previews, and a todo's due date are
+ * changed in its bottom row (`AddTag`, `StyleMenu` and `DueMenu`). A phone has no hover; a tap opens the entry,
+ * whose sheet has them all, and a todo's due date in its bubble can be tapped.
  */
 export function BubbleTools({ card, open }: { card: Entry; open: () => void }) {
   const { vaults, shared } = useCards();
@@ -30,7 +29,6 @@ export function BubbleTools({ card, open }: { card: Entry; open: () => void }) {
         </button>
         {can.edit && card.type !== 'diary' && <TypeSwitch card={card} className="bubble__open" size={16} />}
         {can.share && <ShareButton card={card} />}
-        {can.edit && <StyleMenu card={card} />}
       </span>
       {/* In the bubble's top right corner, in room the bubble keeps for it, so it covers none of the text. */}
       <button type="button" className="bubble__copy" aria-label="Copy text" title="Copy text" onClick={() => copyText(card.id)}>

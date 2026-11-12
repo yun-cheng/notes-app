@@ -70,8 +70,8 @@ export function StyleOptions({ card }: { card: Entry }) {
 }
 
 /**
- * The style menu's button: beside a bubble, shown on hover like the open button, or (`inBar`) in an entry's
- * sheet, which is where phones get it.
+ * The style menu's button: in a bubble's bottom row, shown on hover like the tag button, or (`inBar`) in an
+ * entry's sheet, which is where phones get it.
  */
 export function StyleMenu({ card, inBar = false }: { card: Entry; inBar?: boolean }) {
   const { open, root, toggle, fixedStyle } = usePopover();
@@ -81,18 +81,18 @@ export function StyleMenu({ card, inBar = false }: { card: Entry; inBar?: boolea
     <div ref={root} className={`entry-style${open ? ' is-open' : ''}`} onClick={(e) => e.stopPropagation()}>
       <button
         type="button"
-        className={inBar ? `icon-btn${open ? ' is-active' : ''}` : 'entry-style__btn'}
+        className={inBar ? `icon-btn${open ? ' is-active' : ''}` : 'bubble__add'}
         aria-haspopup="menu"
         aria-expanded={!!open}
         aria-label="Color and previews"
         title="Color and previews"
         onClick={toggle}
       >
-        <Icon name={inBar ? 'color' : 'more'} size={inBar ? 20 : 16} />
+        <Icon name="color" size={inBar ? 20 : 12} />
       </button>
       {open && (
-        // In a sheet, which scrolls and would clip it, the menu sits fixed beside the button.
-        <div className={`style-menu${open === 'up' ? ' style-menu--up' : ''}`} style={inBar ? fixedStyle(232) : undefined} role="menu" aria-label="Color and previews">
+        // Fixed beside the button, so a sheet that scrolls or a bubble's row can't clip it.
+        <div className={`style-menu${open === 'up' ? ' style-menu--up' : ''}`} style={fixedStyle(232)} role="menu" aria-label="Color and previews">
           <StyleOptions card={card} />
         </div>
       )}

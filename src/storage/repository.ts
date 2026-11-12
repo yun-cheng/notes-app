@@ -1,6 +1,8 @@
 import { EMPTY_DOC, type Card, type CardPayload, type CardRecord, type JSONNode, type Repeat, type Vault } from '../domain/types';
 import type { Backup } from '../domain/backup';
+import { canRedo, canUndo, changedFields, isTextChange, revertCard, type Change, type ChangeEntry } from '../domain/changes';
 import { isBlank } from '../domain/content';
+import { isEncryptedPayload } from '../crypto/vaultKeys';
 import { diaryId, rehomeCards } from '../domain/rehome';
 import { changeType, retypePatch, type EntryType } from '../domain/retype';
 import { noJournal, type CardPatch, type DiaryPatch, type Journal, type JournalOp } from './journal';
@@ -21,6 +23,29 @@ function sealedCard(record: CardRecord): Card {
 
 const isSealed = (card: Card) => (card as { [SEALED]?: boolean })[SEALED] === true;
 
+/** One thing the user did: every write asked for in the same breath. Its changes are logged, and undone, together. */
+interface Action {
+  id: string;
+  /** Named by the caller with `action()`, to undo it later. Its changes stay their own, never joined to typing. */
+  explicit: boolean;
+}
+
+// Not from `newId`, which names cards.
+const newAction = (): Action => ({ id: `${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 10)}`, explicit: false });
+
+/** The change log keeps this many changes; older ones are in each entry's own history on the server. */
+const LOG_LIMIT = 500;
+const TRIM_EVERY = 50;
+/** Typing saves this close together are one change, until it has grown this long. */
+const JOIN_GAP = 5 * 60_000;
+const JOIN_SPAN = 30 * 60_000;
+
+/** A change with the card it was made to, as that card is now. */
+export interface ChangeRow {
+  change: Change;
+  current: Card | undefined;
+}
+
 export interface ImportResult {
   added: number;
   updated: number;
@@ -36,6 +61,8 @@ export class CardRepository {
   private encryptedIds = new Set<string>();
   /** Called after any local change, so sync can be scheduled. */
   onChange: (() => void) | null = null;
+  private pending: Action | null = null;
+  private logged = 0;
 
   constructor(
     readonly store: CardStore,
@@ -69,19 +96,39 @@ export class CardRepository {
     return this.enqueue(async () => {
       const vault = await this.defaultVault();
       await this.replayJournal();
+      await this.store.trimChanges(LOG_LIMIT);
       return vault;
     });
+  }
+
+  /** The action that writes asked for right now belong to. It ends with this turn of the event loop. */
+  private acting(): Action {
+    if (!this.pending) {
+      this.pending = newAction();
+      queueMicrotask(() => (this.pending = null));
+    }
+    return this.pending;
+  }
+
+  /**
+   * Names the action under way, so it can be undone later by that name. Call it right before the writes, which
+   * must all be asked for without waiting in between: `const action = repo.action(); await Promise.all(...)`.
+   */
+  action(): string {
+    const action = this.acting();
+    action.explicit = true;
+    return action.id;
   }
 
   private async replayJournal(): Promise<void> {
     for (const op of this.journal.load()) {
       if (op.kind === 'update') {
         const card = await this.read(op.id);
-        if (card && card.updatedAt < op.at) await this.applyUpdate(card, op.patch);
+        if (card && card.updatedAt < op.at) await this.applyUpdate(card, op.patch, newAction());
       } else {
         const vault = await this.defaultVault();
         const card = await this.read(op.existingId ?? diaryId(op.vaultId ?? vault.id, op.date));
-        if (!card || card.updatedAt < op.at) await this.applyDiary(op.date, op.patch, op.existingId, op.vaultId);
+        if (!card || card.updatedAt < op.at) await this.applyDiary(op.date, op.patch, newAction(), op.existingId, op.vaultId);
       }
     }
     this.journal.save(this.uncommitted);
@@ -100,16 +147,26 @@ export class CardRepository {
   async decode(record: CardRecord): Promise<Card> {
     if (this.codec.isEncrypted?.(record.vault_id)) this.encryptedIds.add(record.id);
     else this.encryptedIds.delete(record.id);
+    return this.unpack(record);
+  }
+
+  /** Reads a record without taking it for where its card is now, which an old record in the change log may not say. */
+  private async unpack(record: CardRecord): Promise<Card> {
     const payload = await this.codec.decode(record.payload, { id: record.id, vaultId: record.vault_id });
     if (!payload) return sealedCard(record);
     return { ...payload, id: record.id, vaultId: record.vault_id, updatedAt: record.updated_at, deleted: record.deleted, seq: record.seq } as Card;
   }
 
   private async encode(card: Card): Promise<CardRecord> {
-    if (isSealed(card)) throw new Error('A locked card cannot be saved');
     if (this.codec.isEncrypted?.(card.vaultId)) this.encryptedIds.add(card.id);
     else this.encryptedIds.delete(card.id);
-    const { id, vaultId, updatedAt, deleted, seq, ...payload } = card;
+    return this.pack(card, card.vaultId);
+  }
+
+  /** The card as a record stored the way `vaultId` stores its cards. */
+  private async pack(card: Card, vaultId: string): Promise<CardRecord> {
+    if (isSealed(card)) throw new Error('A locked card cannot be saved');
+    const { id, vaultId: _own, updatedAt, deleted, seq, ...payload } = card;
     return { id, vault_id: vaultId, updated_at: updatedAt, deleted, seq, payload: await this.codec.encode(payload as CardPayload, { id, vaultId }) };
   }
 
@@ -131,6 +188,8 @@ export class CardRepository {
         await this.store.putCards(records);
         this.onChange?.();
       }
+      // Logged changes are stored the way the vault stored its cards then, which is no longer how it does.
+      await this.forget((entry) => entry.after.vault_id === vaultId || entry.beforeVault === vaultId);
       return records.length;
     });
   }
@@ -140,10 +199,131 @@ export class CardRepository {
     return record && this.decode(record);
   }
 
-  private async write(card: Card): Promise<Card> {
-    await this.store.putCards([await this.encode(card)]);
+  /** Saves a card. With an `action`, the change from `before` (the card as it was, if it was) goes in the change log. */
+  private async write(card: Card, action?: Action, before?: Card): Promise<Card> {
+    const record = await this.encode(card);
+    const prior = action && (await this.store.getCard(card.id));
+    await this.store.putCards([record]);
+    if (action) {
+      try {
+        await this.log(action, prior, prior && (before ?? (await this.unpack(prior))), card, record);
+      } catch (err) {
+        // The card is saved; only its place in the history is lost.
+        console.error('Logging a change failed', err);
+      }
+    }
     this.onChange?.();
     return card;
+  }
+
+  private async log(action: Action, prior: CardRecord | undefined, before: Card | undefined, card: Card, record: CardRecord): Promise<void> {
+    // A card opened and left empty isn't there yet as far as the user can tell, so its first words make it.
+    const made = !prior || !before || isBlank(before);
+    if (made && isBlank(card)) return;
+    const fields = made ? [] : changedFields(before, card);
+    if (!made && !fields.length) return;
+    const typed = !action.explicit && (made || isTextChange(fields));
+    const at = card.updatedAt;
+
+    const last = typed && !made ? await this.store.lastChange() : undefined;
+    if (
+      last?.joins &&
+      last.undoneAt === undefined &&
+      last.cardId === card.id &&
+      // Nothing from another device landed in between.
+      last.after.updated_at === prior!.updated_at &&
+      last.after.vault_id === record.vault_id &&
+      at - last.until <= JOIN_GAP &&
+      at - last.at <= JOIN_SPAN
+    ) {
+      const joined = last.before ? [...new Set([...last.fields, ...fields])].sort() : [];
+      await this.store.putChanges([{ ...last, after: record, until: at, fields: joined }]);
+      return;
+    }
+
+    const entry: ChangeEntry = { at, until: at, group: action.id, cardId: card.id, before: made ? null : prior!, after: record, fields };
+    if (typed) entry.joins = true;
+    const moved = entry.before && entry.before.vault_id !== record.vault_id;
+    if (moved) {
+      entry.beforeVault = prior!.vault_id;
+      entry.before = await this.pack(before!, record.vault_id);
+    }
+    await this.store.putChanges([entry]);
+    if (moved) await this.forgetReadable(card.id, record.vault_id);
+    if (++this.logged % TRIM_EVERY === 0) await this.store.trimChanges(LOG_LIMIT);
+  }
+
+  private async forget(match: (entry: ChangeEntry) => boolean): Promise<void> {
+    const gone = (await this.store.listChanges()).filter(match).map((entry) => entry.n!);
+    if (gone.length) await this.store.deleteChanges(gone);
+  }
+
+  /** After a card went into an encrypted vault, drops what the log holds of it from before, which anyone could read. */
+  private async forgetReadable(cardId: string, vaultId: string): Promise<void> {
+    if (!this.codec.isEncrypted?.(vaultId)) return;
+    await this.forget((entry) => entry.cardId === cardId && !this.codec.isEncrypted?.(entry.after.vault_id));
+  }
+
+  // The change log: what this device changed, newest last, for the history and for undo.
+
+  /** A logged change with its cards readable, if their vault's key is open. */
+  async decodeChange(entry: ChangeEntry): Promise<Change> {
+    const { before: beforeRecord, beforeVault, after: afterRecord, joins: _joins, n, ...rest } = entry;
+    const open = async (record: CardRecord) => {
+      try {
+        return await this.unpack(record);
+      } catch {
+        // Stored under a key that has since changed. It can't be read again.
+        return sealedCard(record);
+      }
+    };
+    const after = await open(afterRecord);
+    const before = beforeRecord && { ...(await open(beforeRecord)), vaultId: beforeVault ?? beforeRecord.vault_id };
+    return { ...rest, n: n!, before, after, sealed: isSealed(after) || (!!before && isSealed(before)) };
+  }
+
+  /** The whole log, oldest first, each change with its card as it is now. It waits for writes under way. */
+  readChanges(): Promise<ChangeRow[]> {
+    return this.enqueue(async () => {
+      const cards = new Map<string, Promise<Card | undefined>>();
+      const current = (id: string) => cards.get(id) ?? cards.set(id, this.read(id)).get(id)!;
+      return Promise.all(
+        (await this.store.listChanges()).map(async (entry) => ({ change: await this.decodeChange(entry), current: await current(entry.cardId) })),
+      );
+    });
+  }
+
+  /**
+   * Takes logged changes back, or puts undone ones back, and gives the ones it did. A change is left alone when
+   * its card no longer holds what the change (or its undo) left, or can't be read or written right now. The
+   * reverting write isn't itself logged: the change is marked undone instead, and can be redone.
+   */
+  revert(ns: number[], direction: 'undo' | 'redo'): Promise<number[]> {
+    return this.enqueue(async () => {
+      const done: number[] = [];
+      let stamp: number | undefined;
+      // Newest first to undo, oldest first to redo, so two changes to one card come off in order.
+      for (const n of [...new Set(ns)].sort((a, b) => (direction === 'undo' ? b - a : a - b))) {
+        const entry = await this.store.getChange(n);
+        const current = entry && (await this.read(entry.cardId));
+        if (!entry || !current || isSealed(current)) continue;
+        const change = await this.decodeChange(entry);
+        if (!(direction === 'undo' ? canUndo(change, current) : canRedo(change, current))) continue;
+        const at = this.now();
+        const next = { ...revertCard(current, change, direction), updatedAt: at };
+        try {
+          await this.write(next);
+        } catch {
+          continue;
+        }
+        stamp ??= at;
+        const { undoneAt: _was, ...live } = entry;
+        await this.store.putChanges([direction === 'undo' ? { ...entry, undoneAt: stamp } : live]);
+        if (next.vaultId !== current.vaultId) await this.forgetReadable(next.id, next.vaultId);
+        done.push(n);
+      }
+      return done;
+    });
   }
 
   private lastCreated = 0;
@@ -158,8 +338,9 @@ export class CardRepository {
 
   createNote(init: { id?: string; title?: string; content?: JSONNode; tags?: string[]; vaultId?: string } = {}): Promise<Card> {
     const id = init.id ?? this.newId();
+    const action = this.acting();
     return this.enqueue(async () =>
-      this.write({ ...(await this.newEnvelope(id, init.vaultId)), type: 'note', title: init.title ?? '', content: init.content ?? EMPTY_DOC, tags: init.tags ?? [] }),
+      this.write({ ...(await this.newEnvelope(id, init.vaultId)), type: 'note', title: init.title ?? '', content: init.content ?? EMPTY_DOC, tags: init.tags ?? [] }, action),
     );
   }
 
@@ -173,6 +354,7 @@ export class CardRepository {
     vaultId?: string;
     done?: boolean;
   }): Promise<Card> {
+    const action = this.acting();
     return this.enqueue(async () => {
       const envelope = await this.newEnvelope(this.newId(), init.vaultId);
       return this.write({
@@ -187,7 +369,7 @@ export class CardRepository {
         ...(init.due && init.dueTime ? { dueTime: init.dueTime } : {}),
         ...(init.due && init.repeat ? { repeat: init.repeat } : {}),
         completedAt: init.done ? envelope.createdAt : null,
-      });
+      }, action);
     });
   }
 
@@ -195,15 +377,17 @@ export class CardRepository {
   createTag(init: { title: string; id?: string; members?: string[]; choice?: 'one' | 'many'; ordered?: boolean }): Promise<Card> {
     const id = init.id ?? this.newId();
     const group = init.members ? { members: init.members, choice: init.choice ?? 'many', ordered: init.ordered ?? false } : {};
+    const action = this.acting();
     return this.enqueue(async () =>
-      this.write({ ...(await this.newEnvelope(id)), type: 'tag', title: init.title, content: EMPTY_DOC, tags: [], pinned: false, ...group }),
+      this.write({ ...(await this.newEnvelope(id)), type: 'tag', title: init.title, content: EMPTY_DOC, tags: [], pinned: false, ...group }, action),
     );
   }
 
   update(id: string, patch: CardPatch): Promise<Card | undefined> {
+    const action = this.acting();
     const work = async () => {
       const card = await this.read(id);
-      return card && this.applyUpdate(card, patch);
+      return card && this.applyUpdate(card, patch, action);
     };
     return this.secret(id) ? this.enqueue(work) : this.journaled({ kind: 'update', at: this.now(), id, patch }, work);
   }
@@ -213,17 +397,18 @@ export class CardRepository {
    * change lands, after any edit still on its way, so nothing typed just before is lost.
    */
   retype(id: string, type: EntryType): Promise<CardPatch | undefined> {
+    const action = this.acting();
     const work = async () => {
       const card = await this.read(id);
       const change = card && (card.type === 'note' || card.type === 'todo') ? retypePatch(card, type) : null;
       if (!card || !change) return undefined;
-      await this.applyUpdate(card, { type });
+      await this.applyUpdate(card, { type }, action);
       return change.undo;
     };
     return this.secret(id) ? this.enqueue(work) : this.journaled({ kind: 'update', at: this.now(), id, patch: { type } }, work);
   }
 
-  private applyUpdate(card: Card, { type, ...patch }: CardPatch): Promise<Card> {
+  private applyUpdate(card: Card, { type, ...patch }: CardPatch, action: Action): Promise<Card> {
     let base = card;
     if (type && type !== card.type && (card.type === 'note' || card.type === 'todo')) {
       // Words move as `retypePatch` says, unless the patch brings its own (an undo, a restore).
@@ -232,36 +417,39 @@ export class CardRepository {
     }
     const next = { ...base, ...patch, updatedAt: this.now() } as Card;
     if (next.type === 'todo' && patch.status) next.completedAt = patch.status === 'done' ? this.now() : null;
-    return this.write(next);
+    return this.write(next, action, card);
   }
 
   /** Diary entries are created on first write. Their ID comes from the date, so two devices can't create two entries for one day. */
   saveDiary(date: string, patch: DiaryPatch, existingId?: string, vaultId?: string): Promise<Card> {
-    const work = () => this.applyDiary(date, patch, existingId, vaultId);
+    const action = this.acting();
+    const work = () => this.applyDiary(date, patch, action, existingId, vaultId);
     if (this.secret(existingId ?? '', vaultId)) return this.enqueue(work);
     return this.journaled({ kind: 'diary', at: this.now(), date, patch, existingId, vaultId }, work);
   }
 
-  private async applyDiary(date: string, patch: DiaryPatch, existingId?: string, vaultId?: string): Promise<Card> {
+  private async applyDiary(date: string, patch: DiaryPatch, action: Action, existingId?: string, vaultId?: string): Promise<Card> {
     const target = vaultId ?? (await this.defaultVault()).id;
     const id = existingId ?? diaryId(target, date);
     const card = await this.read(id);
-    if (card && !card.deleted) return this.write({ ...card, ...patch, updatedAt: this.now() } as Card);
+    if (card && !card.deleted) return this.write({ ...card, ...patch, updatedAt: this.now() } as Card, action, card);
     const content: JSONNode = patch.content ?? EMPTY_DOC;
-    return this.write({ ...(await this.newEnvelope(id, target)), type: 'diary', date, title: '', content, tags: patch.tags ?? [] });
+    return this.write({ ...(await this.newEnvelope(id, target)), type: 'diary', date, title: '', content, tags: patch.tags ?? [] }, action, card);
   }
 
   setDeleted(id: string, deleted: boolean): Promise<void> {
+    const action = this.acting();
     return this.enqueue(async () => {
       const card = await this.read(id);
-      if (card) await this.write({ ...card, deleted, updatedAt: this.now() });
+      if (card) await this.write({ ...card, deleted, updatedAt: this.now() }, action, card);
     });
   }
 
   moveToVault(id: string, vaultId: string): Promise<void> {
+    const action = this.acting();
     return this.enqueue(async () => {
       const card = await this.read(id);
-      if (card && card.vaultId !== vaultId) await this.write({ ...card, vaultId, updatedAt: this.now() });
+      if (card && card.vaultId !== vaultId) await this.write({ ...card, vaultId, updatedAt: this.now() }, action, card);
     });
   }
 
@@ -332,6 +520,7 @@ export class CardRepository {
             continue;
           }
           await this.store.putCards([next]);
+          await this.forget((entry) => entry.cardId === record.id && !isEncryptedPayload(entry.after.payload));
         }
         if (next.seq === 0 && isBlank(await this.decode(next))) continue;
         out.push(next);
@@ -354,6 +543,10 @@ export class CardRepository {
       await this.store.replaceVaults(vaults);
       await this.store.setMeta('shared', shared);
       if (gone.length) await this.store.deleteCards(gone);
+      // The log goes with the cards it's about, and keeps nothing readable from a vault that has since been encrypted.
+      const lost = new Set(gone);
+      const encrypted = new Set(vaults.filter((v) => v.encryption).map((v) => v.id));
+      await this.forget((entry) => lost.has(entry.cardId) || (encrypted.has(entry.after.vault_id) && !isEncryptedPayload(entry.after.payload)));
       if (this.vault && !vaultIds.has(this.vault.id)) this.vault = null;
       return after.some((key) => !before.has(key));
     });

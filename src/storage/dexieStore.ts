@@ -1,4 +1,5 @@
 import Dexie, { liveQuery, type Table } from 'dexie';
+import type { ChangeEntry } from '../domain/changes';
 import type { CardRecord, Vault } from '../domain/types';
 import type { PhotoRecord, PhotoStore } from '../photos/types';
 import type { CardStore } from './types';
@@ -9,12 +10,14 @@ class NotesDb extends Dexie {
   dirty!: Table<{ id: string }, string>;
   meta!: Table<{ key: string; value: unknown }, string>;
   photos!: Table<PhotoRecord, string>;
+  changes!: Table<ChangeEntry, number>;
 
   constructor(name: string) {
     super(name);
     this.version(1).stores({ cards: 'id, vault_id, updated_at, seq', vaults: 'id' });
     this.version(2).stores({ dirty: 'id', meta: 'key' });
     this.version(3).stores({ photos: 'id, uploaded, addedAt' });
+    this.version(4).stores({ changes: '++n' });
   }
 }
 
@@ -121,6 +124,36 @@ export class DexieStore implements CardStore, PhotoStore {
     const subscription = liveQuery(() => this.db.cards.toArray()).subscribe({
       next: listener,
       error: (err) => console.error('Reading cards failed', err),
+    });
+    return () => subscription.unsubscribe();
+  }
+
+  listChanges() {
+    return this.db.changes.toArray();
+  }
+  getChange(n: number) {
+    return this.db.changes.get(n);
+  }
+  lastChange() {
+    return this.db.changes.orderBy(':id').last();
+  }
+  async putChanges(entries: ChangeEntry[]) {
+    await this.db.changes.bulkPut(entries);
+  }
+  async deleteChanges(ns: number[]) {
+    await this.db.changes.bulkDelete(ns);
+  }
+  async trimChanges(keep: number) {
+    const { changes } = this.db;
+    await this.db.transaction('rw', changes, async () => {
+      const extra = (await changes.count()) - keep;
+      if (extra > 0) await changes.bulkDelete(await changes.orderBy(':id').limit(extra).primaryKeys());
+    });
+  }
+  subscribeChanges(listener: (entries: ChangeEntry[]) => void) {
+    const subscription = liveQuery(() => this.db.changes.toArray()).subscribe({
+      next: listener,
+      error: (err) => console.error('Reading the change log failed', err),
     });
     return () => subscription.unsubscribe();
   }

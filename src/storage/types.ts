@@ -1,3 +1,4 @@
+import type { ChangeEntry } from '../domain/changes';
 import type { CardPayload, CardRecord, Vault } from '../domain/types';
 
 /** Device storage. The UI never touches this directly, so a Tauri backend can replace it. */
@@ -25,6 +26,21 @@ export interface CardStore {
   subscribeVaults(listener: (vaults: Vault[]) => void): () => void;
   /** Calls back with every record now and after any change, including from other tabs. */
   subscribe(listener: (records: CardRecord[]) => void): () => void;
+
+  // The change log: what this device changed, for the history and for undo. It never leaves the device.
+
+  /** Every logged change, oldest first. */
+  listChanges(): Promise<ChangeEntry[]>;
+  getChange(n: number): Promise<ChangeEntry | undefined>;
+  /** The newest logged change. */
+  lastChange(): Promise<ChangeEntry | undefined>;
+  /** Adds entries that have no `n` yet, and replaces the ones that do. */
+  putChanges(entries: ChangeEntry[]): Promise<void>;
+  deleteChanges(ns: number[]): Promise<void>;
+  /** Drops the oldest changes, so no more than `keep` are left. */
+  trimChanges(keep: number): Promise<void>;
+  /** Calls back with the whole log, oldest first, now and after any change to it. */
+  subscribeChanges(listener: (entries: ChangeEntry[]) => void): () => void;
 }
 
 export interface CodecContext {

@@ -1,3 +1,4 @@
+import type { ChangeEntry } from '../domain/changes';
 import type { CardRecord, Vault } from '../domain/types';
 import type { CardStore } from './types';
 
@@ -8,6 +9,9 @@ export class MemoryStore implements CardStore {
   private meta = new Map<string, unknown>();
   private listeners = new Set<(records: CardRecord[]) => void>();
   private vaultListeners = new Set<(vaults: Vault[]) => void>();
+  private changes = new Map<number, ChangeEntry>();
+  private changeListeners = new Set<(entries: ChangeEntry[]) => void>();
+  private lastN = 0;
 
   async listCards() {
     return [...this.cards.values()];
@@ -80,5 +84,40 @@ export class MemoryStore implements CardStore {
     this.listeners.add(listener);
     listener([...this.cards.values()]);
     return () => void this.listeners.delete(listener);
+  }
+
+  private notifyChanges() {
+    const all = [...this.changes.values()];
+    this.changeListeners.forEach((l) => l(all));
+  }
+  async listChanges() {
+    return [...this.changes.values()];
+  }
+  async getChange(n: number) {
+    return this.changes.get(n);
+  }
+  async lastChange() {
+    return this.changes.get(Math.max(...this.changes.keys()));
+  }
+  async putChanges(entries: ChangeEntry[]) {
+    // Replaced entries keep their place, so the map stays in order of `n`.
+    for (const entry of entries) {
+      const n = entry.n ?? ++this.lastN;
+      this.changes.set(n, { ...entry, n });
+    }
+    this.notifyChanges();
+  }
+  async deleteChanges(ns: number[]) {
+    ns.forEach((n) => this.changes.delete(n));
+    this.notifyChanges();
+  }
+  async trimChanges(keep: number) {
+    const extra = [...this.changes.keys()].slice(0, Math.max(0, this.changes.size - keep));
+    if (extra.length) await this.deleteChanges(extra);
+  }
+  subscribeChanges(listener: (entries: ChangeEntry[]) => void) {
+    this.changeListeners.add(listener);
+    listener([...this.changes.values()]);
+    return () => void this.changeListeners.delete(listener);
   }
 }

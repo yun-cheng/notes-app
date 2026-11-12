@@ -6,6 +6,7 @@ import type { EntryType } from '../domain/retype';
 import type { Card, DiaryCard, NoteCard, TodoCard } from '../domain/types';
 import { useCards } from '../state/CardsContext';
 import { useToast } from './Toast';
+import { useUndo } from './useUndo';
 import { useSaveEntries, type SaveOptions } from './useSaveEntry';
 
 export const entries = (n: number) => `${n} ${n === 1 ? 'entry' : 'entries'}`;
@@ -50,6 +51,7 @@ export function useEntryActions() {
   const { index, repo, vaults, shared } = useCards();
   const toast = useToast();
   const { saveEntries } = useSaveEntries();
+  const { undoAction } = useUndo();
 
   const cardsFor = (ids: string[]) => ids.map((id) => index.byId.get(id)).filter(copyable);
 
@@ -85,9 +87,10 @@ export function useEntryActions() {
       if (skipped) toast(`${entries(skipped)} couldn't be removed`);
       return;
     }
+    const action = repo.action();
     await Promise.all(removable.map((id) => repo.setDeleted(id, true)));
     toast(`${verb} ${entries(removable.length)}${verb === 'Moved' ? ' to Trash' : ''}${note}`, {
-      action: { label: 'Undo', run: () => removable.forEach((id) => void repo.setDeleted(id, false)) },
+      action: { label: 'Undo', run: () => void undoAction(action) },
     });
   };
 
@@ -103,14 +106,14 @@ export function useEntryActions() {
     const result = await saveEntries(list, opts);
     if (result.unlock) return toast('Unlock the diary to paste into it.');
     if (!result.saved) return;
-    const undo = result.ids.length && !result.diary ? { label: 'Undo', run: () => result.ids.forEach((id) => void repo.setDeleted(id, true)) } : undefined;
-    toast(`Pasted ${entries(result.saved)}`, { action: undo });
+    const { action } = result;
+    toast(`Pasted ${entries(result.saved)}`, { action: action ? { label: 'Undo', run: () => void undoAction(action) } : undefined });
   };
 
   /** Turns a note into a todo or a todo into a note, in one click, with an undo. */
   const retype = async (id: string, type: EntryType) => {
-    const undo = await repo.retype(id, type);
-    if (undo) toast(type === 'todo' ? 'Made it a todo' : 'Made it a note', { action: { label: 'Undo', run: () => void repo.update(id, undo) } });
+    const action = repo.action();
+    if (await repo.retype(id, type)) toast(type === 'todo' ? 'Made it a todo' : 'Made it a note', { action: { label: 'Undo', run: () => void undoAction(action) } });
   };
 
   return { copy, copyText, cut, trash, paste, retype };

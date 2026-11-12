@@ -2,7 +2,7 @@ import { appendToDoc, parseEntries, type Entry } from '../domain/entry';
 import { diaryVault } from '../domain/locks';
 import type { StreamFilter } from '../domain/stream';
 import { isGroupName, settleTags } from '../domain/tagGroups';
-import { EMPTY_DOC, type JSONNode } from '../domain/types';
+import { EMPTY_DOC, type Card, type JSONNode } from '../domain/types';
 import { useCards, useToday } from '../state/CardsContext';
 
 /** How many entries were saved, or the vault to unlock first when the diary is locked. Unsaved text stays in the box. */
@@ -13,6 +13,8 @@ export interface SaveResult {
   /** Something was added to the day's diary. */
   diary?: boolean;
   unlock?: string;
+  /** What was saved, as one action to undo. */
+  action?: string;
 }
 
 /** Where entries go: the journal filter's tag and vault, its diary or todo default, and "due today". */
@@ -67,9 +69,11 @@ export function useSaveEntries() {
       return settleTags(ids, groupOf);
     };
 
+    // Everything is asked for in one go, with no waiting in between, so it's one action to undo.
+    const action = repo.action();
     // Diary parts go in together, in one save, so one can't overwrite another.
     let diary: { content: JSONNode; tags: string[] } | null = null;
-    const ids: string[] = [];
+    const making: Promise<Card>[] = [];
     for (const entry of entries) {
       const tags = tagIdsFor(entry.tags);
       if (entry.kind === 'diary') {
@@ -77,7 +81,8 @@ export function useSaveEntries() {
           ? { content: appendToDoc(diary.content, entry.content), tags: [...new Set([...diary.tags, ...tags])] }
           : { content: entry.content, tags };
       } else if (entry.kind === 'todo') {
-        ids.push((await repo.createTodo({
+        making.push(
+          repo.createTodo({
             title: entry.title,
             content: entry.content,
             tags,
@@ -86,17 +91,21 @@ export function useSaveEntries() {
             repeat: entry.repeat,
             done: entry.done,
             vaultId: opts.vaultId,
-          })).id);
+          }),
+        );
       } else {
-        ids.push((await repo.createNote({ title: entry.title, content: entry.content, tags, vaultId: opts.vaultId })).id);
+        making.push(repo.createNote({ title: entry.title, content: entry.content, tags, vaultId: opts.vaultId }));
       }
     }
+    let saving: Promise<Card> | undefined;
     if (diary) {
       const existing = index.diaryByDate.get(today);
       const tags = [...new Set([...(existing?.tags ?? []), ...diary.tags])];
-      await repo.saveDiary(today, { content: appendToDoc(existing?.content ?? EMPTY_DOC, diary.content), tags }, existing?.id, vault?.id);
+      saving = repo.saveDiary(today, { content: appendToDoc(existing?.content ?? EMPTY_DOC, diary.content), tags }, existing?.id, vault?.id);
     }
-    return { saved: entries.length, ids, diary: !!diary };
+    const ids = (await Promise.all(making)).map((card) => card.id);
+    await saving;
+    return { saved: entries.length, ids, diary: !!diary, action };
   };
 
   /** Typed text, like the command box's. With `todo`, every line is a todo. */

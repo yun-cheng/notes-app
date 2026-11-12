@@ -14,8 +14,10 @@ import { LINK_STYLES, PHOTO_STYLES, setDisplayPrefs, type LinkStyle, type PhotoS
 import { useJournalFilter } from './FilterPanel';
 import { Icon, type IconName } from './Icon';
 import { cardPath, journalPath, sheetState } from './paths';
+import { MOD, REDO_KEYS } from './Shortcuts';
 import { useToast } from './Toast';
 import { useSaveEntries } from './useSaveEntry';
+import { useUndo } from './useUndo';
 
 interface Command {
   id: string;
@@ -49,6 +51,7 @@ export function CommandPalette({ onClose, onShortcuts }: { onClose: () => void; 
   const toast = useToast();
   const { saveText } = useSaveEntries();
   const newNote = useNewNote();
+  const { undo, redo } = useUndo();
   const current = useJournalFilter();
   const [query, setQuery] = useState('');
   const [active, setActive] = useState(0);
@@ -67,6 +70,8 @@ export function CommandPalette({ onClose, onShortcuts }: { onClose: () => void; 
       { id: 'go-tags', group: 'Go to', label: 'All tags', icon: 'tag', keywords: 'labels folders', run: go('/tags') },
       { id: 'go-vaults', group: 'Go to', label: 'Vaults', icon: 'lock', keywords: 'private pin members', run: go('/vaults') },
       { id: 'go-settings', group: 'Go to', label: 'Backup & settings', icon: 'settings', keywords: 'trash export import ai photos account sign out', run: go('/settings') },
+      { id: 'undo', group: 'Edit', label: 'Undo', hint: `${MOD}Z`, icon: 'undo', keywords: 'take back revert last change', run: () => void undo() },
+      { id: 'redo', group: 'Edit', label: 'Redo', hint: REDO_KEYS, icon: 'redo', keywords: 'put back again', run: () => void redo() },
       { id: 'shortcuts', group: 'Help', label: 'Keyboard shortcuts', hint: '?', keywords: 'keys help copy paste select', run: onShortcuts },
       { id: 'show-all', group: 'Filter', label: 'Show everything', icon: 'notes', keywords: 'clear reset all', run: go(journalPath({ sort: current.sort })) },
     ];

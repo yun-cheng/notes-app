@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { Link, Navigate, NavLink, Outlet, Route, Routes, useLocation } from 'react-router';
 import { registerSW } from 'virtual:pwa-register';
 import { AuthGate, useAccount } from '../auth/AuthContext';
@@ -21,6 +21,7 @@ import { FilterPanel } from './FilterPanel';
 import { journalPath, type SheetState } from './paths';
 import { isMac, ShortcutsDialog } from './Shortcuts';
 import { ToastProvider, useToast } from './Toast';
+import { useUndo } from './useUndo';
 
 /** The phone's tab bar. Today is a journal filter: open todos due by today. */
 const TABS: { to: string; label: string; icon: IconName }[] = [
@@ -91,16 +92,29 @@ function Layout() {
   const toast = useToast();
   const [commands, setCommands] = useState(false);
   const [shortcuts, setShortcuts] = useState(false);
+  const undoing = useUndo();
+  const undo = useRef(undoing);
+  undo.current = undoing;
 
   useEffect(() => {
     const onKey = (e: KeyboardEvent) => {
-      if ((e.metaKey || e.ctrlKey) && !e.shiftKey && !e.altKey && e.key.toLowerCase() === 'k') {
+      const key = e.key.toLowerCase();
+      if ((e.metaKey || e.ctrlKey) && !e.shiftKey && !e.altKey && key === 'k') {
         e.preventDefault();
         setCommands((open) => !open);
         return;
       }
-      // `/` opens it too, and `?` the list of shortcuts, when they aren't being typed into something.
       const typing = e.target instanceof HTMLElement && e.target.closest('input, textarea, select, [contenteditable="true"]');
+      // Undo and redo for the whole app. A text box keeps its own, for what is typed in it.
+      if ((e.metaKey || e.ctrlKey) && !e.altKey && !typing && !e.defaultPrevented) {
+        const redo = (key === 'z' && e.shiftKey) || (!isMac && key === 'y' && !e.shiftKey);
+        if (redo || (key === 'z' && !e.shiftKey)) {
+          e.preventDefault();
+          void (redo ? undo.current.redo() : undo.current.undo());
+          return;
+        }
+      }
+      // `/` opens it too, and `?` the list of shortcuts, when they aren't being typed into something.
       if (typing || e.metaKey || e.ctrlKey || e.altKey || document.querySelector('.dialog-backdrop')) return;
       if (e.key === '/' || e.key === '?') {
         e.preventDefault();

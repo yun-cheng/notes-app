@@ -10,6 +10,7 @@ import { Icon } from './Icon';
 import type { Selection } from './selection';
 import { MOD } from './Shortcuts';
 import { useToast } from './Toast';
+import { useUndo } from './useUndo';
 
 /**
  * Takes the writing box's place while entries are picked: tag, finish, date, switch between note and todo, copy,
@@ -21,6 +22,7 @@ export function BatchBar({ selection }: { selection: Selection }) {
   const toast = useToast();
   const today = useToday();
   const actions = useEntryActions();
+  const { undoAction } = useUndo();
   const [panel, setPanel] = useState<'tags' | 'due' | null>(null);
   const cards = selection.ids.map((id) => index.byId.get(id)).filter((c): c is Card => !!c && !c.deleted);
   const editable = cards.filter((c) => permissions(c, vaults, shared).edit);
@@ -31,9 +33,11 @@ export function BatchBar({ selection }: { selection: Selection }) {
   const apply = async (edit: BatchEdit, done: (n: number) => string) => {
     const steps = planBatch(editable, edit, index.tagGroups.groupOf, today);
     if (!steps.length) return;
+    // A tag made for this (`BatchTags`) was asked for a moment ago, so it's part of the same action.
+    const action = repo.action();
     await Promise.all(steps.map((s) => repo.update(s.id, s.patch)));
     toast(`${done(steps.length)}${skipped(cards.length - editable.length)}`, {
-      action: { label: 'Undo', run: () => steps.forEach((s) => void repo.update(s.id, s.undo)) },
+      action: { label: 'Undo', run: () => void undoAction(action) },
     });
   };
 
@@ -45,12 +49,13 @@ export function BatchBar({ selection }: { selection: Selection }) {
 
   const targets = vaults.filter((v) => !locked.has(v.id) && (v.role ?? 'owner') !== 'viewer');
   const move = async (vaultId: string) => {
-    const moving = manageable.filter((c) => c.vaultId !== vaultId).map((c) => ({ id: c.id, from: c.vaultId }));
+    const moving = manageable.filter((c) => c.vaultId !== vaultId);
     if (!moving.length) return;
-    await Promise.all(moving.map((m) => repo.moveToVault(m.id, vaultId)));
+    const action = repo.action();
+    await Promise.all(moving.map((c) => repo.moveToVault(c.id, vaultId)));
     const name = vaults.find((v) => v.id === vaultId)?.name ?? 'another vault';
     toast(`Moved ${entries(moving.length)} to ${name}${skipped(cards.length - manageable.length)}`, {
-      action: { label: 'Undo', run: () => moving.forEach((m) => void repo.moveToVault(m.id, m.from)) },
+      action: { label: 'Undo', run: () => void undoAction(action) },
     });
   };
 

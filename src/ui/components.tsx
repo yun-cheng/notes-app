@@ -9,6 +9,7 @@ import { useCards } from '../state/CardsContext';
 import { Icon, type IconName } from './Icon';
 import { cardPath, entryPath, journalPath, sheetState } from './paths';
 import { useToast } from './Toast';
+import { useUndo } from './useUndo';
 import { usePopover } from './usePopover';
 import { colorClass } from './EntryStyle';
 import { DueLabel, useTickTodo } from './TodoDue';
@@ -354,14 +355,15 @@ export function TagPicker({ tagIds, onChange, autoFocus = false }: { tagIds: str
 export function VaultField({ card, compact = false }: { card: Card; compact?: boolean }) {
   const { repo, vaults, locked, shared } = useCards();
   const toast = useToast();
+  const { undoAction } = useUndo();
   // Only into vaults this account can write to.
   const options = vaults.filter((v) => !locked.has(v.id) && (v.role ?? 'owner') !== 'viewer');
   if (options.length < 2 || !permissions(card, vaults, shared).manage) return null;
   const move = (vaultId: string) => {
-    const from = card.vaultId;
+    const action = repo.action();
     void repo.moveToVault(card.id, vaultId);
     const name = vaults.find((v) => v.id === vaultId)?.name ?? 'another vault';
-    toast(`Moved to ${name}`, { action: { label: 'Undo', run: () => void repo.moveToVault(card.id, from) } });
+    toast(`Moved to ${name}`, { action: { label: 'Undo', run: () => void undoAction(action) } });
   };
   const select = (
     <select className={compact ? 'vault-select' : undefined} value={card.vaultId} aria-label={compact ? 'Vault' : undefined} title={compact ? 'Move to another vault' : undefined} onChange={(e) => move(e.target.value)}>
@@ -428,10 +430,12 @@ export function useDeleteCard() {
   const { repo } = useCards();
   const toast = useToast();
   const navigate = useNavigate();
+  const { undoAction } = useUndo();
   return (card: Card, goTo: string | null) => {
+    const action = repo.action();
     void repo.setDeleted(card.id, true);
     if (goTo) void navigate(goTo, { replace: true });
-    toast('Moved to Trash', { action: { label: 'Undo', run: () => void repo.setDeleted(card.id, false) } });
+    toast('Moved to Trash', { action: { label: 'Undo', run: () => void undoAction(action) } });
   };
 }
 

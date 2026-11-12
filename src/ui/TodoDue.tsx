@@ -7,6 +7,7 @@ import type { CardPatch } from '../storage/journal';
 import { useCards, useToday } from '../state/CardsContext';
 import { Icon } from './Icon';
 import { useToast } from './Toast';
+import { useUndo } from './useUndo';
 import { usePopover } from './usePopover';
 
 /**
@@ -17,11 +18,13 @@ export function useTickTodo() {
   const { repo } = useCards();
   const today = useToday();
   const toast = useToast();
+  const { undoAction } = useUndo();
   return (todo: TodoCard, { announce = false } = {}) => {
     if (todo.status === 'done') return void repo.update(todo.id, { status: 'open' });
-    const { patch, undo, next } = completeTodo(todo, today);
+    const { patch, next } = completeTodo(todo, today);
+    const action = repo.action();
     void repo.update(todo.id, patch);
-    const back = { label: 'Undo', run: () => void repo.update(todo.id, undo) };
+    const back = { label: 'Undo', run: () => void undoAction(action) };
     if (next) toast(`Done for now. “${displayTitle(todo)}” is due again ${relativeDayInSentence(next, today)}`, { action: back });
     else if (announce) toast(`Done: ${displayTitle(todo)}`, { action: back });
   };

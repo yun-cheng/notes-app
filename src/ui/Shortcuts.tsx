@@ -3,6 +3,7 @@ import { Fragment, useEffect } from 'react';
 export const isMac = typeof navigator !== 'undefined' && /Mac|iPhone|iPad/.test(navigator.platform);
 /** The command key as the keyboard shows it: ⌘ on a Mac, Ctrl elsewhere. */
 export const MOD = isMac ? '⌘' : 'Ctrl+';
+export const REDO_KEYS = isMac ? '⇧⌘Z' : 'Ctrl+Shift+Z';
 
 const GROUPS: { title: string; keys: [string, string][] }[] = [
   {
@@ -10,7 +11,8 @@ const GROUPS: { title: string; keys: [string, string][] }[] = [
     keys: [
       [`${MOD}K or /`, 'Commands and search'],
       ['?', 'These shortcuts'],
-      [`${MOD}Z`, 'Undo, when the note at the bottom offers it'],
+      [`${MOD}Z`, 'Undo the last change, outside a text box'],
+      [REDO_KEYS, 'Redo'],
     ],
   },
   {

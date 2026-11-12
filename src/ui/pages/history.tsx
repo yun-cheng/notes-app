@@ -16,6 +16,7 @@ import { Icon } from '../Icon';
 import { LockPanel } from '../LockPanel';
 import { cardPath } from '../paths';
 import { useToast } from '../Toast';
+import { useUndo } from '../useUndo';
 
 /** A row on the history page: a saved version, or this device's changes that haven't synced yet. */
 interface Entry {
@@ -77,6 +78,7 @@ function History({ card }: { card: Card }) {
   const { index, repo, vaults, shared } = useCards();
   const canEdit = permissions(card, vaults, shared).edit;
   const toast = useToast();
+  const { undoAction } = useUndo();
   const navigate = useNavigate();
   const [versions, setVersions] = useState<VersionInfo[] | null>(null);
   const [error, setError] = useState<string | null>(null);
@@ -153,11 +155,11 @@ function History({ card }: { card: Card }) {
   };
 
   const restore = async (version: Card, label: string) => {
-    const undo = restorePatch(card);
     // Keeps what is there now as its own version. If this fails, the restore still goes ahead.
     await sealVersions(card.id).catch(() => undefined);
+    const action = repo.action();
     await repo.update(card.id, restorePatch(version));
-    toast(`Restored the version from ${label}`, { action: { label: 'Undo', run: () => void repo.update(card.id, undo) } });
+    toast(`Restored the version from ${label}`, { action: { label: 'Undo', run: () => void undoAction(action) } });
     void navigate(cardPath(card));
   };
 

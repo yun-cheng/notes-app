@@ -1,4 +1,4 @@
-import { createContext, useCallback, useContext, useEffect, useRef, useState, type ReactNode } from 'react';
+import { createContext, useCallback, useContext, useRef, useState, type ReactNode } from 'react';
 
 interface ToastAction {
   label: string;
@@ -21,22 +21,6 @@ export function ToastProvider({ children }: { children: ReactNode }) {
     if (timer.current) clearTimeout(timer.current);
     setToast({ message, action: options?.action });
     if (!options?.sticky) timer.current = setTimeout(() => setToast(null), 7000);
-  }, []);
-
-  // Cmd/Ctrl+Z, outside text boxes (which have their own undo), takes the toast's Undo.
-  const latest = useRef(toast);
-  latest.current = toast;
-  useEffect(() => {
-    const onKey = (e: KeyboardEvent) => {
-      const action = latest.current?.action;
-      if (!(e.metaKey || e.ctrlKey) || e.shiftKey || e.altKey || e.key.toLowerCase() !== 'z' || action?.label !== 'Undo' || e.defaultPrevented) return;
-      if (e.target instanceof Element && e.target.closest('input, textarea, select, [contenteditable="true"]')) return;
-      e.preventDefault();
-      action.run();
-      setToast(null);
-    };
-    window.addEventListener('keydown', onKey);
-    return () => window.removeEventListener('keydown', onKey);
   }, []);
 
   return (

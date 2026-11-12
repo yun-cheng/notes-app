@@ -9,6 +9,7 @@ import { colorClass, ColorSwatches } from '../EntryStyle';
 import { Icon } from '../Icon';
 import { journalPath } from '../paths';
 import { useToast } from '../Toast';
+import { useUndo } from '../useUndo';
 import { usePopover } from '../usePopover';
 
 /** Moving tags in and out of groups, and making groups. A tag is in one group at most. */
@@ -179,6 +180,7 @@ function TagLink({ tag }: { tag: TagCard }) {
 function GroupBlock({ group }: { group: TagGroup }) {
   const { index, repo } = useCards();
   const toast = useToast();
+  const { undoAction } = useUndo();
   const edits = useGroupEdits();
   const [name, setName] = useState(group.title);
   const [adding, setAdding] = useState('');
@@ -196,8 +198,9 @@ function GroupBlock({ group }: { group: TagGroup }) {
     setAdding('');
   };
   const remove = () => {
+    const action = repo.action();
     void repo.setDeleted(group.id, true);
-    toast(`Removed the ${group.title} group. Its tags stay on entries.`, { action: { label: 'Undo', run: () => void repo.setDeleted(group.id, false) } });
+    toast(`Removed the ${group.title} group. Its tags stay on entries.`, { action: { label: 'Undo', run: () => void undoAction(action) } });
   };
 
   return (

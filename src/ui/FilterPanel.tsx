@@ -21,13 +21,19 @@ import {
 import { useCards, useToday } from '../state/CardsContext';
 import { colorClass } from './EntryStyle';
 import { Icon, type IconName } from './Icon';
-import { journalPath } from './paths';
+import { historyPath, journalPath } from './paths';
 
-/** The journal's filter, read from the address. Empty on any other page. */
+/** The filter in the address, on the pages it narrows: the journal, and the history of changes. Empty on any other page. */
 export function useJournalFilter(): StreamFilter {
   const { pathname } = useLocation();
   const [params] = useSearchParams();
-  return pathname === '/journal' ? parseFilter(params) : {};
+  return pathname === '/journal' || pathname === '/history' ? parseFilter(params) : {};
+}
+
+/** Where a filter leads from here: the history while that's the page showing, otherwise the journal. */
+export function useFilterPath(): (filter: StreamFilter) => string {
+  const { pathname } = useLocation();
+  return pathname === '/history' ? historyPath : journalPath;
 }
 
 const STATUS_TITLE: Record<TodoStatus, string> = { open: 'Open todos', done: 'Done todos', today: 'Due today', upcoming: 'Upcoming', undated: 'Todos with no date' };
@@ -89,6 +95,7 @@ const STATUSES: TodoStatus[] = ['open', 'today', 'upcoming', 'undated', 'done'];
 /**
  * Every way to narrow the journal, in the sidebar on a computer and in a sheet on a phone. Its order is `SortMenu`, in the top bar.
  * Each choice toggles: picking the chosen one again turns it off. Choices in different groups combine.
+ * On the history page the same choices narrow the history, and Journal and History switch between the two.
  */
 export function FilterPanel({ onPick }: { onPick?: () => void }) {
   const { index, vaults, locked } = useCards();
@@ -96,9 +103,11 @@ export function FilterPanel({ onPick }: { onPick?: () => void }) {
   const filter = useJournalFilter();
   const { pathname } = useLocation();
   const onJournal = pathname === '/journal';
+  const onHistory = pathname === '/history';
+  const path = useFilterPath();
 
-  const item = (key: string, label: ReactNode, next: StreamFilter, active: boolean, icon?: IconName, count?: number, tint = '') => (
-    <Link key={key} to={journalPath(next)} className={`nav-item${active ? ' active' : ''}`} aria-current={active ? 'page' : undefined} onClick={onPick}>
+  const link = (key: string, label: ReactNode, to: string, active: boolean, icon?: IconName, count?: number, tint = '') => (
+    <Link key={key} to={to} className={`nav-item${active ? ' active' : ''}`} aria-current={active ? 'page' : undefined} onClick={onPick}>
       {icon ? (
         <i className={`nav-item__icon${tint}`}>
           <Icon name={icon} />
@@ -110,6 +119,8 @@ export function FilterPanel({ onPick }: { onPick?: () => void }) {
       {count !== undefined && <span className="nav-item__count">{count}</span>}
     </Link>
   );
+  const item = (key: string, label: ReactNode, next: StreamFilter, active: boolean, icon?: IconName, count?: number, tint?: string) =>
+    link(key, label, path(next), active, icon, count, tint);
   const toggle = <K extends keyof StreamFilter>(key: K, value: StreamFilter[K]): StreamFilter => ({
     ...filter,
     [key]: filter[key] === value ? undefined : value,
@@ -127,7 +138,8 @@ export function FilterPanel({ onPick }: { onPick?: () => void }) {
   return (
     <div className="filters">
       <nav aria-label="Journal">
-        {item('all', 'Journal', { sort: filter.sort }, onJournal && !isFiltered(filter), 'notes')}
+        {link('all', 'Journal', journalPath(onHistory ? filter : { sort: filter.sort }), onJournal && !isFiltered(filter), 'notes')}
+        {link('history', 'History', historyPath(onJournal ? filter : { sort: filter.sort }), onHistory, 'history')}
       </nav>
 
       <FilterSection id="type" title="Type">
@@ -228,5 +240,22 @@ function FilterSection({ id, title, children }: { id: string; title: string; chi
       </h2>
       {shown}
     </nav>
+  );
+}
+
+/** The filters in a sheet, for a phone, where there's no sidebar. Picking one closes it. */
+export function FilterSheet({ onClose }: { onClose: () => void }) {
+  return (
+    <div className="dialog-backdrop" onClick={(e) => e.target === e.currentTarget && onClose()}>
+      <div className="dialog filter-sheet" role="dialog" aria-label="Filter">
+        <FilterPanel onPick={onClose} />
+        <div className="note-sheet__bar">
+          <span className="note-sheet__spacer" />
+          <button type="button" className="btn" onClick={onClose}>
+            Done
+          </button>
+        </div>
+      </div>
+    </div>
   );
 }

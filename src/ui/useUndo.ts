@@ -1,7 +1,8 @@
 import { useCallback } from 'react';
+import { useLocation, useSearchParams } from 'react-router';
 import { permissions } from '../domain/access';
 import { canRedo, canUndo, changeTitle, describeChange, matchesChange, nextRedo, nextUndo, type Change } from '../domain/changes';
-import type { StreamFilter } from '../domain/stream';
+import { isFiltered, parseFilter, type StreamFilter } from '../domain/stream';
 import type { Card } from '../domain/types';
 import { useCards, useToday } from '../state/CardsContext';
 import { useToast } from './Toast';
@@ -43,6 +44,18 @@ function summary(changes: Change[], currentOf: (change: Change) => Card | undefi
 type Pick = (changes: Change[], usable: (change: Change) => boolean) => Change[];
 
 /**
+ * What Undo and Redo keep to. On the history page narrowed by a filter, it's the changes that page shows, so
+ * the last change to a todo can be undone without touching anything else. Anywhere else, everything.
+ */
+export function useUndoScope(): StreamFilter | undefined {
+  const { pathname } = useLocation();
+  const [params] = useSearchParams();
+  if (pathname !== '/history') return undefined;
+  const filter = parseFilter(params);
+  return isFiltered(filter) ? filter : undefined;
+}
+
+/**
  * Undo and redo over everything this device changed. Each says what it did in a toast that offers the way back.
  * Changes are read through the repository, after any write still on its way, so undo right after an action
  * finds that action.
@@ -52,6 +65,7 @@ export function useUndo() {
   const canRevert = useCanRevert();
   const toast = useToast();
   const today = useToday();
+  const scope = useUndoScope();
 
   const run = useCallback(
     async (direction: Direction, pick: Pick): Promise<void> => {
@@ -72,14 +86,13 @@ export function useUndo() {
     [repo, canRevert, toast],
   );
 
-  const within = (filter: StreamFilter | undefined) => (changes: Change[]) =>
-    filter ? changes.filter((c) => matchesChange(c, filter, today)) : changes;
+  const within = (changes: Change[]) => (scope ? changes.filter((c) => matchesChange(c, scope, today)) : changes);
 
   return {
-    /** Takes back the last action, among the changes a filter shows if one is given. */
-    undo: (filter?: StreamFilter) => run('undo', (all, usable) => nextUndo(within(filter)(all), usable)),
+    /** Takes back the last action, among the changes in scope. */
+    undo: () => run('undo', (all, usable) => nextUndo(within(all), usable)),
     /** Puts back what was undone last. */
-    redo: (filter?: StreamFilter) => run('redo', (all, usable) => nextRedo(within(filter)(all), usable)),
+    redo: () => run('redo', (all, usable) => nextRedo(within(all), usable)),
     /** Takes back one action, named with `repo.action()` when it was made. */
     undoAction: (action: string) => run('undo', (all, usable) => all.filter((c) => c.group === action && usable(c))),
     /** Undoes or redoes these changes, by their place in the log. */

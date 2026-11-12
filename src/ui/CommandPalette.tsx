@@ -11,9 +11,9 @@ import type { Card } from '../domain/types';
 import { useCards, useToday } from '../state/CardsContext';
 import { useNewNote } from './components';
 import { LINK_STYLES, PHOTO_STYLES, setDisplayPrefs, type LinkStyle, type PhotoStyle } from './displayPrefs';
-import { useJournalFilter } from './FilterPanel';
+import { useFilterPath, useJournalFilter } from './FilterPanel';
 import { Icon, type IconName } from './Icon';
-import { cardPath, journalPath, sheetState } from './paths';
+import { cardPath, historyPath, journalPath, sheetState } from './paths';
 import { MOD, REDO_KEYS } from './Shortcuts';
 import { useToast } from './Toast';
 import { useSaveEntries } from './useSaveEntry';
@@ -53,18 +53,22 @@ export function CommandPalette({ onClose, onShortcuts }: { onClose: () => void; 
   const newNote = useNewNote();
   const { undo, redo } = useUndo();
   const current = useJournalFilter();
+  const filterPath = useFilterPath();
   const [query, setQuery] = useState('');
   const [active, setActive] = useState(0);
   const list = useRef<HTMLDivElement>(null);
   const engine = useMemo(() => buildSearch(index), [index]);
 
   const go = (to: string) => () => void navigate(to);
-  const narrow = (next: StreamFilter) => go(journalPath({ ...current, ...next }));
+  // A filter narrows the page it's picked on: the history from there, the journal from anywhere else.
+  const narrow = (next: StreamFilter) => go(filterPath({ ...current, ...next }));
+  const order = (sort: StreamFilter['sort']) => go(journalPath({ ...current, sort }));
 
   const commands = (() => {
     const all: Command[] = [
       { id: 'new-note', group: 'Write', label: 'New note', icon: 'plus', keywords: 'create add', run: () => void newNote() },
       { id: 'go-journal', group: 'Go to', label: 'Journal', icon: 'notes', keywords: 'home all everything', run: go('/journal') },
+      { id: 'go-history', group: 'Go to', label: 'History', icon: 'history', keywords: 'changes recent activity log undo redo', run: go(historyPath(current)) },
       { id: 'go-calendar', group: 'Go to', label: 'Calendar', icon: 'calendar', keywords: 'month day date', run: go('/calendar') },
       { id: 'go-search', group: 'Go to', label: 'Search', icon: 'search', keywords: 'find', run: go('/search') },
       { id: 'go-tags', group: 'Go to', label: 'All tags', icon: 'tag', keywords: 'labels folders', run: go('/tags') },
@@ -73,7 +77,7 @@ export function CommandPalette({ onClose, onShortcuts }: { onClose: () => void; 
       { id: 'undo', group: 'Edit', label: 'Undo', hint: `${MOD}Z`, icon: 'undo', keywords: 'take back revert last change', run: () => void undo() },
       { id: 'redo', group: 'Edit', label: 'Redo', hint: REDO_KEYS, icon: 'redo', keywords: 'put back again', run: () => void redo() },
       { id: 'shortcuts', group: 'Help', label: 'Keyboard shortcuts', hint: '?', keywords: 'keys help copy paste select', run: onShortcuts },
-      { id: 'show-all', group: 'Filter', label: 'Show everything', icon: 'notes', keywords: 'clear reset all', run: go(journalPath({ sort: current.sort })) },
+      { id: 'show-all', group: 'Filter', label: 'Show everything', icon: 'notes', keywords: 'clear reset all', run: go(filterPath({ sort: current.sort })) },
     ];
     for (const type of Object.keys(TYPE_LABEL) as EntryType[]) {
       all.push({ id: `type-${type}`, group: 'Filter', label: `Show ${TYPE_LABEL[type].toLowerCase()}`, icon: TYPE_ICON[type], keywords: 'type only', run: narrow({ type, status: undefined }) });
@@ -101,10 +105,10 @@ export function CommandPalette({ onClose, onShortcuts }: { onClose: () => void; 
       all.push({ id: `photos-${photos}`, group: 'Display', label: `Photos: ${PHOTO_STYLES[photos].toLowerCase()}`, icon: 'image', keywords: 'pictures images preview style size', run: () => setDisplayPrefs({ photos }) });
     }
     for (const sort of Object.keys(SORT_LABEL) as BaseSort[]) {
-      all.push({ id: `sort-${sort}`, group: 'Sort', label: `Sort: ${SORT_LABEL[sort].toLowerCase()}`, icon: 'upcoming', keywords: 'order', run: narrow({ sort }) });
+      all.push({ id: `sort-${sort}`, group: 'Sort', label: `Sort: ${SORT_LABEL[sort].toLowerCase()}`, icon: 'upcoming', keywords: 'order', run: order(sort) });
     }
     for (const g of index.tagGroups.groups.filter((x) => x.ordered)) {
-      all.push({ id: `sort-group-${g.id}`, group: 'Sort', label: `Sort: by ${g.title.toLowerCase()}`, icon: 'upcoming', keywords: 'order group rank', run: narrow({ sort: `group:${g.id}` }) });
+      all.push({ id: `sort-group-${g.id}`, group: 'Sort', label: `Sort: by ${g.title.toLowerCase()}`, icon: 'upcoming', keywords: 'order group rank', run: order(`group:${g.id}`) });
     }
     const unlocked = vaults.filter((v) => v.lock === 'pin' && !locked.has(v.id));
     if (unlocked.length) {

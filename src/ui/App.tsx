@@ -10,6 +10,7 @@ import { Icon, type IconName } from './Icon';
 import { ConnectPage } from './pages/ai';
 import { PublicPage } from './pages/public';
 import { CardPage, DayPage } from './pages/cards';
+import { ChangesPage } from './pages/changes';
 import { HistoryPage } from './pages/history';
 import { SettingsPage } from './pages/SettingsPage';
 import { VaultPage, VaultsPage } from './pages/vaults';
@@ -185,6 +186,7 @@ function SignedInApp() {
           <Route path="journal" element={<JournalPage />}>
             <Route path=":id" element={<EntrySheet />} />
           </Route>
+          <Route path="history" element={<ChangesPage />} />
           <Route path="notes/:id?" element={<OldNoteRedirect />} />
           <Route path="tags" element={<TagsPage />} />
           <Route path="vaults" element={<VaultsPage />} />

@@ -10,7 +10,7 @@ import { useCards, useToday } from '../../state/CardsContext';
 import { Comments } from '../Comments';
 import { Backlinks, Empty, Page, TagChips, TagPicker, TitleField, useDeleteCard, VaultField } from '../components';
 import { Editor } from '../editor/Editor';
-import { FilterPanel, SortMenu, useFilterTitle, useJournalFilter } from '../FilterPanel';
+import { FilterSheet, SortMenu, useFilterTitle, useJournalFilter } from '../FilterPanel';
 import { Icon } from '../Icon';
 import { MOD } from '../Shortcuts';
 import { LockPanel } from '../LockPanel';
@@ -130,19 +130,7 @@ export function JournalPage() {
             </div>
           </>
         )}
-        {filtering && (
-          <div className="dialog-backdrop" onClick={(e) => e.target === e.currentTarget && setFiltering(false)}>
-            <div className="dialog filter-sheet" role="dialog" aria-label="Filter">
-              <FilterPanel onPick={() => setFiltering(false)} />
-              <div className="note-sheet__bar">
-                <span className="note-sheet__spacer" />
-                <button type="button" className="btn" onClick={() => setFiltering(false)}>
-                  Done
-                </button>
-              </div>
-            </div>
-          </div>
-        )}
+        {filtering && <FilterSheet onClose={() => setFiltering(false)} />}
         <Outlet />
       </Page>
     </SelectionProvider>

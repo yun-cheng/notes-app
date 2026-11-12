@@ -11,6 +11,12 @@ export function journalPath(filter: StreamFilter): string {
   return query ? `/journal?${query}` : '/journal';
 }
 
+/** The history of changes, narrowed the way the journal is. */
+export function historyPath(filter: StreamFilter): string {
+  const query = filterParams(filter).toString();
+  return query ? `/history?${query}` : '/history';
+}
+
 export const opensInSheet = (card: Card) => card.type === 'note' || card.type === 'todo';
 
 export const cardPath = (card: Card) => (card.type === 'diary' ? `/day/${card.date}` : opensInSheet(card) ? entryPath(card.id) : `/card/${card.id}`);

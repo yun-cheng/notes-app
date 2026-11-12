@@ -208,6 +208,11 @@ None. Defaults chosen while building are listed in the implementation notes, and
 - Undo needs the same access as the change: a viewer can't, and undoing a move needs write access to the vault the card goes back to.
 - Undo in a toast (ticking a todo, Trash, a move, a batch change, paste, turning a note into a todo, restoring a version) takes back that action from the log, so it follows the same rules.
 - Restoring a backup, changes from sync and conflict copies aren't logged.
+- History, in the sidebar and the command box, is the log as a page (`/history`): each action newest first, grouped by day, with what it did, the entry, the time, the lines it changed on request, and Undo or Redo for that change alone. An action that changed several entries is shown together, with Undo all. A change whose entry was changed again later says so, and offers no button until the later change comes off.
+- The history takes the journal's filters (decided 2026-11-13). On the History page the sidebar's filters stay on it: open todos, one tag, one vault, a day. A change is shown when its entry passed the filter before the change or after it, so "Done" shows the ticking and "Open" shows it too. Journal and History switch between the two views and keep the filter.
+- On a filtered history, Cmd+Z, the command box and the page's undo and redo buttons keep to the changes shown, so the last change to a tag's entries can be undone without touching anything else. Everywhere else they act on the whole log.
+- Changes in a locked vault are listed as "Locked entry" with no button, and only under that vault or with no filter; a hidden vault's changes aren't listed until it's unlocked.
+- Not in the history yet: changes made on other devices, by other people and by AI apps. Showing them needs the server's versions across cards.
 
 ## Implementation notes from Milestone 4
 

@@ -51,11 +51,22 @@ interface CardCommon extends CardEnvelope {
 export interface NoteCard extends CardCommon {
   type: 'note';
 }
+/** How a todo comes back: every N days, weeks, months or years, or every weekday (Monday to Friday, `every` 1). */
+export type RepeatUnit = 'day' | 'week' | 'month' | 'year' | 'weekday';
+export interface Repeat {
+  unit: RepeatUnit;
+  every: number;
+}
+
 export interface TodoCard extends CardCommon {
   type: 'todo';
   status: 'open' | 'done';
   /** Local date key (YYYY-MM-DD), or null for no due date. */
   due: string | null;
+  /** Local time on the due date (HH:MM, 24-hour). Missing or null: any time that day. */
+  dueTime?: string | null;
+  /** Set on a repeating todo: ticking it moves `due` to the next time instead of finishing it. See `repeat.ts`. */
+  repeat?: Repeat | null;
   completedAt: number | null;
 }
 export interface DiaryCard extends CardCommon {

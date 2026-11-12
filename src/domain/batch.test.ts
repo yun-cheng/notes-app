@@ -25,6 +25,21 @@ describe('batch edits', () => {
     expect(planBatch([a, t, done], { kind: 'due', due: null })).toEqual([{ id: 't', patch: { due: null }, undo: { due: '2026-11-12' } }]);
   });
 
+  it('moves a repeating todo on instead of finishing it', () => {
+    const gym = todo('g', '2026-11-12', { repeat: { unit: 'day', every: 2 } });
+    expect(planBatch([t, gym], { kind: 'status', status: 'done' }, new Map(), '2026-11-12')).toEqual([
+      { id: 't', patch: { status: 'done' }, undo: { status: 'open' } },
+      { id: 'g', patch: { due: '2026-11-14' }, undo: { due: '2026-11-12' } },
+    ]);
+  });
+
+  it('takes the time and repeat off with the due date', () => {
+    const gym = todo('g', '2026-11-12', { dueTime: '18:00', repeat: { unit: 'week', every: 1 } });
+    expect(planBatch([gym], { kind: 'due', due: null })).toEqual([
+      { id: 'g', patch: { due: null, dueTime: null, repeat: null }, undo: { due: '2026-11-12', dueTime: '18:00', repeat: { unit: 'week', every: 1 } } },
+    ]);
+  });
+
   it('swaps a tag from a one-choice group for the one already there', () => {
     const prio = buildTagGroups([tag('hi', 'High'), tag('lo', 'Low'), { ...tag('p', 'Priority'), members: ['hi', 'lo'], choice: 'one' }]);
     const high = note('x', 'X', { tags: ['work', 'hi'] });

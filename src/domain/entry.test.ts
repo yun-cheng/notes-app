@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { appendToDoc, entriesFromDoc, parseDue, parseEntries, parseEntry } from './entry';
+import { appendToDoc, dueWord, entriesFromDoc, parseDue, parseEntries, parseEntry } from './entry';
 import type { JSONNode } from './types';
 import { textToDoc } from './content';
 import { EMPTY_DOC } from './types';
@@ -153,6 +153,37 @@ describe('parseDue', () => {
     expect(parseDue('fri', TODAY)).toBe('2026-11-13');
     expect(parseDue('monday', TODAY)).toBe('2026-11-16');
     expect(parseDue('thu', TODAY)).toBe('2026-11-19');
+  });
+});
+
+describe('due times and repeats', () => {
+  const when = (text: string) => {
+    const e = parseEntry(text, TODAY);
+    return e && { title: e.title, due: e.due, dueTime: e.dueTime, repeat: e.repeat };
+  };
+
+  it('reads a time and a repeat beside the date, in any order', () => {
+    expect(when('[] Pay rent @monthly @2026-12-01 @9am')).toEqual({ title: 'Pay rent', due: '2026-12-01', dueTime: '09:00', repeat: { unit: 'month', every: 1 } });
+    expect(when('[] Water plants @every-3-days @fri')).toEqual({ title: 'Water plants', due: '2026-11-13', dueTime: undefined, repeat: { unit: 'day', every: 3 } });
+  });
+
+  it('starts a time or a repeat with no date today', () => {
+    expect(when('[] Call the dentist @3:30pm')).toEqual({ title: 'Call the dentist', due: TODAY, dueTime: '15:30', repeat: undefined });
+    expect(when('[] Standup @weekdays @9:30')).toEqual({ title: 'Standup', due: TODAY, dueTime: '09:30', repeat: { unit: 'weekday', every: 1 } });
+  });
+
+  it('leaves other @ words, and times on notes, as typed', () => {
+    expect(when('[] Ask @bob about 3pm')?.title).toBe('Ask @bob about 3pm');
+    expect(parseEntry('Lunch @1pm with Sam', TODAY)?.content).toEqual(textToDoc('Lunch @1pm with Sam'));
+  });
+
+  it('reads them from the journal box too', () => {
+    const doc: JSONNode = { type: 'doc', content: [{ type: 'taskList', content: [{ type: 'taskItem', attrs: { checked: false }, content: [{ type: 'paragraph', content: [{ type: 'text', text: 'Gym @weekly @18:00' }] }] }] }] };
+    expect(entriesFromDoc(doc, TODAY)).toMatchObject([{ kind: 'todo', title: 'Gym', due: TODAY, dueTime: '18:00', repeat: { unit: 'week', every: 1 } }]);
+  });
+
+  it('says what an @ word sets', () => {
+    expect(['fri', '3pm', 'weekly', 'bob'].map((w) => dueWord(w, TODAY))).toEqual(['date', 'time', 'repeat', null]);
   });
 });
 

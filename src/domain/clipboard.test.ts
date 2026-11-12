@@ -22,6 +22,19 @@ describe('copying entries', () => {
     expect(entriesText([done, call, plan], tagName, linkTitle)).toBe('[x] Call mum\n[ ] Call dad\n\n[ ] Plan trip @2026-11-20 #work\nBook the train');
   });
 
+  it('carries a due time and repeat both ways', () => {
+    const gym = todo('g', '2026-11-16', { title: 'Gym', dueTime: '18:00', repeat: { unit: 'week', every: 2 } });
+    const text = entriesText([gym], tagName, linkTitle);
+    expect(text).toBe('[ ] Gym @2026-11-16 @18:00 @every-2-weeks');
+    expect(parseEntries(text, '2026-11-12')).toMatchObject([{ title: 'Gym', due: '2026-11-16', dueTime: '18:00', repeat: { unit: 'week', every: 2 } }]);
+    expect(decodeEntries(encodeEntries(toEntries([gym], tagName)))).toMatchObject([{ dueTime: '18:00', repeat: { unit: 'week', every: 2 } }]);
+  });
+
+  it('drops a time or repeat it does not understand, and keeps the todo', () => {
+    const raw = JSON.stringify({ app: 'notes', version: 1, entries: [{ kind: 'todo', title: 'X', content: { type: 'doc' }, tags: [], due: '2026-11-16', dueTime: '25:00', repeat: { unit: 'hour', every: 1 } }] });
+    expect(decodeEntries(raw)).toEqual([{ kind: 'todo', title: 'X', content: { type: 'doc' }, tags: [], due: '2026-11-16' }]);
+  });
+
   it('reads back as the same todos when typed into the journal', () => {
     const back = parseEntries(entriesText([plan, done], tagName, linkTitle), '2026-11-12');
     expect(back.map((e) => [e.kind, e.title, e.due, e.done ?? false, e.tags])).toEqual([

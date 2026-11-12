@@ -1,5 +1,6 @@
 import { plainText } from './content';
-import type { Card, JSONNode } from './types';
+import { repeatLabel } from './repeat';
+import type { Card, JSONNode, Repeat } from './types';
 
 export type Piece = { kind: 'same' | 'added' | 'removed'; text: string };
 /** One line of a comparison. A changed line carries word-level pieces. */
@@ -44,7 +45,8 @@ export function cardLines(card: Card, titleOf?: TitleOf, tagName: (id: string) =
   if (card.type !== 'diary') lines.push(`Title: ${card.title.trim() || 'Untitled'}`);
   if (card.type === 'todo') {
     lines.push(`Status: ${card.status === 'done' ? 'Done' : 'Open'}`);
-    if (card.due) lines.push(`Due: ${card.due}`);
+    if (card.due) lines.push(`Due: ${card.due}${card.dueTime ? ` ${card.dueTime}` : ''}`);
+    if (card.repeat) lines.push(`Repeats: ${repeatLabel(card.repeat)}`);
   }
   if (card.tags.length) lines.push(`Tags: ${card.tags.map(tagName).join(', ')}`);
   for (const block of card.content.content ?? []) lines.push(...blockLines(block, titleOf));
@@ -178,6 +180,8 @@ export interface RestoreFields {
   tags?: string[];
   status?: 'open' | 'done';
   due?: string | null;
+  dueTime?: string | null;
+  repeat?: Repeat | null;
   pinned?: boolean;
 }
 
@@ -187,7 +191,7 @@ export function restorePatch(version: Card): RestoreFields {
     case 'note':
       return { title: version.title, content: version.content, tags: version.tags };
     case 'todo':
-      return { title: version.title, content: version.content, tags: version.tags, status: version.status, due: version.due };
+      return { title: version.title, content: version.content, tags: version.tags, status: version.status, due: version.due, dueTime: version.dueTime ?? null, repeat: version.repeat ?? null };
     case 'tag':
       return { title: version.title, content: version.content, pinned: version.pinned };
     case 'diary':

@@ -1,6 +1,7 @@
 import { strToU8, zipSync } from 'fflate';
 import { linkTitle, resolveTags, type CardIndex } from './cardIndex';
 import { toMarkdown } from './markdown';
+import { repeatWord } from './repeat';
 import { CARD_TYPES, type Card, type Vault } from './types';
 
 export interface MarkdownFile {
@@ -34,6 +35,8 @@ export function markdownFiles(index: CardIndex): MarkdownFile[] {
     if (card.type === 'todo') {
       front.push(`status: ${card.status}`);
       if (card.due) front.push(`due: ${card.due}`);
+      if (card.due && card.dueTime) front.push(`time: "${card.dueTime}"`);
+      if (card.due && card.repeat) front.push(`repeat: ${repeatWord(card.repeat)}`);
     }
     const tags = resolveTags(index, card.tags);
     if (tags.length) front.push(`tags: [${tags.map((t) => yamlString(t.title)).join(', ')}]`);

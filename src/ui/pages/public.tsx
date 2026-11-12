@@ -3,7 +3,7 @@ import { EditorContent, useEditor } from '@tiptap/react';
 import { StarterKit } from '@tiptap/starter-kit';
 import { useEffect, useState } from 'react';
 import { useParams } from 'react-router';
-import { formatDay } from '../../domain/dates';
+import { formatDay, formatTime } from '../../domain/dates';
 import type { JSONNode } from '../../domain/types';
 import { fetchPublicCard, type PublicCard } from '../../sync/http';
 
@@ -73,7 +73,7 @@ export function PublicPage() {
             {card.type === 'todo' && (
               <p className="prose-note">
                 {card.status === 'done' ? 'Done' : 'To do'}
-                {card.due ? ` · due ${formatDay(card.due)}` : ''}
+                {card.due ? ` · due ${formatDay(card.due)}${card.due_time ? `, ${formatTime(card.due_time)}` : ''}` : ''}
               </p>
             )}
             <Body content={card.content} token={token} />

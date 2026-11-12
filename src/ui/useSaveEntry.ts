@@ -77,7 +77,16 @@ export function useSaveEntries() {
           ? { content: appendToDoc(diary.content, entry.content), tags: [...new Set([...diary.tags, ...tags])] }
           : { content: entry.content, tags };
       } else if (entry.kind === 'todo') {
-        ids.push((await repo.createTodo({ title: entry.title, content: entry.content, tags, due: entry.due, done: entry.done, vaultId: opts.vaultId })).id);
+        ids.push((await repo.createTodo({
+            title: entry.title,
+            content: entry.content,
+            tags,
+            due: entry.due,
+            dueTime: entry.dueTime,
+            repeat: entry.repeat,
+            done: entry.done,
+            vaultId: opts.vaultId,
+          })).id);
       } else {
         ids.push((await repo.createNote({ title: entry.title, content: entry.content, tags, vaultId: opts.vaultId })).id);
       }

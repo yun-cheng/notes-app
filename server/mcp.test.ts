@@ -86,6 +86,18 @@ describe('MCP server', () => {
     expect((await tool('list_todos')).text).toBe('No todos match.');
     expect((await tool('list_todos', { status: 'done' })).text).toContain('Book hotel (todo, done');
   });
+  it('adds todos with a time and a repeat, and moves a repeating one on when completed', async () => {
+    const { tool } = await world();
+    const added = await tool('add_todo', { title: 'Gym', due: '2099-01-05', time: '18:00', repeat: 'weekly' });
+    expect(added.text).toMatch(/^Added "Gym" due 2099-01-05 18:00, repeats weekly \(id: /);
+    const id = /id: ([^)]+)/.exec(added.text)![1];
+    expect((await tool('complete_todo', { id })).text).toBe('Done for now: "Gym" repeats, and is next due 2099-01-12.');
+    expect((await tool('get_card', { id })).text).toContain('Status: open · Due: 2099-01-12 18:00, repeats weekly');
+    expect((await tool('edit_card', { id, repeat: null, time: null })).text).toBe('Updated the time, repeat of "Gym".');
+    expect((await tool('get_card', { id })).text).toContain('Status: open · Due: 2099-01-12\n');
+    expect((await tool('add_todo', { title: 'X', repeat: 'fortnightly' })).error).toBe(true);
+    expect((await tool('add_todo', { title: 'X', time: '6pm' })).error).toBe(true);
+  });
   it('creates notes that sync to devices, with history marked as the app', async () => {
     const { tool, pull, call, ann } = await world();
     const made = await tool('create_note', { title: 'Ideas', markdown: '- see [[Tokyo plan]]\n- **rest**', tags: ['Travel', 'Someday'] });

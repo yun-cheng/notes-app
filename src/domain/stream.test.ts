@@ -95,6 +95,14 @@ describe('sorting', () => {
     expect(run('edited')).toEqual(['later@2026-11-09', 'soon@2026-11-11', `old@${TODAY}`]);
   });
   it('can order by due date, with undated entries after', () => expect(run('due')).toEqual([`soon@${TODAY}`, 'later@2026-11-20', 'old@']));
+  it('orders a day by due time, with todos due any time that day after', () => {
+    const day = [
+      todo('any', TODAY, { createdAt: 1 }),
+      todo('late', TODAY, { dueTime: '18:00', createdAt: 2 }),
+      todo('early', TODAY, { dueTime: '09:00', createdAt: 3 }),
+    ];
+    expect(ids(streamItems(buildIndex(day), { sort: 'due' }, TODAY))).toEqual([`early@${TODAY}`, `late@${TODAY}`, `any@${TODAY}`]);
+  });
   it('can order by an ordered tag group, highest first, each under its tag, then entries with none', () => {
     const prio = { ...tag('p', 'Priority'), members: ['hi', 'lo'], choice: 'one' as const, ordered: true };
     const tagged = [tag('hi', 'High'), tag('lo', 'Low'), prio, { ...cards[0], tags: ['lo'] }, cards[1], { ...cards[2], tags: ['hi'] }];

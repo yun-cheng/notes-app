@@ -1,7 +1,8 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
 import { useLocation, useNavigate } from 'react-router';
 import { displayTitle } from '../domain/content';
-import { relativeDayInSentence } from '../domain/dates';
+import { formatTime, relativeDayInSentence } from '../domain/dates';
+import { repeatLabel } from '../domain/repeat';
 import { parseEntry } from '../domain/entry';
 import { sortVaults } from '../domain/locks';
 import { buildSearch } from '../domain/search';
@@ -120,7 +121,9 @@ export function CommandPalette({ onClose, onShortcuts }: { onClose: () => void; 
     writing = entry.kind !== 'note' || entry.tags.length > 0;
     const where = entry.kind === 'todo' ? 'as a todo' : entry.kind === 'diary' ? "to today's diary" : 'as a note';
     const tags = entry.tags.length ? `, tagged ${entry.tags.map((t) => `#${t}`).join(' ')}` : '';
-    const due = entry.due ? `, due ${relativeDayInSentence(entry.due, today)}` : '';
+    const at = entry.dueTime ? ` at ${formatTime(entry.dueTime)}` : '';
+    const repeats = entry.repeat ? `, ${repeatLabel(entry.repeat).toLowerCase()}` : '';
+    const due = entry.due ? `, due ${relativeDayInSentence(entry.due, today)}${at}${repeats}` : '';
     const write = (todo: boolean) => () =>
       void saveText(text, { todo }).then((result) => {
         if (result.saved) toast(result.saved === 1 ? 'Saved to the journal' : `Saved ${result.saved} entries to the journal`, { action: { label: 'Show', run: () => void navigate('/journal') } });

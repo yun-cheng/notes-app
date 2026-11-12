@@ -1,5 +1,6 @@
 import type { Context, Hono } from 'hono';
 import { photoIds, walk } from '../src/domain/content';
+import { isTimeKey } from '../src/domain/dates';
 import type { CardPayload } from '../src/domain/types';
 import { allows, cardAccess, sharedWith } from './access';
 import { randomToken } from './auth';
@@ -60,6 +61,7 @@ interface PublicCard {
   content: unknown;
   status: string | null;
   due: string | null;
+  due_time: string | null;
   updated_at: number;
 }
 
@@ -92,6 +94,7 @@ export function publicRoutes(app: Hono<AppEnv>, googleFetch: GoogleFetch, now: (
       content: p.content,
       status: p.type === 'todo' ? p.status : null,
       due: p.type === 'todo' ? p.due : null,
+      due_time: p.type === 'todo' && p.due && isTimeKey(p.dueTime) ? p.dueTime : null,
       updated_at: card.updated_at,
     });
   });

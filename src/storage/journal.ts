@@ -1,4 +1,4 @@
-import type { CardColor, DiaryCard, JSONNode, PreviewStyle } from '../domain/types';
+import type { CardColor, DiaryCard, JSONNode, PreviewStyle, Repeat } from '../domain/types';
 
 export interface CardPatch {
   title?: string;
@@ -6,6 +6,10 @@ export interface CardPatch {
   tags?: string[];
   status?: 'open' | 'done';
   due?: string | null;
+  /** null for any time that day. */
+  dueTime?: string | null;
+  /** null to stop repeating. */
+  repeat?: Repeat | null;
   pinned?: boolean;
   /** Replaces the whole style; `{}` goes back to the device's setting. */
   preview?: PreviewStyle;

@@ -59,6 +59,36 @@ export function relativeDay(key: string, today: string, locale?: string): string
   return parseDateKey(key).toLocaleDateString(locale, opts);
 }
 
+/** A time of day as stored: `HH:MM`, 24-hour, local. */
+export function isTimeKey(s: unknown): s is string {
+  return typeof s === 'string' && /^([01]\d|2[0-3]):[0-5]\d$/.test(s);
+}
+
+/** `15:00`, `9:30`, `3pm`, `3:30pm`, `9am` or `9a` as a time key. A bare number isn't a time. */
+export function parseTime(word: string): string | null {
+  const m = /^(\d{1,2})(?::(\d{2}))?([ap]m?)?$/i.exec(word);
+  if (!m || (!m[2] && !m[3])) return null;
+  let hour = Number(m[1]);
+  const minute = m[2] ? Number(m[2]) : 0;
+  if (minute > 59) return null;
+  if (m[3]) {
+    if (hour < 1 || hour > 12) return null;
+    hour = (hour % 12) + (m[3][0].toLowerCase() === 'p' ? 12 : 0);
+  } else if (hour > 23) return null;
+  return `${pad(hour)}:${pad(minute)}`;
+}
+
+/** The time key of a moment, for comparing with a stored time. */
+export function toTimeKey(d: Date): string {
+  return `${pad(d.getHours())}:${pad(d.getMinutes())}`;
+}
+
+/** "3:00 PM" or "15:00", as the locale writes times. */
+export function formatTime(key: string, locale?: string): string {
+  const [h, m] = key.split(':').map(Number);
+  return new Date(2000, 0, 1, h, m).toLocaleTimeString(locale, { hour: 'numeric', minute: '2-digit' });
+}
+
 /** `relativeDay` for the middle of a sentence: "due today", but "due Tue, Nov 10". */
 export function relativeDayInSentence(key: string, today: string, locale?: string): string {
   const day = relativeDay(key, today, locale);

@@ -1,5 +1,6 @@
 import { withTag, type TagGroup } from './tagGroups';
-import type { Card } from './types';
+import { completeTodo } from './todos';
+import type { Card, Repeat } from './types';
 
 /** A change applied to many entries at once. */
 export type BatchEdit =
@@ -13,6 +14,8 @@ export interface BatchPatch {
   tags?: string[];
   status?: 'open' | 'done';
   due?: string | null;
+  dueTime?: string | null;
+  repeat?: Repeat | null;
 }
 
 /** One card's change, with the patch that puts it back. */
@@ -24,9 +27,11 @@ export interface BatchStep {
 
 /**
  * What a batch edit changes, card by card. Cards it doesn't apply to (a todo status on a note) or that already
- * match are left out, so the count shown and the undo cover only real changes.
+ * match are left out, so the count shown and the undo cover only real changes. Marking a repeating todo done
+ * moves it to its next due date (`today` is when it's done), and taking a todo's date off takes its time and
+ * repeat with it.
  */
-export function planBatch(cards: Card[], edit: BatchEdit, groupOf: Map<string, TagGroup> = new Map()): BatchStep[] {
+export function planBatch(cards: Card[], edit: BatchEdit, groupOf: Map<string, TagGroup> = new Map(), today = ''): BatchStep[] {
   const steps: BatchStep[] = [];
   for (const card of cards) {
     if (card.type === 'tag') continue;
@@ -36,9 +41,15 @@ export function planBatch(cards: Card[], edit: BatchEdit, groupOf: Map<string, T
     } else if (edit.kind === 'remove-tag' && card.tags.includes(edit.tagId)) {
       steps.push({ id: card.id, patch: { tags: card.tags.filter((t) => t !== edit.tagId) }, undo: { tags: card.tags } });
     } else if (edit.kind === 'status' && card.type === 'todo' && card.status !== edit.status) {
-      steps.push({ id: card.id, patch: { status: edit.status }, undo: { status: card.status } });
+      const { patch, undo } = edit.status === 'done' ? completeTodo(card, today) : { patch: { status: edit.status }, undo: { status: card.status } };
+      steps.push({ id: card.id, patch, undo });
     } else if (edit.kind === 'due' && card.type === 'todo' && card.due !== edit.due) {
-      steps.push({ id: card.id, patch: { due: edit.due }, undo: { due: card.due } });
+      const clears = edit.due === null && (card.dueTime || card.repeat);
+      steps.push({
+        id: card.id,
+        patch: { due: edit.due, ...(clears ? { dueTime: null, repeat: null } : {}) },
+        undo: { due: card.due, ...(clears ? { dueTime: card.dueTime ?? null, repeat: card.repeat ?? null } : {}) },
+      });
     }
   }
   return steps;

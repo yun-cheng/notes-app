@@ -22,6 +22,7 @@ import { colorClass, StyleMenu } from '../EntryStyle';
 import { BatchBar } from '../BatchBar';
 import { SelectionProvider, useBoxSelect, useSelectable, useSelection, useSelectionState } from '../selection';
 import { useEntryShortcuts } from '../useEntryShortcuts';
+import { DueLabel, DueMenu, useTickTodo } from '../TodoDue';
 
 const time = (at: number) => new Date(at).toLocaleTimeString(undefined, { hour: 'numeric', minute: '2-digit' });
 
@@ -218,15 +219,13 @@ function useLines(card: NoteCard | TodoCard | DiaryCard) {
   return previewLines(card.content, (id, label) => linkTitle(index, id, label));
 }
 
-function BubbleMeta({ card, at, due, fold }: { card: NoteCard | TodoCard | DiaryCard; at: number; due?: string | null; fold: Fold }) {
-  const today = useToday();
+function BubbleMeta({ card, at, fold }: { card: NoteCard | TodoCard | DiaryCard; at: number; fold: Fold }) {
   const { repo, vaults, shared } = useCards();
   // A grouped tag (Priority: High) can be switched right here.
   const retag = permissions(card, vaults, shared).edit ? (tags: string[]) => void repo.update(card.id, { tags }) : undefined;
-  const overdue = card.type === 'todo' && card.status === 'open' && !!due && due < today;
   return (
     <span className="bubble__meta">
-      {due && <span className={`bubble__due${overdue ? ' is-alert' : ''}`}>Due {relativeDayInSentence(due, today)}</span>}
+      {card.type === 'todo' && <DueLabel todo={card} className="bubble__due" />}
       <TagChips tagIds={card.tags} onChange={retag} />
       {(fold.long || fold.folded) && (
         <button type="button" className="bubble__fold" aria-expanded={!fold.folded} onClick={fold.toggle}>
@@ -352,7 +351,8 @@ function NoteBubble({ note, at }: { note: NoteCard; at: number }) {
 }
 
 function TodoBubble({ todo, at }: { todo: TodoCard; at: number }) {
-  const { repo, vaults, shared } = useCards();
+  const { vaults, shared } = useCards();
+  const tick = useTickTodo();
   const lines = useLines(todo);
   const text = useFold(todo.id, lines);
   const done = todo.status === 'done';
@@ -366,7 +366,7 @@ function TodoBubble({ todo, at }: { todo: TodoCard; at: number }) {
           checked={done}
           disabled={!permissions(todo, vaults, shared).edit}
           aria-label={`Mark "${displayTitle(todo)}" ${done ? 'not done' : 'done'}`}
-          onChange={() => void repo.update(todo.id, { status: done ? 'open' : 'done' })}
+          onChange={() => tick(todo)}
         />
       </label>
       <div className="bubble__body">
@@ -374,7 +374,7 @@ function TodoBubble({ todo, at }: { todo: TodoCard; at: number }) {
           <LinkedText text={displayTitle(todo)} />
         </span>
         {text.view}
-        <BubbleMeta card={todo} at={at} due={todo.due} fold={text.fold} />
+        <BubbleMeta card={todo} at={at} fold={text.fold} />
       </div>
       <BubbleTools card={todo} open={open} />
     </div>
@@ -461,7 +461,7 @@ export function EntrySheet() {
 
 function EntryDetail({ card, fresh, onClose }: { card: NoteCard | TodoCard; fresh: boolean; onClose: () => void }) {
   const { repo, vaults, shared } = useCards();
-  const today = useToday();
+  const tick = useTickTodo();
   const can = permissions(card, vaults, shared);
   const remove = useDeleteCard();
   const [tools, setTools] = useState(false);
@@ -483,25 +483,11 @@ function EntryDetail({ card, fresh, onClose }: { card: NoteCard | TodoCard; fres
                 checked={card.status === 'done'}
                 disabled={!can.edit}
                 aria-label="Done"
-                onChange={() => void repo.update(card.id, { status: card.status === 'done' ? 'open' : 'done' })}
+                onChange={() => tick(card)}
               />
             </label>
           )}
           <TitleField value={card.title} autoFocus={titled || (fresh && isTodo)} readOnly={!can.edit} onSave={(title) => void repo.update(card.id, { title })} />
-        </div>
-      )}
-      {isTodo && (
-        <div className="field-row">
-          <label>
-            Due
-            <input type="date" value={card.due ?? ''} disabled={!can.edit} onChange={(e) => void repo.update(card.id, { due: e.target.value || null })} />
-          </label>
-          {card.due && <span className="field-row__hint">{relativeDay(card.due, today)}</span>}
-          {card.due && can.edit && (
-            <button type="button" className="btn btn--quiet" onClick={() => void repo.update(card.id, { due: null })}>
-              Clear
-            </button>
-          )}
         </div>
       )}
       <Editor
@@ -526,6 +512,7 @@ function EntryDetail({ card, fresh, onClose }: { card: NoteCard | TodoCard; fres
       <Comments card={card} />
       <Backlinks cardId={card.id} />
       <div className="note-sheet__bar">
+        {isTodo && can.edit && <DueMenu card={card} />}
         {can.edit && (
           <button
             type="button"

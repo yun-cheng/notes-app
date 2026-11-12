@@ -1,12 +1,13 @@
-import { isDateKey } from './dates';
+import { isDateKey, isTimeKey } from './dates';
 import type { Entry } from './entry';
 import { toMarkdown, type TitleResolver } from './markdown';
+import { isRepeat, repeatWord } from './repeat';
 import type { DiaryCard, JSONNode, NoteCard, TodoCard } from './types';
 
 /**
  * Copying entries out of the journal and pasting them back. The clipboard gets readable text for other apps, and
  * an exact copy in its own type that only this app reads, so pasted entries come back with their formatting,
- * photos, tags, due dates and ticks.
+ * photos, tags, due dates, times, repeats and ticks.
  */
 export const ENTRIES_TYPE = 'application/x-notes-entries+json';
 
@@ -22,7 +23,18 @@ const MAX_ENTRIES = 1000;
 export function toEntries(cards: Copyable[], tagName: TagName): Entry[] {
   return cards.map((card) => {
     const tags = card.tags.map(tagName).filter((t): t is string => !!t);
-    if (card.type === 'todo') return { kind: 'todo', title: card.title, content: card.content, tags, due: card.due, ...(card.status === 'done' ? { done: true } : {}) };
+    if (card.type === 'todo') {
+      return {
+        kind: 'todo',
+        title: card.title,
+        content: card.content,
+        tags,
+        due: card.due,
+        ...(card.due && isTimeKey(card.dueTime) ? { dueTime: card.dueTime } : {}),
+        ...(card.due && isRepeat(card.repeat) ? { repeat: card.repeat } : {}),
+        ...(card.status === 'done' ? { done: true } : {}),
+      };
+    }
     return { kind: 'note', title: card.title, content: card.content, tags, due: null };
   });
 }
@@ -30,16 +42,17 @@ export function toEntries(cards: Copyable[], tagName: TagName): Entry[] {
 const tagWords = (tags: string[]) => tags.map((t) => `#${t.replace(/\s+/g, '-')}`).join(' ');
 
 /**
- * Entries as text, with a blank line between them: a todo as `[ ] Title @2026-12-01 #tag`, the way the journal
- * box takes it, with its details below; a note as Markdown with its tags on a last line. Todos of a line each
- * make one list.
+ * Entries as text, with a blank line between them: a todo as `[ ] Title @2026-12-01 @15:00 @weekly #tag`, the
+ * way the journal box takes it, with its details below; a note as Markdown with its tags on a last line. Todos of
+ * a line each make one list.
  */
 export function entriesText(cards: Copyable[], tagName: TagName, linkTitle: TitleResolver): string {
   const parts = toEntries(cards, tagName).map((entry) => {
     const body = toMarkdown(entry.content, linkTitle);
     const tags = tagWords(entry.tags);
     if (entry.kind === 'todo') {
-      const head = [`[${entry.done ? 'x' : ' '}] ${entry.title}`, entry.due ? `@${entry.due}` : '', tags].filter(Boolean).join(' ');
+      const when = [entry.due, entry.dueTime, entry.repeat && repeatWord(entry.repeat)].filter(Boolean).map((w) => `@${w}`);
+      const head = [`[${entry.done ? 'x' : ' '}] ${entry.title}`, ...when, tags].filter(Boolean).join(' ');
       return { text: body ? `${head}\n${body}` : head, line: !body };
     }
     return { text: [entry.title.trim(), body, tags].filter(Boolean).join('\n'), line: false };
@@ -68,11 +81,22 @@ export function decodeEntries(raw: string): Entry[] | null {
   const entries: Entry[] = [];
   for (const item of list.entries as Record<string, unknown>[]) {
     if (typeof item !== 'object' || item === null) return null;
-    const { kind, title, content, tags, due, done } = item;
+    const { kind, title, content, tags, due, dueTime, repeat, done } = item;
     if ((kind !== 'note' && kind !== 'todo') || typeof title !== 'string' || !isDoc(content)) return null;
     if (!Array.isArray(tags) || !tags.every((t) => typeof t === 'string')) return null;
     if (due !== null && due !== undefined && !(typeof due === 'string' && isDateKey(due))) return null;
-    entries.push({ kind, title, content, tags: tags as string[], due: kind === 'todo' ? ((due as string | null | undefined) ?? null) : null, ...(kind === 'todo' && done === true ? { done: true } : {}) });
+    const dated = kind === 'todo' ? ((due as string | null | undefined) ?? null) : null;
+    entries.push({
+      kind,
+      title,
+      content,
+      tags: tags as string[],
+      due: dated,
+      // A time or repeat that doesn't make sense is dropped rather than refusing the paste.
+      ...(dated && isTimeKey(dueTime) ? { dueTime } : {}),
+      ...(dated && isRepeat(repeat) ? { repeat: { unit: repeat.unit, every: repeat.every } } : {}),
+      ...(kind === 'todo' && done === true ? { done: true } : {}),
+    });
   }
   return entries.length ? entries : null;
 }

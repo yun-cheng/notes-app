@@ -18,6 +18,7 @@ import { useToast } from './Toast';
 export function BatchBar({ selection }: { selection: Selection }) {
   const { index, repo, vaults, locked, shared } = useCards();
   const toast = useToast();
+  const today = useToday();
   const actions = useEntryActions();
   const [panel, setPanel] = useState<'tags' | 'due' | null>(null);
   const cards = selection.ids.map((id) => index.byId.get(id)).filter((c): c is Card => !!c && !c.deleted);
@@ -27,7 +28,7 @@ export function BatchBar({ selection }: { selection: Selection }) {
   const skipped = (n: number) => (n ? `; ${entries(n)} couldn't be changed` : '');
 
   const apply = async (edit: BatchEdit, done: (n: number) => string) => {
-    const steps = planBatch(editable, edit, index.tagGroups.groupOf);
+    const steps = planBatch(editable, edit, index.tagGroups.groupOf, today);
     if (!steps.length) return;
     await Promise.all(steps.map((s) => repo.update(s.id, s.patch)));
     toast(`${done(steps.length)}${skipped(cards.length - editable.length)}`, {

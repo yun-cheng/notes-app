@@ -183,7 +183,10 @@ function sortItems(items: StreamItem[], sort: BaseSort): StreamItem[] {
     const edited = items.map((i) => (i.kind === 'card' ? { ...i, at: i.card.updatedAt, day: toDateKey(new Date(i.card.updatedAt)) } : i));
     return edited.sort((a, b) => a.at - b.at);
   }
-  // By due date, soonest first; anything without one after, oldest written first.
+  // By due date, soonest first, and on a day by time, with todos due any time that day after the timed ones;
+  // anything without a due date after, oldest written first.
+  const time = (i: StreamItem) => (i.kind === 'card' && i.card.type === 'todo' && i.card.dueTime) || '24:00';
   const due = items.map((i) => ({ ...i, day: i.kind === 'card' && i.card.type === 'todo' ? (i.card.due ?? '') : '' }));
-  return due.sort((a, b) => (a.day === b.day ? a.at - b.at : !a.day ? 1 : !b.day ? -1 : a.day < b.day ? -1 : 1));
+  const order = (x: string, y: string) => (x < y ? -1 : x > y ? 1 : 0);
+  return due.sort((a, b) => (a.day === b.day ? order(time(a), time(b)) || a.at - b.at : !a.day ? 1 : !b.day ? -1 : order(a.day, b.day)));
 }

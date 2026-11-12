@@ -1,4 +1,4 @@
-import { Extension, wrappingInputRule, type Editor as TiptapEditor } from '@tiptap/core';
+import { Extension, wrappingInputRule, type Editor as TiptapEditor, type Range } from '@tiptap/core';
 import { TaskItem, TaskList } from '@tiptap/extension-list';
 import { Plugin } from '@tiptap/pm/state';
 import { Decoration, DecorationSet } from '@tiptap/pm/view';
@@ -7,8 +7,9 @@ import { StarterKit } from '@tiptap/starter-kit';
 import { Placeholder } from '@tiptap/extensions';
 import { useEffect, useRef, useState, type ChangeEvent } from 'react';
 import { mainVault } from '../domain/access';
-import { addDays, parseDateKey, relativeDay } from '../domain/dates';
-import { entriesFromDoc, parseDue } from '../domain/entry';
+import { addDays, formatTime, parseDateKey, parseTime, relativeDay } from '../domain/dates';
+import { dueWord, entriesFromDoc, parseDue } from '../domain/entry';
+import { parseRepeat, REPEAT_CHOICES, repeatLabel, repeatWord } from '../domain/repeat';
 import { isGroupName } from '../domain/tagGroups';
 import { effectiveType, type StreamFilter } from '../domain/stream';
 import type { JSONNode } from '../domain/types';
@@ -36,9 +37,9 @@ const TodoWord = Extension.create({
 });
 
 const TAG_TOKEN = /(^|\s)(#[\p{L}\p{N}_-]+)/gu;
-const DATE_TOKEN = /(^|\s)(@[\p{L}\p{N}-]+)/gu;
+const DATE_TOKEN = /(^|\s)(@[\p{L}\p{N}:-]+)/gu;
 
-/** Shows `#tags` and `@dates` as they're typed, so it's clear they'll file the entry or date the todo. */
+/** Shows `#tags` and `@dates` (and times and repeats) as they're typed, so it's clear they'll file the entry or date the todo. */
 function tokenHighlight(today: () => string) {
   return Extension.create({
     name: 'tokenHighlight',
@@ -55,7 +56,7 @@ function tokenHighlight(today: () => string) {
                   marks.push(Decoration.inline(from, from + m[2].length, { class: 'token token--tag' }));
                 }
                 for (const m of node.text.matchAll(DATE_TOKEN)) {
-                  if (!parseDue(m[2].slice(1), today())) continue;
+                  if (!dueWord(m[2].slice(1), today())) continue;
                   const from = pos + (m.index ?? 0) + m[1].length;
                   marks.push(Decoration.inline(from, from + m[2].length, { class: 'token token--date' }));
                 }
@@ -178,19 +179,26 @@ export function JournalBox({ filter }: { filter: StreamFilter }) {
     const weekday = (d: string) => parseDateKey(d).toLocaleDateString(undefined, { weekday: 'long' }).toLowerCase();
     const words = ['today', 'tomorrow', ...[2, 3, 4, 5, 6, 7].map((n) => weekday(addDays(day, n)))];
     const typedDate = /^\d{4}-\d{2}-\d{2}$/.test(query) && parseDue(query, day) ? [query] : [];
-    return [...words, ...typedDate]
+    const insert = (w: string) => (e: TiptapEditor, range: Range) => e.chain().focus().insertContentAt(range, `@${w} `).run();
+    const dates = [...words, ...typedDate]
       .filter((w) => w.startsWith(query.toLowerCase()))
-      .map<MenuItem>((w) => {
-        const date = parseDue(w, day)!;
-        return { id: w, label: `@${w}`, hint: relativeDay(date, day), icon: 'calendar', run: (e, range) => e.chain().focus().insertContentAt(range, `@${w} `).run() };
-      });
+      .map<MenuItem>((w) => ({ id: w, label: `@${w}`, hint: relativeDay(parseDue(w, day)!, day), icon: 'calendar', run: insert(w) }));
+    // A typed time (3pm, 15:00) is offered as it's typed; repeats once their first letters are.
+    const time = parseTime(query);
+    const times = time ? [{ id: 'time', label: `@${query.toLowerCase()}`, hint: formatTime(time), icon: 'today' as const, run: insert(query.toLowerCase()) }] : [];
+    const repeats = query
+      ? REPEAT_CHOICES.map(repeatWord)
+          .filter((w) => w.startsWith(query.toLowerCase()))
+          .map<MenuItem>((w) => ({ id: w, label: `@${w}`, hint: repeatLabel(parseRepeat(w)!), icon: 'repeat', run: insert(w) }))
+      : [];
+    return [...dates, ...times, ...repeats];
   };
 
   const editor = useEditor({
     extensions: [
       StarterKit.configure({ heading: { levels: [2, 3] }, link: { openOnClick: false, autolink: true, defaultProtocol: 'https' } }),
       Placeholder.configure({
-        placeholder: ({ editor: e }) => (e.isActive('taskItem') ? 'Todo · @ for a due date' : latest.current.diary ? "Write in today's diary" : 'Write a note · [] todo · #tag · / for more'),
+        placeholder: ({ editor: e }) => (e.isActive('taskItem') ? 'Todo · @ for a due date, time or repeat' : latest.current.diary ? "Write in today's diary" : 'Write a note · [] todo · #tag · / for more'),
       }),
       Photo,
       TaskList,

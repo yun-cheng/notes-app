@@ -1,4 +1,4 @@
-import { EMPTY_DOC, type Card, type CardPayload, type CardRecord, type JSONNode, type Vault } from '../domain/types';
+import { EMPTY_DOC, type Card, type CardPayload, type CardRecord, type JSONNode, type Repeat, type Vault } from '../domain/types';
 import type { Backup } from '../domain/backup';
 import { isBlank } from '../domain/content';
 import { diaryId, rehomeCards } from '../domain/rehome';
@@ -162,7 +162,16 @@ export class CardRepository {
     );
   }
 
-  createTodo(init: { title: string; due?: string | null; content?: JSONNode; tags?: string[]; vaultId?: string; done?: boolean }): Promise<Card> {
+  createTodo(init: {
+    title: string;
+    due?: string | null;
+    dueTime?: string | null;
+    repeat?: Repeat | null;
+    content?: JSONNode;
+    tags?: string[];
+    vaultId?: string;
+    done?: boolean;
+  }): Promise<Card> {
     return this.enqueue(async () => {
       const envelope = await this.newEnvelope(this.newId(), init.vaultId);
       return this.write({
@@ -173,6 +182,9 @@ export class CardRepository {
         tags: init.tags ?? [],
         status: init.done ? 'done' : 'open',
         due: init.due ?? null,
+        // Left off when unset, so todos without them look as they always have to the other apps.
+        ...(init.due && init.dueTime ? { dueTime: init.dueTime } : {}),
+        ...(init.due && init.repeat ? { repeat: init.repeat } : {}),
         completedAt: init.done ? envelope.createdAt : null,
       });
     });
@@ -367,7 +379,7 @@ export class CardRepository {
       };
       await this.write(
         loser.type === 'todo'
-          ? { ...common, type: 'todo', status: loser.status, due: loser.due, completedAt: loser.completedAt }
+          ? { ...common, type: 'todo', status: loser.status, due: loser.due, dueTime: loser.dueTime, repeat: loser.repeat, completedAt: loser.completedAt }
           : { ...common, type: 'note' },
       );
     });

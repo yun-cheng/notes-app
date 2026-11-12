@@ -1,11 +1,13 @@
-import { addDays, isDateKey, parseDateKey } from './dates';
+import { addDays, isDateKey, parseDateKey, parseTime } from './dates';
 import { inlineText, photoIds, textToDoc } from './content';
-import type { JSONNode } from './types';
+import { firstDue, parseRepeat } from './repeat';
+import type { JSONNode, Repeat } from './types';
 
 /**
  * What the composer turns typed text into. Everything is written in one stream, and markers in the text decide
  * where it goes: `[] ` or `TODO ` (or `#todo`) makes a todo, `#diary` adds to the day's diary, any other `#tag`
- * files it under that tag, and on a todo `@tomorrow`, `@fri` or `@2026-12-01` sets the due date.
+ * files it under that tag, and on a todo `@tomorrow`, `@fri` or `@2026-12-01` sets the due date, `@3pm` or
+ * `@15:00` its time, and `@weekly` or `@every-2-weeks` makes it repeat.
  */
 export interface Entry {
   kind: 'note' | 'todo' | 'diary';
@@ -16,6 +18,10 @@ export interface Entry {
   tags: string[];
   /** A todo's due date, or null. */
   due: string | null;
+  /** A todo's due time (HH:MM). Set only with a due date. */
+  dueTime?: string;
+  /** How a todo repeats. Set only with a due date. */
+  repeat?: Repeat;
   /** A todo already ticked, typed as `[x] ` or a ticked checkbox. */
   done?: boolean;
 }
@@ -24,7 +30,7 @@ export interface Entry {
 const TODO_MARKER = /^(?:\[[ xX]?\]\s*|TODO\s+)/;
 const DONE_MARKER = /^\[[xX]\]/;
 const TAG = /(^|\s)#([\p{L}\p{N}_-]+)/gu;
-const DUE = /(^|\s)@([\p{L}\p{N}-]+)/gu;
+const DUE = /(^|\s)@([\p{L}\p{N}:-]+)/gu;
 const WEEKDAYS = ['sunday', 'monday', 'tuesday', 'wednesday', 'thursday', 'friday', 'saturday'];
 
 /** `@today`, `@tomorrow`, `@2026-12-01`, or a weekday (`@fri`, `@friday`) meaning the next one after today. */
@@ -36,6 +42,33 @@ export function parseDue(word: string, today: string): string | null {
   const day = w.length >= 3 ? WEEKDAYS.findIndex((d) => d.startsWith(w)) : -1;
   if (day < 0) return null;
   return addDays(today, (day - parseDateKey(today).getDay() + 7) % 7 || 7);
+}
+
+/** What an `@` word on a todo sets, or null for a word that stays in the text (`@bob`). */
+export function dueWord(word: string, today: string): 'date' | 'time' | 'repeat' | null {
+  return parseDue(word, today) ? 'date' : parseTime(word) ? 'time' : parseRepeat(word) ? 'repeat' : null;
+}
+
+/**
+ * Gathers a todo's `@` words. A time or a repeat with no date is due today (a weekday repeat on a weekend: the
+ * next weekday).
+ */
+function dueWords(today: string) {
+  let date: string | null = null;
+  let time: string | null = null;
+  let repeat: Repeat | null = null;
+  const take = (word: string) => {
+    const kind = dueWord(word, today);
+    if (kind === 'date') date = parseDue(word, today);
+    else if (kind === 'time') time = parseTime(word);
+    else if (kind === 'repeat') repeat = parseRepeat(word);
+    return !!kind;
+  };
+  const result = (): Pick<Entry, 'due' | 'dueTime' | 'repeat'> => {
+    const due = date ?? (repeat ? firstDue(repeat, today) : time ? today : null);
+    return { due, ...(time ? { dueTime: time } : {}), ...(repeat ? { repeat } : {}) };
+  };
+  return { take, result };
 }
 
 /** Removes matches from each line; a line left empty by that goes away. */
@@ -57,7 +90,7 @@ export function parseEntry(text: string, today: string): Entry | null {
   let lines = text.replace(/\r\n?/g, '\n').split('\n');
   let todo = false;
   let diary = false;
-  let due: string | null = null;
+  const due = dueWords(today);
   const tags: string[] = [];
 
   let done = false;
@@ -77,20 +110,14 @@ export function parseEntry(text: string, today: string): Entry | null {
   });
 
   // Only todos have due dates. On a note, `@friday` stays as typed.
-  if (todo) {
-    lines = strip(lines, DUE, (word) => {
-      const date = parseDue(word, today);
-      if (date) due = date;
-      return !!date;
-    });
-  }
+  if (todo) lines = strip(lines, DUE, due.take);
 
   const body = lines.join('\n').trim();
   if (!body) return null;
   if (!todo) return { kind: diary ? 'diary' : 'note', title: '', content: textToDoc(body), tags, due: null };
 
   const [head, ...rest] = body.split('\n');
-  return { kind: 'todo', title: head.trim(), content: textToDoc(rest.join('\n').trim()), tags, due, ...(done ? { done } : {}) };
+  return { kind: 'todo', title: head.trim(), content: textToDoc(rest.join('\n').trim()), tags, ...due.result(), ...(done ? { done } : {}) };
 }
 
 const TAGS_ONLY = /^\s*(#[\p{L}\p{N}_-]+\s*)+$/u;
@@ -209,7 +236,7 @@ export function entriesFromDoc(doc: JSONNode, today: string): Entry[] {
   for (const chunk of chunks) {
     let { todo } = chunk;
     let diary = false;
-    let due: string | null = null;
+    const due = dueWords(today);
     const tags: string[] = [];
     const addTag = (name: string) => {
       const lower = name.toLowerCase();
@@ -219,13 +246,7 @@ export function entriesFromDoc(doc: JSONNode, today: string): Entry[] {
     };
     let body = stripBlocks(chunk.blocks, TAG, (name) => (addTag(name), true));
     sharedTags.forEach(addTag);
-    if (todo) {
-      body = stripBlocks(body, DUE, (word) => {
-        const date = parseDue(word, today);
-        if (date) due = date;
-        return !!date;
-      });
-    }
+    if (todo) body = stripBlocks(body, DUE, due.take);
     while (body.length && isEmptyBlock(body[0])) body.shift();
     while (body.length && isEmptyBlock(body[body.length - 1])) body.pop();
     if (!hasSubstance(body)) continue;
@@ -243,7 +264,7 @@ export function entriesFromDoc(doc: JSONNode, today: string): Entry[] {
       title: title || 'Photo',
       content: details.length ? { type: 'doc', content: details } : textToDoc(''),
       tags,
-      due,
+      ...due.result(),
       ...(chunk.done ? { done: true } : {}),
     });
   }

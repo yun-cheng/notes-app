@@ -178,6 +178,8 @@ export interface PublicCard {
   content: JSONNode;
   status: string | null;
   due: string | null;
+  /** Missing from a server older than due times. */
+  due_time?: string | null;
   updated_at: number;
 }
 

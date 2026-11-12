@@ -1,12 +1,14 @@
 import { isGroupName, settleTags } from '../src/domain/tagGroups';
 import { buildIndex, type CardIndex } from '../src/domain/cardIndex';
 import { displayTitle, plainText } from '../src/domain/content';
-import { addDays, isDateKey } from '../src/domain/dates';
+import { addDays, isDateKey, isTimeKey, toDateKey } from '../src/domain/dates';
 import { toMarkdown } from '../src/domain/markdown';
 import { fromMarkdown } from '../src/domain/markdownIn';
 import { diaryId } from '../src/domain/rehome';
+import { parseRepeat, repeatWord } from '../src/domain/repeat';
+import { completeTodo } from '../src/domain/todos';
 import { buildSearch } from '../src/domain/search';
-import { EMPTY_DOC, type Card, type CardPayload, type CardRecord, type JSONNode, type TodoCard, type Vault } from '../src/domain/types';
+import { EMPTY_DOC, type Card, type CardPayload, type CardRecord, type JSONNode, type Repeat, type TodoCard, type Vault } from '../src/domain/types';
 import type { Database } from './db';
 import type { AiCaller } from './oauth';
 import { pushRecords } from './sync';
@@ -102,9 +104,13 @@ const tagNames = (scope: Scope, card: Card) => card.tags.map((id) => titleOf(sco
 function summary(scope: Scope, card: Card): string {
   const vault = scope.vaults.get(card.vaultId)?.name ?? '';
   const parts = [card.type, `id: ${card.id}`, vault && `vault: ${vault}`, `updated ${when(card.updatedAt)}`];
-  if (card.type === 'todo') parts.splice(1, 0, card.status === 'done' ? 'done' : card.due ? `due ${card.due}` : 'no due date');
+  if (card.type === 'todo') parts.splice(1, 0, card.status === 'done' ? 'done' : card.due ? `due ${dueText(card)}` : 'no due date');
   return `- ${displayTitle(card)} (${parts.filter(Boolean).join(', ')})`;
 }
+
+/** "2026-11-10 15:00, repeats weekly". */
+const dueText = (todo: TodoCard) =>
+  todo.due ? `${todo.due}${todo.dueTime ? ` ${todo.dueTime}` : ''}${todo.repeat ? `, repeats ${repeatWord(todo.repeat)}` : ''}` : '';
 
 const body = (scope: Scope, content: JSONNode) => toMarkdown(content, titleOf(scope)) || '(empty)';
 
@@ -112,7 +118,7 @@ function renderCard(scope: Scope, card: Card): string {
   const lines = [`# ${displayTitle(card)}`, ''];
   const vault = scope.vaults.get(card.vaultId);
   lines.push(`Type: ${card.type} · ID: ${card.id} · Vault: ${vault?.name} (${vault?.write ? 'you can edit' : 'read only'})`);
-  if (card.type === 'todo') lines.push(`Status: ${card.status}${card.due ? ` · Due: ${card.due}` : ''}`);
+  if (card.type === 'todo') lines.push(`Status: ${card.status}${card.due ? ` · Due: ${dueText(card)}` : ''}`);
   if (card.type === 'diary') lines.push(`Date: ${card.date}`);
   if (card.tags.length) lines.push(`Tags: ${tagNames(scope, card).join(', ')}`);
   lines.push(`Created: ${when(card.createdAt)} · Updated: ${when(card.updatedAt)}`);
@@ -145,6 +151,22 @@ function date(args: Json, key: string, optional = false): string | undefined {
   return v;
 }
 
+function time(args: Json, key: string): string | null | undefined {
+  if (args[key] === null) return null;
+  const v = str(args, key, { optional: true });
+  if (v !== undefined && !isTimeKey(v)) throw new ToolError(`"${key}" must be a 24-hour time like 15:00.`);
+  return v;
+}
+
+function repeat(args: Json, key: string): Repeat | null | undefined {
+  if (args[key] === null) return null;
+  const v = str(args, key, { optional: true });
+  if (v === undefined) return undefined;
+  const parsed = parseRepeat(v);
+  if (!parsed) throw new ToolError(`"${key}" must be daily, weekdays, weekly, monthly, yearly, or like every-2-weeks.`);
+  return parsed;
+}
+
 function names(args: Json, key: string): string[] | undefined {
   const v = args[key];
   if (v === undefined || v === null) return undefined;
@@ -175,6 +197,9 @@ interface Writer {
   caller: AiCaller;
   now: () => number;
 }
+
+/** Today on the server's clock (UTC), for a repeat or time given with no date. The user's own day may differ near midnight. */
+const serverToday = (w: Writer) => toDateKey(new Date(w.now()));
 
 function writableVault(scope: Scope, name?: string): ScopeVault {
   if (name) {
@@ -246,6 +271,11 @@ interface Tool {
 }
 
 const dateSchema = { type: 'string', pattern: '^\\d{4}-\\d{2}-\\d{2}$', description: 'A date like 2026-11-10' };
+const timeSchema = { type: ['string', 'null'], description: 'Todos only: a 24-hour time on the due date, like 15:00, or null for any time that day' };
+const repeatSchema = {
+  type: ['string', 'null'],
+  description: 'Todos only: daily, weekdays, weekly, monthly, yearly, or every-N-days/weeks/months/years like every-2-weeks; null to stop. Completing a repeating todo moves it to its next due date.',
+};
 
 export const TOOLS: Tool[] = [
   {
@@ -372,16 +402,26 @@ export const TOOLS: Tool[] = [
   {
     name: 'add_todo',
     title: 'Add a todo',
-    description: 'Adds a todo, optionally with a due date and notes.',
+    description: 'Adds a todo, optionally with a due date, a time, a repeat and notes. A time or repeat with no date starts today.',
     write: true,
     inputSchema: {
       type: 'object',
-      properties: { title: { type: 'string' }, due: dateSchema, markdown: { type: 'string', description: 'Notes for the todo' }, vault: { type: 'string' } },
+      properties: {
+        title: { type: 'string' },
+        due: dateSchema,
+        time: timeSchema,
+        repeat: repeatSchema,
+        markdown: { type: 'string', description: 'Notes for the todo' },
+        vault: { type: 'string' },
+      },
       required: ['title'],
     },
     run: async (args, w) => {
       const vault = writableVault(w.scope, str(args, 'vault', { optional: true }));
-      const todo: Card = {
+      const dueTime = time(args, 'time');
+      const repeats = repeat(args, 'repeat');
+      const due = date(args, 'due', true) ?? (dueTime || repeats ? serverToday(w) : null);
+      const todo: TodoCard = {
         id: crypto.randomUUID(),
         vaultId: vault.id,
         type: 'todo',
@@ -389,7 +429,9 @@ export const TOOLS: Tool[] = [
         content: fromMarkdown(str(args, 'markdown', { optional: true, max: 200_000 }) ?? '', resolver(w.scope)),
         tags: [],
         status: 'open',
-        due: date(args, 'due', true) ?? null,
+        due,
+        ...(dueTime ? { dueTime } : {}),
+        ...(repeats ? { repeat: repeats } : {}),
         completedAt: null,
         createdAt: w.now(),
         updatedAt: 0,
@@ -397,13 +439,13 @@ export const TOOLS: Tool[] = [
         seq: 0,
       };
       await save(w, [todo]);
-      return `Added "${todo.title}"${todo.due ? ` due ${todo.due}` : ''} (id: ${todo.id}).`;
+      return `Added "${todo.title}"${todo.due ? ` due ${dueText(todo)}` : ''} (id: ${todo.id}).`;
     },
   },
   {
     name: 'complete_todo',
     title: 'Complete a todo',
-    description: 'Marks a todo done, or open again with done: false.',
+    description: 'Marks a todo done, or open again with done: false. A repeating todo stays open and moves to its next due date.',
     write: true,
     inputSchema: { type: 'object', properties: { id: { type: 'string' }, done: { type: 'boolean', default: true } }, required: ['id'] },
     run: async (args, w) => {
@@ -411,6 +453,11 @@ export const TOOLS: Tool[] = [
       if (card.type !== 'todo') throw new ToolError(`"${displayTitle(card)}" is not a todo.`);
       requireWrite(w.scope, card);
       const done = args.done !== false;
+      if (done && card.status === 'open' && card.repeat) {
+        const { next } = completeTodo(card, serverToday(w));
+        await save(w, [{ ...card, due: next! }]);
+        return `Done for now: "${card.title}" repeats, and is next due ${next}.`;
+      }
       await save(w, [{ ...card, status: done ? 'done' : 'open', completedAt: done ? w.now() : null }]);
       return `Marked "${card.title}" ${done ? 'done' : 'open'}.`;
     },
@@ -448,7 +495,7 @@ export const TOOLS: Tool[] = [
     name: 'edit_card',
     title: 'Edit a card',
     description:
-      'Changes a note, todo, tag or diary entry: rename it, replace or append to its body, set its tags, or change a todo\'s due date. Read it with get_card first. Replacing the body discards what was there, though the user can restore it from history.',
+      'Changes a note, todo, tag or diary entry: rename it, replace or append to its body, set its tags, or change a todo\'s due date, time or repeat. Read it with get_card first. Replacing the body discards what was there, though the user can restore it from history.',
     write: true,
     inputSchema: {
       type: 'object',
@@ -458,7 +505,9 @@ export const TOOLS: Tool[] = [
         markdown: { type: 'string', description: 'New body, replacing the old one' },
         append_markdown: { type: 'string', description: 'Added after the current body' },
         tags: { type: 'array', items: { type: 'string' }, description: 'Replaces the tags, by name' },
-        due: { type: ['string', 'null'], description: 'Todos only: a date like 2026-11-10, or null for none' },
+        due: { type: ['string', 'null'], description: 'Todos only: a date like 2026-11-10, or null for none (which also clears the time and repeat)' },
+        time: timeSchema,
+        repeat: repeatSchema,
       },
       required: ['id'],
     },
@@ -495,7 +544,22 @@ export const TOOLS: Tool[] = [
       if (args.due !== undefined) {
         if (next.type !== 'todo') throw new ToolError('Only todos have a due date.');
         next.due = args.due === null ? null : date(args, 'due')!;
+        if (next.due === null) Object.assign(next, { dueTime: null, repeat: null });
         changes.push('due date');
+      }
+      const dueTime = time(args, 'time');
+      const repeats = repeat(args, 'repeat');
+      if (dueTime !== undefined || repeats !== undefined) {
+        if (next.type !== 'todo') throw new ToolError('Only todos have a due time or repeat.');
+        if (dueTime !== undefined) {
+          next.dueTime = dueTime;
+          changes.push('time');
+        }
+        if (repeats !== undefined) {
+          next.repeat = repeats;
+          changes.push('repeat');
+        }
+        if ((next.dueTime || next.repeat) && !next.due) next.due = serverToday(w);
       }
       if (!changes.length) throw new ToolError('Nothing to change.');
       await save(w, [...created, next]);

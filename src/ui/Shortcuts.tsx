@@ -38,7 +38,7 @@ const GROUPS: { title: string; keys: [string, string][] }[] = [
       ['Shift Enter', 'New line, or the next checkbox'],
       ['[] or TODO', 'Start a todo'],
       ['#', 'Tag'],
-      ['@', 'Due date'],
+      ['@', 'Due date, time (@3pm) or repeat (@weekly)'],
       ['/', 'Lists, headings, photos and more'],
     ],
   },

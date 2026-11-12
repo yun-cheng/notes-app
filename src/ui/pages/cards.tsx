@@ -1,6 +1,6 @@
 import { useState } from 'react';
 import { Link, Navigate, useLocation, useNavigate, useParams } from 'react-router';
-import { addDays, formatDay, isDateKey, relativeDay } from '../../domain/dates';
+import { addDays, formatDay, isDateKey } from '../../domain/dates';
 import { diaryVault } from '../../domain/locks';
 import { todosDueOn } from '../../domain/todos';
 import { EMPTY_DOC, type Card } from '../../domain/types';
@@ -13,6 +13,7 @@ import { Comments } from '../Comments';
 import { Icon } from '../Icon';
 import { entryPath, journalPath } from '../paths';
 import { ShareDialog } from '../ShareDialog';
+import { DueFields, useTickTodo } from '../TodoDue';
 
 function FormattingToggle({ on, onChange }: { on: boolean; onChange: (on: boolean) => void }) {
   return (
@@ -72,7 +73,7 @@ function CardDetail({ card }: { card: Exclude<Card, { type: 'diary' }> }) {
   const { repo, vaults, shared } = useCards();
   const can = permissions(card, vaults, shared);
   const remove = useDeleteCard();
-  const today = useToday();
+  const tick = useTickTodo();
   const fresh = !!(useLocation().state as { fresh?: boolean } | null)?.fresh;
   const [sharing, setSharing] = useState(false);
   const [tools, setTools] = useState(false);
@@ -132,7 +133,7 @@ function CardDetail({ card }: { card: Exclude<Card, { type: 'diary' }> }) {
               checked={card.status === 'done'}
               disabled={!can.edit}
               aria-label="Done"
-              onChange={() => void repo.update(card.id, { status: card.status === 'done' ? 'open' : 'done' })}
+              onChange={() => tick(card)}
             />
           </label>
         )}
@@ -140,18 +141,7 @@ function CardDetail({ card }: { card: Exclude<Card, { type: 'diary' }> }) {
       </div>
 
       {card.type === 'todo' && (
-        <div className="field-row">
-          <label>
-            Due
-            <input type="date" value={card.due ?? ''} disabled={!can.edit} onChange={(e) => void repo.update(card.id, { due: e.target.value || null })} />
-          </label>
-          {card.due && <span className="field-row__hint">{relativeDay(card.due, today)}</span>}
-          {card.due && can.edit && (
-            <button type="button" className="btn btn--quiet" onClick={() => void repo.update(card.id, { due: null })}>
-              Clear
-            </button>
-          )}
-        </div>
+        <DueFields card={card} editable={can.edit} />
       )}
 
       <VaultField card={card} />

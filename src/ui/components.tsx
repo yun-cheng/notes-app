@@ -3,15 +3,15 @@ import { Link, useLocation, useNavigate } from 'react-router';
 import { permissions } from '../domain/access';
 import { cardText, resolveTags, type Backlink } from '../domain/cardIndex';
 import { displayTitle } from '../domain/content';
-import { relativeDay } from '../domain/dates';
 import { clashingTags, orderTags, pickInGroup, withTag, type TagGroup } from '../domain/tagGroups';
 import type { Card, TagCard, TodoCard } from '../domain/types';
-import { useCards, useToday } from '../state/CardsContext';
+import { useCards } from '../state/CardsContext';
 import { Icon, type IconName } from './Icon';
 import { cardPath, entryPath, journalPath, sheetState } from './paths';
 import { useToast } from './Toast';
 import { usePopover } from './usePopover';
 import { colorClass } from './EntryStyle';
+import { DueLabel, useTickTodo } from './TodoDue';
 
 export function Page({ title, actions, children }: { title: ReactNode; actions?: ReactNode; children: ReactNode }) {
   return (
@@ -133,12 +133,10 @@ export function CardRow({ card, detail }: { card: Card; detail?: string }) {
 }
 
 export function TodoRow({ todo, showDue = true }: { todo: TodoCard; showDue?: boolean }) {
-  const { repo, vaults, shared } = useCards();
+  const { vaults, shared } = useCards();
   const { edit } = permissions(todo, vaults, shared);
-  const today = useToday();
-  const toast = useToast();
+  const tick = useTickTodo();
   const done = todo.status === 'done';
-  const overdue = !done && todo.due !== null && todo.due < today;
   return (
     <div className={`row row--todo${done ? ' is-done' : ''}`}>
       <label className="check">
@@ -147,16 +145,13 @@ export function TodoRow({ todo, showDue = true }: { todo: TodoCard; showDue?: bo
           checked={done}
           disabled={!edit}
           aria-label={`Mark "${displayTitle(todo)}" ${done ? 'not done' : 'done'}`}
-          onChange={() => {
-            void repo.update(todo.id, { status: done ? 'open' : 'done' });
-            // A done todo may drop out of the list, so a mistaken tap needs a way back.
-            if (!done) toast(`Done: ${displayTitle(todo)}`, { action: { label: 'Undo', run: () => void repo.update(todo.id, { status: 'open' }) } });
-          }}
+          // A done todo may drop out of the list, so a mistaken tap needs a way back.
+          onChange={() => tick(todo, { announce: true })}
         />
       </label>
       <CardLink className="row__body" card={todo}>
         <span className="row__title">{displayTitle(todo)}</span>
-        {showDue && todo.due && <span className={`row__due${overdue ? ' is-alert' : ''}`}>{relativeDay(todo.due, today)}</span>}
+        {showDue && <DueLabel todo={todo} short className="row__due" />}
         <TagChips tagIds={todo.tags} />
       </CardLink>
     </div>

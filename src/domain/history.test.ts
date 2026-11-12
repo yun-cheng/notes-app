@@ -69,7 +69,7 @@ describe('diffs', () => {
 describe('restoring', () => {
   it('puts back text and fields but not the vault or ID', () => {
     const old = todo('t', null, { title: 'Old', status: 'done', vaultId: 'elsewhere' });
-    expect(restorePatch(old)).toEqual({ title: 'Old', content: old.content, tags: [], status: 'done', due: null });
+    expect(restorePatch(old)).toEqual({ title: 'Old', content: old.content, tags: [], status: 'done', due: null, dueTime: null, repeat: null });
   });
   it('ignores sync bookkeeping when comparing', () => {
     expect(sameContent(note('n', 'A', { seq: 1, updatedAt: 5 }), note('n', 'A', { seq: 9, updatedAt: 7 }))).toBe(true);

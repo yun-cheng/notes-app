@@ -175,10 +175,13 @@ const KEEPS_PICKING = '.stream__entry, .batch, .page__head, .sidebar, .tabbar, .
 /** Things a drag can't start on, so clicks on them still work. */
 const INTERACTIVE = '.bubble, .attachments, .pick, a, button, input, textarea, select, label, [contenteditable="true"]';
 
+/** Parts of the page a drag can't start in, though they sit in the main area. */
+const NO_BOX = '.page__head, .composer, .composer__unlock, .batch, .dialog-backdrop, .toast-slot, .link-menu';
+
 /**
- * Picking from the stream's empty space. A click (or tap) on a row beside its bubble picks or unpicks that entry,
- * Shift-click a range. Pressing there and dragging picks every entry the box touches, as it moves; Shift or
- * Cmd/Ctrl adds to what was picked. Entries are found by `[data-entry-id]` inside `root`.
+ * Picking from empty space. A click (or tap) on a row beside its bubble picks or unpicks that entry, Shift-click a
+ * range. Pressing anywhere empty in the main area, beside the stream too, and dragging picks every entry the box
+ * touches, as it moves; Shift or Cmd/Ctrl adds to what was picked. Entries are found by `[data-entry-id]` in `root`.
  */
 export function useBoxSelect(root: RefObject<HTMLElement | null>, selection: Selection | null) {
   const [drag, setDrag] = useState<Drag | null>(null);
@@ -197,8 +200,8 @@ export function useBoxSelect(root: RefObject<HTMLElement | null>, selection: Sel
       if (row?.dataset.entryId) latest.current.selection?.toggle(row.dataset.entryId, e.shiftKey);
     };
     const onDown = (e: PointerEvent) => {
-      if (e.pointerType !== 'mouse' || e.button !== 0) return;
-      if (e.target instanceof Element && e.target.closest(INTERACTIVE)) return;
+      if (e.pointerType !== 'mouse' || e.button !== 0 || !(e.target instanceof Element)) return;
+      if (!e.target.closest('.main') || e.target.closest(INTERACTIVE) || e.target.closest(NO_BOX)) return;
       e.preventDefault();
       const add = e.shiftKey || e.metaKey || e.ctrlKey;
       const x = e.clientX + window.scrollX;
@@ -215,12 +218,12 @@ export function useBoxSelect(root: RefObject<HTMLElement | null>, selection: Sel
       if (e.target instanceof Element && (e.target.closest(KEEPS_PICKING) || !e.target.isConnected)) return;
       current.clear();
     };
-    el.addEventListener('pointerdown', onDown);
+    document.addEventListener('pointerdown', onDown);
     el.addEventListener('click', onClick);
     document.addEventListener('pointerdown', onPress, true);
     document.addEventListener('click', onOutside);
     return () => {
-      el.removeEventListener('pointerdown', onDown);
+      document.removeEventListener('pointerdown', onDown);
       el.removeEventListener('click', onClick);
       document.removeEventListener('pointerdown', onPress, true);
       document.removeEventListener('click', onOutside);

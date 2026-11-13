@@ -39,6 +39,18 @@ describe('sharing a vault', () => {
     await send(ann.cookie, 'POST', `/api/vaults/${family.id}/members`, { email: 'ben@example.com', role: 'viewer' });
     expect((await send(ann.cookie, 'PATCH', `/api/vaults/${family.id}`, { pin })).status).toBe(400);
   });
+  it('keeps a vault with an invite still waiting without a PIN', async () => {
+    const { ann, send, signIn, me, json } = await people();
+    const pin = { salt: 'c2FsdA==', hash: 'aGFzaA==', iterations: 300_000 };
+    const family = await json<Vault>(send(ann.cookie, 'POST', '/api/vaults', { name: 'Family' }));
+    await send(ann.cookie, 'POST', `/api/vaults/${family.id}/members`, { email: 'cat@example.com', role: 'viewer' });
+    expect((await send(ann.cookie, 'PATCH', `/api/vaults/${family.id}`, { pin })).status).toBe(400);
+    // Taking the invite back makes it the owner's alone again.
+    await send(ann.cookie, 'DELETE', `/api/vaults/${family.id}/invites/cat@example.com`);
+    expect((await send(ann.cookie, 'PATCH', `/api/vaults/${family.id}`, { pin })).status).toBe(200);
+    const cat = await signIn('cat');
+    expect((await me(cat.cookie)).vaults.map((v) => v.id)).not.toContain(family.id);
+  });
   it('lets only the owner add people', async () => {
     const { ann, ben, send } = await people();
     await send(ann.cookie, 'POST', `/api/vaults/${ann.vault}/members`, { email: 'ben@example.com', role: 'editor' });

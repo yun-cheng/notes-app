@@ -65,6 +65,8 @@ export async function updateVault(db: Database, userId: string, id: string, upda
   if (update.pin && id === defaultVaultId(userId)) return { error: 'default_vault' };
   // A PIN would have to be told to every member. Keep shared vaults open until sharing private vaults is designed.
   if (update.pin && (current.members ?? 1) > 1) return { error: 'shared_private' };
+  // Someone invited by email joins at their first sign-in, so an invite still waiting counts as sharing.
+  if (update.pin && (await db.prepare(`SELECT 1 FROM vault_invites WHERE vault_id = ? LIMIT 1`).bind(id).first())) return { error: 'shared_private' };
 
   const pin = update.pin === undefined ? current.pin : update.pin;
   if (pin && update.ai_access && update.ai_access !== 'off') return { error: 'private_ai' };

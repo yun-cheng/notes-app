@@ -104,6 +104,13 @@ export async function pushRecords(
               .bind(r.vault_id, r.updated_at, r.deleted ? 1 : 0, r.payload, r.id, expected),
       );
     });
+    // A card that leaves a vault is noted, so the vault's other members hear that it went. Only if its write landed.
+    writes.forEach(({ record: r }, i) => {
+      const from = existing.get(r.id)?.vault_id;
+      if (!from || from === r.vault_id) return;
+      const seq = `(SELECT value FROM seq_counter WHERE id = 1) - ${writes.length - 1 - i}`;
+      statements.push(db.prepare(`INSERT INTO card_moves (card_id, vault_id, seq) SELECT id, ?, seq FROM cards WHERE id = ? AND seq = ${seq}`).bind(from, r.id));
+    });
     const outcomes = await db.batch<{ seq: number }>(statements);
     const written: Written[] = [];
     writes.forEach((write, i) => {
@@ -132,5 +139,18 @@ export async function pullRecords(db: Database, userId: string, since: number): 
     .all<CardRow>();
   const more = results.length > PULL_LIMIT;
   const page = results.slice(0, PULL_LIMIT).map(toRecord);
-  return { records: page, next: page.length ? page[page.length - 1].seq : since, more };
+  const last = page.length ? page[page.length - 1].seq : since;
+  // Cards that left one of this account's vaults for somewhere it can't see. Within this page's range while more pages follow.
+  const { results: moved } = await db
+    .prepare(
+      `SELECT m.card_id, MAX(m.seq) AS seq FROM card_moves m JOIN cards c ON c.id = m.card_id
+       WHERE m.seq > ? AND m.seq <= ?
+         AND m.vault_id IN (SELECT vault_id FROM vault_members WHERE user_id = ?)
+         AND c.vault_id NOT IN (SELECT vault_id FROM vault_members WHERE user_id = ?)
+         AND c.id NOT IN (SELECT s.card_id FROM card_shares s WHERE ${SHARED_WITH})
+       GROUP BY m.card_id`,
+    )
+    .bind(since, more ? last : Number.MAX_SAFE_INTEGER, userId, userId, userId, userId)
+    .all<{ card_id: string; seq: number }>();
+  return { records: page, gone: moved.map((m) => m.card_id), next: more ? last : Math.max(last, ...moved.map((m) => m.seq)), more };
 }

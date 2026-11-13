@@ -136,6 +136,7 @@ export class SyncEngine {
     for (;;) {
       const page = await this.transport.pull(since);
       await this.repo.applyRemote(page.records);
+      if (page.gone?.length) await this.repo.dropCards(page.gone);
       since = page.next;
       await this.repo.setCursor(since);
       if (!page.more) return;

@@ -584,6 +584,15 @@ export class CardRepository {
     });
   }
 
+  /** Removes cards that someone moved out of this account's reach, along with their place in the log. */
+  dropCards(ids: string[]): Promise<void> {
+    return this.enqueue(async () => {
+      await this.store.deleteCards(ids);
+      const lost = new Set(ids);
+      await this.forget((entry) => lost.has(entry.cardId));
+    });
+  }
+
   applyRemote(records: CardRecord[]): Promise<void> {
     return this.enqueue(() => this.store.applyRemote(records));
   }

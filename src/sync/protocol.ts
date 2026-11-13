@@ -41,6 +41,8 @@ export interface SharedCard {
 
 export interface PullResponse {
   records: CardRecord[];
+  /** Cards that moved out of this account's reach, to remove from the device. */
+  gone?: string[];
   next: number;
   more: boolean;
 }

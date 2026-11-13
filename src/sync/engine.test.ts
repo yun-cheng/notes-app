@@ -402,6 +402,37 @@ describe('sharing', () => {
     expect(await b.titles()).toEqual(['Ben note']);
     expect((await b.store.listVaults()).map((v) => v.id)).toEqual([ben.info.vaults[0].id]);
   });
+  it('removes a card that someone moved to a vault this account is not in', async () => {
+    const { ann, a, b, call } = await annAndBen();
+    const shared = ann.info.vaults[0].id;
+    await call(ann.cookie, 'POST', `/api/vaults/${shared}/members`, { email: 'ben@x.y', role: 'editor' });
+    const own = ((await (await call(ann.cookie, 'POST', '/api/vaults', { name: 'Own' })).json()) as Vault).id;
+    const card = await a.repo.createNote({ title: 'Moves away' });
+    const back = await a.repo.createNote({ title: 'Moves and returns' });
+    await a.repo.createNote({ title: 'Stays' });
+    await a.engine.sync();
+    await b.engine.sync();
+    expect(await b.titles()).toEqual(['Moves and returns', 'Moves away', 'Stays']);
+
+    await a.repo.moveToVault(card.id, own);
+    await a.repo.moveToVault(back.id, own);
+    await a.engine.sync();
+    await a.repo.moveToVault(back.id, shared);
+    await a.engine.sync();
+    await b.repo.update(card.id, { title: 'Edited after it left' });
+    await b.engine.sync();
+    // The edit was refused, which this sync reports once; the card is gone, so the next has nothing left to fail.
+    expect(await b.titles()).toEqual(['Moves and returns', 'Stays']);
+    expect(b.engine.getStatus()).toMatchObject({ state: 'error', pending: 0 });
+    await b.engine.sync();
+    expect(b.engine.getStatus()).toMatchObject({ state: 'idle', pending: 0 });
+    expect(await a.titles()).toEqual(['Moves and returns', 'Moves away', 'Stays']);
+
+    // Nothing more to hear about once the cursor has passed the move.
+    const cursor = await b.repo.getCursor();
+    await b.engine.sync();
+    expect(await b.repo.getCursor()).toBe(cursor);
+  });
   it("syncs a single shared card and keeps new cards in the account's own vault", async () => {
     const { ann, ben, a, b, call } = await annAndBen();
     const card = await a.repo.createNote({ title: 'Recipe' });

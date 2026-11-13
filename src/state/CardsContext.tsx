@@ -13,6 +13,7 @@ import { preparePhoto } from '../photos/prepare';
 import { PhotoService, type PhotoState } from '../photos/service';
 import { Keyring } from '../crypto/keyring';
 import { unlockWithPin } from '../crypto/vaultKeys';
+import { finishEncrypting } from './encrypting';
 
 /** Each account has its own database and journal, so accounts on one browser stay apart. */
 export function openAccountStorage(accountId: string) {
@@ -74,6 +75,13 @@ export function CardsProvider({ accountId, children }: { accountId: string; chil
   const index = useMemo<CardIndex | null>(() => (cards && vaults ? buildIndex(cards, locked) : null), [cards, vaults, locked]);
   const [error, setError] = useState<string | null>(null);
   const [shared, setShared] = useState<ReadonlyMap<string, SharedCard>>(new Map());
+
+  // A vault whose encryption was turned on but not finished (the tab closed, a sync failed) is finished when opened.
+  useEffect(() => {
+    for (const vault of vaults ?? []) {
+      if (vault.encryption && !locked.has(vault.id)) void finishEncrypting(repo, engine, keyring, vault.id).catch(() => false);
+    }
+  }, [vaults, locked, repo, engine, keyring]);
 
   // The shared list changes only when a sync brings a new one.
   useEffect(() => {

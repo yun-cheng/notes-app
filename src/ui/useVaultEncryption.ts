@@ -2,7 +2,8 @@ import { changePin, createVaultKey, unlockWithRecoveryKey } from '../crypto/vaul
 import { hashPin } from '../domain/pin';
 import type { Vault } from '../domain/types';
 import { deviceKeyName, useCards } from '../state/CardsContext';
-import { purgePlaintextHistory, updateVault, type VaultChanges } from '../sync/http';
+import { encryptingName, finishEncrypting } from '../state/encrypting';
+import { updateVault, type VaultChanges } from '../sync/http';
 
 export class NeedsPin extends Error {}
 
@@ -26,12 +27,18 @@ export function useVaultEncryption() {
   const encrypt = async (vault: Vault, pin: string): Promise<string> => {
     await engine.sync();
     const { key, encryption, recoveryKey } = await createVaultKey(pin);
-    await save(vault, { pin: await hashPin(pin), encryption });
+    // Noted first, so the cards are still stored again if this stops partway (see `finishEncrypting`).
+    await repo.setMeta(encryptingName(vault.id), true);
+    try {
+      await save(vault, { pin: await hashPin(pin), encryption });
+    } catch (err) {
+      await repo.setMeta(encryptingName(vault.id), null);
+      throw err;
+    }
     keyring.set(vault.id, key);
     locks.unlockVerified(vault.id);
-    await repo.recodeVault(vault.id);
-    await engine.sync();
-    await purgePlaintextHistory(vault.id).catch(() => undefined);
+    // The recovery key is shown whatever happens next; what's left is done when the vault is next opened.
+    await finishEncrypting(repo, engine, keyring, vault.id).catch(() => false);
     return recoveryKey;
   };
 
@@ -41,6 +48,7 @@ export function useVaultEncryption() {
     await save(vault, { pin: null, encryption: null });
     await repo.recodeVault(vault.id);
     await repo.setMeta(deviceKeyName(vault.id), null);
+    await repo.setMeta(encryptingName(vault.id), null);
     await engine.sync();
   };
 

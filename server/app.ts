@@ -2,7 +2,7 @@ import { Hono, type Context } from 'hono';
 import { deleteCookie, getCookie, setCookie } from 'hono/cookie';
 import type { VaultPin } from '../src/domain/pin';
 import type { CardRecord } from '../src/domain/types';
-import { PUSH_LIMIT, type ConfigResponse, type SessionInfo, type VersionResponse, type VersionsResponse } from '../src/sync/protocol';
+import { PUSH_LIMIT, type ConfigResponse, type RecentVersionsResponse, type SessionInfo, type VersionResponse, type VersionsResponse } from '../src/sync/protocol';
 import {
   createSession,
   deleteSession,
@@ -23,7 +23,7 @@ import { pairingPublicRoutes, pairingSessionRoutes } from './pairing';
 import { publicRoutes, shareRoutes } from './shares';
 import { pullRecords, pushRecords } from './sync';
 import { createVault, listVaults, updateVault, type VaultUpdate } from './vaults';
-import { getVersion, listVersions, sealVersions } from './versions';
+import { getVersion, listRecentVersions, listVersions, sealVersions, type Device } from './versions';
 import { unfurlRoutes, type WebFetch } from './unfurl';
 
 type Env = AppEnv;
@@ -43,6 +43,17 @@ const COOKIE = 'session';
 function bearerToken(c: Context<Env>): string | undefined {
   const header = c.req.header('Authorization');
   return header?.startsWith('Bearer ') ? header.slice(7).trim() || undefined : undefined;
+}
+
+/**
+ * The device a request says it comes from. A device makes up its own ID and name, and nothing rests on them but
+ * how the history tells devices apart, so they're only checked for shape.
+ */
+function deviceOf(c: Context<Env>): Device | null {
+  const id = c.req.header('X-Device-Id');
+  if (!id || !/^[\w-]{8,64}$/.test(id)) return null;
+  const name = (c.req.header('X-Device-Name') ?? '').replace(/[^\x20-\x7e]/g, '').trim().slice(0, 60);
+  return { id, name: name || null };
 }
 
 function isRecord(value: unknown): value is CardRecord {
@@ -225,13 +236,19 @@ export function createApp({
       return c.json({ error: 'Invalid records' }, 400);
     }
     if (new Set(records.map((r) => r.id)).size !== records.length) return c.json({ error: 'Duplicate records' }, 400);
-    return c.json({ results: await pushRecords(c.env.DB, c.get('user').id, records) });
+    return c.json({ results: await pushRecords(c.env.DB, c.get('user').id, records, null, deviceOf(c)) });
   });
 
   app.get('/sync/pull', async (c) => {
     const since = Number(c.req.query('since') ?? 0);
     if (!Number.isSafeInteger(since) || since < 0) return c.json({ error: 'Invalid cursor' }, 400);
     return c.json(await pullRecords(c.env.DB, c.get('user').id, since));
+  });
+
+  /** What changed lately across every card this account can read, newest first, a page at a time. */
+  app.get('/versions', async (c) => {
+    const page = await listRecentVersions(c.env.DB, c.get('user').id, deviceOf(c)?.id ?? null, c.req.query('before') ?? null);
+    return page ? c.json<RecentVersionsResponse>(page) : c.json({ error: 'Invalid cursor' }, 400);
   });
 
   app.get('/cards/:id/versions', async (c) => {

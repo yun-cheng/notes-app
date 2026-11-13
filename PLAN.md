@@ -119,7 +119,7 @@ VaultMember  vault_id, user_id, role(owner|editor|viewer)
 Card         id, home_vault_id, type(note|todo|diary|tag), payload(TipTap JSON + fields)
 Share        card_id, target(vault|user|public_link), role(view|comment|edit), expires_at
 Comment      id, card_id, author_id, anchor, body
-CardVersion  id, card_id, author_id, started_at, saved_at, payload
+CardVersion  id, card_id, author_id, started_at, saved_at, payload, via, device, device_name, deleted
 ```
 
 Links and tag associations live inside the card payload.
@@ -188,7 +188,9 @@ None. Defaults chosen while building are listed in the implementation notes, and
 ## Implementation notes from version history
 
 - The server keeps history, so every device sees the same versions and a new device gets them too. It needs a connection; offline, the page says so.
-- One version covers a stretch of edits by one person: saves within 10 minutes of each other extend it, up to an hour. Both sides of a sync conflict are kept as separate versions. At most 200 versions per card.
+- One version covers a stretch of edits by one person on one device: saves within 10 minutes of each other extend it, up to an hour. Both sides of a sync conflict are kept as separate versions. At most 200 versions per card.
+- A version records the device it came from (decided 2026-11-13): an ID the device makes up for itself and a name like "Chrome on Mac", sent with each push. It also records whether the card was in the Trash, so moving a card to the Trash, or back, is a version of its own.
+- `GET /api/versions` lists the newest versions of every card the user can read, each with the version it replaced, 40 to a page. It is what the History page shows of other devices, other people and AI apps. Only the user's own versions say which device.
 - A card that existed before history was kept gets its earlier state saved, with no author, the first time it changes.
 - History is visible to members of the card's current vault. Locked cards show the unlock panel instead, as their card page does.
 - The page compares a version with the one before it, word by word (each CJK character counts as a word), or shows its full text. A line that was mostly rewritten is shown as the old line and the new one.

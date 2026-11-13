@@ -2,7 +2,7 @@ import type { CardRecord } from '../src/domain/types';
 import { MAX_PAYLOAD_BYTES, PULL_LIMIT, type PullResponse, type PushResult } from '../src/sync/protocol';
 import { SHARED_WITH } from './access';
 import type { Database, Statement } from './db';
-import { recordVersions, type Written } from './versions';
+import { recordVersions, type Device, type Written } from './versions';
 
 interface CardRow extends Omit<CardRecord, 'deleted'> {
   deleted: number;
@@ -47,8 +47,14 @@ interface Write {
  * Applies a batch of records. Decisions are made from a read, and each write only lands
  * if the card hasn't changed since. A write that lost that race comes back as `retry`.
  */
-/** `via` names the AI app making the change, for its history; null for the person's own devices. */
-export async function pushRecords(db: Database, userId: string, records: CardRecord[], via: string | null = null): Promise<PushResult[]> {
+/** For the cards' history, `via` names the AI app making the change (null for the person's own devices) and `device` the device, if it said. */
+export async function pushRecords(
+  db: Database,
+  userId: string,
+  records: CardRecord[],
+  via: string | null = null,
+  device: Device | null = null,
+): Promise<PushResult[]> {
   const writable = await writableVaults(db, userId);
   const { results: sealed } = await db.prepare(`SELECT id FROM vaults WHERE encryption IS NOT NULL`).all<{ id: string }>();
   const encrypted = new Set(sealed.map((v) => v.id));
@@ -108,7 +114,7 @@ export async function pushRecords(db: Database, userId: string, records: CardRec
       if (row) written.push({ record: write.record, previous: existing.get(id), conflict: result.status === 'conflict_client_won' });
     });
     // History is a convenience: a failure here must not fail a push that already landed.
-    await recordVersions(db, userId, written, via).catch((err) => console.error('Could not record versions', err));
+    await recordVersions(db, userId, written, via, device).catch((err) => console.error('Could not record versions', err));
   }
   return records.map((r) => results.get(r.id)!);
 }

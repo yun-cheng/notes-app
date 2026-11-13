@@ -88,6 +88,16 @@ export function changeTitle(change: Change, current?: Card): string {
 }
 
 /**
+ * A change as it may be shown while some vaults are locked: unreadable when its card is in one of them, or was
+ * before the change. A vault from before encryption can be locked with its cards still readable in the database.
+ */
+export function sealLocked(change: Change, locked: ReadonlySet<string>): Change {
+  if (change.sealed) return change;
+  const shut = locked.has(change.after.vaultId) || (!!change.before && locked.has(change.before.vaultId));
+  return shut ? { ...change, sealed: true } : change;
+}
+
+/**
  * A change can be undone while the card still holds what the change left: every field it set is as it set it.
  * So an edit made since, here or on another device, is never overwritten; undo that one first. A new card can
  * be undone until it's in the Trash, which is where undoing it puts it.

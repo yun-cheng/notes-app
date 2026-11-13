@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import {
-  canRedo, canUndo, changedFields, describeChange, groupChanges, isTextChange, matchesChange, nextRedo, nextUndo, revertCard, type Change,
+  canRedo, canUndo, changedFields, describeChange, groupChanges, isTextChange, matchesChange, nextRedo, nextUndo, revertCard, sealLocked, type Change,
 } from './changes';
 import { doc, note, p, tag, text, todo } from './testFixtures';
 import type { Card } from './types';
@@ -138,6 +138,20 @@ describe('filtered history', () => {
     expect(matchesChange(locked, { vaultId: 'w' }, TODAY)).toBe(false);
     expect(matchesChange(locked, { type: 'todo' }, TODAY)).toBe(false);
     expect(matchesChange(locked, { tagId: 'work' }, TODAY)).toBe(false);
+  });
+});
+
+describe('changes in a locked vault', () => {
+  it('can’t be read while the vault they are in, or came from, is locked', () => {
+    const a = { ...note('a', 'One'), vaultId: 'v' };
+    const edit = change(a, { ...a, title: 'Two' });
+    const move = change(a, { ...a, vaultId: 'w' });
+    expect(sealLocked(edit, new Set(['v']))).toMatchObject({ sealed: true });
+    expect(sealLocked(move, new Set(['v'])).sealed).toBe(true);
+    expect(sealLocked(move, new Set(['w'])).sealed).toBe(true);
+    expect(sealLocked(change(null, a), new Set(['v'])).sealed).toBe(true);
+    expect(sealLocked(edit, new Set(['w']))).toBe(edit);
+    expect(sealLocked(edit, new Set())).toBe(edit);
   });
 });
 

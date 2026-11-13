@@ -1,7 +1,7 @@
 import { useEffect, useMemo, useState } from 'react';
 import { Link, useLocation } from 'react-router';
 import { linkTitle } from '../../domain/cardIndex';
-import { canRedo, canUndo, changeTitle, describeChange, groupChanges, matchesChange, nextRedo, nextUndo, type Change, type ChangeGroup } from '../../domain/changes';
+import { canRedo, canUndo, changeTitle, describeChange, groupChanges, matchesChange, nextRedo, nextUndo, sealLocked, type Change, type ChangeGroup } from '../../domain/changes';
 import { relativeDay, toDateKey } from '../../domain/dates';
 import { cardLines, diffExcerpt, diffLines } from '../../domain/history';
 import { isFiltered } from '../../domain/stream';
@@ -73,10 +73,12 @@ export function ChangesPage() {
   const shown = useMemo(() => {
     // A hidden vault stays out of sight until it's unlocked from Vaults.
     const hidden = new Set(vaults.filter((v) => v.hidden && locked.has(v.id)).map((v) => v.id));
-    return (rows ?? []).filter(
-      ({ change }) =>
-        !hidden.has(change.after.vaultId) && !(change.before && hidden.has(change.before.vaultId)) && (!filtered || matchesChange(change, filter, today)),
-    );
+    return (rows ?? [])
+      .map((row) => ({ ...row, change: sealLocked(row.change, locked) }))
+      .filter(
+        ({ change }) =>
+          !hidden.has(change.after.vaultId) && !(change.before && hidden.has(change.before.vaultId)) && (!filtered || matchesChange(change, filter, today)),
+      );
     // `here` stands for the filter, which is a new object each time.
   }, [rows, vaults, locked, here, today]);
 

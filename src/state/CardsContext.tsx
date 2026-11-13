@@ -27,7 +27,7 @@ export const deviceKeyName = (vaultId: string) => `devicekey:${vaultId}`;
 
 function openAccount(accountId: string) {
   const { store, repo, keyring } = openAccountStorage(accountId);
-  const engine = new SyncEngine(repo, httpTransport);
+  const engine = new SyncEngine(repo, httpTransport(() => repo.deviceId()));
   repo.onChange = () => engine.schedule();
   const keys: VaultKeyHooks = {
     unlock: async (vault, pin) => {

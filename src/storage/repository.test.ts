@@ -262,3 +262,13 @@ describe('backup import', () => {
     expect(vaults).toHaveLength(1);
   });
 });
+
+describe('device', () => {
+  it('makes up an ID for this device once, and keeps it', async () => {
+    const [first, again] = await Promise.all([repo.deviceId(), repo.deviceId()]);
+    expect(first).toMatch(/^id\d+$/);
+    expect(again).toBe(first);
+    const reopened = new CardRepository(store, jsonCodec, () => clock++, () => `other${++n}`);
+    expect(await reopened.deviceId()).toBe(first);
+  });
+});

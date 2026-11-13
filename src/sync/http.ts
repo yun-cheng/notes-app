@@ -1,3 +1,4 @@
+import { deviceName } from '../domain/device';
 import type { VaultPin } from '../domain/pin';
 import type { CardRecord, JSONNode, Vault } from '../domain/types';
 import type { PhotoTransport } from '../photos/types';
@@ -16,13 +17,20 @@ async function request<T>(path: string, init?: RequestInit): Promise<T> {
   return (await res.json()) as T;
 }
 
-export const httpTransport: SyncTransport = {
+/** Says which device a request comes from, so history can tell this device's changes from the others'. */
+const deviceHeaders = (deviceId: string) => ({
+  'content-type': 'application/json',
+  'X-Device-Id': deviceId,
+  'X-Device-Name': deviceName(navigator.userAgent, navigator.maxTouchPoints),
+});
+
+export const httpTransport = (deviceId: () => Promise<string>): SyncTransport => ({
   push: async (records: CardRecord[]) =>
-    (await request<PushResponse>('/sync/push', { method: 'POST', body: JSON.stringify({ records }) })).results,
+    (await request<PushResponse>('/sync/push', { method: 'POST', headers: deviceHeaders(await deviceId()), body: JSON.stringify({ records }) })).results,
   pull: (since) => request<PullResponse>(`/sync/pull?since=${since}`),
   vaults: async () => (await request<SessionInfo>('/me')).vaults,
   shared: async () => (await request<{ cards: SharedCard[] }>('/shared')).cards,
-};
+});
 
 export const fetchConfig = () => request<ConfigResponse>('/config');
 

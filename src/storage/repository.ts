@@ -457,6 +457,22 @@ export class CardRepository {
     return this.enqueue(() => this.store.putVaults(vaults));
   }
 
+  private device: Promise<string> | null = null;
+
+  /**
+   * What this device signs its changes with, so history can tell them from other devices'. Made up once and kept
+   * beside the change log, so it lasts as long as the log does.
+   */
+  deviceId(): Promise<string> {
+    return (this.device ??= (async () => {
+      const kept = await this.store.getMeta('device');
+      if (typeof kept === 'string') return kept;
+      await this.store.setMeta('device', this.newId());
+      // Read back, in case another tab made one in the same moment.
+      return (await this.store.getMeta('device')) as string;
+    })());
+  }
+
   getMeta(key: string): Promise<unknown> {
     return this.store.getMeta(key);
   }

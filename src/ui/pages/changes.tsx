@@ -16,6 +16,7 @@ import { FilterSheet, useFilterTitle, useJournalFilter } from '../FilterPanel';
 import { Icon, type IconName } from '../Icon';
 import { cardPath, historyPath, sheetState, versionsPath } from '../paths';
 import { MOD, REDO_KEYS } from '../Shortcuts';
+import { useToast } from '../Toast';
 import { useSyncedChanges } from '../useSyncedChanges';
 import { useCanRevert, useUndo, type Direction } from '../useUndo';
 
@@ -69,7 +70,8 @@ function useChanges(): ChangeRow[] | null {
  * The journal's filters narrow it: the history of open todos, of one tag, of one vault.
  */
 export function ChangesPage() {
-  const { vaults, locked, index } = useCards();
+  const { vaults, locked, index, repo } = useCards();
+  const toast = useToast();
   const today = useToday();
   const filter = useJournalFilter();
   const filtered = isFiltered(filter);
@@ -77,7 +79,7 @@ export function ChangesPage() {
   const rows = useChanges();
   const synced = useSyncedChanges();
   const canRevert = useCanRevert();
-  const { undo, redo, revert } = useUndo();
+  const { undo, redo, revert, undoAction } = useUndo();
   const [filtering, setFiltering] = useState(false);
   const here = historyPath(filter);
 
@@ -108,8 +110,14 @@ export function ChangesPage() {
   const changes = shown.map((row) => row.change);
   // A change from elsewhere is checked against the card as it is here now.
   const currentOf = (change: Change) => (change.by ? index.byId.get(change.cardId) : current.get(change.n));
-  // Only this device's changes are in the log, to be undone.
-  const can = (direction: Direction) => (change: Change) => !change.by && canRevert(change, currentOf(change), direction);
+  const can = (direction: Direction) => (change: Change) => canRevert(change, currentOf(change), direction);
+  /** Undoes a change made elsewhere. That is a change made here, so the way back is to undo it. */
+  const takeBack = async (change: Change) => {
+    const said = `${describeChange(change)} “${changeTitle(change, currentOf(change))}”`;
+    const action = await repo.takeBack(change);
+    if (!action) return toast("That change can't be undone any more: the entry was changed again.");
+    toast(`Undid: ${said}`, { action: { label: 'Redo', run: () => void undoAction(action) } });
+  };
   const undoable = nextUndo(changes, can('undo')).length > 0;
   const redoable = nextRedo(changes, can('redo')).length > 0;
 
@@ -194,6 +202,7 @@ export function ChangesPage() {
                     currentOf={currentOf}
                     can={can}
                     revert={(ns, direction) => void revert(ns, direction)}
+                    takeBack={(change) => void takeBack(change)}
                   />
                 ))}
               </ol>
@@ -222,10 +231,12 @@ interface Reverting {
   currentOf: (change: Change) => Card | undefined;
   can: (direction: Direction) => (change: Change) => boolean;
   revert: (ns: number[], direction: Direction) => void;
+  /** Undoes a change that came by sync, which isn't in the log to be reverted. */
+  takeBack: (change: Change) => void;
 }
 
 /** The changes one action made. Several, like five entries trashed at once, can be undone together. */
-function Group({ group, currentOf, can, revert }: { group: ChangeGroup } & Reverting) {
+function Group({ group, currentOf, can, revert, takeBack }: { group: ChangeGroup } & Reverting) {
   const { changes } = group;
   const undo = changes.filter(can('undo'));
   const redo = changes.filter(can('redo'));
@@ -248,13 +259,13 @@ function Group({ group, currentOf, can, revert }: { group: ChangeGroup } & Rever
         </div>
       )}
       {changes.map((change) => (
-        <Row key={change.n} change={change} current={currentOf(change)} can={can} revert={revert} />
+        <Row key={change.n} change={change} current={currentOf(change)} can={can} revert={revert} takeBack={takeBack} />
       ))}
     </li>
   );
 }
 
-function Row({ change, current, can, revert }: { change: Change; current: Card | undefined } & Omit<Reverting, 'currentOf'>) {
+function Row({ change, current, can, revert, takeBack }: { change: Change; current: Card | undefined } & Omit<Reverting, 'currentOf'>) {
   const { index } = useCards();
   const location = useLocation();
   const [open, setOpen] = useState(false);
@@ -303,7 +314,7 @@ function Row({ change, current, can, revert }: { change: Change; current: Card |
         {open && compared && <Comparison change={change} />}
       </div>
       {undoable && (
-        <button type="button" className="btn" onClick={() => revert([change.n], 'undo')}>
+        <button type="button" className="btn" onClick={() => (change.by ? takeBack(change) : revert([change.n], 'undo'))}>
           Undo
         </button>
       )}

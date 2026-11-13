@@ -2,6 +2,7 @@ import { beforeEach, describe, expect, it } from 'vitest';
 import { CardRepository } from './repository';
 import { MemoryStore } from './memoryStore';
 import { jsonCodec, type PayloadCodec } from './types';
+import type { Change } from '../domain/changes';
 import type { CardPayload, TodoCard, Vault } from '../domain/types';
 
 const doc = (t: string) => ({ type: 'doc', content: [{ type: 'paragraph', content: [{ type: 'text', text: t }] }] });
@@ -230,6 +231,39 @@ describe('undo and redo', () => {
     const back = await current(card.id);
     expect(back).toMatchObject({ type: 'note', title: '', content: doc('buy milk') });
     expect(back).not.toHaveProperty('status');
+  });
+});
+
+describe('taking back a change made elsewhere', () => {
+  /** An edit as the server's history tells it: made on another device, so not in this device's log. */
+  const elsewhere = async (id: string, title: string): Promise<Change> => {
+    const record = (await store.getCard(id))!;
+    const before = await repo.decode(record);
+    const after = { ...before, title, updatedAt: 9000 };
+    await repo.forceRemote({ ...record, seq: 5, updated_at: 9000, payload: JSON.stringify({ type: 'note', title, content: before.content, tags: [], createdAt: before.createdAt }) });
+    return { n: -1, at: 9000, until: 9000, group: 'v:1', cardId: id, before, after, fields: ['title'], sealed: false };
+  };
+
+  it('writes back what the change replaced, as a change of its own that undo takes back', async () => {
+    const card = await repo.createNote({ title: 'mine' });
+    const theirs = await elsewhere(card.id, 'theirs');
+    const action = await repo.takeBack(theirs);
+    expect(await current(card.id)).toMatchObject({ title: 'mine' });
+    const [, back] = await changes();
+    expect(back).toMatchObject({ group: action, fields: ['title'], before: { title: 'theirs' }, after: { title: 'mine' } });
+    expect((await store.listDirty()).map((r) => r.id)).toEqual([card.id]);
+
+    expect(await repo.revert([back.n], 'undo')).toEqual([back.n]);
+    expect(await current(card.id)).toMatchObject({ title: 'theirs' });
+  });
+
+  it('leaves the card alone once it has been changed again', async () => {
+    const card = await repo.createNote({ title: 'mine' });
+    const theirs = await elsewhere(card.id, 'theirs');
+    await repo.update(card.id, { title: 'later' });
+    expect(await repo.takeBack(theirs)).toBeUndefined();
+    expect(await current(card.id)).toMatchObject({ title: 'later' });
+    expect(await repo.takeBack({ ...theirs, cardId: 'gone' })).toBeUndefined();
   });
 });
 

@@ -326,6 +326,22 @@ export class CardRepository {
     });
   }
 
+  /**
+   * Takes back a change this device didn't make, read from the server's history, as undo would: only the fields
+   * it set, and only while the card still holds what it left. Unlike undo this is a change of its own in the
+   * log, so it can be undone in turn. Gives the action it's logged as, or nothing when it can't be done.
+   */
+  takeBack(change: Change): Promise<string | undefined> {
+    const action = this.acting();
+    action.explicit = true;
+    return this.enqueue(async () => {
+      const current = await this.read(change.cardId);
+      if (!current || isSealed(current) || !canUndo(change, current)) return undefined;
+      await this.write({ ...revertCard(current, change, 'undo'), updatedAt: this.now() }, action, current);
+      return action.id;
+    });
+  }
+
   private lastCreated = 0;
 
   /** Creation times never repeat, so entries saved together keep the order they were typed in. */

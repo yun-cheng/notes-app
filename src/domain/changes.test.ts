@@ -1,7 +1,9 @@
 import { describe, expect, it } from 'vitest';
 import {
-  canRedo, canUndo, changedFields, describeChange, groupChanges, isTextChange, matchesChange, nextRedo, nextUndo, revertCard, sealLocked, type Change,
+  appendRecent, canRedo, canUndo, changedFields, describeChange, groupChanges, inLog, isTextChange, madeBy, matchesChange, mergeHistory, nextRedo, nextUndo, reachOf,
+  refreshRecent, revertCard, sealLocked, syncedChange, versionEntry, type Change, type ChangeSource,
 } from './changes';
+import type { RecentVersion } from '../sync/protocol';
 import { doc, note, p, tag, text, todo } from './testFixtures';
 import type { Card } from './types';
 
@@ -190,5 +192,101 @@ describe('what undo and redo pick', () => {
     const fresh = change(a, { ...a, title: 'A2' }, { until: 50 });
     expect(nextRedo([one, undoneTwo, fresh], all)).toEqual([]);
     expect(nextRedo([one, undoneTwo], () => false)).toEqual([]);
+  });
+});
+
+describe('changes that came by sync', () => {
+  const version = (over: Partial<RecentVersion> = {}): RecentVersion => ({
+    id: 7, started_at: 100, saved_at: 160, author: 'Ann', via: null, card_id: 'a', vault_id: 'v', payload: 'new', deleted: false,
+    before: { payload: 'old', deleted: false }, mine: true, device: { here: false, name: 'Safari on iPhone' }, ...over,
+  });
+  const by = (over: Partial<ChangeSource> = {}): ChangeSource => ({ author: 'Ann', mine: true, via: null, device: null, ...over });
+
+  it('reads a version as a log entry of its own, outside the log’s numbering', () => {
+    expect(versionEntry(version({ deleted: true }))).toEqual({
+      n: -7, at: 100, until: 160, group: 'v:7', cardId: 'a', fields: [],
+      before: { id: 'a', vault_id: 'v', updated_at: 100, deleted: false, seq: 0, payload: 'old' },
+      after: { id: 'a', vault_id: 'v', updated_at: 160, deleted: true, seq: 0, payload: 'new' },
+    });
+    expect(versionEntry(version({ before: null })).before).toBeNull();
+  });
+
+  it('says what a version changed and who made it', () => {
+    const before = note('a', 'One');
+    const made = syncedChange(change(before, { ...before, title: 'Two' }, { fields: [] }), version({ via: 'Claude' }))!;
+    expect(made.fields).toEqual(['title']);
+    expect(made.by).toEqual({ author: 'Ann', mine: true, via: 'Claude', device: { here: false, name: 'Safari on iPhone' } });
+    expect(describeChange(syncedChange(change(before, { ...before, deleted: true }, { fields: [] }), version())!)).toBe('Moved to Trash');
+  });
+
+  it('drops a version that changed nothing, and takes a card’s first words for its making', () => {
+    const before = note('a', 'One');
+    expect(syncedChange(change(before, { ...before, updatedAt: 9 }, { fields: [] }), version())).toBeNull();
+    const blank = { ...note('b', ''), content: doc() };
+    expect(syncedChange(change(null, blank), version())).toBeNull();
+    expect(syncedChange(change(blank, { ...blank, title: 'Hello' }, { fields: [] }), version())).toMatchObject({ before: null, fields: [] });
+    expect(syncedChange(change(before, before, { sealed: true, fields: [] }), version())).toMatchObject({ sealed: true, by: { author: 'Ann' } });
+  });
+
+  it('names who or what made it', () => {
+    expect(madeBy(by({ via: 'Claude' }))).toBe('Claude (AI)');
+    expect(madeBy(by({ mine: false, author: 'Ben', via: 'Claude' }))).toBe('Ben via Claude (AI)');
+    expect(madeBy(by({ mine: false, author: 'Ben' }))).toBe('Ben');
+    expect(madeBy(by({ mine: false, author: null }))).toBe('Someone');
+    expect(madeBy(by({ device: { here: true, name: 'Chrome on Mac' } }))).toBe('This device');
+    expect(madeBy(by({ device: { here: false, name: 'Safari on iPhone' } }))).toBe('Safari on iPhone');
+    expect(madeBy(by({ device: { here: false, name: null } }))).toBe('Another device');
+    expect(madeBy(by())).toBe('One of your devices');
+  });
+
+  it('leaves this device’s own changes to its log, for as far back as the log goes', () => {
+    const a = note('a', 'One');
+    const log = [change(a, { ...a, title: 'Two' }, { at: 500, until: 560 })];
+    const synced = (source: Partial<ChangeSource>, at: number, until: number, card = a) => change(card, { ...card, title: 'x' }, { at, until, by: by(source) });
+    const here = { device: { here: true, name: null } };
+    expect(inLog(synced(here, 900, 950, note('b', 'B')), log)).toBe(true);
+    expect(inLog(synced(here, 100, 499), log)).toBe(false);
+    expect(inLog(synced({ device: { here: false, name: null } }, 500, 560), log)).toBe(false);
+    expect(inLog(synced({ ...here, via: 'Claude' }, 500, 560), log)).toBe(false);
+    expect(inLog(synced({ ...here, mine: false }, 500, 560), log)).toBe(false);
+    expect(inLog(synced(here, 500, 560), [])).toBe(false);
+  });
+
+  it('takes an unsigned version for this device’s when the log has the card changing then', () => {
+    const a = note('a', 'One');
+    const log = [change(a, { ...a, title: 'Two' }, { at: 500, until: 560 }), change(a, { ...a, title: 'Three' }, { at: 700, until: 700, undoneAt: 800 })];
+    const synced = (at: number, until: number, card = a) => change(card, { ...card, title: 'x' }, { at, until, by: by() });
+    expect(inLog(synced(540, 600), log)).toBe(true);
+    expect(inLog(synced(561, 650), log)).toBe(false);
+    expect(inLog(synced(540, 600, note('b', 'B')), log)).toBe(false);
+    // Undoing a change saved the card again.
+    expect(inLog(synced(790, 800), log)).toBe(true);
+  });
+
+  it('keeps the older pages when the newest is asked again, unless too much is new to meet them', () => {
+    const at = (...ids: number[]) => ids.map((id) => version({ id, saved_at: id * 10 }));
+    const ids = (pages: { versions: RecentVersion[] }) => pages.versions.map((v) => v.id);
+    const had = appendRecent({ versions: at(9, 8, 7), next: '70-7' }, { versions: at(7, 6, 5), next: '50-5' });
+    expect(ids(had)).toEqual([9, 8, 7, 6, 5]);
+    expect(reachOf(had)).toBe(50);
+    expect(reachOf({ versions: at(1), next: null })).toBe(-Infinity);
+    expect(reachOf(null)).toBe(-Infinity);
+
+    const met = refreshRecent(had, { versions: at(11, 10, 9), next: '90-9' });
+    expect([ids(met), met.next]).toEqual([[11, 10, 9, 8, 7, 6, 5], '50-5']);
+    // A version saved again moves up, and isn't listed twice.
+    const moved = refreshRecent(had, { versions: [version({ id: 6, saved_at: 120 }), ...at(9, 8)], next: '80-8' });
+    expect([ids(moved), moved.next]).toEqual([[6, 9, 8, 7, 5], '50-5']);
+    const apart = refreshRecent(had, { versions: at(30, 29, 28), next: '280-28' });
+    expect([ids(apart), apart.next]).toEqual([[30, 29, 28], '280-28']);
+    expect(refreshRecent(had, { versions: at(9, 8), next: null }).next).toBeNull();
+    expect(refreshRecent(null, { versions: at(9), next: '90-9' }).next).toBe('90-9');
+  });
+
+  it('puts both kinds in one history, newest first', () => {
+    const a = note('a', 'One');
+    const local = groupChanges([change(a, a, { until: 100, group: 'y' }), change(a, a, { until: 300, group: 'x' }), change(a, a, { until: 300, group: 'x' })]);
+    const synced = [change(a, a, { n: -1, until: 300, group: 'v:1' }), change(a, a, { n: -2, until: 200, group: 'v:2' })];
+    expect(mergeHistory(local, synced).map((g) => [g.group, g.changes.length, g.at])).toEqual([['x', 2, 300], ['v:1', 1, 300], ['v:2', 1, 200], ['y', 1, 100]]);
   });
 });

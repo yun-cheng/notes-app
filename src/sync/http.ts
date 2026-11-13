@@ -3,7 +3,7 @@ import type { VaultPin } from '../domain/pin';
 import type { CardRecord, JSONNode, Vault } from '../domain/types';
 import type { PhotoTransport } from '../photos/types';
 import { SyncAuthExpired, SyncOffline, type SyncTransport } from './engine';
-import type { ConfigResponse, LinkPreview, PullResponse, PushResponse, SessionInfo, SharedCard, VersionResponse, VersionsResponse } from './protocol';
+import type { ConfigResponse, LinkPreview, PullResponse, PushResponse, RecentVersionsResponse, SessionInfo, SharedCard, VersionResponse, VersionsResponse } from './protocol';
 
 async function request<T>(path: string, init?: RequestInit): Promise<T> {
   let res: Response;
@@ -60,6 +60,10 @@ export const fetchVersions = async (cardId: string) =>
 
 export const fetchVersion = (cardId: string, versionId: number) =>
   request<VersionResponse>(`/cards/${encodeURIComponent(cardId)}/versions/${versionId}`);
+
+/** A page of the newest versions of every card, with what each replaced. `before` is the `next` of the page before. */
+export const fetchRecentVersions = (deviceId: string, before?: string | null) =>
+  request<RecentVersionsResponse>(`/versions${before ? `?before=${encodeURIComponent(before)}` : ''}`, { headers: deviceHeaders(deviceId) });
 
 /** Closes the card's newest version, so a restore shows up as its own entry. */
 export const sealVersions = (cardId: string) => request<unknown>(`/cards/${encodeURIComponent(cardId)}/versions/seal`, { method: 'POST', body: '{}' });

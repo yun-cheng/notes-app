@@ -344,6 +344,8 @@ body:has(.composer:focus-within) .tabbar { display: none; }
 .changes__together span { flex: 1; }
 .changes__together ~ .change { padding-left: 12px; border-left: 2px solid var(--line); }
 .changes__note { color: var(--muted); font-size: 13px; padding: 16px 0; }
+.changes__note .btn { margin-right: 8px; }
+.changes__problem { color: var(--muted); font-size: 14px; margin: -8px 0 12px; }
 .change { display: flex; align-items: flex-start; gap: 10px; padding: 10px 0; }
 .change .btn { flex: none; min-height: 34px; }
 .change__body { flex: 1; min-width: 0; }
@@ -353,6 +355,8 @@ body:has(.composer:focus-within) .tabbar { display: none; }
 a.change__title:hover { color: var(--accent); }
 .change__meta { display: flex; flex-wrap: wrap; align-items: center; gap: 2px 10px; color: var(--muted); font-size: 13px; }
 .change__undone { padding: 0 7px; border-radius: 999px; background: var(--sunken); font-weight: 600; }
+/* Who made a change that came by sync: another device, an AI app, someone the entry is shared with. */
+.change__by { padding: 0 7px; border-radius: 999px; background: var(--sunken); font-weight: 600; }
 .change__toggle { color: var(--muted); font-size: 13px; text-decoration: underline; text-underline-offset: 2px; }
 .change__toggle:hover { color: var(--text); }
 .change__plain { color: var(--muted); font-size: 14px; margin-top: 6px; }

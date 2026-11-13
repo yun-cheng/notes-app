@@ -1,7 +1,9 @@
-import { useEffect, useMemo, useState } from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
 import { Link, useLocation } from 'react-router';
 import { linkTitle } from '../../domain/cardIndex';
-import { canRedo, canUndo, changeTitle, describeChange, groupChanges, matchesChange, nextRedo, nextUndo, sealLocked, type Change, type ChangeGroup } from '../../domain/changes';
+import {
+  canRedo, canUndo, changeTitle, describeChange, groupChanges, inLog, madeBy, matchesChange, mergeHistory, nextRedo, nextUndo, sealLocked, type Change, type ChangeGroup,
+} from '../../domain/changes';
 import { relativeDay, toDateKey } from '../../domain/dates';
 import { cardLines, diffExcerpt, diffLines } from '../../domain/history';
 import { isFiltered } from '../../domain/stream';
@@ -12,13 +14,20 @@ import { Empty, Page } from '../components';
 import { Diff } from '../Diff';
 import { FilterSheet, useFilterTitle, useJournalFilter } from '../FilterPanel';
 import { Icon, type IconName } from '../Icon';
-import { cardPath, historyPath, sheetState } from '../paths';
+import { cardPath, historyPath, sheetState, versionsPath } from '../paths';
 import { MOD, REDO_KEYS } from '../Shortcuts';
+import { useSyncedChanges } from '../useSyncedChanges';
 import { useCanRevert, useUndo, type Direction } from '../useUndo';
 
 const TYPE_ICON: Record<Card['type'], IconName> = { note: 'note', todo: 'todo', diary: 'diary', tag: 'tag' };
 /** The fields a comparison of two versions can show. Where a card is, or whether it's in the Trash, isn't text. */
 const COMPARED = new Set(['title', 'content', 'tags', 'type', 'status', 'due', 'dueTime', 'repeat']);
+
+/** Older pages are fetched unasked until this many actions show, a few pages at a time. */
+const ENOUGH = 15;
+const PAGES_AT_ONCE = 3;
+/** How long the page waits for the server before showing this device's changes alone. */
+const PATIENCE = 3000;
 
 const time = (at: number) => new Date(at).toLocaleTimeString(undefined, { hour: 'numeric', minute: '2-digit' });
 
@@ -55,50 +64,85 @@ function useChanges(): ChangeRow[] | null {
 }
 
 /**
- * Everything this device changed, newest first, with undo and redo for each change and for the last one.
+ * Everything that changed, newest first: this device's log, with undo and redo for each change and for the last
+ * one, and between its entries what other devices, other people and AI apps changed, from the server's history.
  * The journal's filters narrow it: the history of open todos, of one tag, of one vault.
  */
 export function ChangesPage() {
-  const { vaults, locked } = useCards();
+  const { vaults, locked, index } = useCards();
   const today = useToday();
   const filter = useJournalFilter();
   const filtered = isFiltered(filter);
   const scope = useFilterTitle(filter);
   const rows = useChanges();
+  const synced = useSyncedChanges();
   const canRevert = useCanRevert();
   const { undo, redo, revert } = useUndo();
   const [filtering, setFiltering] = useState(false);
   const here = historyPath(filter);
 
-  const shown = useMemo(() => {
+  const [waited, setWaited] = useState(false);
+  useEffect(() => {
+    const timer = setTimeout(() => setWaited(true), PATIENCE);
+    return () => clearTimeout(timer);
+  }, []);
+  const ready = !!rows && (synced.settled || waited);
+
+  const { shown, others, any } = useMemo(() => {
     // A hidden vault stays out of sight until it's unlocked from Vaults.
     const hidden = new Set(vaults.filter((v) => v.hidden && locked.has(v.id)).map((v) => v.id));
-    return (rows ?? [])
-      .map((row) => ({ ...row, change: sealLocked(row.change, locked) }))
-      .filter(
-        ({ change }) =>
-          !hidden.has(change.after.vaultId) && !(change.before && hidden.has(change.before.vaultId)) && (!filtered || matchesChange(change, filter, today)),
-      );
+    const seen = (change: Change) =>
+      !hidden.has(change.after.vaultId) && !(change.before && hidden.has(change.before.vaultId)) && (!filtered || matchesChange(change, filter, today));
+    const log = (rows ?? []).map((row) => row.change);
+    // What this device did is in its log, with undo. The server's copy of it would say it twice.
+    const elsewhere = (synced.changes ?? []).filter((change) => !inLog(change, log));
+    return {
+      shown: (rows ?? []).map((row) => ({ ...row, change: sealLocked(row.change, locked) })).filter((row) => seen(row.change)),
+      others: elsewhere.map((change) => sealLocked(change, locked)).filter(seen),
+      any: log.length + elsewhere.length > 0,
+    };
     // `here` stands for the filter, which is a new object each time.
-  }, [rows, vaults, locked, here, today]);
+  }, [rows, synced.changes, vaults, locked, here, today]);
 
   const current = new Map(shown.map((row) => [row.change.n, row.current]));
   const changes = shown.map((row) => row.change);
-  const can = (direction: Direction) => (change: Change) => canRevert(change, current.get(change.n), direction);
+  // A change from elsewhere is checked against the card as it is here now.
+  const currentOf = (change: Change) => (change.by ? index.byId.get(change.cardId) : current.get(change.n));
+  // Only this device's changes are in the log, to be undone.
+  const can = (direction: Direction) => (change: Change) => !change.by && canRevert(change, currentOf(change), direction);
   const undoable = nextUndo(changes, can('undo')).length > 0;
   const redoable = nextRedo(changes, can('redo')).length > 0;
 
+  // This device's older changes wait for the server's of the same time, so nothing is missing in between.
+  const groups = mergeHistory(groupChanges(changes), others).filter((group) => group.at >= synced.reach);
   const days: { day: string; groups: ChangeGroup[] }[] = [];
-  for (const group of groupChanges(changes)) {
+  for (const group of groups) {
     const day = toDateKey(new Date(group.at));
     if (days.at(-1)?.day === day) days.at(-1)!.groups.push(group);
     else days.push({ day, groups: [group] });
   }
 
+  // A short list, as under a narrow filter, reaches further back by itself, but not without end.
+  const unasked = useRef(PAGES_AT_ONCE);
+  useEffect(() => {
+    unasked.current = PAGES_AT_ONCE;
+  }, [here]);
+  const short = groups.length < ENOUGH;
+  const { older, reading, loading, problem, more } = synced;
+  useEffect(() => {
+    if (!ready || !short || !older || reading || loading || problem || unasked.current <= 0) return;
+    unasked.current--;
+    more();
+  }, [ready, short, older, reading, loading, problem, more, here]);
+  const showOlder = () => {
+    unasked.current = PAGES_AT_ONCE - 1;
+    more();
+  };
+
   const among = filtered ? ' shown here' : '';
   const actions = (
     <>
-      <button type="button" className="icon-btn" disabled={!undoable} onClick={() => void undo()} aria-label="Undo" title={`Undo the last change${among} (${MOD}Z)`}>
+      <button type="button" className="icon-btn" disabled={!undoable} onClick={() => void undo()} aria-label="Undo" title={`Undo the last change${among} made on this device (${MOD}Z)`}>
         <Icon name="undo" />
       </button>
       <button type="button" className="icon-btn" disabled={!redoable} onClick={() => void redo()} aria-label="Redo" title={`Redo what was undone last${among} (${REDO_KEYS})`}>
@@ -121,7 +165,7 @@ export function ChangesPage() {
       actions={actions}
     >
       <p className="history__subject">
-        What was changed on this device, newest first. Changes made on other devices or by AI apps are in each entry's own history.
+        What was changed, newest first: on this device, on your other devices, by AI apps and by people you share with.
         {filtered && (
           <>
             {' '}
@@ -132,10 +176,11 @@ export function ChangesPage() {
           </>
         )}
       </p>
-      {!rows ? (
+      {ready && problem && <p className="changes__problem">{problem}</p>}
+      {!ready ? (
         <Empty>Loading history…</Empty>
-      ) : !days.length ? (
-        <Empty>{filtered && rows.length ? 'No changes here match. Pick another filter, or show all changes.' : 'Nothing has been changed on this device yet.'}</Empty>
+      ) : !days.length && !older ? (
+        <Empty>{filtered && any ? 'No changes here match. Pick another filter, or show all changes.' : 'Nothing has been changed yet.'}</Empty>
       ) : (
         <div className="changes">
           {days.map(({ day, groups }) => (
@@ -143,12 +188,29 @@ export function ChangesPage() {
               <h2 className="changes__day">{relativeDay(day, today)}</h2>
               <ol className="changes__list">
                 {groups.map((group) => (
-                  <Group key={group.group} group={group} currentOf={(c) => current.get(c.n)} can={can} revert={(ns, direction) => void revert(ns, direction)} />
+                  <Group
+                    key={group.group}
+                    group={group}
+                    currentOf={currentOf}
+                    can={can}
+                    revert={(ns, direction) => void revert(ns, direction)}
+                  />
                 ))}
               </ol>
             </section>
           ))}
-          <p className="changes__note">History keeps the newest 500 changes made on this device.</p>
+          {older ? (
+            <p className="changes__note">
+              {!days.length && (loading || reading ? 'Looking further back… ' : 'Nothing here in the newest changes. ')}
+              <button type="button" className="btn" disabled={loading || reading} onClick={showOlder}>
+                {loading || reading ? 'Loading…' : 'Show older changes'}
+              </button>
+            </p>
+          ) : (
+            <p className="changes__note">
+              Undo and redo reach back through the newest 500 changes made on this device. Every version of an entry, with restore, is in its own version history.
+            </p>
+          )}
         </div>
       )}
       {filtering && <FilterSheet onClose={() => setFiltering(false)} />}
@@ -224,12 +286,18 @@ function Row({ change, current, can, revert }: { change: Change; current: Card |
         </p>
         <p className="change__meta">
           <time dateTime={new Date(change.until).toISOString()}>{time(change.until)}</time>
+          {change.by && <span className="change__by">{madeBy(change.by)}</span>}
           {undone && <span className="change__undone">Undone</span>}
           {passed && <span title={`This entry was changed again later. ${undone ? 'Redo' : 'Undo'} needs it the way this change left it.`}>Changed since</span>}
           {compared && (
             <button type="button" className="change__toggle" aria-expanded={open} onClick={() => setOpen(!open)}>
               {open ? 'Hide changes' : 'Show changes'}
             </button>
+          )}
+          {change.by && card && !change.sealed && (
+            <Link className="change__toggle" to={versionsPath(card)} title="Every version of this entry, with restore">
+              Version history
+            </Link>
           )}
         </p>
         {open && compared && <Comparison change={change} />}

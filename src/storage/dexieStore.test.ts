@@ -65,6 +65,15 @@ describe('DexieStore', () => {
     expect((await dx.getCard('a'))?.updated_at).toBe(9);
     expect(await dx.listDirty()).toHaveLength(0);
   });
+  it('keeps a card edited since, when asked to', async () => {
+    const dx = new DexieStore(`t-${Math.random()}`);
+    await dx.putCards([rec('a', 6)]);
+    expect(await dx.forceRemote({ ...rec('a', 9), seq: 2 }, 5)).toBe(false);
+    expect((await dx.getCard('a'))?.updated_at).toBe(6);
+    expect(await dx.listDirty()).toHaveLength(1);
+    expect(await dx.forceRemote({ ...rec('a', 9), seq: 2 }, 6)).toBe(true);
+    expect((await dx.getCard('a'))?.updated_at).toBe(9);
+  });
   it('stores metadata', async () => {
     const dx = new DexieStore(`t-${Math.random()}`);
     expect(await dx.getMeta('cursor')).toBeUndefined();

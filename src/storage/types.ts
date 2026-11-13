@@ -11,7 +11,8 @@ export interface CardStore {
   /** Saves records from the server, skipping any card with unpushed local changes. */
   applyRemote(records: CardRecord[]): Promise<void>;
   /** Replaces a card with the server's version and discards its unpushed state. */
-  forceRemote(record: CardRecord): Promise<void>;
+  /** Replaces a card with the server's version. Given `ifUpdatedAt`, only while the card is still as it was then; says whether it replaced it. */
+  forceRemote(record: CardRecord, ifUpdatedAt?: number): Promise<boolean>;
   /** Records the seq a push was given. The card stays dirty if it changed since `updatedAt`. */
   markSynced(id: string, updatedAt: number, seq: number): Promise<void>;
   getMeta(key: string): Promise<unknown>;

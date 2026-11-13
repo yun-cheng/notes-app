@@ -179,6 +179,27 @@ describe('conflicts', () => {
     expect(second.engine.getStatus().pending).toBe(0);
   });
 
+  it('keeps what was typed while a losing push was on its way', async () => {
+    const { first, second, card } = await bothEdit('phone');
+    await second.engine.sync();
+    const push = first.transport.push.bind(first.transport);
+    let typed = false;
+    first.transport.push = async (records) => {
+      const results = await push(records);
+      if (!typed) await first.repo.update(card.id, { content: doc('typed since') });
+      typed = true;
+      return results;
+    };
+    await first.engine.sync();
+    await second.engine.sync();
+    for (const device of [first, second]) {
+      const cards = await device.cards();
+      expect(cards.find((c) => c.id === card.id)?.content).toEqual(doc('typed since'));
+      expect(cards.find((c) => c.title === 'Base (conflict copy)')?.content).toEqual(doc('newer edit'));
+    }
+    expect(first.engine.getStatus().pending).toBe(0);
+  });
+
   it('merges two diary entries written offline for the same day into one plus a copy', async () => {
     const { phone, mac } = await twoDevices();
     await phone.repo.saveDiary('2026-11-10', { content: doc('phone day') });

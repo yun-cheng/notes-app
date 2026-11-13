@@ -121,8 +121,8 @@ export class SyncEngine {
         await this.repo.saveConflictCopy(result.loser, local);
         break;
       case 'conflict_server_won':
-        await this.repo.saveConflictCopy(local, result.server);
-        await this.repo.forceRemote(result.server);
+        // An edit made while the push was on its way is newer than what lost: it stays, and the next push settles it.
+        if (await this.repo.forceRemote(result.server, local.updated_at)) await this.repo.saveConflictCopy(local, result.server);
         break;
       case 'retry':
         break;

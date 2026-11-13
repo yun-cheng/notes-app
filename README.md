@@ -92,7 +92,7 @@ migrations/ D1 schema
 - **Writes run one at a time.** The repository queues them so overlapping saves can't overwrite each other.
 - **Edits are journaled.** Each edit goes to `localStorage` synchronously, is cleared once committed, and is replayed on next launch, so closing the page mid-save loses nothing.
 - **Backlinks and search are derived on each device.** `buildIndex` recomputes them from the cards, and they are never stored or synced.
-- **Sync never blocks writing.** Edits save locally first and are pushed in the background. Remote changes share the write queue, and never overwrite unpushed edits.
+- **Sync never blocks writing.** Edits save locally first and are pushed in the background. Remote changes share the write queue, and never overwrite unpushed edits. That includes an edit typed while a push that lost a conflict was on its way.
 - **Each account has its own local database**, and the server checks vault membership on every request.
 - **Locked cards stop at `buildIndex`.** Lists, search, backlinks and exports are built from the index, so a new view can't leak a locked card by accident. Links must go through `linkTitle`, because a link stores the title it was created with.
 - **History lives on the server.** Each push that changes a card extends or adds a version, so history needs a connection but covers every device. Versions hold the same opaque payload as cards, and say who saved them, from which device or through which AI app, and whether the card was in the Trash. `GET /api/versions` lists the newest versions across cards, each with the one it replaced.

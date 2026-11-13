@@ -55,11 +55,13 @@ export class DexieStore implements CardStore, PhotoStore {
       if (changed.length) await cards.bulkPut(changed);
     });
   }
-  async forceRemote(record: CardRecord) {
+  async forceRemote(record: CardRecord, ifUpdatedAt?: number) {
     const { cards, dirty } = this.db;
-    await this.db.transaction('rw', cards, dirty, async () => {
+    return this.db.transaction('rw', cards, dirty, async () => {
+      if (ifUpdatedAt !== undefined && (await cards.get(record.id))?.updated_at !== ifUpdatedAt) return false;
       await cards.put(record);
       await dirty.delete(record.id);
+      return true;
     });
   }
   async markSynced(id: string, updatedAt: number, seq: number) {

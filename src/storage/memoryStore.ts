@@ -39,10 +39,12 @@ export class MemoryStore implements CardStore {
     });
     this.notify();
   }
-  async forceRemote(record: CardRecord) {
+  async forceRemote(record: CardRecord, ifUpdatedAt?: number) {
+    if (ifUpdatedAt !== undefined && this.cards.get(record.id)?.updated_at !== ifUpdatedAt) return false;
     this.cards.set(record.id, record);
     this.dirty.delete(record.id);
     this.notify();
+    return true;
   }
   async markSynced(id: string, updatedAt: number, seq: number) {
     const card = this.cards.get(id);

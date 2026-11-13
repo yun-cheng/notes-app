@@ -588,8 +588,9 @@ export class CardRepository {
     return this.enqueue(() => this.store.applyRemote(records));
   }
 
-  forceRemote(record: CardRecord): Promise<void> {
-    return this.enqueue(() => this.store.forceRemote(record));
+  /** Takes the server's version of a card. Given `ifUpdatedAt`, an edit made since then stays instead, and this says false. */
+  forceRemote(record: CardRecord, ifUpdatedAt?: number): Promise<boolean> {
+    return this.enqueue(() => this.store.forceRemote(record, ifUpdatedAt));
   }
 
   markSynced(id: string, updatedAt: number, seq: number): Promise<void> {

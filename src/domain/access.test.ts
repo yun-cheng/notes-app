@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { mainVault, permissions } from './access';
+import { mainVault, ownAlone, permissions } from './access';
 import { note } from './testFixtures';
 import type { Vault } from './types';
 
@@ -15,6 +15,12 @@ describe('permissions', () => {
     const shared = new Map([['n', { card_id: 'n', role: 'edit' as const, shared_by: 'Ann' }]]);
     expect(permissions(note('n', 'x', { vaultId: 'elsewhere' }), [vault('v')], shared)).toMatchObject({ edit: true, manage: false, share: false, sharedBy: 'Ann' });
     expect(permissions(note('m', 'x', { vaultId: 'elsewhere' }), [vault('v')], shared)).toMatchObject({ edit: false, comment: false });
+  });
+  it('knows a vault that is the account’s alone', () => {
+    expect(ownAlone(vault('v'))).toBe(true);
+    expect(ownAlone({ ...vault('v', 'owner'), members: 2 })).toBe(false);
+    expect(ownAlone(vault('v', 'editor'))).toBe(false);
+    expect(ownAlone(undefined)).toBe(false);
   });
   it('finds the account’s own main vault even when a shared one is older', () => {
     expect(mainVault([vault('vault-ann', 'viewer', 1), vault('vault-ben', 'owner', 5)], 'ben').id).toBe('vault-ben');

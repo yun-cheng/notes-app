@@ -1,5 +1,7 @@
 import { appendToDoc, parseEntries, type Entry } from '../domain/entry';
+import { mainVault, ownAlone } from '../domain/access';
 import { diaryVault } from '../domain/locks';
+import { diaryId } from '../domain/rehome';
 import type { StreamFilter } from '../domain/stream';
 import { isGroupName, settleTags } from '../domain/tagGroups';
 import { EMPTY_DOC, type Card, type JSONNode } from '../domain/types';
@@ -32,7 +34,7 @@ export function journalDefaults(filter: StreamFilter, today: string): SaveOption
 
 /** Saves entries read from the journal box, or typed text read the same way (`saveText`). */
 export function useSaveEntries() {
-  const { repo, index, vaults, locked } = useCards();
+  const { repo, index, vaults, locked, accountId } = useCards();
   const today = useToday();
 
   const saveEntries = async (entries: Entry[], opts: SaveOptions = {}): Promise<SaveResult> => {
@@ -99,7 +101,12 @@ export function useSaveEntries() {
     }
     let saving: Promise<Card> | undefined;
     if (diary) {
-      const existing = index.diaryByDate.get(today);
+      // Added to today's entry, unless that one sits in a vault other people are in (one moved there, say):
+      // then to this account's own, so a diary line never lands where others read it.
+      const latest = index.diaryByDate.get(today);
+      const home = vault?.id ?? mainVault(vaults, accountId)?.id;
+      const own = home ? index.byId.get(diaryId(home, today)) : undefined;
+      const existing = latest && ownAlone(vaults.find((v) => v.id === latest.vaultId)) ? latest : own?.type === 'diary' && !own.deleted ? own : undefined;
       const tags = [...new Set([...(existing?.tags ?? []), ...diary.tags])];
       saving = repo.saveDiary(today, { content: appendToDoc(existing?.content ?? EMPTY_DOC, diary.content), tags }, existing?.id, vault?.id);
     }

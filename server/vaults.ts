@@ -2,6 +2,7 @@ import type { VaultPin } from '../src/domain/pin';
 import type { VaultEncryption } from '../src/crypto/vaultKeys';
 import type { Vault } from '../src/domain/types';
 import type { Database } from './db';
+import { unshare } from './shares';
 
 interface VaultRow extends Omit<Vault, 'pin' | 'hidden' | 'encryption'> {
   encryption: string | null;
@@ -75,7 +76,7 @@ export async function updateVault(db: Database, userId: string, id: string, upda
   const encryption = update.encryption === undefined ? (current.encryption ?? null) : update.encryption;
   // Dropping the PIN of an encrypted vault must say the encryption goes too, after the device decrypted its cards.
   if (!pin && encryption) return { error: 'encrypted_open' };
-  await db
+  const save = db
     .prepare(`UPDATE vaults SET name = ?, lock = ?, ai_access = ?, pin_salt = ?, pin_hash = ?, pin_iterations = ?, hidden = ?, encryption = ? WHERE id = ?`)
     .bind(
       update.name ?? current.name,
@@ -87,7 +88,9 @@ export async function updateVault(db: Database, userId: string, id: string, upda
       hidden ? 1 : 0,
       encryption ? JSON.stringify(encryption) : null,
       id,
-    )
-    .run();
+    );
+  // Nobody a card was shared with can read it once it's encrypted, and its shares could no longer be managed: end them.
+  const ending = encryption && !current.encryption ? unshare(db, `SELECT id FROM cards WHERE vault_id = ?`, id) : [];
+  await db.batch([save, ...ending]);
   return { vault: (await listVaults(db, userId)).find((v) => v.id === id)! };
 }

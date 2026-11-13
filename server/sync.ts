@@ -2,6 +2,7 @@ import type { CardRecord } from '../src/domain/types';
 import { MAX_PAYLOAD_BYTES, PULL_LIMIT, type PullResponse, type PushResult } from '../src/sync/protocol';
 import { SHARED_WITH } from './access';
 import type { Database, Statement } from './db';
+import { unshare } from './shares';
 import { recordVersions, type Device, type Written } from './versions';
 
 interface CardRow extends Omit<CardRecord, 'deleted'> {
@@ -110,6 +111,8 @@ export async function pushRecords(
       if (!from || from === r.vault_id) return;
       const seq = `(SELECT value FROM seq_counter WHERE id = 1) - ${writes.length - 1 - i}`;
       statements.push(db.prepare(`INSERT INTO card_moves (card_id, vault_id, seq) SELECT id, ?, seq FROM cards WHERE id = ? AND seq = ${seq}`).bind(from, r.id));
+      // Moved into an encrypted vault, a card stops being shared, as its new vault's cards are.
+      if (encrypted.has(r.vault_id)) statements.push(...unshare(db, `SELECT id FROM cards WHERE id = ? AND seq = ${seq}`, r.id));
     });
     const outcomes = await db.batch<{ seq: number }>(statements);
     const written: Written[] = [];

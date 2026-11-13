@@ -42,6 +42,40 @@ describe('encrypted vaults', () => {
     expect(history.versions).toHaveLength(1);
     expect((await t.send(t.ben.cookie, 'POST', `/api/vaults/${vault.id}/purge-plaintext`)).status).toBe(404);
   });
+  it('ends a card\'s sharing when its vault is encrypted, or it moves into one', async () => {
+    const t = await people();
+    const { send, call, push, ann, ben } = t;
+    const open = (await t.me(ann.cookie)).vaults[0].id;
+    const vault = await t.json<Vault>(send(ann.cookie, 'POST', '/api/vaults', { name: 'Diary', pin }));
+    const payload = JSON.stringify({ type: 'note', title: 'Plain', content: { type: 'doc' }, tags: [], createdAt: 1 });
+    const [, moving] = await push(ann.cookie, [rec(vault.id, 'd', { payload }), rec(open, 'm', { payload })]);
+    const tokens: string[] = [];
+    for (const id of ['d', 'm']) {
+      tokens.push((await t.json<{ links: { token: string }[] }>(send(ann.cookie, 'POST', `/api/cards/${id}/links`, {}))).links[0].token);
+      await send(ann.cookie, 'POST', `/api/cards/${id}/shares`, { email: 'ben@example.com', role: 'view' });
+      await send(ann.cookie, 'POST', `/api/cards/${id}/shares`, { email: 'cat@example.com', role: 'view' });
+    }
+    const shared = async () => (await t.json<{ cards: { card_id: string }[] }>(send(ben.cookie, 'GET', '/api/shared'))).cards.map((c) => c.card_id).sort();
+    expect(await shared()).toEqual(['d', 'm']);
+
+    await send(ann.cookie, 'PATCH', `/api/vaults/${vault.id}`, { encryption });
+    expect(await shared()).toEqual(['m']);
+    expect((await call(`/api/public/${tokens[0]}`)).status).toBe(404);
+    expect((await call(`/api/public/${tokens[1]}`)).status).toBe(200);
+
+    await push(ann.cookie, [rec(vault.id, 'm', { seq: seqOf(moving), updated_at: 999_999_999, payload: 'e1:moved' })]);
+    expect(await shared()).toEqual([]);
+    expect((await call(`/api/public/${tokens[1]}`)).status).toBe(404);
+    // Cat, invited by email, finds nothing shared at her first sign-in.
+    const cat = await t.signIn('cat');
+    expect((await t.json<{ cards: unknown[] }>(send(cat.cookie, 'GET', '/api/shared'))).cards).toEqual([]);
+  });
+  it('answers a public link to an encrypted card as turned off', async () => {
+    const { vault, push, call, ann, db } = await encryptedVault();
+    await push(ann.cookie, [rec(vault.id, 's', { payload: 'e1:abc' })]);
+    await db.prepare(`INSERT INTO public_links (token, card_id, created_by, created_at) VALUES ('tok', 's', ?, 1)`).bind(ann.user.id).run();
+    expect((await call('/api/public/tok')).status).toBe(404);
+  });
   it('keeps encrypted cards out of sharing for now', async () => {
     const { vault, push, send, ann } = await encryptedVault();
     await push(ann.cookie, [rec(vault.id, 's', { payload: 'e1:abc' })]);

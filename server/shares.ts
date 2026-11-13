@@ -4,7 +4,7 @@ import { isTimeKey } from '../src/domain/dates';
 import type { CardPayload } from '../src/domain/types';
 import { allows, cardAccess, sharedWith } from './access';
 import { randomToken } from './auth';
-import type { AppEnv, Database } from './db';
+import type { AppEnv, Database, Statement } from './db';
 import { downloadFile, DriveFailed, DriveNotConnected, type GoogleFetch } from './drive';
 
 export type ShareRole = 'view' | 'comment' | 'edit';
@@ -54,6 +54,11 @@ async function mayShare(c: Context<AppEnv>, cardId: string): Promise<boolean> {
   return !sealed;
 }
 
+/** The statements that end all sharing of the cards picked by `where` (a condition on card ids, with its values): people, vaults, waiting invites and public links. */
+export function unshare(db: Database, where: string, ...values: unknown[]): Statement[] {
+  return ['card_shares', 'card_share_invites', 'public_links'].map((table) => db.prepare(`DELETE FROM ${table} WHERE card_id IN (${where})`).bind(...values));
+}
+
 interface PublicCard {
   type: CardPayload['type'];
   title: string;
@@ -74,7 +79,9 @@ async function publicCard(db: Database, token: string, now: number): Promise<{ p
     )
     .bind(token, now)
     .first<{ payload: string; updated_at: number; vault_id: string }>();
-  return row && { payload: JSON.parse(row.payload) as CardPayload, updated_at: row.updated_at, vault_id: row.vault_id };
+  // An encrypted card has nothing the server can show: a link made before its vault was encrypted is as good as off.
+  if (!row || row.payload.startsWith('e1:')) return null;
+  return { payload: JSON.parse(row.payload) as CardPayload, updated_at: row.updated_at, vault_id: row.vault_id };
 }
 
 /** Public links: no session, read only. The page itself is the app at /s/:token. */

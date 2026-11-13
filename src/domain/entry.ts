@@ -150,9 +150,11 @@ export function parseEntries(text: string, today: string, opts: { allTodos?: boo
   return texts.map((t) => parseEntry(t, today)).filter((e): e is Entry => !!e);
 }
 
-/** Removes matching words from the text in some blocks. A paragraph left empty by that goes away. */
+/** Removes matching words from the text in some blocks, leaving code alone. A paragraph left empty by that goes away. */
 function stripBlocks(blocks: JSONNode[], pattern: RegExp, take: (word: string) => boolean): JSONNode[] {
   const inText = (node: JSONNode): { node: JSONNode; touched: boolean } => {
+    // Code is kept as typed: `#include` and `@media` there are not markers.
+    if (node.type === 'codeBlock' || (node.type === 'text' && node.marks?.some((m) => m.type === 'code'))) return { node, touched: false };
     if (node.type === 'text') {
       let touched = false;
       const text = (node.text ?? '').replace(pattern, (match, space: string, word: string) => {

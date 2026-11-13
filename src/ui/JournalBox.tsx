@@ -50,7 +50,9 @@ function tokenHighlight(today: () => string) {
             decorations: (state) => {
               const marks: Decoration[] = [];
               state.doc.descendants((node, pos) => {
-                if (!node.isText || !node.text) return;
+                // Code is saved as typed (see `entriesFromDoc`), so nothing in it is shown as a marker.
+                if (node.type.name === 'codeBlock') return false;
+                if (!node.isText || !node.text || node.marks.some((m) => m.type.name === 'code')) return;
                 for (const m of node.text.matchAll(TAG_TOKEN)) {
                   const from = pos + (m.index ?? 0) + m[1].length;
                   marks.push(Decoration.inline(from, from + m[2].length, { class: 'token token--tag' }));

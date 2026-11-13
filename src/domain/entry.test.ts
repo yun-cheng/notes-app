@@ -121,6 +121,16 @@ describe('entriesFromDoc', () => {
     expect(entry).toMatchObject({ kind: 'note', tags: ['reading'], content: docOf(para(t('Read '), t('this', link), t(' later'))) });
   });
 
+  it('leaves code as typed', () => {
+    const code: JSONNode = { type: 'codeBlock', content: [t('#include <stdio.h>\n@media print {}')] };
+    const inline = [{ type: 'code' }];
+    const todo = tasks(item(false, para(t('run '), t('@daily', inline), t(' #ops @fri'))));
+    expect(entriesFromDoc(docOf(para(t('Snippet #c')), code, todo), TODAY)).toEqual([
+      { kind: 'note', title: '', content: docOf(para(t('Snippet')), code), tags: ['c'], due: null },
+      { kind: 'todo', title: 'run @daily', content: EMPTY_DOC, tags: ['ops'], due: '2026-11-13' },
+    ]);
+  });
+
   it('puts a checkbox’s nested items after it, and its other lines in its details', () => {
     const nested = item(false, para(t('Trip')), para(t('passport')), tasks(item(false, para(t('book hotel')))));
     expect(entriesFromDoc(docOf(tasks(nested)), TODAY).map((e) => [e.title, e.content])).toEqual([

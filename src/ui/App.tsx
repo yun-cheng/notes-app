@@ -4,7 +4,6 @@ import { registerSW } from 'virtual:pwa-register';
 import { AuthGate, useAccount } from '../auth/AuthContext';
 import { PairPage } from '../auth/PairPage';
 import { useSyncStatus } from '../state/CardsContext';
-import { describeSync } from '../sync/engine';
 import { useNewNote } from './components';
 import { Icon, type IconName } from './Icon';
 import { ConnectPage } from './pages/ai';
@@ -51,7 +50,6 @@ function TabBar() {
 
 function Sidebar({ onCommands }: { onCommands: () => void }) {
   const newNote = useNewNote();
-  const sync = useSyncStatus();
   return (
     <aside className="sidebar">
       <div className="sidebar__brand">Notes</div>
@@ -64,10 +62,7 @@ function Sidebar({ onCommands }: { onCommands: () => void }) {
         <kbd>{isMac ? '⌘K' : 'Ctrl K'}</kbd>
       </button>
       <FilterPanel />
-      <p className="sidebar__sync" role="status">
-        {describeSync(sync)}
-      </p>
-      <NavLink to="/settings" className="nav-item">
+      <NavLink to="/settings" className="nav-item sidebar__settings">
         <Icon name="settings" />
         <span>Backup & settings</span>
       </NavLink>

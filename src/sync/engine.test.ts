@@ -5,7 +5,7 @@ import type { JSONNode, TodoCard, Vault } from '../domain/types';
 import { MemoryStore } from '../storage/memoryStore';
 import { CardRepository } from '../storage/repository';
 import { jsonCodec } from '../storage/types';
-import { describeSync, SyncAuthExpired, SyncEngine, SyncOffline, type SyncTransport } from './engine';
+import { describeSync, syncSummary, SyncAuthExpired, SyncEngine, SyncOffline, type SyncTransport } from './engine';
 import { PUSH_LIMIT, type PullResponse, type PushResult, type SessionInfo, type SharedCard } from './protocol';
 
 const doc = (t: string): JSONNode => ({ type: 'doc', content: [{ type: 'paragraph', content: [{ type: 'text', text: t }] }] });
@@ -444,5 +444,19 @@ describe('describeSync', () => {
     expect(describeSync({ ...s, state: 'idle', pending: 2 })).toBe('2 changes waiting');
     expect(describeSync({ ...s, state: 'offline', pending: 1 })).toBe('Offline, 1 change waiting');
     expect(describeSync({ ...s, state: 'expired', pending: 0 })).toBe('Sign in again to sync');
+  });
+});
+
+describe('syncSummary', () => {
+  const s = { pending: 0, lastSyncedAt: null };
+  it('says Synced while only checking for news, and Syncing while changes go up', () => {
+    expect(syncSummary({ ...s, state: 'syncing' }, 0).label).toBe('Synced');
+    expect(syncSummary({ ...s, state: 'idle' }, 0).look).toBe('synced');
+    expect(syncSummary({ ...s, state: 'syncing' }, 2)).toMatchObject({ look: 'sending', label: 'Syncing…', detail: 'Sending 2 changes to the server.' });
+  });
+  it('says what is waiting when sync is held up', () => {
+    expect(syncSummary({ ...s, state: 'offline' }, 1).detail).toBe("1 change saved on this device will sync when you're back online.");
+    expect(syncSummary({ ...s, state: 'error' }, 3)).toMatchObject({ look: 'trouble', label: 'Not synced' });
+    expect(syncSummary({ ...s, state: 'expired' }, 0)).toMatchObject({ look: 'trouble', label: 'Sign in to sync' });
   });
 });

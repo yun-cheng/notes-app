@@ -149,7 +149,10 @@ export class SyncEngine {
     const onVisibility = () => {
       if (document.visibilityState === 'visible' || this.timer) run();
     };
+    // Said at once when the device knows it lost its connection, not at the next sync.
+    const onOffline = () => this.status.state !== 'expired' && this.publish({ state: 'offline' });
     window.addEventListener('online', run);
+    window.addEventListener('offline', onOffline);
     document.addEventListener('visibilitychange', onVisibility);
     const interval = setInterval(() => {
       if (document.visibilityState === 'visible') run();
@@ -157,11 +160,48 @@ export class SyncEngine {
     run();
     return () => {
       window.removeEventListener('online', run);
+      window.removeEventListener('offline', onOffline);
       document.removeEventListener('visibilitychange', onVisibility);
       clearInterval(interval);
       if (this.timer) clearTimeout(this.timer);
     };
   }
+}
+
+export type SyncLook = 'synced' | 'sending' | 'offline' | 'trouble';
+
+/**
+ * What the sync badge says, given how many cards have changes not yet sent. A sync that only checks for news
+ * from other devices still says Synced, so the badge doesn't flicker once a minute.
+ */
+export function syncSummary({ state }: SyncStatus, waiting: number): { look: SyncLook; label: string; detail: string } {
+  const changes = `${waiting} ${waiting === 1 ? 'change' : 'changes'}`;
+  switch (state) {
+    case 'offline':
+      return {
+        look: 'offline',
+        label: 'Offline',
+        detail: waiting
+          ? `${changes} saved on this device will sync when you're back online.`
+          : "What you write is saved on this device and syncs when you're back online.",
+      };
+    case 'expired':
+      return {
+        look: 'trouble',
+        label: 'Sign in to sync',
+        detail: waiting ? `${changes} saved on this device will sync once you sign in again.` : 'Sign in again to sync with your other devices.',
+      };
+    case 'error':
+      return {
+        look: 'trouble',
+        label: 'Not synced',
+        detail: waiting
+          ? `${changes} couldn't be sent. They're safe on this device, and sending them will be tried again.`
+          : "The last sync didn't finish. It will be tried again.",
+      };
+  }
+  if (waiting) return { look: 'sending', label: 'Syncing…', detail: `Sending ${changes} to the server.` };
+  return { look: 'synced', label: 'Synced', detail: 'Everything on this device is on the server too, for your other devices.' };
 }
 
 export function describeSync({ state, pending }: SyncStatus): string {

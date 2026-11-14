@@ -13,12 +13,14 @@ import { useUndo } from './useUndo';
 import { usePopover } from './usePopover';
 import { colorClass } from './EntryStyle';
 import { DueLabel, useTickTodo } from './TodoDue';
+import { SyncBadge } from './SyncStatus';
 
 export function Page({ title, actions, children }: { title: ReactNode; actions?: ReactNode; children: ReactNode }) {
   return (
     <div className="page">
       <header className="page__head">
         <h1>{title}</h1>
+        <SyncBadge />
         {actions && <div className="page__actions">{actions}</div>}
       </header>
       {children}

@@ -25,6 +25,7 @@ import { entries, useEntryActions } from '../entryActions';
 import { useEntryShortcuts } from '../useEntryShortcuts';
 import { AddTag, BubbleTools, TypeSwitch } from '../BubbleTools';
 import { DueLabel, DueMenu, useTickTodo } from '../TodoDue';
+import { SyncMark } from '../SyncStatus';
 
 const time = (at: number) => new Date(at).toLocaleTimeString(undefined, { hour: 'numeric', minute: '2-digit' });
 
@@ -273,6 +274,7 @@ function BubbleMeta({ card, at, fold }: { card: NoteCard | TodoCard; at: number;
           </button>
         )}
         {card.type === 'todo' && (retag ? <DueMenu card={card} look={card.due ? 'label' : 'add'} /> : <DueLabel todo={card} className="bubble__due" />)}
+        <SyncMark id={card.id} />
         <time dateTime={new Date(at).toISOString()}>{time(at)}</time>
       </span>
     </span>

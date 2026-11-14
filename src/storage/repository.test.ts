@@ -253,4 +253,11 @@ describe('device', () => {
     const reopened = new CardRepository(store, jsonCodec, () => clock++, () => `other${++n}`);
     expect(await reopened.deviceId()).toBe(first);
   });
+  it('asks again after a failed read', async () => {
+    const getMeta = store.getMeta.bind(store);
+    store.getMeta = async () => { throw new Error('busy'); };
+    await expect(repo.deviceId()).rejects.toThrow('busy');
+    store.getMeta = getMeta;
+    expect(await repo.deviceId()).toMatch(/^id\d+$/);
+  });
 });

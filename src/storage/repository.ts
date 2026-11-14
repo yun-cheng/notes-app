@@ -465,7 +465,11 @@ export class CardRepository {
       await this.store.setMeta('device', this.newId());
       // Read back, in case another tab made one in the same moment.
       return (await this.store.getMeta('device')) as string;
-    })());
+    })().catch((err: unknown) => {
+      // Asked again next time: one failed read mustn't stop pushes and History for the rest of the session.
+      this.device = null;
+      throw err;
+    }));
   }
 
   getMeta(key: string): Promise<unknown> {

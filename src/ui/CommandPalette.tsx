@@ -57,7 +57,9 @@ export function CommandPalette({ onClose, onShortcuts }: { onClose: () => void; 
   const [query, setQuery] = useState('');
   const [active, setActive] = useState(0);
   const list = useRef<HTMLDivElement>(null);
-  const engine = useMemo(() => buildSearch(index), [index]);
+  // Built once something is typed that could find entries: opening the box for a command needn't wait for it.
+  const searching = !!query.trim() && !query.trimStart().startsWith('/');
+  const engine = useMemo(() => (searching ? buildSearch(index) : null), [index, searching]);
 
   const go = (to: string) => () => void navigate(to);
   // A filter narrows the page it's picked on: the history from there, the journal from anywhere else.
@@ -149,7 +151,7 @@ export function CommandPalette({ onClose, onShortcuts }: { onClose: () => void; 
   }
 
   const found: Command[] = text && !onlyCommands
-    ? engine.search(text).slice(0, 8).map((hit) => ({
+    ? (engine?.search(text) ?? []).slice(0, 8).map((hit) => ({
         id: `card-${hit.card.id}`,
         group: 'Notes',
         label: displayTitle(hit.card),

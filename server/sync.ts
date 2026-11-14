@@ -61,7 +61,12 @@ export async function pushRecords(
   device: Device | null = null,
 ): Promise<PushResult[]> {
   const writable = await writableVaults(db, userId);
-  const { results: sealed } = await db.prepare(`SELECT id FROM vaults WHERE encryption IS NOT NULL`).all<{ id: string }>();
+  // Only the vaults written to: the table holds every account's.
+  const targets = [...new Set(records.map((r) => r.vault_id))];
+  const { results: sealed } = await db
+    .prepare(`SELECT id FROM vaults WHERE encryption IS NOT NULL AND id IN (${targets.map(() => '?').join(',')})`)
+    .bind(...targets)
+    .all<{ id: string }>();
   const encrypted = new Set(sealed.map((v) => v.id));
   const editable = await editableShares(db, userId, records.map((r) => r.id));
   const { results: rows } = await db

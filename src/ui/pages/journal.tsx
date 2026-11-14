@@ -254,11 +254,6 @@ function EntryBubble({ card, at }: { card: NoteCard | TodoCard; at: number }) {
   return <NoteBubble note={card} at={at} />;
 }
 
-function useLines(card: NoteCard | TodoCard) {
-  const { index } = useCards();
-  return previewLines(card.content, (id, label) => linkTitle(index, id, label));
-}
-
 function BubbleMeta({ card, at, fold }: { card: NoteCard | TodoCard; at: number; fold: Fold }) {
   const { repo, vaults, shared } = useCards();
   // A grouped tag (Priority: High) can be switched right here.
@@ -387,11 +382,16 @@ function useOpen(card: NoteCard | TodoCard) {
   return () => void navigate(cardPath(card), { state: sheetState(location, card) });
 }
 
+/** What every bubble does: its text, folded when long; opening it; and picking it. */
+function useBubble(card: NoteCard | TodoCard) {
+  const { index } = useCards();
+  const text = useFold(card.id, previewLines(card.content, (id, label) => linkTitle(index, id, label)));
+  const open = useOpen(card);
+  return { text, open, ...useSelectable(card.id, open) };
+}
+
 function NoteBubble({ note, at }: { note: NoteCard; at: number }) {
-  const lines = useLines(note);
-  const text = useFold(note.id, lines);
-  const open = useOpen(note);
-  const { selected, handlers } = useSelectable(note.id, open);
+  const { text, open, selected, handlers } = useBubble(note);
   return (
     <div className={`bubble${colorClass(note)}${selected ? ' is-selected' : ''}`} role="article" aria-current={selected || undefined} {...handlers}>
       {note.title.trim() && (
@@ -409,11 +409,8 @@ function NoteBubble({ note, at }: { note: NoteCard; at: number }) {
 function TodoBubble({ todo, at }: { todo: TodoCard; at: number }) {
   const { vaults, shared } = useCards();
   const tick = useTickTodo();
-  const lines = useLines(todo);
-  const text = useFold(todo.id, lines);
+  const { text, open, selected, handlers } = useBubble(todo);
   const done = todo.status === 'done';
-  const open = useOpen(todo);
-  const { selected, handlers } = useSelectable(todo.id, open);
   return (
     <div className={`bubble bubble--todo${colorClass(todo)}${done ? ' is-done' : ''}${selected ? ' is-selected' : ''}`} role="article" aria-current={selected || undefined} {...handlers}>
       <label className="check">

@@ -2,8 +2,9 @@ import { strToU8, zipSync } from 'fflate';
 import { linkTitle, resolveTags, type CardIndex } from './cardIndex';
 import { toMarkdown } from './markdown';
 import { modernCard } from './payload';
-import { repeatWord } from './repeat';
-import { CARD_TYPES, type Card, type Vault } from './types';
+import { isRepeat, repeatWord } from './repeat';
+import { isDateKey, isTimeKey } from './dates';
+import { CARD_TYPES, isCardColor, type Card, type Vault } from './types';
 
 export interface MarkdownFile {
   path: string;
@@ -66,19 +67,50 @@ export function makeBackup(vaults: Vault[], cards: Card[], now = Date.now()): Ba
   return { format: BACKUP_FORMAT, version: 1, exportedAt: iso(now), vaults, cards };
 }
 
+const isTime = (v: unknown): v is number => typeof v === 'number' && Number.isFinite(v);
+const optional = <T>(v: T | undefined, ok: (v: T) => boolean) => v === undefined || ok(v);
+const isStrings = (v: unknown): v is string[] => Array.isArray(v) && v.every((s) => typeof s === 'string');
+
+/** Everything the app reads from a card is there and of the right kind, so a hand-edited backup can't bring in a card that breaks it. */
 function isCard(value: unknown): value is Card {
   const c = value as Partial<Card> | null;
-  return (
-    !!c &&
-    typeof c.id === 'string' &&
-    typeof c.vaultId === 'string' &&
-    typeof c.updatedAt === 'number' &&
-    typeof c.title === 'string' &&
-    typeof c.content === 'object' &&
-    c.content !== null &&
-    Array.isArray(c.tags) &&
-    CARD_TYPES.includes(c.type as Card['type'])
-  );
+  if (
+    !c ||
+    typeof c !== 'object' ||
+    typeof c.id !== 'string' ||
+    !c.id ||
+    typeof c.vaultId !== 'string' ||
+    !isTime(c.updatedAt) ||
+    !isTime(c.createdAt) ||
+    !optional(c.deleted, (d) => typeof d === 'boolean') ||
+    typeof c.title !== 'string' ||
+    typeof c.content !== 'object' ||
+    c.content === null ||
+    c.content.type !== 'doc' ||
+    !isStrings(c.tags) ||
+    !optional(c.color, (color) => color === null || isCardColor(color)) ||
+    !CARD_TYPES.includes(c.type as Card['type'])
+  ) {
+    return false;
+  }
+  if (c.type === 'todo') {
+    return (
+      (c.status === 'open' || c.status === 'done') &&
+      (c.due === null || isDateKey(c.due)) &&
+      optional(c.dueTime, (t) => t === null || isTimeKey(t)) &&
+      optional(c.repeat, (r) => r === null || isRepeat(r)) &&
+      (c.completedAt === null || isTime(c.completedAt))
+    );
+  }
+  if (c.type === 'tag') {
+    return (
+      typeof c.pinned === 'boolean' &&
+      optional(c.members, isStrings) &&
+      optional(c.choice, (choice) => choice === 'one' || choice === 'many') &&
+      optional(c.ordered, (o) => typeof o === 'boolean')
+    );
+  }
+  return true;
 }
 
 /** Throws a user-readable error if `text` isn't a backup this app can restore. */

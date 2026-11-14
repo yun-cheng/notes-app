@@ -71,6 +71,22 @@ describe('backup', () => {
     expect(() => parseBackup(JSON.stringify({ ...b, version: 9 }))).toThrow(/version 9/);
     expect(() => parseBackup(JSON.stringify({ ...b, cards: [{ id: 1 }] }))).toThrow(/damaged/);
   });
+  it('refuses a card missing what the app reads from it', () => {
+    const b = makeBackup([], [t, todo('x', '2026-11-12'), note('n', 'N')], 0);
+    expect(parseBackup(JSON.stringify(b)).cards).toHaveLength(3);
+    const damaged = (change: (cards: Record<string, unknown>[]) => void) => {
+      const copy = JSON.parse(JSON.stringify(b)) as { cards: Record<string, unknown>[] };
+      change(copy.cards);
+      return () => parseBackup(JSON.stringify(copy));
+    };
+    expect(damaged((c) => (c[1].status = 'maybe'))).toThrow(/damaged/);
+    expect(damaged((c) => (c[1].due = 'friday'))).toThrow(/damaged/);
+    expect(damaged((c) => (c[1].repeat = { unit: 'fortnight', every: 1 }))).toThrow(/damaged/);
+    expect(damaged((c) => delete c[2].createdAt)).toThrow(/damaged/);
+    expect(damaged((c) => (c[2].tags = [1]))).toThrow(/damaged/);
+    expect(damaged((c) => (c[2].content = { type: 'paragraph' }))).toThrow(/damaged/);
+    expect(damaged((c) => delete c[0].pinned)).toThrow(/damaged/);
+  });
   it('restores an old backup’s diary cards as notes', () => {
     const old = { ...base, id: 'd', title: '', type: 'diary', date: '2026-11-10', content: doc(p(text('hello'))) };
     const [card] = parseBackup(JSON.stringify({ ...makeBackup([], [], 0), cards: [old] })).cards;

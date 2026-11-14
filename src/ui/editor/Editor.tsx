@@ -5,6 +5,7 @@ import { StarterKit } from '@tiptap/starter-kit';
 import { Placeholder } from '@tiptap/extensions';
 import type { SuggestionKeyDownProps, SuggestionProps } from '@tiptap/suggestion';
 import { mainVault } from '../../domain/access';
+import { Echoes } from './echoes';
 import { displayTitle } from '../../domain/content';
 import type { CardIndex } from '../../domain/cardIndex';
 import type { JSONNode } from '../../domain/types';
@@ -148,7 +149,7 @@ export function Editor({ content, onChange, placeholder, selfId, vaultId, editab
   addPhotosRef.current = addPhotos;
   const command = useRef<((item: LinkOption) => void) | null>(null);
   const pending = useRef<JSONNode | null>(null);
-  const sent = useRef<string[]>([]);
+  const echoes = useRef(new Echoes()).current;
   const timer = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   const flush = useRef(() => {
@@ -157,7 +158,7 @@ export function Editor({ content, onChange, placeholder, selfId, vaultId, editab
     if (pending.current) {
       const value = pending.current;
       pending.current = null;
-      sent.current = [...sent.current.slice(-19), JSON.stringify(value)];
+      echoes.sent(JSON.stringify(value));
       latest.current.onChange(value);
     }
   }).current;
@@ -306,7 +307,7 @@ export function Editor({ content, onChange, placeholder, selfId, vaultId, editab
   useEffect(() => {
     if (!editor || pending.current) return;
     const incoming = JSON.stringify(content);
-    if (incoming === JSON.stringify(editor.getJSON()) || sent.current.includes(incoming)) return;
+    if (echoes.isEcho(incoming) || incoming === JSON.stringify(editor.getJSON())) return;
     const { from, to } = editor.state.selection;
     const focused = editor.isFocused;
     // Not undoable here: undo would otherwise revert a change made on another device.

@@ -31,8 +31,9 @@ export interface Entry {
 /** `[] `, `[ ] `, `[x] ` or `TODO ` at the start of a line. A space after the brackets is optional. */
 const TODO_MARKER = /^(?:\[[ xX]?\]\s*|TODO\s+)/;
 const DONE_MARKER = /^\[[xX]\]/;
-const TAG = /(^|\s)#([\p{L}\p{N}_-]+)/gu;
-const DUE = /(^|\s)@([\p{L}\p{N}:-]+)/gu;
+/** A `#tag` and an `@` word, each after a space or at the start: the space, then the word without its sign. */
+export const TAG = /(^|\s)#([\p{L}\p{N}_-]+)/gu;
+export const DUE = /(^|\s)@([\p{L}\p{N}:-]+)/gu;
 const WEEKDAYS = ['sunday', 'monday', 'tuesday', 'wednesday', 'thursday', 'friday', 'saturday'];
 
 /** `@today`, `@tomorrow`, `@2026-12-01`, or a weekday (`@fri`, `@friday`) meaning the next one after today. */
@@ -73,54 +74,14 @@ function dueWords(today: string) {
   return { take, result };
 }
 
-/** Removes matches from each line; a line left empty by that goes away. */
-function strip(lines: string[], pattern: RegExp, take: (word: string) => boolean): string[] {
-  return lines.flatMap((line) => {
-    let touched = false;
-    const out = line.replace(pattern, (match, space: string, word: string) => {
-      if (!take(word)) return match;
-      touched = true;
-      return space;
-    });
-    if (!touched) return [line];
-    const tidy = out.replace(/[ \t]{2,}/g, ' ').trim();
-    return tidy ? [tidy] : [];
-  });
-}
-
+/** One entry from typed text, read like the journal box's: see `entryFrom`. Null if it holds nothing but markers. */
 export function parseEntry(text: string, today: string): Entry | null {
-  let lines = text.replace(/\r\n?/g, '\n').split('\n');
-  let todo = false;
-  let diary = false;
-  const due = dueWords(today);
-  const tags: string[] = [];
-
-  let done = false;
+  const lines = text.replace(/\r\n?/g, '\n').split('\n');
   const first = lines.findIndex((l) => l.trim());
-  if (first >= 0 && TODO_MARKER.test(lines[first].trimStart())) {
-    todo = true;
-    done = DONE_MARKER.test(lines[first].trimStart());
-    lines[first] = lines[first].trimStart().replace(TODO_MARKER, '');
-  }
-
-  lines = strip(lines, TAG, (name) => {
-    const lower = name.toLowerCase();
-    if (lower === 'todo') todo = true;
-    else if (lower === 'diary') diary = true;
-    else if (!tags.some((t) => t.toLowerCase() === lower)) tags.push(name);
-    return true;
-  });
-
-  // Only todos have due dates. On a note, `@friday` stays as typed.
-  if (todo) lines = strip(lines, DUE, due.take);
-
-  const body = lines.join('\n').trim();
-  if (!body) return null;
-  const where = diary ? { diary } : {};
-  if (!todo) return { kind: 'note', title: '', content: textToDoc(body), tags, due: null, ...where };
-
-  const [head, ...rest] = body.split('\n');
-  return { kind: 'todo', title: head.trim(), content: textToDoc(rest.join('\n').trim()), tags, ...due.result(), ...(done ? { done } : {}), ...where };
+  const marked = first >= 0 && TODO_MARKER.test(lines[first].trimStart());
+  const done = marked && DONE_MARKER.test(lines[first].trimStart());
+  if (marked) lines[first] = lines[first].trimStart().replace(TODO_MARKER, '');
+  return entryFrom(textToDoc(lines.join('\n').trim()).content ?? [], marked, done, [], today);
 }
 
 const TAGS_ONLY = /^\s*(#[\p{L}\p{N}_-]+\s*)+$/u;
@@ -237,42 +198,48 @@ export function entriesFromDoc(doc: JSONNode, today: string): Entry[] {
   }
 
   const sharedTags = shared.join(' ').match(/#[\p{L}\p{N}_-]+/gu)?.map((t) => t.slice(1)) ?? [];
-  const entries: Entry[] = [];
-  for (const chunk of chunks) {
-    let { todo } = chunk;
-    let diary = false;
-    const due = dueWords(today);
-    const tags: string[] = [];
-    const addTag = (name: string) => {
-      const lower = name.toLowerCase();
-      if (lower === 'todo') todo = true;
-      else if (lower === 'diary') diary = true;
-      else if (!tags.some((t) => t.toLowerCase() === lower)) tags.push(name);
-    };
-    let body = stripBlocks(chunk.blocks, TAG, (name) => (addTag(name), true));
-    sharedTags.forEach(addTag);
-    if (todo) body = stripBlocks(body, DUE, due.take);
-    while (body.length && isEmptyBlock(body[0])) body.shift();
-    while (body.length && isEmptyBlock(body[body.length - 1])) body.pop();
-    if (!hasSubstance(body)) continue;
+  return chunks.flatMap((chunk) => entryFrom(chunk.blocks, chunk.todo, chunk.done, sharedTags, today) ?? []);
+}
 
-    if (!todo) {
-      entries.push({ kind: 'note', title: '', content: { type: 'doc', content: body }, tags, due: null, ...(diary ? { diary } : {}) });
-      continue;
-    }
-    // A todo is named by its first line; anything after it, or a photo in it, is its details.
-    const [head, ...rest] = body;
-    const title = inlineText(head).trim();
-    const details = title ? rest : body;
-    entries.push({
-      kind: 'todo',
-      title: title || 'Photo',
-      content: details.length ? { type: 'doc', content: details } : textToDoc(''),
-      tags,
-      ...due.result(),
-      ...(chunk.done ? { done: true } : {}),
-      ...(diary ? { diary } : {}),
-    });
-  }
-  return entries;
+/**
+ * One entry from its blocks, the same for typed text and the journal box. `#todo` makes it a todo and `#diary` files
+ * it in the diary; other `#tags` (with `shared` ones, from a last line of only tags) file it; on a todo, `@` words
+ * set its due date, time and repeat. All of them leave the text. A todo is named by its first line, and the rest, or
+ * a photo, is its details. Null when nothing is left.
+ */
+function entryFrom(blocks: JSONNode[], todo: boolean, done: boolean, shared: string[], today: string): Entry | null {
+  let diary = false;
+  const due = dueWords(today);
+  const tags: string[] = [];
+  const addTag = (name: string) => {
+    const lower = name.toLowerCase();
+    if (lower === 'todo') todo = true;
+    else if (lower === 'diary') diary = true;
+    else if (!tags.some((t) => t.toLowerCase() === lower)) tags.push(name);
+  };
+  let body = stripBlocks(blocks, TAG, (name) => (addTag(name), true));
+  shared.forEach(addTag);
+  if (todo) body = stripBlocks(body, DUE, due.take);
+  const trim = (list: JSONNode[]) => {
+    while (list.length && isEmptyBlock(list[0])) list.shift();
+    while (list.length && isEmptyBlock(list[list.length - 1])) list.pop();
+    return list;
+  };
+  trim(body);
+  if (!hasSubstance(body)) return null;
+
+  const where = diary ? { diary } : {};
+  if (!todo) return { kind: 'note', title: '', content: { type: 'doc', content: body }, tags, due: null, ...where };
+  const [head, ...rest] = body;
+  const title = inlineText(head).trim();
+  const details = trim(title ? rest : body);
+  return {
+    kind: 'todo',
+    title: title || 'Photo',
+    content: details.length ? { type: 'doc', content: details } : textToDoc(''),
+    tags,
+    ...due.result(),
+    ...(done ? { done } : {}),
+    ...where,
+  };
 }

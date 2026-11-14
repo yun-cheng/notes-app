@@ -8,7 +8,7 @@ import { Placeholder } from '@tiptap/extensions';
 import { useEffect, useRef, useState, type ChangeEvent } from 'react';
 import { diaryVault, mainVault } from '../domain/access';
 import { addDays, formatTime, parseDateKey, parseTime, relativeDay } from '../domain/dates';
-import { dueWord, entriesFromDoc, parseDue } from '../domain/entry';
+import { DUE, dueWord, entriesFromDoc, parseDue, TAG } from '../domain/entry';
 import { parseRepeat, REPEAT_CHOICES, repeatLabel, repeatWord } from '../domain/repeat';
 import { isGroupName } from '../domain/tagGroups';
 import { effectiveType, type StreamFilter } from '../domain/stream';
@@ -36,9 +36,6 @@ const TodoWord = Extension.create({
   },
 });
 
-const TAG_TOKEN = /(^|\s)(#[\p{L}\p{N}_-]+)/gu;
-const DATE_TOKEN = /(^|\s)(@[\p{L}\p{N}:-]+)/gu;
-
 /** Shows `#tags` and `@dates` (and times and repeats) as they're typed, so it's clear they'll file the entry or date the todo. */
 function tokenHighlight(today: () => string) {
   return Extension.create({
@@ -53,15 +50,13 @@ function tokenHighlight(today: () => string) {
                 // Code is saved as typed (see `entriesFromDoc`), so nothing in it is shown as a marker.
                 if (node.type.name === 'codeBlock') return false;
                 if (!node.isText || !node.text || node.marks.some((m) => m.type.name === 'code')) return;
-                for (const m of node.text.matchAll(TAG_TOKEN)) {
+                // The word with its sign: after the space the pattern matched first.
+                const mark = (m: RegExpMatchArray, kind: string) => {
                   const from = pos + (m.index ?? 0) + m[1].length;
-                  marks.push(Decoration.inline(from, from + m[2].length, { class: 'token token--tag' }));
-                }
-                for (const m of node.text.matchAll(DATE_TOKEN)) {
-                  if (!dueWord(m[2].slice(1), today())) continue;
-                  const from = pos + (m.index ?? 0) + m[1].length;
-                  marks.push(Decoration.inline(from, from + m[2].length, { class: 'token token--date' }));
-                }
+                  marks.push(Decoration.inline(from, from + 1 + m[2].length, { class: `token token--${kind}` }));
+                };
+                for (const m of node.text.matchAll(TAG)) mark(m, 'tag');
+                for (const m of node.text.matchAll(DUE)) if (dueWord(m[2], today())) mark(m, 'date');
               });
               return DecorationSet.create(state.doc, marks);
             },

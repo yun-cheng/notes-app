@@ -168,32 +168,37 @@ function Stream({ items, empty, sort }: { items: StreamItem[]; empty: string; so
   const filter = useJournalFilter();
   const navigate = useNavigate();
 
-  let lastDay: string | null = null;
+  // Each day's entries sit together under its badge, which stays pinned under the title bar while they scroll past.
+  const days: { day: string; items: StreamItem[] }[] = [];
+  for (const item of shown) {
+    const last = days.at(-1);
+    if (last && last.day === item.day) last.items.push(item);
+    else days.push({ day: item.day, items: [item] });
+  }
   return (
     <div ref={root} className={`stream${chat ? '' : ' stream--top'}${selection?.selecting ? ' stream--selecting' : ''}`}>
       {items.length === 0 && <Empty>{empty}</Empty>}
       {chat && more}
-      {shown.map((item) => {
-        const separator = item.day !== lastDay;
-        lastDay = item.day;
-        return (
-          <div key={item.card.id} className="stream__item">
-            {separator &&
-              (pickable ? (
-                <button type="button" className="stream__day stream__day--pick" title="Pick dates" onClick={() => setPickFrom(item.day)}>
-                  {label(item.day)}
-                </button>
-              ) : (
-                <p className="stream__day">{label(item.day)}</p>
-              ))}
-            <div className="stream__entry" data-entry-id={item.card.id}>
-              {selection && <PickCircle id={item.card.id} />}
-              <EntryBubble card={item.card} at={item.at} />
-              <Attachments card={item.card} />
+      {days.map(({ day, items: dayItems }) => (
+        <section key={`day:${day}`} className="stream__group" aria-label={label(day)}>
+          {pickable ? (
+            <button type="button" className="stream__day stream__day--pick" title="Pick dates" onClick={() => setPickFrom(day)}>
+              {label(day)}
+            </button>
+          ) : (
+            <p className="stream__day">{label(day)}</p>
+          )}
+          {dayItems.map((item) => (
+            <div key={item.card.id} className="stream__item">
+              <div className="stream__entry" data-entry-id={item.card.id}>
+                {selection && <PickCircle id={item.card.id} />}
+                <EntryBubble card={item.card} at={item.at} />
+                <Attachments card={item.card} />
+              </div>
             </div>
-          </div>
-        );
-      })}
+          ))}
+        </section>
+      ))}
       {!chat && more}
       {box}
       {pickFrom && (

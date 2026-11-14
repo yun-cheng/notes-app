@@ -17,9 +17,19 @@ import { SyncBadge } from './SyncStatus';
 import { AccountButton, DemoTag } from './AccountBadge';
 
 export function Page({ title, actions, children }: { title: ReactNode; actions?: ReactNode; children: ReactNode }) {
+  const page = useRef<HTMLDivElement>(null);
+  const head = useRef<HTMLElement>(null);
+  // What sticks under the title bar (a day's badge in the journal) needs its height, which changes with the phone's notch.
+  useEffect(() => {
+    const el = head.current;
+    if (!el) return;
+    const watch = new ResizeObserver(() => page.current?.style.setProperty('--head-height', `${el.offsetHeight}px`));
+    watch.observe(el);
+    return () => watch.disconnect();
+  }, []);
   return (
-    <div className="page">
-      <header className="page__head">
+    <div className="page" ref={page}>
+      <header className="page__head" ref={head}>
         <h1>{title}</h1>
         <DemoTag />
         <SyncBadge />

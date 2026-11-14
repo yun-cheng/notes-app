@@ -16,6 +16,8 @@
       "migrations_dir": "migrations"
     }
   ],
+  // Once a day: removing expired sessions and codes (server/cleanup.ts).
+  "triggers": { "crons": ["17 4 * * *"] },
   "vars": {
     "GOOGLE_CLIENT_ID": "468133721722-vll21ap6270hafml9rc7gra71sbbmg3i.apps.googleusercontent.com"
   }

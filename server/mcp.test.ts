@@ -71,7 +71,7 @@ describe('MCP server', () => {
       expect(text).not.toMatch(/crush|Secret diary/i);
     }
     expect((await tool('get_card', { id: 'private-1' })).error).toBe(true);
-    expect((await tool('list_vaults')).text).toBe('- Personal (read and write)\n1 other vault is closed to AI.');
+    expect((await tool('list_vaults')).text).toBe('- Personal (read and write)\n2 other vaults are closed to AI.');
   });
   it('sees nothing when AI access is off', async () => {
     const { tool, patch, ann } = await world();

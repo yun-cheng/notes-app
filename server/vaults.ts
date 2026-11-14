@@ -23,6 +23,8 @@ function toVault({ pin_salt, pin_hash, pin_iterations, hidden, encryption, ...re
 }
 
 export const defaultVaultId = (userId: string) => `vault-${userId}`;
+/** Every account's diary: a vault like any other, made at the first sign-in. Unlike the default vault it can take a PIN. */
+export const diaryVaultId = (userId: string) => `diary-${userId}`;
 
 export async function listVaults(db: Database, userId: string): Promise<Vault[]> {
   const { results } = await db

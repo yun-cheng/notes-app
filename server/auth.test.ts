@@ -6,12 +6,13 @@ import { createTestDb } from './testDb';
 import { CLIENT_ID, DAY, setup } from './testHarness';
 
 describe('sign-in', () => {
-  it('creates a user with one owned vault and a locked-down cookie', async () => {
+  it('creates a user with a default vault and a diary, and a locked-down cookie', async () => {
     const { signIn, db } = setup();
     const { user, vaults, res } = await signIn('ann');
     expect(user.email).toBe('ann@example.com');
-    expect(vaults).toHaveLength(1);
+    expect(vaults.map((v) => [v.id, v.name])).toEqual([[`vault-${user.id}`, 'Personal'], [`diary-${user.id}`, 'Diary']]);
     expect(vaults[0]).toMatchObject({ owner_id: user.id, lock: 'none', ai_access: 'off' });
+    expect(vaults[1]).toMatchObject({ owner_id: user.id, lock: 'none', ai_access: 'off', role: 'owner', members: 1 });
     const cookie = res.headers.get('set-cookie')!;
     expect(cookie).toMatch(/HttpOnly/);
     expect(cookie).toMatch(/SameSite=Strict/);
@@ -27,7 +28,16 @@ describe('sign-in', () => {
     const b = await signIn('ann');
     expect(b.user.id).toBe(a.user.id);
     expect(b.vault).toBe(a.vault);
-    expect(db.raw.prepare('SELECT * FROM vaults').all()).toHaveLength(1);
+    expect(db.raw.prepare('SELECT * FROM vaults').all()).toHaveLength(2);
+  });
+  it('gives an account from before the diary one at its next sign-in, keeping its name and lock after that', async () => {
+    const { signIn, db } = setup();
+    const a = await signIn('ann');
+    db.raw.prepare(`DELETE FROM vault_members WHERE vault_id = ?`).run(`diary-${a.user.id}`);
+    db.raw.prepare(`DELETE FROM vaults WHERE id = ?`).run(`diary-${a.user.id}`);
+    expect((await signIn('ann')).vaults.map((v) => v.name)).toEqual(['Personal', 'Diary']);
+    db.raw.prepare(`UPDATE vaults SET name = 'Journal' WHERE id = ?`).run(`diary-${a.user.id}`);
+    expect((await signIn('ann')).vaults.map((v) => v.name)).toEqual(['Personal', 'Journal']);
   });
   it('rejects a bad or missing credential', async () => {
     const { call } = setup();

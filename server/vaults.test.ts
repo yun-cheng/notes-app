@@ -23,11 +23,11 @@ describe('vaults', () => {
     const { signIn, create, call, advance } = vaultApi();
     const { cookie } = await signIn('ann');
     advance(1000);
-    const { status, vault } = await create(cookie, { name: ' Diary ', pin, hidden: true });
+    const { status, vault } = await create(cookie, { name: ' Secrets ', pin, hidden: true });
     expect(status).toBe(201);
-    expect(vault).toMatchObject({ name: 'Diary', lock: 'pin', pin, hidden: true, ai_access: 'off' });
+    expect(vault).toMatchObject({ name: 'Secrets', lock: 'pin', pin, hidden: true, ai_access: 'off' });
     const me = (await (await call('/api/me', {}, cookie)).json()) as { vaults: Vault[] };
-    expect(me.vaults.map((v) => v.name)).toEqual(['Personal', 'Diary']);
+    expect(me.vaults.map((v) => v.name)).toEqual(['Personal', 'Diary', 'Secrets']);
   });
   it('accepts writes to a new vault', async () => {
     const { signIn, create, push } = vaultApi();

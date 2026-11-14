@@ -171,6 +171,7 @@ None. Defaults chosen while building are listed in the implementation notes, and
 - The first account to sign in on a browser takes over notes written before accounts existed, moved into that account's vault.
 - A push carries the last server version the device saw. Same version: it applies. Different: the newest `updated_at` wins, and the losing text is kept as a "(conflict copy)" card. No copy is made if only a todo's status or due date or a tag differs.
 - Each account's vault ID is derived from its user ID, so diary IDs match across devices.
+- Each account also gets a vault named Diary at sign-in (`diary-<user ID>`), a moment younger than the default vault so it lists second. An account from before it gets one at its next sign-in. It is an ordinary vault: it can be renamed, locked with a PIN, encrypted or shared.
 - Who can sign up is limited by the Google consent screen while it stays in Testing mode. Publishing it would need an allowlist first.
 
 ## Implementation notes from Milestone 3

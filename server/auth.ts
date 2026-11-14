@@ -1,7 +1,7 @@
 import { createRemoteJWKSet, jwtVerify, type JWTVerifyGetKey } from 'jose';
 import type { Account } from '../src/sync/protocol';
 import type { Database } from './db';
-import { defaultVaultId } from './vaults';
+import { defaultVaultId, diaryVaultId } from './vaults';
 
 export interface GoogleIdentity {
   sub: string;
@@ -56,13 +56,17 @@ export async function upsertUser(db: Database, identity: GoogleIdentity, now: nu
     .first<Account>();
   if (!user) throw new Error('Saving the user failed');
 
-  // Derived from the user ID, so repeating a first sign-in can't create a second vault.
+  // Derived from the user ID, so repeating a first sign-in can't create a second vault or a second diary.
   const vaultId = defaultVaultId(user.id);
+  const diaryId = diaryVaultId(user.id);
   await db.batch([
     db
       .prepare(`INSERT OR IGNORE INTO vaults (id, owner_id, name, created_at) VALUES (?, ?, 'Personal', ?)`)
       .bind(vaultId, user.id, now),
     db.prepare(`INSERT OR IGNORE INTO vault_members (vault_id, user_id, role) VALUES (?, ?, 'owner')`).bind(vaultId, user.id),
+    // The diary, a moment younger so the default vault stays first. An account from before it existed gets it here.
+    db.prepare(`INSERT OR IGNORE INTO vaults (id, owner_id, name, created_at) VALUES (?, ?, 'Diary', ?)`).bind(diaryId, user.id, now + 1),
+    db.prepare(`INSERT OR IGNORE INTO vault_members (vault_id, user_id, role) VALUES (?, ?, 'owner')`).bind(diaryId, user.id),
     // Whatever was shared with this email before the account existed now belongs to it.
     db
       .prepare(`INSERT OR IGNORE INTO vault_members (vault_id, user_id, role) SELECT vault_id, ?, role FROM vault_invites WHERE email = lower(?)`)

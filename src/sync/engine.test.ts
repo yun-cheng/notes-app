@@ -400,7 +400,7 @@ describe('sharing', () => {
     await call(ann.cookie, 'DELETE', `/api/vaults/${vault}/members/${ben.info.user.id}`);
     await b.engine.sync();
     expect(await b.titles()).toEqual(['Ben note']);
-    expect((await b.store.listVaults()).map((v) => v.id)).toEqual([ben.info.vaults[0].id]);
+    expect((await b.store.listVaults()).map((v) => v.id)).toEqual(ben.info.vaults.map((v) => v.id));
   });
   it('removes a card that someone moved to a vault this account is not in', async () => {
     const { ann, a, b, call } = await annAndBen();

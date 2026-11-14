@@ -20,7 +20,7 @@ describe('sharing a vault', () => {
     await send(ann.cookie, 'POST', `/api/vaults/${ann.vault}/members`, { email: 'ben@example.com', role: 'editor' });
     expect((await send(ben.cookie, 'DELETE', `/api/vaults/${ann.vault}/members/${ann.user.id}`)).status).toBe(404);
     expect((await send(ben.cookie, 'DELETE', `/api/vaults/${ann.vault}/members/${ben.user.id}`)).status).toBe(200);
-    expect((await me(ben.cookie)).vaults.map((v) => v.id)).toEqual([ben.vault]);
+    expect((await me(ben.cookie)).vaults.map((v) => v.id)).not.toContain(ann.vault);
     expect(await ids(ben.cookie)).toEqual([]);
   });
   it('invites someone without an account, who joins at first sign-in', async () => {

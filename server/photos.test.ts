@@ -8,7 +8,9 @@ function fakeGoogle() {
   const calls: string[] = [];
   let refreshes = 0;
   let revoked = false;
-  const idToken = `x.${btoa(JSON.stringify({ email: 'ann@gmail.com' }))}.y`;
+  let email = 'ann@gmail.com';
+  let folders = 0;
+  const deleted: string[] = [];
   const json = (body: unknown, status = 200) => new Response(JSON.stringify(body), { status, headers: { 'content-type': 'application/json' } });
   const fetcher = async (url: string, init: RequestInit = {}) => {
     calls.push(`${init.method ?? 'GET'} ${url.split('?')[0]}`);
@@ -17,7 +19,7 @@ function fakeGoogle() {
       if (form.get('client_secret') !== 'shh') return json({ error: 'invalid_client' }, 401);
       if (form.get('grant_type') === 'authorization_code') {
         return form.get('code') === 'good'
-          ? json({ access_token: 'a1', refresh_token: 'r1', expires_in: 3600, scope: `openid email ${DRIVE_SCOPE}`, id_token: idToken })
+          ? json({ access_token: 'a1', refresh_token: 'r1', expires_in: 3600, scope: `openid email ${DRIVE_SCOPE}`, id_token: `x.${btoa(JSON.stringify({ email }))}.y` })
           : json({ error: 'invalid_grant' }, 400);
       }
       if (revoked) return json({ error: 'invalid_grant' }, 400);
@@ -27,7 +29,17 @@ function fakeGoogle() {
     if (url.startsWith('https://oauth2.googleapis.com/revoke')) return new Response(null, { status: 200 });
     const auth = new Headers(init.headers).get('authorization');
     if (!auth?.startsWith('Bearer a')) return json({ error: 'unauthorized' }, 401);
-    if (url.startsWith('https://www.googleapis.com/drive/v3/files?')) return json({ id: 'folder-1' });
+    if (url.startsWith('https://www.googleapis.com/drive/v3/files?')) {
+      const id = `folder-${++folders}`;
+      // Slow enough that two uploads at once both make one.
+      await new Promise((done) => setTimeout(done, 5));
+      return json({ id });
+    }
+    const gone = init.method === 'DELETE' && url.match(/drive\/v3\/files\/(folder-\d+)$/);
+    if (gone) {
+      deleted.push(gone[1]);
+      return new Response(null, { status: 204 });
+    }
     if (url.startsWith('https://www.googleapis.com/upload/drive/v3/files')) {
       const raw = new Uint8Array(init.body as ArrayBuffer);
       const text = new TextDecoder('latin1').decode(raw);
@@ -42,7 +54,7 @@ function fakeGoogle() {
     if (m && files.has(m[1])) return new Response(files.get(m[1])!.bytes.slice().buffer);
     return json({ error: 'not found' }, 404);
   };
-  return { fetcher, files, calls, revoke: () => (revoked = true), refreshes: () => refreshes };
+  return { fetcher, files, calls, deleted, revoke: () => (revoked = true), refreshes: () => refreshes, signInAs: (address: string) => (email = address) };
 }
 
 async function connected(secret = 'shh') {
@@ -89,6 +101,27 @@ describe('photos in Google Drive', () => {
     expect(got.headers.get('content-type')).toBe('image/jpeg');
     expect(got.headers.get('cache-control')).toContain('immutable');
     expect(new Uint8Array(await got.arrayBuffer())).toEqual(jpeg);
+  });
+  it('keeps one folder when two first uploads race', async () => {
+    const t = await connected();
+    const [a, b] = await Promise.all([upload(t, 'photo-0001', t.ann.cookie, t.ann.vault), upload(t, 'photo-0002', t.ann.cookie, t.ann.vault)]);
+    expect([a.status, b.status]).toEqual([201, 201]);
+    expect(new Set([...t.files.values()].map((f) => f.parent)).size).toBe(1);
+    expect(t.deleted).toEqual(['folder-2']);
+  });
+  it('makes a new folder after reconnecting with another Google account, and keeps it for the same one', async () => {
+    const t = await connected();
+    await upload(t, 'photo-0001', t.ann.cookie, t.ann.vault);
+    const reconnect = async () => {
+      const start = (await (await t.call('/api/drive/connect', { method: 'POST' }, t.ann.cookie)).json()) as { url: string };
+      await t.call(`/api/drive/callback?code=good&state=${new URL(start.url).searchParams.get('state')}`);
+    };
+    await reconnect();
+    await upload(t, 'photo-0002', t.ann.cookie, t.ann.vault);
+    t.signInAs('ann.other@gmail.com');
+    await reconnect();
+    await upload(t, 'photo-0003', t.ann.cookie, t.ann.vault);
+    expect([...t.files.values()].map((f) => f.parent)).toEqual(['folder-1', 'folder-1', 'folder-2']);
   });
   it('only lets vault members upload or see a photo', async () => {
     const t = await connected();

@@ -75,7 +75,9 @@ export async function finishConnect(db: Database, config: DriveConfig, state: st
     .prepare(
       `INSERT INTO drive_accounts (user_id, email, refresh_token, access_token, access_expires_at, folder_id, connected_at) VALUES (?, ?, ?, ?, ?, NULL, ?)
        ON CONFLICT(user_id) DO UPDATE SET email = excluded.email, refresh_token = excluded.refresh_token, access_token = excluded.access_token,
-         access_expires_at = excluded.access_expires_at, connected_at = excluded.connected_at`,
+         access_expires_at = excluded.access_expires_at, connected_at = excluded.connected_at,
+         -- Another Google account can't see the old account's folder: it gets its own.
+         folder_id = CASE WHEN drive_accounts.email = excluded.email THEN drive_accounts.folder_id ELSE NULL END`,
     )
     .bind(row.user_id, emailFromIdToken(tokens.id_token), tokens.refresh_token, tokens.access_token, now + (tokens.expires_in ?? 3600) * 1000, now)
     .run();
@@ -139,8 +141,16 @@ async function folder(db: Database, config: DriveConfig, userId: string, token: 
   });
   const body = (await res.json().catch(() => ({}))) as { id?: string };
   if (!res.ok || !body.id) throw new DriveFailed('Creating the photos folder failed');
-  await db.prepare(`UPDATE drive_accounts SET folder_id = ? WHERE user_id = ?`).bind(body.id, userId).run();
-  return body.id;
+  // Two first uploads at once both make a folder. The first one saved is kept, and the other removed.
+  const kept = await db
+    .prepare(`UPDATE drive_accounts SET folder_id = coalesce(folder_id, ?) WHERE user_id = ? RETURNING folder_id`)
+    .bind(body.id, userId)
+    .first<{ folder_id: string }>();
+  if (!kept) throw new DriveNotConnected('Drive was disconnected');
+  if (kept.folder_id !== body.id) {
+    await config.fetch(`https://www.googleapis.com/drive/v3/files/${encodeURIComponent(body.id)}`, { method: 'DELETE', headers: { authorization: `Bearer ${token}` } }).catch(() => undefined);
+  }
+  return kept.folder_id;
 }
 
 /** Uploads a file to the user's photos folder and returns its Drive ID. */

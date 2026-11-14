@@ -550,11 +550,23 @@ export class CardRepository {
    */
   applyAccess(vaults: Vault[], shared: SharedCard[]): Promise<boolean> {
     return this.enqueue(async () => {
-      const before = new Set([...(await this.store.listVaults()).map((v) => `v:${v.id}`), ...((await this.store.getMeta('shared')) as SharedCard[] | undefined ?? []).map((s) => `c:${s.card_id}`)]);
-      const after = [...vaults.map((v) => `v:${v.id}`), ...shared.map((s) => `c:${s.card_id}`)];
+      const [known, knownShared] = await Promise.all([this.store.listVaults(), this.store.getMeta('shared') as Promise<SharedCard[] | undefined>]);
       const vaultIds = new Set(vaults.map((v) => v.id));
       const sharedIds = new Set(shared.map((s) => s.card_id));
-      const gone = (await this.store.listCards()).filter((r) => !vaultIds.has(r.vault_id) && !sharedIds.has(r.id)).map((r) => r.id);
+      const outOfReach = (r: CardRecord) => !vaultIds.has(r.vault_id) && !sharedIds.has(r.id);
+
+      // Most syncs change nothing here. Then only cards made on this device and not yet accepted can be out of
+      // reach, and nothing is written, so the app has nothing to redraw.
+      const byId = <T>(list: T[], id: (item: T) => string) => JSON.stringify([...list].sort((a, b) => id(a).localeCompare(id(b))));
+      if (byId(known, (v) => v.id) === byId(vaults, (v) => v.id) && byId(knownShared ?? [], (s) => s.card_id) === byId(shared, (s) => s.card_id)) {
+        const stray = (await this.store.listDirty()).filter(outOfReach).map((r) => r.id);
+        if (stray.length) await this.dropStored(stray);
+        return false;
+      }
+
+      const before = new Set([...known.map((v) => `v:${v.id}`), ...(knownShared ?? []).map((s) => `c:${s.card_id}`)]);
+      const after = [...vaults.map((v) => `v:${v.id}`), ...shared.map((s) => `c:${s.card_id}`)];
+      const gone = (await this.store.listCards()).filter(outOfReach).map((r) => r.id);
       await this.store.replaceVaults(vaults);
       await this.store.setMeta('shared', shared);
       if (gone.length) await this.store.deleteCards(gone);
@@ -569,11 +581,13 @@ export class CardRepository {
 
   /** Removes cards that someone moved out of this account's reach, along with their place in the log. */
   dropCards(ids: string[]): Promise<void> {
-    return this.enqueue(async () => {
-      await this.store.deleteCards(ids);
-      const lost = new Set(ids);
-      await this.forget((entry) => lost.has(entry.cardId));
-    });
+    return this.enqueue(() => this.dropStored(ids));
+  }
+
+  private async dropStored(ids: string[]) {
+    await this.store.deleteCards(ids);
+    const lost = new Set(ids);
+    await this.forget((entry) => lost.has(entry.cardId));
   }
 
   applyRemote(records: CardRecord[]): Promise<void> {

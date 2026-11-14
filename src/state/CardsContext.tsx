@@ -75,6 +75,11 @@ export function CardsProvider({ accountId, children }: { accountId: string; chil
   const index = useMemo<CardIndex | null>(() => (cards && vaults ? buildIndex(cards, locked) : null), [cards, vaults, locked]);
   const [error, setError] = useState<string | null>(null);
   const [shared, setShared] = useState<ReadonlyMap<string, SharedCard>>(new Map());
+  // The same object until something in it changes, since every entry on screen reads it.
+  const value = useMemo<CardsValue | null>(
+    () => (index && vaults ? { index, repo, engine, vaults, locks, locked, photos, keyring, accountId, shared } : null),
+    [index, repo, engine, vaults, locks, locked, photos, keyring, accountId, shared],
+  );
 
   // A vault whose encryption was turned on but not finished (the tab closed, a sync failed) is finished when opened.
   useEffect(() => {
@@ -86,8 +91,15 @@ export function CardsProvider({ accountId, children }: { accountId: string; chil
   // The shared list changes only when a sync brings a new one.
   useEffect(() => {
     let live = true;
+    let last = '';
     const read = () =>
-      void repo.getMeta('shared').then((list) => live && setShared(new Map(((list as SharedCard[] | undefined) ?? []).map((s) => [s.card_id, s]))));
+      void repo.getMeta('shared').then((list) => {
+        // Every sync ends here; a list the same as before must not redraw everything that reads it.
+        const json = JSON.stringify(list ?? []);
+        if (!live || json === last) return;
+        last = json;
+        setShared(new Map(((list as SharedCard[] | undefined) ?? []).map((s) => [s.card_id, s])));
+      });
     read();
     const stop = engine.subscribe(() => engine.getStatus().state !== 'syncing' && read());
     return () => {
@@ -115,7 +127,8 @@ export function CardsProvider({ accountId, children }: { accountId: string; chil
           return card;
         }),
       );
-      if (active && run === latest) setCards(loaded);
+      // A sync that only marked cards as sent changes none of them: nothing to redraw.
+      if (active && run === latest) setCards((prev) => (prev && prev.length === loaded.length && prev.every((card, i) => card === loaded[i]) ? prev : loaded));
     };
     // Opening or forgetting a key changes what can be read.
     const stopKeys = keyring.subscribe(() => load(lastRecords).catch((e: unknown) => setError(String(e))));
@@ -159,8 +172,8 @@ export function CardsProvider({ accountId, children }: { accountId: string; chil
       </div>
     );
   }
-  if (!index || !vaults) return <div className="boot" aria-busy="true" />;
-  return <CardsContext.Provider value={{ index, repo, engine, vaults, locks, locked, photos, keyring, accountId, shared }}>{children}</CardsContext.Provider>;
+  if (!value) return <div className="boot" aria-busy="true" />;
+  return <CardsContext.Provider value={value}>{children}</CardsContext.Provider>;
 }
 
 export function useCards(): CardsValue {

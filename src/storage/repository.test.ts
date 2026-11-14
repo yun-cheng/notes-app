@@ -178,6 +178,19 @@ describe('journal', () => {
 describe('vaults', () => {
   const vault = (id: string, created_at: number): Vault => ({ id, name: id, owner_id: 'u', lock: 'none', ai_access: 'off', created_at, pin: null, hidden: false });
 
+  it('writes nothing when a sync finds access unchanged', async () => {
+    const vaults = [vault('a', 1), vault('b', 2)];
+    expect(await repo.applyAccess(vaults, [])).toBe(true);
+    let writes = 0;
+    const replace = store.replaceVaults.bind(store);
+    store.replaceVaults = async (list) => (writes++, replace(list));
+    const list = store.listCards.bind(store);
+    store.listCards = async () => (writes++, list());
+    expect(await repo.applyAccess([vault('b', 2), vault('a', 1)], [])).toBe(false);
+    expect(writes).toBe(0);
+    expect(await repo.applyAccess([vault('a', 1)], [])).toBe(false);
+    expect(writes).toBe(2);
+  });
   it('creates cards in a chosen vault', async () => {
     const card = await repo.createNote({ title: 'x', vaultId: 'private' });
     expect(card.vaultId).toBe('private');

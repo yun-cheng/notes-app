@@ -36,7 +36,7 @@ describe('encrypted vaults', () => {
     const vault = await t.json<Vault>(t.send(t.ann.cookie, 'POST', '/api/vaults', { name: 'Diary', pin }));
     const [first] = await t.push(t.ann.cookie, [rec(vault.id, 'd', { payload: '{"title":"old"}' })]);
     await t.send(t.ann.cookie, 'PATCH', `/api/vaults/${vault.id}`, { encryption });
-    await t.push(t.ann.cookie, [rec(vault.id, 'd', { seq: seqOf(first), updated_at: 999_999_999, payload: 'e1:new' })]);
+    await t.push(t.ann.cookie, [rec(vault.id, 'd', { seq: seqOf(first), updated_at: 1_000_500, payload: 'e1:new' })]);
     expect((await t.send(t.ann.cookie, 'POST', `/api/vaults/${vault.id}/purge-plaintext`)).status).toBe(200);
     const history = await t.json<VersionsResponse>(t.send(t.ann.cookie, 'GET', '/api/cards/d/versions'));
     expect(history.versions).toHaveLength(1);
@@ -63,7 +63,7 @@ describe('encrypted vaults', () => {
     expect((await call(`/api/public/${tokens[0]}`)).status).toBe(404);
     expect((await call(`/api/public/${tokens[1]}`)).status).toBe(200);
 
-    await push(ann.cookie, [rec(vault.id, 'm', { seq: seqOf(moving), updated_at: 999_999_999, payload: 'e1:moved' })]);
+    await push(ann.cookie, [rec(vault.id, 'm', { seq: seqOf(moving), updated_at: 1_000_500, payload: 'e1:moved' })]);
     expect(await shared()).toEqual([]);
     expect((await call(`/api/public/${tokens[1]}`)).status).toBe(404);
     // Cat, invited by email, finds nothing shared at her first sign-in.

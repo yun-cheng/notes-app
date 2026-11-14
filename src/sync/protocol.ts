@@ -26,7 +26,8 @@ export type PushResult =
   | { id: string; status: 'conflict_client_won'; seq: number; loser: CardRecord }
   /** Both sides changed. The server's version was newer and was kept. */
   | { id: string; status: 'conflict_server_won'; server: CardRecord }
-  | { id: string; status: 'retry' | 'forbidden' | 'too_large' };
+  /** `bad_clock`: the device's clock is more than a day ahead of the server's. */
+  | { id: string; status: 'retry' | 'forbidden' | 'too_large' | 'bad_clock' };
 
 export interface PushResponse {
   results: PushResult[];

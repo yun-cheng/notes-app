@@ -52,7 +52,7 @@ describe('push and pull', () => {
       }
       return realPrepare(sql);
     };
-    const [result] = await pushRecords(db, user.id, [rec(vault, 'a', { seq: 1, payload: 'late' })]);
+    const [result] = await pushRecords(db, user.id, [rec(vault, 'a', { seq: 1, payload: 'late' })], 1_000_000);
     expect(result.status).toBe('retry');
     expect(db.raw.prepare(`SELECT payload FROM cards`).get()!.payload).toBe('payload-a');
   });
@@ -61,6 +61,13 @@ describe('push and pull', () => {
     const { cookie, vault } = await signIn('ann');
     const results = await push(cookie, [rec(vault, 'big', { payload: 'x'.repeat(MAX_PAYLOAD_BYTES + 1) }), rec(vault, 'small')]);
     expect(results.map((r) => r.status)).toEqual(['too_large', 'ok']);
+  });
+  it('refuses a card dated more than a day ahead of the server, which would win every conflict', async () => {
+    const { signIn, push } = setup();
+    const { cookie, vault } = await signIn('ann');
+    const day = 24 * 60 * 60 * 1000;
+    const results = await push(cookie, [rec(vault, 'future', { updated_at: 1_000_000 + 2 * day }), rec(vault, 'skewed', { updated_at: 1_000_000 + day / 2 })]);
+    expect(results.map((r) => r.status)).toEqual(['bad_clock', 'ok']);
   });
   it('rejects malformed, duplicate and oversized batches', async () => {
     const { signIn, call } = setup();

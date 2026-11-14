@@ -162,7 +162,7 @@ describe('card history', () => {
     const { signIn, edit, list, db } = historyApi();
     const { cookie, vault, user } = await signIn('ann');
     const seq = await edit(cookie, vault, 'a', [[0, 'mine']]);
-    await pushRecords(db, user.id, [rec(vault, 'a', { seq, updated_at: MIN, payload: 'from claude' })], 'Claude');
+    await pushRecords(db, user.id, [rec(vault, 'a', { seq, updated_at: MIN, payload: 'from claude' })], MIN, 'Claude');
     const { versions } = await list(cookie, 'a');
     expect(versions.map((v) => [v.author, v.via])).toEqual([['ann', 'Claude'], ['ann', null]]);
   });
@@ -208,7 +208,7 @@ describe('the history of every card', () => {
     const ben = await signIn('ben');
     db.raw.exec(`INSERT INTO vault_members (vault_id, user_id, role) VALUES ('${ann.vault}', '${ben.user.id}', 'editor')`);
     const [first] = await pushFrom(ann.cookie, LAPTOP, [rec(ann.vault, 'a', { updated_at: 0, payload: 'ann' })], 'Chrome on Mac');
-    const [second] = await pushRecords(db, ann.user.id, [rec(ann.vault, 'a', { seq: seqOf(first), updated_at: MIN, payload: 'claude' })], 'Claude');
+    const [second] = await pushRecords(db, ann.user.id, [rec(ann.vault, 'a', { seq: seqOf(first), updated_at: MIN, payload: 'claude' })], MIN, 'Claude');
     await pushFrom(ben.cookie, PHONE, [rec(ann.vault, 'a', { seq: seqOf(second), updated_at: 2 * MIN, payload: 'ben' })], 'Safari on iPhone');
     const seen = async (cookie: string) => (await recent(cookie, LAPTOP)).versions.map((v) => [v.author, v.mine, v.via, v.device]);
     expect(await seen(ann.cookie)).toEqual([

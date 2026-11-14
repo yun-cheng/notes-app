@@ -230,7 +230,7 @@ async function save(w: Writer, cards: Card[]): Promise<void> {
     const { id, vaultId, updatedAt: _u, deleted, seq: _s, ...payload } = card;
     return { id, vault_id: vaultId, updated_at: at, deleted, seq: w.scope.records.get(id)?.seq ?? 0, payload: JSON.stringify(payload) };
   });
-  const results = await pushRecords(w.db, w.caller.user.id, records, w.caller.app);
+  const results = await pushRecords(w.db, w.caller.user.id, records, at, w.caller.app);
   const failed = results.find((r) => r.status !== 'ok' && r.status !== 'conflict_client_won');
   if (failed) throw new ToolError(failed.status === 'too_large' ? 'That card would be too large.' : 'The card changed while saving. Read it again and retry.');
 }

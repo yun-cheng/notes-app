@@ -44,6 +44,9 @@ interface Write {
   result: (seq: number) => PushResult;
 }
 
+/** How far ahead of the server's clock a device's may be: a day covers time zones set wrong and clocks drifting. */
+const MAX_CLOCK_AHEAD = 24 * 60 * 60 * 1000;
+
 /**
  * Applies a batch of records. Decisions are made from a read, and each write only lands
  * if the card hasn't changed since. A write that lost that race comes back as `retry`.
@@ -53,6 +56,7 @@ export async function pushRecords(
   db: Database,
   userId: string,
   records: CardRecord[],
+  now: number,
   via: string | null = null,
   device: Device | null = null,
 ): Promise<PushResult[]> {
@@ -73,6 +77,9 @@ export async function pushRecords(
     const current = existing.get(id);
     if (new TextEncoder().encode(record.payload).length > MAX_PAYLOAD_BYTES) {
       results.set(id, { id, status: 'too_large' });
+    } else if (record.updated_at > now + MAX_CLOCK_AHEAD) {
+      // The newer edit wins a conflict, so a device whose clock is far ahead would win every one for years.
+      results.set(id, { id, status: 'bad_clock' });
     } else if (!mayWrite(record, current, writable, editable) || (encrypted.has(record.vault_id) && !record.payload.startsWith('e1:'))) {
       // An encrypted vault only takes ciphertext, so a device that missed the change can't write plaintext into it.
       results.set(id, { id, status: 'forbidden' });

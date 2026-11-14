@@ -236,7 +236,7 @@ export function createApp({
       return c.json({ error: 'Invalid records' }, 400);
     }
     if (new Set(records.map((r) => r.id)).size !== records.length) return c.json({ error: 'Duplicate records' }, 400);
-    return c.json({ results: await pushRecords(c.env.DB, c.get('user').id, records, null, deviceOf(c)) });
+    return c.json({ results: await pushRecords(c.env.DB, c.get('user').id, records, now(), null, deviceOf(c)) });
   });
 
   app.get('/sync/pull', async (c) => {

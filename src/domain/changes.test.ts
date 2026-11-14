@@ -239,12 +239,15 @@ describe('changes that came by sync', () => {
     expect(madeBy(by())).toBe('One of your devices');
   });
 
-  it('leaves this device’s own changes to its log, for as far back as the log goes', () => {
+  it('leaves this device’s own changes to its log, but shows what it wrote without logging', () => {
     const a = note('a', 'One');
     const log = [change(a, { ...a, title: 'Two' }, { at: 500, until: 560 })];
     const synced = (source: Partial<ChangeSource>, at: number, until: number, card = a) => change(card, { ...card, title: 'x' }, { at, until, by: by(source) });
     const here = { device: { here: true, name: null } };
-    expect(inLog(synced(here, 900, 950, note('b', 'B')), log)).toBe(true);
+    expect(inLog(synced(here, 540, 600), log)).toBe(true);
+    // A conflict copy, or a card a restored backup changed: this device made it, but its log doesn't show it.
+    expect(inLog(synced(here, 900, 950, note('b', 'B')), log)).toBe(false);
+    expect(inLog(synced(here, 900, 950), log)).toBe(false);
     expect(inLog(synced(here, 100, 499), log)).toBe(false);
     expect(inLog(synced({ device: { here: false, name: null } }, 500, 560), log)).toBe(false);
     expect(inLog(synced({ ...here, via: 'Claude' }, 500, 560), log)).toBe(false);
@@ -259,8 +262,9 @@ describe('changes that came by sync', () => {
     expect(inLog(synced(540, 600), log)).toBe(true);
     expect(inLog(synced(561, 650), log)).toBe(false);
     expect(inLog(synced(540, 600, note('b', 'B')), log)).toBe(false);
-    // Undoing a change saved the card again.
+    // Undoing a change saved the card again, and so does redoing it.
     expect(inLog(synced(790, 800), log)).toBe(true);
+    expect(inLog(synced(900, 900), [...log, change(a, { ...a, title: 'Four' }, { at: 600, until: 600, redoneAt: 900 })])).toBe(true);
   });
 
   it('keeps the older pages when the newest is asked again, unless too much is new to meet them', () => {

@@ -30,6 +30,8 @@ export interface ChangeEntry {
   joins?: boolean;
   /** Set while the change is undone, to when that happened. */
   undoneAt?: number;
+  /** Set once an undone change is redone, to when: that write is this change's too. */
+  redoneAt?: number;
 }
 
 /** Who made a change that came by sync, and with what. */
@@ -55,6 +57,7 @@ export interface Change {
   after: Card;
   fields: string[];
   undoneAt?: number;
+  redoneAt?: number;
   sealed: boolean;
   /** Set on a change that came by sync, from the server's history: who made it. */
   by?: ChangeSource;
@@ -246,15 +249,15 @@ export function madeBy({ author, mine, via, device }: ChangeSource): string {
 }
 
 /**
- * Whether this device's log already shows a change that came by sync, because this device made it. Its own
- * changes are the log's to show for as far back as the log goes. A version from before devices said which they
- * were is taken for this device's when the log has the same card changing at the same time.
+ * Whether this device's log already shows a change that came by sync, because this device made it and logged it:
+ * the log has the same card changing at the same time. What this device wrote without logging (a restored backup,
+ * a conflict copy) is left to show from sync. A version from before devices said which they were is taken for
+ * this device's on the same terms.
  */
 export function inLog(change: Change, log: Change[]): boolean {
   const by = change.by;
-  if (!by?.mine || by.via) return false;
-  if (by.device) return by.device.here && log.some((logged) => logged.at <= change.until);
-  return log.some((logged) => logged.cardId === change.cardId && logged.at <= change.until && Math.max(logged.until, logged.undoneAt ?? 0) >= change.at);
+  if (!by?.mine || by.via || (by.device && !by.device.here)) return false;
+  return log.some((logged) => logged.cardId === change.cardId && logged.at <= change.until && Math.max(logged.until, logged.undoneAt ?? 0, logged.redoneAt ?? 0) >= change.at);
 }
 
 /** This device's actions and the changes that came by sync as one history, newest first. */

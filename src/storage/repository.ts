@@ -311,7 +311,7 @@ export class CardRepository {
         }
         stamp ??= at;
         const { undoneAt: _was, ...live } = entry;
-        await this.store.putChanges([direction === 'undo' ? { ...entry, undoneAt: stamp } : live]);
+        await this.store.putChanges([direction === 'undo' ? { ...entry, undoneAt: stamp } : { ...live, redoneAt: stamp }]);
         if (next.vaultId !== current.vaultId) await this.forgetReadable(next.id, next.vaultId);
         done.push(n);
       }

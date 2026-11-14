@@ -175,10 +175,13 @@ describe('undo and redo', () => {
 
     expect(await repo.revert([2], 'undo')).toEqual([]);
     expect(await repo.revert([2], 'redo')).toEqual([2]);
-    expect(await current(card.id)).toMatchObject({ status: 'done' });
+    const redone = await current(card.id);
+    expect(redone).toMatchObject({ status: 'done' });
     all = await changes();
     expect(all).toHaveLength(2);
     expect(all[1].undoneAt).toBeUndefined();
+    // So History knows the redo's write from sync is this change.
+    expect(all[1].redoneAt).toBe(redone!.updatedAt);
     // The card is waiting to sync again.
     expect((await store.listDirty()).map((r) => r.id)).toEqual([card.id]);
   });

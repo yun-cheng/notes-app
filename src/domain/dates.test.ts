@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { addDays, addMonths, formatTime, isDateKey, isTimeKey, monthGrid, parseDateKey, parseTime, relativeDay, relativeDayInSentence, toDateKey } from './dates';
+import { addDays, addMonths, formatShortMonth, formatTime, isDateKey, isTimeKey, monthGrid, parseDateKey, parseTime, relativeDay, relativeDayInSentence, toDateKey } from './dates';
 
 describe('dates', () => {
   it('round-trips local date keys', () => {
@@ -55,5 +55,12 @@ describe('times', () => {
   it('writes a time the way the locale does', () => {
     expect(formatTime('15:30', 'en-US')).toBe('3:30 PM');
     expect(formatTime('15:30', 'en-GB')).toBe('15:30');
+  });
+});
+
+describe('formatShortMonth', () => {
+  it('leaves out this year, and keeps another', () => {
+    expect(formatShortMonth('2026-11', '2026-11-15', 'en-US')).toBe('Nov');
+    expect(formatShortMonth('2027-01', '2026-11-15', 'en-US')).toBe('Jan 2027');
   });
 });

@@ -73,6 +73,9 @@ h1, h2, p { margin: 0; }
 .demo-tag { display: inline-flex; align-items: center; flex: none; padding: 1px 7px; border-radius: 999px; background: color-mix(in srgb, var(--alert) 16%, transparent); color: var(--alert); font: 600 11px/1.5 var(--sans); letter-spacing: 0.02em; text-transform: uppercase; }
 .demo-tag--head { padding: 3px 9px; }
 /* A narrow phone's title bar holds the title, Demo, sync and three buttons: closer together, so the title fits. */
+/* A title with a short form for a narrow phone, like the calendar's month. */
+.title--narrow { display: none; }
+@media (max-width: 419px) { .title--wide { display: none; } .title--narrow { display: inline; } }
 @media (max-width: 419px) { .page__head { gap: 6px; } .page__actions { gap: 0; } .page__actions .icon-btn { width: 36px; } .demo-tag--head { padding: 2px 6px; letter-spacing: 0; } }
 .account-button { position: relative; }
 .style-menu.account-menu { padding: 8px; gap: 2px; font-size: 14px; }

@@ -1,7 +1,7 @@
 import { useMemo } from 'react';
 import { Link, useSearchParams } from 'react-router';
 import { diaryVault } from '../../domain/access';
-import { addMonths, formatMonth, monthGrid, monthKey, parseDateKey, toDateKey } from '../../domain/dates';
+import { addMonths, formatMonth, formatShortMonth, monthGrid, monthKey, parseDateKey, toDateKey } from '../../domain/dates';
 import { buildSearch } from '../../domain/search';
 import { useCards, useToday } from '../../state/CardsContext';
 import { CardRow, Empty, Page } from '../components';
@@ -40,7 +40,12 @@ export function CalendarPage() {
 
   return (
     <Page
-      title={formatMonth(month)}
+      title={
+        <>
+          <span className="title--wide">{formatMonth(month)}</span>
+          <span className="title--narrow">{formatShortMonth(month, today)}</span>
+        </>
+      }
       actions={
         <>
           <button type="button" className="btn" onClick={() => go(monthKey(today))}>

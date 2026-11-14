@@ -1,7 +1,7 @@
 import { SyncAuthExpired, SyncOffline } from '../sync/engine';
 import type { PhotoStore, PhotoTransport, PreparedPhoto } from './types';
 
-export type PhotoProblem = 'needs_drive' | 'not_configured' | 'offline' | 'error' | null;
+export type PhotoProblem = 'needs_drive' | 'not_configured' | 'offline' | 'expired' | 'error' | null;
 
 export interface PhotoState {
   /** Photos added on this device that the server doesn't have yet. */
@@ -115,8 +115,8 @@ export class PhotoService {
         problem = result;
         break;
       } catch (err) {
-        problem = err instanceof SyncOffline ? 'offline' : err instanceof SyncAuthExpired ? 'offline' : 'error';
-        if (problem === 'offline') break;
+        problem = err instanceof SyncOffline ? 'offline' : err instanceof SyncAuthExpired ? 'expired' : 'error';
+        if (problem !== 'error') break;
         console.error('Photo upload failed', err);
       }
     }

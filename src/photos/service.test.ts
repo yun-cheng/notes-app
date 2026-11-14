@@ -1,9 +1,9 @@
 import { describe, expect, it } from 'vitest';
-import { SyncOffline } from '../sync/engine';
+import { SyncAuthExpired, SyncOffline } from '../sync/engine';
 import { PhotoService } from './service';
 import { MemoryPhotoStore, type PhotoRecord, type PhotoTransport, type UploadResult } from './types';
 
-function fixture(answers: (UploadResult | 'offline')[] = []) {
+function fixture(answers: (UploadResult | 'offline' | 'expired')[] = []) {
   const store = new MemoryPhotoStore();
   const server = new Map<string, Blob>();
   const uploads: string[] = [];
@@ -11,6 +11,7 @@ function fixture(answers: (UploadResult | 'offline')[] = []) {
     upload: async (photo: PhotoRecord) => {
       const answer = answers.shift() ?? 'ok';
       if (answer === 'offline') throw new SyncOffline('offline');
+      if (answer === 'expired') throw new SyncAuthExpired('expired');
       if (answer === 'ok') {
         server.set(photo.id, photo.blob);
         uploads.push(photo.id);
@@ -48,6 +49,12 @@ describe('PhotoService', () => {
     await photos.upload();
     expect(uploads).toEqual(['photo-0001']);
     expect(photos.getState()).toEqual({ pending: 0, problem: null });
+  });
+  it('says when uploads wait for signing in again, not for a connection', async () => {
+    const { photos } = fixture(['expired', 'expired']);
+    await photos.add(image(), 'v1');
+    await photos.upload();
+    expect(photos.getState()).toEqual({ pending: 1, problem: 'expired' });
   });
   it('fetches a photo from another device once, then keeps it', async () => {
     const { photos, server, store } = fixture();

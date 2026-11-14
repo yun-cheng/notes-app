@@ -1,6 +1,7 @@
 import { useEffect, useState } from 'react';
 import { useLocation, useNavigate } from 'react-router';
 import { usePhotoState } from '../../state/CardsContext';
+import type { PhotoProblem } from '../../photos/service';
 import { disconnectDrive, fetchDriveStatus, startDriveConnect, type DriveStatus } from '../../sync/http';
 import { Section } from '../components';
 import { useToast } from '../Toast';
@@ -10,6 +11,15 @@ const RESULT: Record<string, string> = {
   denied: 'Google Drive was not connected.',
   expired: 'That took too long. Try connecting Google Drive again.',
   failed: "Google Drive couldn't be connected. Try again.",
+};
+
+/** How the sentence about waiting photos ends, for each reason they wait. */
+const WHY: Record<NonNullable<PhotoProblem>, string> = {
+  needs_drive: ' until Google Drive is connected.',
+  not_configured: ' until photo storage is set up on the server.',
+  offline: ' until you are back online.',
+  expired: ' until you sign in again.',
+  error: '. Some uploads failed and will be retried.',
 };
 
 /** Settings: where photos are stored, and any waiting to upload. */
@@ -52,16 +62,7 @@ export function PhotosSection() {
   };
 
   const waiting = pending ? `${pending} ${pending === 1 ? 'photo is' : 'photos are'} waiting to upload` : '';
-  const why =
-    problem === 'needs_drive'
-      ? ' until Google Drive is connected.'
-      : problem === 'not_configured'
-        ? ' until photo storage is set up on the server.'
-        : problem === 'offline'
-          ? ' until you are back online.'
-          : problem === 'error'
-            ? '. Some uploads failed and will be retried.'
-            : '.';
+  const why = problem ? WHY[problem] : '.';
 
   return (
     <Section title="Photos">

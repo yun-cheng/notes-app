@@ -15,7 +15,7 @@ export function setup(options: { googleFetch?: GoogleFetch; webFetch?: WebFetch;
   let clock = 1_000_000;
   const verifyGoogle: VerifyGoogleToken = async (credential) => {
     if (credential === 'bad') throw new InvalidGoogleToken('no');
-    return { sub: credential, email: `${credential}@example.com`, name: credential };
+    return { sub: credential, email: `${credential}@example.com`, name: credential, picture: `https://photos.example/${credential}.jpg` };
   };
   const app = createApp({ verifyGoogle, now: () => clock, googleFetch: options.googleFetch, webFetch: options.webFetch });
   const env = { DB: db, GOOGLE_CLIENT_ID: CLIENT_ID, GOOGLE_CLIENT_SECRET: options.clientSecret };

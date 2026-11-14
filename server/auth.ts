@@ -9,7 +9,12 @@ export interface GoogleIdentity {
   sub: string;
   email: string;
   name: string;
+  /** The Google profile photo's address, when the account has one. */
+  picture?: string | null;
 }
+
+/** Only a web address served over HTTPS is kept as a photo. */
+const photoUrl = (value: unknown) => (typeof value === 'string' && value.startsWith('https://') ? value : null);
 
 export type VerifyGoogleToken = (credential: string, clientId: string) => Promise<GoogleIdentity>;
 
@@ -27,7 +32,12 @@ export function googleVerifier(keys: JWTVerifyGetKey = googleKeys): VerifyGoogle
       if (typeof payload.sub !== 'string' || typeof payload.email !== 'string' || payload.email_verified !== true) {
         throw new InvalidGoogleToken('Google account has no verified email');
       }
-      return { sub: payload.sub, email: payload.email, name: typeof payload.name === 'string' ? payload.name : payload.email };
+      return {
+        sub: payload.sub,
+        email: payload.email,
+        name: typeof payload.name === 'string' ? payload.name : payload.email,
+        picture: photoUrl(payload.picture),
+      };
     } catch (err) {
       if (err instanceof InvalidGoogleToken) throw err;
       throw new InvalidGoogleToken('Google token failed verification');
@@ -49,11 +59,11 @@ export async function hashToken(token: string): Promise<string> {
 export async function upsertUser(db: Database, identity: GoogleIdentity, now: number): Promise<Account> {
   const user = await db
     .prepare(
-      `INSERT INTO users (id, google_sub, email, name, created_at) VALUES (?, ?, ?, ?, ?)
-       ON CONFLICT(google_sub) DO UPDATE SET email = excluded.email, name = excluded.name
-       RETURNING id, email, name`,
+      `INSERT INTO users (id, google_sub, email, name, picture, created_at) VALUES (?, ?, ?, ?, ?, ?)
+       ON CONFLICT(google_sub) DO UPDATE SET email = excluded.email, name = excluded.name, picture = excluded.picture
+       RETURNING id, email, name, picture`,
     )
-    .bind(crypto.randomUUID(), identity.sub, identity.email, identity.name, now)
+    .bind(crypto.randomUUID(), identity.sub, identity.email, identity.name, photoUrl(identity.picture), now)
     .first<Account>();
   if (!user) throw new Error('Saving the user failed');
 
@@ -101,22 +111,41 @@ export interface ResolvedSession {
   renewed: boolean;
 }
 
-export async function resolveSession(db: Database, token: string, now: number): Promise<ResolvedSession | null> {
-  const hash = await hashToken(token);
-  const row = await db
+/** A live session from this browser's cookie, which can hold several accounts. */
+export interface BrowserSession {
+  token: string;
+  user: Account;
+  expiresAt: number;
+}
+
+/** The live sessions among `tokens`, in the same order, without the expired or signed-out ones. */
+export async function resolveSessions(db: Database, tokens: string[], now: number): Promise<BrowserSession[]> {
+  if (!tokens.length) return [];
+  const hashes = await Promise.all(tokens.map(hashToken));
+  const { results } = await db
     .prepare(
-      `SELECT u.id, u.email, u.name, s.expires_at FROM sessions s JOIN users u ON u.id = s.user_id
-       WHERE s.token_hash = ? AND s.expires_at > ?`,
+      `SELECT s.token_hash, s.expires_at, u.id, u.email, u.name, u.picture FROM sessions s JOIN users u ON u.id = s.user_id
+       WHERE s.token_hash IN (${hashes.map(() => '?').join(', ')}) AND s.expires_at > ?`,
     )
-    .bind(hash, now)
-    .first<Account & { expires_at: number }>();
-  if (!row) return null;
-  const { expires_at: expiresAt, ...user } = row;
-  const renewed = expiresAt - now < (SESSION_DAYS / 2) * DAY;
-  if (renewed) {
-    await db.prepare(`UPDATE sessions SET expires_at = ? WHERE token_hash = ?`).bind(now + SESSION_DAYS * DAY, hash).run();
-  }
-  return { user, renewed };
+    .bind(...hashes, now)
+    .all<Account & { token_hash: string; expires_at: number }>();
+  const byHash = new Map(results.map(({ token_hash, expires_at, ...user }) => [token_hash, { user, expiresAt: expires_at }]));
+  return tokens.flatMap((token, i) => {
+    const found = byHash.get(hashes[i]);
+    return found ? [{ token, ...found }] : [];
+  });
+}
+
+/** Extends a session past half its life, so an account in use stays signed in. True when it did. */
+export async function renewSession(db: Database, session: BrowserSession, now: number): Promise<boolean> {
+  if (session.expiresAt - now >= (SESSION_DAYS / 2) * DAY) return false;
+  await db.prepare(`UPDATE sessions SET expires_at = ? WHERE token_hash = ?`).bind(now + SESSION_DAYS * DAY, await hashToken(session.token)).run();
+  return true;
+}
+
+export async function resolveSession(db: Database, token: string, now: number): Promise<ResolvedSession | null> {
+  const [session] = await resolveSessions(db, [token], now);
+  return session ? { user: session.user, renewed: await renewSession(db, session, now) } : null;
 }
 
 export async function deleteSession(db: Database, token: string): Promise<void> {

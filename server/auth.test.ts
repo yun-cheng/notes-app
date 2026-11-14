@@ -3,6 +3,7 @@ import { createLocalJWKSet, exportJWK, generateKeyPair, SignJWT } from 'jose';
 import { createApp } from './app';
 import { googleVerifier, InvalidGoogleToken, SESSION_DAYS } from './auth';
 import { createTestDb } from './testDb';
+import type { SessionInfo, SignedInAccounts } from '../src/sync/protocol';
 import { CLIENT_ID, DAY, setup } from './testHarness';
 
 describe('sign-in', () => {
@@ -82,6 +83,46 @@ describe('sessions', () => {
     advance((SESSION_DAYS + 1) * DAY);
     expect((await call('/api/me', {}, cookie)).status).toBe(401);
   });
+  it('stays signed in to several accounts on one browser, each request naming its own', async () => {
+    const { call } = setup();
+    const signIn = async (name: string, cookie?: string) => {
+      const res = await call('/api/auth/google', { method: 'POST', body: JSON.stringify({ credential: name }) }, cookie);
+      return { user: ((await res.json()) as SessionInfo).user, cookie: res.headers.get('set-cookie')!.split(';')[0] };
+    };
+    const ann = await signIn('ann');
+    expect(ann.user.picture).toBe('https://photos.example/ann.jpg');
+    const both = await signIn('bob', ann.cookie);
+    const me = async (account?: string) => {
+      const res = await call('/api/me', { headers: account ? { 'X-Account': account } : {} }, both.cookie);
+      return res.status === 200 ? ((await res.json()) as SessionInfo).user.name : res.status;
+    };
+    // The newest sign-in answers when the request names no account.
+    expect(await me()).toBe('bob');
+    expect(await me(ann.user.id)).toBe('ann');
+    expect(await me(both.user.id)).toBe('bob');
+    expect(await me('someone-else')).toBe(401);
+    const accounts = async (cookie: string) => ((await (await call('/api/auth/accounts', {}, cookie)).json()) as SignedInAccounts).accounts.map((a) => a.name);
+    expect(await accounts(both.cookie)).toEqual(['bob', 'ann']);
+
+    // Signing in to an account again replaces its session rather than listing it twice.
+    const again = await signIn('ann', both.cookie);
+    expect(await accounts(again.cookie)).toEqual(['ann', 'bob']);
+
+    // Signing out of one leaves the other signed in.
+    const out = await call('/api/auth/logout', { method: 'POST', headers: { 'X-Account': again.user.id } }, again.cookie);
+    expect(((await out.json()) as SignedInAccounts).accounts.map((a) => a.name)).toEqual(['bob']);
+    const left = out.headers.get('set-cookie')!.split(';')[0];
+    expect(await accounts(left)).toEqual(['bob']);
+    expect((await call('/api/me', { headers: { 'X-Account': again.user.id } }, left)).status).toBe(401);
+  });
+  it('forgets an ended session from the cookie', async () => {
+    const { call, signIn } = setup();
+    const ann = await signIn('ann');
+    const cookie = `${ann.cookie}.ended-token`;
+    const res = await call('/api/auth/accounts', {}, cookie);
+    expect(((await res.json()) as SignedInAccounts).accounts.map((a) => a.name)).toEqual(['ann']);
+    expect(res.headers.get('set-cookie')!.split(';')[0]).toBe(ann.cookie);
+  });
   it('marks responses uncacheable', async () => {
     const { call } = setup();
     expect((await call('/api/config')).headers.get('cache-control')).toBe('no-store');
@@ -104,7 +145,12 @@ describe('google token verification', () => {
   }
   it('accepts a valid token', async () => {
     const { verify, sign } = await keys();
-    expect(await verify(await sign({}), CLIENT_ID)).toEqual({ sub: 'google-1', email: 'a@b.c', name: 'A' });
+    expect(await verify(await sign({}), CLIENT_ID)).toEqual({ sub: 'google-1', email: 'a@b.c', name: 'A', picture: null });
+  });
+  it('keeps the profile photo only from an https address', async () => {
+    const { verify, sign } = await keys();
+    expect((await verify(await sign({ picture: 'https://lh3.googleusercontent.com/a/x' }), CLIENT_ID)).picture).toBe('https://lh3.googleusercontent.com/a/x');
+    expect((await verify(await sign({ picture: 'http://example.com/x.jpg' }), CLIENT_ID)).picture).toBeNull();
   });
   it('rejects a token for another app, issuer, expired, unverified or wrongly signed', async () => {
     const { verify, sign } = await keys();

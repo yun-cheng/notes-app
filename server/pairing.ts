@@ -20,7 +20,7 @@ async function pairing(c: Context<AppEnv>, pair: unknown, now: number) {
 }
 
 /** Routes the app calls before it has a session. */
-export function pairingPublicRoutes(app: Hono<AppEnv>, sendSession: (c: Context<AppEnv>, token: string) => void, now: () => number) {
+export function pairingPublicRoutes(app: Hono<AppEnv>, sendSession: (c: Context<AppEnv>, token: string) => Promise<void>, now: () => number) {
   app.post('/auth/pair/start', async (c) => {
     const pair = randomToken();
     const code = shortCode();
@@ -42,12 +42,12 @@ export function pairingPublicRoutes(app: Hono<AppEnv>, sendSession: (c: Context<
     if (!row.user_id) return c.json({ pending: true }, 202);
     const user = await c.env.DB.prepare(`DELETE FROM device_pairings WHERE pair_hash = ? RETURNING user_id`).bind(row.pair_hash).first<{ user_id: string }>();
     if (!user) return c.json({ error: 'expired' }, 404);
-    const account = await c.env.DB.prepare(`SELECT id, email, name FROM users WHERE id = ?`).bind(user.user_id).first<SessionInfo['user']>();
+    const account = await c.env.DB.prepare(`SELECT id, email, name, picture FROM users WHERE id = ?`).bind(user.user_id).first<SessionInfo['user']>();
     if (!account) return c.json({ error: 'expired' }, 404);
     const session = await createSession(c.env.DB, account.id, at);
     const info: SessionInfo = { user: account, vaults: await listVaults(c.env.DB, account.id) };
     if (body?.token === true) return c.json({ ...info, token: session });
-    sendSession(c, session);
+    await sendSession(c, session);
     return c.json(info);
   });
 }

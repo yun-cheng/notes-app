@@ -2,14 +2,17 @@ import { Hono, type Context } from 'hono';
 import { deleteCookie, getCookie, setCookie } from 'hono/cookie';
 import type { VaultPin } from '../src/domain/pin';
 import type { CardRecord } from '../src/domain/types';
-import { PUSH_LIMIT, type ConfigResponse, type RecentVersionsResponse, type SessionInfo, type VersionResponse, type VersionsResponse } from '../src/sync/protocol';
+import { PUSH_LIMIT, type ConfigResponse, type RecentVersionsResponse, type SessionInfo, type SignedInAccounts, type VersionResponse, type VersionsResponse } from '../src/sync/protocol';
 import {
   createSession,
   deleteSession,
   googleVerifier,
   InvalidGoogleToken,
+  renewSession,
   resolveSession,
+  resolveSessions,
   SESSION_DAYS,
+  type BrowserSession,
   upsertUser,
   type VerifyGoogleToken,
 } from './auth';
@@ -38,6 +41,15 @@ export interface AppOptions {
 }
 
 const COOKIE = 'session';
+/**
+ * A browser can be signed in to several accounts at once, like Google. The cookie holds each one's session token,
+ * the newest sign-in first, joined by dots (tokens never contain one). Each request names its account in this
+ * header, so two tabs on different accounts never mix; without it, the first account answers.
+ */
+const ACCOUNT_HEADER = 'X-Account';
+const MAX_ACCOUNTS = 5;
+
+const cookieTokens = (c: Context<Env>) => (getCookie(c, COOKIE) ?? '').split('.').filter(Boolean);
 
 /** The native apps send their session as a bearer token; browsers send the cookie. */
 function bearerToken(c: Context<Env>): string | undefined {
@@ -129,14 +141,35 @@ export function createApp({
 }: AppOptions = {}) {
   const app = new Hono<Env>();
 
-  const sendSessionCookie = (c: Context<Env>, token: string) =>
-    setCookie(c, COOKIE, token, {
+  const writeSessions = (c: Context<Env>, tokens: string[]) => {
+    if (!tokens.length) return deleteCookie(c, COOKIE, { path: '/api' });
+    setCookie(c, COOKIE, tokens.slice(0, MAX_ACCOUNTS).join('.'), {
       httpOnly: true,
       sameSite: 'Strict',
       secure: new URL(c.req.url).protocol === 'https:',
       path: '/api',
       maxAge: SESSION_DAYS * 86_400,
     });
+  };
+  /** The browser's live sessions; the cookie is rewritten without any that ended. */
+  const browserSessions = async (c: Context<Env>) => {
+    const tokens = cookieTokens(c);
+    const live = await resolveSessions(c.env.DB, tokens, now());
+    if (live.length < tokens.length) writeSessions(c, live.map((s) => s.token));
+    return live;
+  };
+  /** Adds a new sign-in at the front, replacing any earlier session for the same account. */
+  const sendSessionCookie = async (c: Context<Env>, token: string) => {
+    const [added] = await resolveSessions(c.env.DB, [token], now());
+    const others = (await browserSessions(c)).filter((s) => s.token !== token && s.user.id !== added?.user.id);
+    await Promise.all(others.slice(MAX_ACCOUNTS - 1).map((s) => deleteSession(c.env.DB, s.token)));
+    writeSessions(c, [token, ...others.map((s) => s.token)]);
+  };
+  /** The session for the account the request names, or the first one. */
+  const pickSession = (sessions: BrowserSession[], c: Context<Env>) => {
+    const wanted = c.req.header(ACCOUNT_HEADER);
+    return wanted ? sessions.find((s) => s.user.id === wanted) : sessions[0];
+  };
 
   app.use(async (c, next) => {
     await next();
@@ -153,7 +186,7 @@ export function createApp({
       const identity = await verifyGoogle(body.credential, c.env.GOOGLE_CLIENT_ID);
       const at = now();
       const user = await upsertUser(c.env.DB, identity, at);
-      sendSessionCookie(c, await createSession(c.env.DB, user.id, at));
+      await sendSessionCookie(c, await createSession(c.env.DB, user.id, at));
       return c.json<SessionInfo>({ user, vaults: await listVaults(c.env.DB, user.id) });
     } catch (err) {
       if (err instanceof InvalidGoogleToken) return c.json({ error: 'Google sign-in failed' }, 401);
@@ -161,12 +194,23 @@ export function createApp({
     }
   });
 
+  /** Signs out of one account: the one the request names, or the first. The others stay signed in. */
   app.post('/auth/logout', async (c) => {
-    const token = bearerToken(c) ?? getCookie(c, COOKIE);
-    if (token) await deleteSession(c.env.DB, token);
-    deleteCookie(c, COOKIE, { path: '/api' });
-    return c.json({ ok: true });
+    const bearer = bearerToken(c);
+    if (bearer) {
+      await deleteSession(c.env.DB, bearer);
+      return c.json<SignedInAccounts>({ accounts: [] });
+    }
+    const sessions = await browserSessions(c);
+    const leaving = pickSession(sessions, c);
+    if (leaving) await deleteSession(c.env.DB, leaving.token);
+    const rest = sessions.filter((s) => s !== leaving);
+    writeSessions(c, rest.map((s) => s.token));
+    return c.json<SignedInAccounts>({ accounts: rest.map((s) => s.user) });
   });
+
+  /** Every account signed in on this browser, for switching between them. */
+  app.get('/auth/accounts', async (c) => c.json<SignedInAccounts>({ accounts: (await browserSessions(c)).map((s) => s.user) }));
 
   // AI apps authenticate with their own bearer tokens, not the session cookie.
   aiPublicRoutes(app, now);
@@ -177,10 +221,17 @@ export function createApp({
   // Everything registered after this requires a valid session.
   app.use(async (c, next) => {
     const bearer = bearerToken(c);
-    const token = bearer ?? getCookie(c, COOKIE);
-    const session = token ? await resolveSession(c.env.DB, token, now()) : null;
+    if (bearer) {
+      const session = await resolveSession(c.env.DB, bearer, now());
+      if (!session) return c.json({ error: 'Not signed in' }, 401);
+      c.set('user', session.user);
+      return next();
+    }
+    const sessions = await browserSessions(c);
+    const session = pickSession(sessions, c);
     if (!session) return c.json({ error: 'Not signed in' }, 401);
-    if (session.renewed && !bearer) sendSessionCookie(c, token!);
+    // Sent again so the cookie lasts as long as the session.
+    if (await renewSession(c.env.DB, session, now())) writeSessions(c, sessions.map((s) => s.token));
     c.set('user', session.user);
     return next();
   });

@@ -8,6 +8,13 @@ export interface Account {
   id: string;
   email: string;
   name: string;
+  /** The Google profile photo's address. Missing from a server older than photos, and for an account without one. */
+  picture?: string | null;
+}
+
+/** The accounts signed in on this browser, the newest sign-in first. */
+export interface SignedInAccounts {
+  accounts: Account[];
 }
 
 export interface SessionInfo {

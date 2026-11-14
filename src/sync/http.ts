@@ -3,12 +3,24 @@ import type { VaultPin } from '../domain/pin';
 import type { CardRecord, JSONNode, Vault } from '../domain/types';
 import type { PhotoTransport } from '../photos/types';
 import { SyncAuthExpired, SyncOffline, type SyncTransport } from './engine';
-import type { ConfigResponse, ConnectedApp, LinkPreview, PullResponse, PushResponse, RecentVersionsResponse, SessionInfo, SharedCard, VersionResponse, VersionsResponse } from './protocol';
+import type { ConfigResponse, ConnectedApp, LinkPreview, PullResponse, PushResponse, RecentVersionsResponse, SessionInfo, SharedCard, SignedInAccounts, VersionResponse, VersionsResponse } from './protocol';
+
+let requestAccount: string | null = null;
+
+/**
+ * The account this tab's requests are for. A browser can be signed in to several, and the server answers each
+ * request as the one it names, so two tabs on different accounts never mix their notes.
+ */
+export function setRequestAccount(id: string | null) {
+  requestAccount = id;
+}
 
 /** Calls the API: `SyncOffline` when the server can't be reached, `SyncAuthExpired` when signed out, else the response. */
 async function rawRequest(path: string, init?: RequestInit): Promise<Response> {
+  const headers = new Headers(init?.headers);
+  if (requestAccount) headers.set('X-Account', requestAccount);
   try {
-    const res = await fetch(`/api${path}`, { credentials: 'same-origin', ...init });
+    const res = await fetch(`/api${path}`, { credentials: 'same-origin', ...init, headers });
     if (res.status === 401) throw new SyncAuthExpired('Not signed in');
     return res;
   } catch (err) {
@@ -19,7 +31,7 @@ async function rawRequest(path: string, init?: RequestInit): Promise<Response> {
 
 /** A JSON request to the API. Other failures than `rawRequest`'s throw a plain error. */
 async function request<T>(path: string, init?: RequestInit): Promise<T> {
-  const res = await rawRequest(path, { headers: { 'content-type': 'application/json' }, ...init });
+  const res = await rawRequest(path, { ...init, headers: { 'content-type': 'application/json', ...init?.headers } });
   if (!res.ok) throw new Error(`Request to ${path} failed with status ${res.status}`);
   return (await res.json()) as T;
 }
@@ -47,7 +59,11 @@ export const fetchLinkPreview = (url: string) => request<LinkPreview>('/unfurl',
 export const signInWithGoogle = (credential: string) =>
   request<SessionInfo>('/auth/google', { method: 'POST', body: JSON.stringify({ credential }) });
 
-export const signOutOfServer = () => request<unknown>('/auth/logout', { method: 'POST', body: '{}' });
+/** Signs this tab's account out. Returns the accounts still signed in on this browser. */
+export const signOutOfServer = async () => (await request<SignedInAccounts>('/auth/logout', { method: 'POST', body: '{}' })).accounts;
+
+/** The accounts signed in on this browser, newest sign-in first. */
+export const fetchSignedInAccounts = async () => (await request<SignedInAccounts>('/auth/accounts')).accounts;
 
 export interface VaultChanges {
   name?: string;

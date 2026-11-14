@@ -5,34 +5,45 @@ import react from '@vitejs/plugin-react';
 import { VitePWA } from 'vite-plugin-pwa';
 
 /**
- * Only in `npm run dev`, never in a build: /demo signs this browser in as the demo account that
- * `npm run demo` made on the local server, and starts its local copy over.
+ * Only in `npm run dev`, never in a build: /demo signs this browser in to the demo account that
+ * `npm run demo` made on the local server, alongside any accounts it is already signed in to.
  */
 function demoSignIn(): Plugin {
   return {
     name: 'demo-sign-in',
     apply: 'serve',
     configureServer(server) {
-      server.middlewares.use('/demo', (_req, res) => {
+      const session = () => {
         const file = '.wrangler/demo-session.json';
+        return existsSync(file) ? (JSON.parse(readFileSync(file, 'utf8')) as { token: string; user: { id: string } }) : null;
+      };
+      // Adds the demo account to the accounts this browser is signed in to, the way the API adds a sign-in, keeping
+      // the others. Under /api, since the session cookie is only sent there.
+      server.middlewares.use('/api/demo-session', (req, res) => {
+        const demo = session();
+        if (!demo || req.method !== 'POST') {
+          res.statusCode = 404;
+          res.end();
+          return;
+        }
+        const current = /(?:^|;\s*)session=([^;]*)/.exec(req.headers.cookie ?? '')?.[1] ?? '';
+        const tokens = [demo.token, ...current.split('.').filter((t) => t && t !== demo.token)].slice(0, 5);
+        res.setHeader('set-cookie', `session=${tokens.join('.')}; Path=/api; HttpOnly; SameSite=Strict; Max-Age=${30 * 86_400}`);
+        res.setHeader('content-type', 'application/json');
+        res.end('{}');
+      });
+      server.middlewares.use('/demo', (_req, res) => {
         res.setHeader('content-type', 'text/html; charset=utf-8');
-        if (!existsSync(file)) {
+        const demo = session();
+        if (!demo) {
           res.end('<p>Run <code>npm run demo</code> first, with <code>npm run dev:api</code> running.</p>');
           return;
         }
-        const { token, user } = JSON.parse(readFileSync(file, 'utf8')) as { token: string; user: { id: string } };
-        // Set the way the API sets it, so it replaces whichever session this browser had.
-        res.setHeader('set-cookie', `session=${token}; Path=/api; HttpOnly; SameSite=Strict; Max-Age=${30 * 86_400}`);
         res.end(`<!doctype html><meta charset="utf-8"><title>Demo</title><p>Signing in to the demo…</p><script>
 (async () => {
-  const user = ${JSON.stringify(user)};
-  localStorage.removeItem('notes-app:journal:' + user.id);
-  await new Promise((done) => {
-    const r = indexedDB.deleteDatabase('notes-app:user:' + user.id);
-    r.onsuccess = r.onerror = r.onblocked = done;
-  });
-  localStorage.setItem('notes-app:account', JSON.stringify(user));
-  location.replace('/notes');
+  await fetch('/api/demo-session', { method: 'POST' });
+  localStorage.setItem('notes-app:account', JSON.stringify(${JSON.stringify(demo.user)}));
+  location.replace('/journal');
 })();
 </script>`);
       });

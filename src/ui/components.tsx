@@ -14,7 +14,7 @@ import { usePopover } from './usePopover';
 import { colorClass } from './EntryStyle';
 import { DueLabel, useTickTodo } from './TodoDue';
 import { SyncBadge } from './SyncStatus';
-import { DemoTag } from './AccountBadge';
+import { AccountButton, DemoTag } from './AccountBadge';
 
 export function Page({ title, actions, children }: { title: ReactNode; actions?: ReactNode; children: ReactNode }) {
   return (
@@ -24,6 +24,8 @@ export function Page({ title, actions, children }: { title: ReactNode; actions?:
         <DemoTag />
         <SyncBadge />
         {actions && <div className="page__actions">{actions}</div>}
+        {/* Phones have no sidebar, so the account shows on every page here. */}
+        <AccountButton className="only-mobile" />
       </header>
       {children}
     </div>

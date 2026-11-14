@@ -26,7 +26,6 @@ import { useEntryShortcuts } from '../useEntryShortcuts';
 import { AddTag, BubbleTools, TypeSwitch } from '../BubbleTools';
 import { DueLabel, DueMenu, useTickTodo } from '../TodoDue';
 import { SyncMark } from '../SyncStatus';
-import { AccountButton } from '../AccountBadge';
 
 const time = (at: number) => new Date(at).toLocaleTimeString(undefined, { hour: 'numeric', minute: '2-digit' });
 
@@ -97,7 +96,6 @@ export function JournalPage() {
       >
         <Icon name="filter" />
       </button>
-      <AccountButton className="only-mobile" />
     </>
   );
 

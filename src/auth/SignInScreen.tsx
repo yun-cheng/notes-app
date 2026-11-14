@@ -1,6 +1,8 @@
 import { useEffect, useRef, useState } from 'react';
 import { SyncAuthExpired, SyncOffline } from '../sync/engine';
 import { fetchConfig } from '../sync/http';
+import type { Account } from '../sync/protocol';
+import { Avatar } from '../ui/Avatar';
 
 interface GoogleIdentityServices {
   accounts: {
@@ -33,7 +35,16 @@ function loadGoogleScript(): Promise<GoogleIdentityServices> {
 
 type Phase = 'loading' | 'ready' | 'unconfigured' | 'offline' | 'busy';
 
-export function SignInScreen({ onCredential }: { onCredential: (credential: string) => Promise<void> }) {
+interface SignInProps {
+  onCredential: (credential: string) => Promise<void>;
+  /** Accounts still signed in on this browser, opened with one press. */
+  accounts?: Account[];
+  onPick?: (account: Account) => void;
+  /** Given while adding another account, to go back to the open one. */
+  onCancel?: () => void;
+}
+
+export function SignInScreen({ onCredential, accounts = [], onPick, onCancel }: SignInProps) {
   const button = useRef<HTMLDivElement>(null);
   const [phase, setPhase] = useState<Phase>('loading');
   const [error, setError] = useState<string | null>(null);
@@ -84,8 +95,24 @@ export function SignInScreen({ onCredential }: { onCredential: (credential: stri
   return (
     <main className="signin">
       <div className="signin__card">
-        <h1>Notes</h1>
-        <p className="signin__lede">Your notes, todos and diary, on every device.</p>
+        <h1>{onCancel ? 'Add an account' : 'Notes'}</h1>
+        <p className="signin__lede">
+          {onCancel ? 'Sign in with another Google account. You stay signed in to this one, and can switch back any time.' : 'Your notes, todos and diary, on every device.'}
+        </p>
+        {accounts.length > 0 && onPick && (
+          <div className="signin__accounts">
+            {accounts.map((a) => (
+              <button key={a.id} type="button" className="signin__account" onClick={() => onPick(a)}>
+                <Avatar account={a} size={36} />
+                <span className="account-menu__who">
+                  <strong>Continue as {a.name}</strong>
+                  <span>{a.email}</span>
+                </span>
+              </button>
+            ))}
+            <p className="signin__note">Or use another Google account:</p>
+          </div>
+        )}
         <div className="signin__button" ref={button} hidden={phase !== 'ready'} />
         {phase === 'loading' && <p className="signin__note">Getting sign-in ready…</p>}
         {phase === 'busy' && <p className="signin__note">Signing you in…</p>}
@@ -95,6 +122,11 @@ export function SignInScreen({ onCredential }: { onCredential: (credential: stri
           <p className="signin__error" role="alert">
             {error}
           </p>
+        )}
+        {onCancel && (
+          <button type="button" className="btn btn--quiet signin__cancel" onClick={onCancel}>
+            Cancel
+          </button>
         )}
       </div>
     </main>

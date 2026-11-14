@@ -162,12 +162,14 @@ function Stream({ items, empty, sort }: { items: StreamItem[]; empty: string; so
   const selection = useSelection();
   const root = useRef<HTMLDivElement>(null);
   const box = useBoxSelect(root, selection);
+  const { shown, more } = useShownItems(items, chat);
 
   let lastDay: string | null = null;
   return (
     <div ref={root} className={`stream${chat ? '' : ' stream--top'}${selection?.selecting ? ' stream--selecting' : ''}`}>
       {items.length === 0 && <Empty>{empty}</Empty>}
-      {items.map((item) => {
+      {chat && more}
+      {shown.map((item) => {
         const separator = item.day !== lastDay;
         lastDay = item.day;
         return (
@@ -181,9 +183,52 @@ function Stream({ items, empty, sort }: { items: StreamItem[]; empty: string; so
           </div>
         );
       })}
+      {!chat && more}
       {box}
     </div>
   );
+}
+
+/** How many entries the stream draws at first, and adds each time the reader nears the end of what's drawn. */
+const STREAM_PAGE = 150;
+
+/**
+ * The entries to draw: the newest ones in a chat (the end nearest the box), the first ones in other orders, and more as
+ * the reader scrolls toward the rest. Drawing thousands of bubbles at once makes every change to any entry slow.
+ * `more` is a button for the next ones, which also asks for them itself when it comes near the screen.
+ */
+function useShownItems(items: StreamItem[], chat: boolean) {
+  const [count, setCount] = useState(STREAM_PAGE);
+  const marker = useRef<HTMLButtonElement>(null);
+  // Drawing older entries above what's on screen would push it down: keep it where it was.
+  const keep = useRef<number | null>(null);
+  const hidden = Math.max(0, items.length - count);
+  const showMore = () => {
+    if (chat) keep.current = document.documentElement.scrollHeight - window.scrollY;
+    setCount((n) => n + STREAM_PAGE);
+  };
+
+  useEffect(() => {
+    const el = marker.current;
+    if (!el || !hidden) return;
+    const watch = new IntersectionObserver(([entry]) => entry.isIntersecting && showMore(), { rootMargin: '1200px 0px' });
+    watch.observe(el);
+    return () => watch.disconnect();
+  }, [hidden, chat, count]);
+
+  useLayoutEffect(() => {
+    if (keep.current === null) return;
+    window.scrollTo(0, document.documentElement.scrollHeight - keep.current);
+    keep.current = null;
+  }, [count]);
+
+  const shown = !hidden ? items : chat ? items.slice(hidden) : items.slice(0, count);
+  const more = hidden > 0 && (
+    <button ref={marker} type="button" className="btn btn--quiet stream__more" onClick={showMore}>
+      {chat ? 'Show earlier entries' : 'Show more entries'}
+    </button>
+  );
+  return { shown, more };
 }
 
 /** The circle beside an entry that picks it: shown on hover, and always while picking. */

@@ -450,6 +450,9 @@ a.change__title:hover { color: var(--accent); }
 .bubble__meta time { padding-left: 4px; }
 .bubble__meta .chip--small { min-height: 18px; }
 .stream--top { justify-content: flex-start; }
+/* The stream keeps its own place when older entries are drawn above, so the browser's own adjusting stays out of it. */
+.stream { overflow-anchor: none; }
+.stream__more { align-self: center; }
 .bubble--todo { flex-direction: row; align-items: flex-start; gap: 4px; padding-left: 6px; }
 .bubble--todo .check { height: 24px; margin: 0; }
 .bubble__body { display: flex; flex-direction: column; gap: 2px; min-width: 0; }

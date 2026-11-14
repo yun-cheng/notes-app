@@ -26,6 +26,7 @@ import { useEntryShortcuts } from '../useEntryShortcuts';
 import { AddTag, BubbleTools, TypeSwitch } from '../BubbleTools';
 import { DueLabel, DueMenu, useTickTodo } from '../TodoDue';
 import { SyncMark } from '../SyncStatus';
+import { DatesDialog } from '../DatesDialog';
 
 const time = (at: number) => new Date(at).toLocaleTimeString(undefined, { hour: 'numeric', minute: '2-digit' });
 
@@ -161,6 +162,11 @@ function Stream({ items, empty, sort }: { items: StreamItem[]; empty: string; so
   const root = useRef<HTMLDivElement>(null);
   const box = useBoxSelect(root, selection);
   const { shown, more } = useShownItems(items, chat);
+  // In the orders grouped by the day written, a day's badge opens the date picker at that day.
+  const pickable = sort === 'written' || sort === 'newest';
+  const [pickFrom, setPickFrom] = useState<string | null>(null);
+  const filter = useJournalFilter();
+  const navigate = useNavigate();
 
   let lastDay: string | null = null;
   return (
@@ -172,7 +178,14 @@ function Stream({ items, empty, sort }: { items: StreamItem[]; empty: string; so
         lastDay = item.day;
         return (
           <div key={item.card.id} className="stream__item">
-            {separator && <p className="stream__day">{label(item.day)}</p>}
+            {separator &&
+              (pickable ? (
+                <button type="button" className="stream__day stream__day--pick" title="Pick dates" onClick={() => setPickFrom(item.day)}>
+                  {label(item.day)}
+                </button>
+              ) : (
+                <p className="stream__day">{label(item.day)}</p>
+              ))}
             <div className="stream__entry" data-entry-id={item.card.id}>
               {selection && <PickCircle id={item.card.id} />}
               <EntryBubble card={item.card} at={item.at} />
@@ -183,6 +196,16 @@ function Stream({ items, empty, sort }: { items: StreamItem[]; empty: string; so
       })}
       {!chat && more}
       {box}
+      {pickFrom && (
+        <DatesDialog
+          when={pickFrom}
+          onClose={() => setPickFrom(null)}
+          onPick={(when) => {
+            setPickFrom(null);
+            void navigate(journalPath({ ...filter, when }));
+          }}
+        />
+      )}
     </div>
   );
 }

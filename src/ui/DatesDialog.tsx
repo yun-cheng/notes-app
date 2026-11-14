@@ -24,14 +24,16 @@ const STEPS: Record<string, number> = { ArrowLeft: -1, ArrowRight: 1, ArrowUp: -
 
 /**
  * Picks one day, or a first and last day, to show what was written then. The first press picks a day; the next
- * picks the other end of a range, in either direction. Show applies it, so one day is a press and Show.
+ * picks the other end of a range, in either direction. Show applies it, so one day is a press and Show. Opened at
+ * one day (from a day's badge in the journal, or a day already picked), a press picks the range's other end.
  */
 export function DatesDialog({ when, onPick, onClose }: { when?: When; onPick: (when: When) => void; onClose: () => void }) {
   const { index } = useCards();
   const today = useToday();
   const picked = when && !WHEN_LABEL[when] ? whenRange(when, today) : null;
   const [start, setStart] = useState<string | null>(picked?.[0] ?? null);
-  const [end, setEnd] = useState<string | null>(picked?.[1] ?? null);
+  // One day opens as the start, so the next press makes a range from it; Show still shows just that day.
+  const [end, setEnd] = useState<string | null>(picked && picked[0] !== picked[1] ? picked[1] : null);
   const [hover, setHover] = useState<string | null>(null);
   const [month, setMonth] = useState(monthKey(picked?.[1] ?? today));
   const [focusDay, setFocusDay] = useState<string | null>(null);

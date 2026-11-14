@@ -100,7 +100,7 @@ describe('MCP server', () => {
   });
   it('creates notes that sync to devices, with history marked as the app', async () => {
     const { tool, pull, call, ann } = await world();
-    const made = await tool('create_note', { title: 'Ideas', markdown: '- see [[Tokyo plan]]\n- **rest**', tags: ['Travel', 'Someday'] });
+    const made = await tool('create_note', { title: 'Ideas', markdown: '- see [[Tokyo plan]]\n- **rest**', tags: ['Travel', 'Someday', 'someday'] });
     expect(made.error).toBe(false);
     const id = made.text.match(/id: ([\w-]+)/)![1];
     const records = (await pull(ann.cookie)).records;
@@ -110,6 +110,9 @@ describe('MCP server', () => {
     expect(JSON.stringify(body.content)).toContain('"cardLink","attrs":{"id":"note-1"');
     const tagTitles = records.filter((r) => body.tags.includes(r.id)).map((r) => JSON.parse(r.payload).title);
     expect(tagTitles.sort()).toEqual(['Someday', 'Travel']);
+    // One new tag for Someday and someday.
+    expect(body.tags).toHaveLength(2);
+    expect(records.filter((r) => JSON.parse(r.payload).title?.toLowerCase() === 'someday')).toHaveLength(1);
     const history = (await (await call(`/api/cards/${id}/versions`, {}, ann.cookie)).json()) as VersionsResponse;
     expect(history.versions[0]).toMatchObject({ author: 'ann', via: 'Claude' });
   });

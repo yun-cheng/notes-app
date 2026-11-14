@@ -244,7 +244,9 @@ function tagIds(w: Writer, wanted: string[], vault: ScopeVault, created: Card[])
   const ids = wanted
     .filter((name) => !isGroupName(name, groups))
     .map((name) => {
-      const existing = w.scope.index.tags.find((t) => t.title.trim().toLowerCase() === name.toLowerCase());
+      // Matched without regard to case, among tags already there and ones just made, so "Travel" and "travel" are one tag.
+      const key = name.trim().toLowerCase();
+      const existing = [...w.scope.index.tags, ...created].find((t) => t.title.trim().toLowerCase() === key);
       if (existing) return existing.id;
       const tag: Card = { id: crypto.randomUUID(), vaultId: vault.id, type: 'tag', title: name, content: EMPTY_DOC, tags: [], pinned: false, createdAt: w.now(), updatedAt: 0, deleted: false, seq: 0 };
       created.push(tag);

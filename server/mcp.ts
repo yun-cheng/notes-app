@@ -45,7 +45,8 @@ interface Scope {
 
 class ToolError extends Error {}
 
-async function loadScope(db: Database, userId: string): Promise<Scope> {
+/** The vaults the AI may see and, unless `withCards` is false, every card in them, read and indexed. */
+async function loadScope(db: Database, userId: string, withCards = true): Promise<Scope> {
   const { results: all } = await db
     .prepare(
       `SELECT v.id, v.name, v.lock, v.ai_access, v.owner_id, m.role FROM vaults v JOIN vault_members m ON m.vault_id = v.id
@@ -60,8 +61,8 @@ async function loadScope(db: Database, userId: string): Promise<Scope> {
     vaults.set(v.id, { id: v.id, name: v.name, write: v.ai_access === 'write' && v.role === 'owner' });
   }
 
-  const open = [...vaults.keys()];
-  const closed = all.map((v) => v.id).filter((id) => !vaults.has(id));
+  const open = withCards ? [...vaults.keys()] : [];
+  const closed = withCards ? all.map((v) => v.id).filter((id) => !vaults.has(id)) : [];
   const marks = (ids: string[]) => ids.map(() => '?').join(',');
   const [{ results: rows }, { results: hidden }] = await Promise.all([
     open.length
@@ -268,6 +269,8 @@ interface Tool {
   description: string;
   inputSchema: Json;
   write?: boolean;
+  /** False for a tool that reads no card, so none are loaded for it. */
+  cards?: false;
   run: (args: Json, w: Writer) => Promise<string>;
 }
 
@@ -284,6 +287,7 @@ export const TOOLS: Tool[] = [
     title: 'List vaults',
     description: 'Lists the vaults open to AI and whether you may edit each. Vaults closed to AI are counted but not named.',
     inputSchema: { type: 'object', properties: {} },
+    cards: false,
     run: async (_args, { scope }) => {
       const lines = [...scope.vaults.values()].map((v) => `- ${v.name} (${v.write ? 'read and write' : 'read only'})`);
       const closed = scope.all.length - scope.vaults.size;
@@ -570,7 +574,7 @@ export async function handleMcp(db: Database, caller: AiCaller, message: unknown
       const args = (params.arguments ?? {}) as Json;
       if (typeof args !== 'object' || Array.isArray(args)) return rpcError(msg.id, -32602, 'Arguments must be an object');
       try {
-        const scope = await loadScope(db, caller.user.id);
+        const scope = await loadScope(db, caller.user.id, tool.cards !== false);
         const text = await tool.run(args, { scope, db, caller, now });
         return reply({ content: [{ type: 'text', text }] });
       } catch (err) {

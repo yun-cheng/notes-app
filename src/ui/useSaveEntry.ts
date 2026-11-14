@@ -52,8 +52,9 @@ export function useSaveEntries() {
     const lockedIn = entries.map(vaultOf).find((v) => v && locked.has(v));
     if (lockedIn) return { saved: 0, ids: [], unlock: lockedIn };
 
-    // Tags typed in several entries are made once.
+    // Tags typed in several entries are made once. Their saves are waited for with the entries', so a failed one is told.
     const made = new Map<string, string>();
+    const tagging: Promise<Card>[] = [];
     const { groups, groupOf } = index.tagGroups;
     const tagIdsFor = (names: string[]) => {
       const ids = opts.tagId ? [opts.tagId] : [];
@@ -64,7 +65,7 @@ export function useSaveEntries() {
         if (!id) {
           id = repo.newId();
           made.set(key, id);
-          void repo.createTag({ id, title: name });
+          tagging.push(repo.createTag({ id, title: name }));
         }
         if (!ids.includes(id)) ids.push(id);
       }
@@ -81,7 +82,7 @@ export function useSaveEntries() {
       const due = entry.due ?? opts.due ?? null;
       return repo.createTodo({ ...common, due, dueTime: entry.dueTime, repeat: entry.repeat, done: entry.done });
     });
-    const ids = (await Promise.all(making)).map((card) => card.id);
+    const [ids] = await Promise.all([Promise.all(making).then((cards) => cards.map((card) => card.id)), Promise.all(tagging)]);
     return { saved: entries.length, ids, action };
   };
 

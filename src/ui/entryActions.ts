@@ -103,7 +103,11 @@ export function useEntryActions() {
 
   /** Makes copied entries again, as new entries written now, in whatever the journal is narrowed to. */
   const paste = async (list: Entry[], opts: SaveOptions) => {
-    const result = await saveEntries(list, opts);
+    const result = await saveEntries(list, opts).catch((err: unknown) => {
+      console.error('Pasting failed', err);
+      return null;
+    });
+    if (!result) return toast("Couldn't paste all of it. Check the journal before pasting again.");
     if (result.unlock) return toast(`Unlock ${vaults.find((v) => v.id === result.unlock)?.name ?? 'the vault'} to paste into it.`);
     if (!result.saved) return;
     const { action } = result;

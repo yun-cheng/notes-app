@@ -139,6 +139,9 @@ export function CommandPalette({ onClose, onShortcuts }: { onClose: () => void; 
         else if (result.unlock) {
           toast('Unlock the vault first, then save it again.', { action: { label: 'Unlock', run: () => void navigate(journalPath({ vaultId: result.unlock })) } });
         }
+      }, (err: unknown) => {
+        console.error('Saving failed', err);
+        toast("Couldn't save all of it. Check the journal before saving again.");
       });
     const icon: IconName = entry.kind === 'todo' ? 'todo' : entry.diary ? 'diary' : 'note';
     writes.push({ id: 'save', group: 'Write', label: `Save “${text}”`, hint: `${where}${due}${tags}`, icon, run: write(false) });

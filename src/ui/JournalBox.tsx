@@ -128,6 +128,10 @@ export function JournalBox({ filter }: { filter: StreamFilter }) {
         editor.commands.setContent(start, { emitUpdate: false });
         if (!f.sort) requestAnimationFrame(() => window.scrollTo({ top: document.documentElement.scrollHeight, behavior: 'smooth' }));
       }
+    } catch (err) {
+      console.error('Saving failed', err);
+      // Part of it may have been saved, so the text stays to compare against.
+      toast("Couldn't save all of it. Check the journal before saving again.");
     } finally {
       setSaving(false);
     }

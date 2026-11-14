@@ -1,4 +1,6 @@
 import { createRemoteJWKSet, jwtVerify, type JWTVerifyGetKey } from 'jose';
+import { toBase64 } from '../src/domain/base64';
+import { DAY } from '../src/domain/dates';
 import type { Account } from '../src/sync/protocol';
 import type { Database } from './db';
 import { defaultVaultId, diaryVaultId } from './vaults';
@@ -33,11 +35,10 @@ export function googleVerifier(keys: JWTVerifyGetKey = googleKeys): VerifyGoogle
   };
 }
 
-const DAY = 86_400_000;
 export const SESSION_DAYS = 90;
 
 export function base64url(bytes: Uint8Array): string {
-  return btoa(String.fromCharCode(...bytes)).replace(/\+/g, '-').replace(/\//g, '_').replace(/=+$/, '');
+  return toBase64(bytes).replace(/\+/g, '-').replace(/\//g, '_').replace(/=+$/, '');
 }
 
 /** Only the hash is stored, so a leaked database can't be used to sign in. */

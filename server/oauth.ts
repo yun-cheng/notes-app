@@ -1,4 +1,5 @@
-import type { Account } from '../src/sync/protocol';
+import { DAY, MINUTE } from '../src/domain/dates';
+import type { Account, ConnectedApp } from '../src/sync/protocol';
 import { base64url, hashToken, randomToken } from './auth';
 import type { Database } from './db';
 
@@ -7,8 +8,6 @@ import type { Database } from './db';
  * authorization codes with PKCE (S256 only), and rotating refresh tokens. Public clients only.
  */
 
-const MINUTE = 60_000;
-const DAY = 86_400_000;
 export const CODE_TTL = 10 * MINUTE;
 export const ACCESS_TTL = 60 * MINUTE;
 export const REFRESH_TTL = 90 * DAY;
@@ -169,13 +168,6 @@ export async function resolveAccessToken(db: Database, token: string, now: numbe
     await db.prepare(`UPDATE oauth_grants SET last_used_at = ? WHERE id = ?`).bind(now, row.grant_id).run();
   }
   return { user: { id: row.id, email: row.email, name: row.name }, grantId: row.grant_id, app: row.app };
-}
-
-export interface ConnectedApp {
-  id: string;
-  name: string;
-  created_at: number;
-  last_used_at: number | null;
 }
 
 export async function listGrants(db: Database, userId: string): Promise<ConnectedApp[]> {

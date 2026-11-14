@@ -1,17 +1,16 @@
 import type { Context, Hono } from 'hono';
 import { photoIds, walk } from '../src/domain/content';
-import { isTimeKey } from '../src/domain/dates';
+import { DAY, isTimeKey } from '../src/domain/dates';
 import { parsePayload } from '../src/domain/payload';
 import type { CardPayload } from '../src/domain/types';
 import { allows, cardAccess, sharedWith } from './access';
 import { randomToken } from './auth';
 import type { AppEnv, Database, Statement } from './db';
+import { isEmail } from './members';
 import { downloadFile, DriveFailed, DriveNotConnected, type GoogleFetch } from './drive';
 
 export type ShareRole = 'view' | 'comment' | 'edit';
 const ROLES: ShareRole[] = ['view', 'comment', 'edit'];
-const EMAIL = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
-const DAY = 86_400_000;
 
 export interface CardShares {
   people: { user_id: string; name: string; email: string; role: ShareRole }[];
@@ -163,7 +162,7 @@ export function shareRoutes(app: Hono<AppEnv>, now: () => number) {
         .run();
     } else {
       const email = typeof body?.email === 'string' ? body.email.trim().toLowerCase() : '';
-      if (!EMAIL.test(email) || email.length > 200) return c.json({ error: 'Give an email address' }, 400);
+      if (!isEmail(email)) return c.json({ error: 'Give an email address' }, 400);
       if (email === me.email.toLowerCase()) return c.json({ error: 'That is you' }, 400);
       const user = await db.prepare(`SELECT id FROM users WHERE lower(email) = ?`).bind(email).first<{ id: string }>();
       await (user

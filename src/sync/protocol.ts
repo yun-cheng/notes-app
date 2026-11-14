@@ -40,6 +40,14 @@ export interface SharedCard {
   shared_by: string;
 }
 
+/** An AI app the user connected, as Settings lists it. */
+export interface ConnectedApp {
+  id: string;
+  name: string;
+  created_at: number;
+  last_used_at: number | null;
+}
+
 export interface PullResponse {
   records: CardRecord[];
   /** Cards that moved out of this account's reach, to remove from the device. */

@@ -55,8 +55,11 @@ export function inlineText(node: JSONNode, titleOf?: (id: string, label: string)
   return (node.content ?? []).map((n) => inlineText(n, titleOf)).join('');
 }
 
-/** The body as short lines of plain text, one per paragraph or list item, for compact previews. Photos are left out. */
-export function previewLines(content: JSONNode, titleOf?: (id: string, label: string) => string): string[] {
+/**
+ * A document as lines of text, with list markers. A preview leaves out photos and rules; `full` (for comparing
+ * versions) keeps them as lines of their own and marks quotes with "> ". Trailing empty lines are dropped.
+ */
+export function previewLines(content: JSONNode, titleOf?: (id: string, label: string) => string, full = false): string[] {
   const lines: string[] = [];
   const block = (node: JSONNode, prefix = '') => {
     switch (node.type) {
@@ -70,11 +73,16 @@ export function previewLines(content: JSONNode, titleOf?: (id: string, label: st
         return;
       }
       case 'blockquote':
+        (node.content ?? []).forEach((child) => block(child, full ? `${prefix}> ` : prefix));
+        return;
       case 'doc':
         (node.content ?? []).forEach((child) => block(child, prefix));
         return;
       case 'photo':
+        if (full) lines.push(`${prefix}[Photo${node.attrs?.alt ? `: ${String(node.attrs.alt)}` : ''}]`);
+        return;
       case 'horizontalRule':
+        if (full) lines.push(`${prefix}———`);
         return;
       default:
         lines.push(...`${prefix}${inlineText(node, titleOf)}`.split('\n'));
@@ -172,8 +180,11 @@ export function photoIds(content: JSONNode): string[] {
   return ids;
 }
 
+/** A document with no words and no photos. */
+export const isEmptyDoc = (doc: JSONNode) => plainText(doc) === '' && photoIds(doc).length === 0;
+
 /** A note or todo the user opened but never wrote anything in. A photo counts as something. */
 export function isBlank(card: Card): boolean {
   if (card.type === 'tag') return false;
-  return card.title.trim() === '' && card.tags.length === 0 && plainText(card.content) === '' && photoIds(card.content).length === 0;
+  return card.title.trim() === '' && card.tags.length === 0 && isEmptyDoc(card.content);
 }

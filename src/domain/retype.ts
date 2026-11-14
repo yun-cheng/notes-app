@@ -1,4 +1,4 @@
-import { photoIds, plainText } from './content';
+import { isEmptyDoc } from './content';
 import { EMPTY_DOC, type Card, type JSONNode, type NoteCard, type TodoCard } from './types';
 
 /**
@@ -39,14 +39,13 @@ export function retypePatch(card: NoteCard | TodoCard, type: EntryType): Retype 
   if (type === 'todo' && !title.trim()) {
     const lifted = liftFirstLine(content);
     if (lifted) ({ title, content } = lifted);
-  } else if (type === 'note' && title.trim() && isBlank(content)) {
+  } else if (type === 'note' && title.trim() && isEmptyDoc(content)) {
     content = { type: 'doc', content: [{ type: 'paragraph', content: [{ type: 'text', text: title.trim() }] }] };
     title = '';
   }
   return { patch: { type, title, content }, undo };
 }
 
-const isBlank = (doc: JSONNode) => plainText(doc) === '' && photoIds(doc).length === 0;
 
 /** The text of a plain first paragraph or heading, and the body without it. */
 function liftFirstLine(doc: JSONNode): { title: string; content: JSONNode } | null {

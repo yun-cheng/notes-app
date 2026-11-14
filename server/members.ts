@@ -16,7 +16,8 @@ export interface VaultPeople {
   invites: { email: string; role: MemberRole }[];
 }
 
-const EMAIL = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+/** Something like an email address, short enough to keep: who an invite is for. */
+export const isEmail = (text: string) => /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(text) && text.length <= 200;
 
 async function roleIn(db: Database, vaultId: string, userId: string): Promise<string | null> {
   const row = await db.prepare(`SELECT role FROM vault_members WHERE vault_id = ? AND user_id = ?`).bind(vaultId, userId).first<{ role: string }>();
@@ -55,7 +56,7 @@ export function memberRoutes(app: Hono<AppEnv>, now: () => number) {
     const body = await c.req.json<{ email?: unknown; role?: unknown }>().catch(() => null);
     const email = typeof body?.email === 'string' ? body.email.trim().toLowerCase() : '';
     const role = body?.role;
-    if (!EMAIL.test(email) || email.length > 200 || (role !== 'editor' && role !== 'viewer')) return c.json({ error: 'Give an email address and a role' }, 400);
+    if (!isEmail(email) || (role !== 'editor' && role !== 'viewer')) return c.json({ error: 'Give an email address and a role' }, 400);
     if (email === me.email.toLowerCase()) return c.json({ error: 'You already own this vault' }, 400);
 
     const user = await c.env.DB.prepare(`SELECT id FROM users WHERE lower(email) = ?`).bind(email).first<{ id: string }>();

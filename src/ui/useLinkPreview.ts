@@ -1,9 +1,10 @@
 import { useEffect, useState } from 'react';
+import { DAY } from '../domain/dates';
 import { fetchLinkPreview } from '../sync/http';
 import type { LinkPreview } from '../sync/protocol';
 import { useCards } from '../state/CardsContext';
 
-const KEEP_MS = 7 * 86_400_000;
+const KEEP_MS = 7 * DAY;
 const RETRY_MS = 60 * 60_000;
 
 interface Stored {

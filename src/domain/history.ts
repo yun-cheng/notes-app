@@ -1,4 +1,4 @@
-import { plainText } from './content';
+import { previewLines } from './content';
 import { repeatLabel } from './repeat';
 import type { Card, JSONNode, Repeat } from './types';
 
@@ -7,34 +7,6 @@ export type Piece = { kind: 'same' | 'added' | 'removed'; text: string };
 export type DiffLine = { kind: 'same' | 'added' | 'removed'; text: string } | { kind: 'changed'; pieces: Piece[] };
 
 type TitleOf = (id: string, label: string) => string;
-
-const BLOCK_PREFIX: Record<string, string> = { blockquote: '> ' };
-
-function blockLines(node: JSONNode, titleOf: TitleOf | undefined, prefix = ''): string[] {
-  switch (node.type) {
-    case 'bulletList':
-    case 'orderedList':
-      return (node.content ?? []).flatMap((item, i) => {
-        const marker = node.type === 'bulletList' ? '• ' : `${Number(node.attrs?.start ?? 1) + i}. `;
-        const [first = '', ...rest] = (item.content ?? []).flatMap((child) => blockLines(child, titleOf));
-        return [`${prefix}${marker}${first}`, ...rest.map((line) => `${prefix}  ${line}`)];
-      });
-    case 'blockquote':
-      return (node.content ?? []).flatMap((child) => blockLines(child, titleOf, prefix + BLOCK_PREFIX.blockquote));
-    case 'codeBlock':
-      return plainCode(node).split('\n').map((line) => prefix + line);
-    case 'horizontalRule':
-      return [`${prefix}———`];
-    case 'photo':
-      return [`${prefix}[Photo${node.attrs?.alt ? `: ${String(node.attrs.alt)}` : ''}]`];
-    default:
-      return [prefix + plainText(node, titleOf)];
-  }
-}
-
-function plainCode(node: JSONNode): string {
-  return (node.content ?? []).map((n) => n.text ?? '').join('');
-}
 
 /**
  * A card as lines of text, for comparing two versions of it. Formatting is dropped; the title,
@@ -49,8 +21,7 @@ export function cardLines(card: Card, titleOf?: TitleOf, tagName: (id: string) =
     if (card.repeat) lines.push(`Repeats: ${repeatLabel(card.repeat)}`);
   }
   if (card.tags.length) lines.push(`Tags: ${card.tags.map(tagName).join(', ')}`);
-  for (const block of card.content.content ?? []) lines.push(...blockLines(block, titleOf));
-  while (lines.at(-1) === '') lines.pop();
+  lines.push(...previewLines(card.content, titleOf, true));
   return lines;
 }
 

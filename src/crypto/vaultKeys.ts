@@ -1,4 +1,5 @@
 import { argon2id } from 'hash-wasm';
+import { fromBase64, toBase64 } from '../domain/base64';
 
 /**
  * End-to-end encryption for private vaults.
@@ -37,8 +38,6 @@ type Bytes = Uint8Array<ArrayBuffer>;
 /** A copy backed by a plain ArrayBuffer, which is what WebCrypto's types accept. */
 const bytesOf = (data: Uint8Array): Bytes => new Uint8Array(data);
 
-const b64 = (bytes: Uint8Array) => btoa(String.fromCharCode(...bytes));
-const unb64 = (text: string): Bytes => Uint8Array.from(atob(text), (c) => c.charCodeAt(0));
 const random = (n: number): Bytes => crypto.getRandomValues(new Uint8Array(n));
 
 export const isEncryptedPayload = (data: string) => data.startsWith(PREFIX);
@@ -46,7 +45,7 @@ export const isEncryptedPayload = (data: string) => data.startsWith(PREFIX);
 async function pinKey(pin: string, kdf: KdfParams): Promise<CryptoKey> {
   const raw = await argon2id({
     password: pin.normalize('NFC'),
-    salt: unb64(kdf.salt),
+    salt: fromBase64(kdf.salt),
     memorySize: kdf.memory,
     iterations: kdf.iterations,
     parallelism: kdf.parallelism,
@@ -93,12 +92,12 @@ async function seal(key: CryptoKey, plain: Bytes, aad: Bytes): Promise<string> {
   const out = new Uint8Array(iv.length + ct.length);
   out.set(iv);
   out.set(ct, iv.length);
-  return b64(out);
+  return toBase64(out);
 }
 
 async function open(key: CryptoKey, sealed: string, aad: Bytes): Promise<Bytes | null> {
   try {
-    const bytes = unb64(sealed);
+    const bytes = fromBase64(sealed);
     return new Uint8Array(await crypto.subtle.decrypt({ name: 'AES-GCM', iv: bytes.slice(0, 12), additionalData: aad }, key, bytes.slice(12)));
   } catch {
     return null;
@@ -109,7 +108,7 @@ async function open(key: CryptoKey, sealed: string, aad: Bytes): Promise<Bytes |
 const importVaultKey = (raw: Bytes) => crypto.subtle.importKey('raw', raw, 'AES-GCM', true, ['encrypt', 'decrypt']);
 
 async function wrapWithPin(raw: Bytes, pin: string, kdf?: Partial<KdfParams>): Promise<Pick<VaultEncryption, 'kdf' | 'wrapped'>> {
-  const params: KdfParams = { name: 'argon2id', salt: b64(random(16)), ...KDF_DEFAULTS, ...kdf };
+  const params: KdfParams = { name: 'argon2id', salt: toBase64(random(16)), ...KDF_DEFAULTS, ...kdf };
   return { kdf: params, wrapped: await seal(await pinKey(pin, params), raw, WRAP_AAD) };
 }
 

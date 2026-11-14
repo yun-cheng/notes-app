@@ -1,3 +1,4 @@
+import { DAY } from '../src/domain/dates';
 import type { CardRecord } from '../src/domain/types';
 import { MAX_PAYLOAD_BYTES, PULL_LIMIT, type PullResponse, type PushResult } from '../src/sync/protocol';
 import { SHARED_WITH } from './access';
@@ -45,7 +46,7 @@ interface Write {
 }
 
 /** How far ahead of the server's clock a device's may be: a day covers time zones set wrong and clocks drifting. */
-const MAX_CLOCK_AHEAD = 24 * 60 * 60 * 1000;
+const MAX_CLOCK_AHEAD = DAY;
 
 /**
  * Applies a batch of records. Decisions are made from a read, and each write only lands

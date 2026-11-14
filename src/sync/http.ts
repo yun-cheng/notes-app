@@ -3,7 +3,7 @@ import type { VaultPin } from '../domain/pin';
 import type { CardRecord, JSONNode, Vault } from '../domain/types';
 import type { PhotoTransport } from '../photos/types';
 import { SyncAuthExpired, SyncOffline, type SyncTransport } from './engine';
-import type { ConfigResponse, LinkPreview, PullResponse, PushResponse, RecentVersionsResponse, SessionInfo, SharedCard, VersionResponse, VersionsResponse } from './protocol';
+import type { ConfigResponse, ConnectedApp, LinkPreview, PullResponse, PushResponse, RecentVersionsResponse, SessionInfo, SharedCard, VersionResponse, VersionsResponse } from './protocol';
 
 async function request<T>(path: string, init?: RequestInit): Promise<T> {
   let res: Response;
@@ -67,13 +67,6 @@ export const fetchRecentVersions = (deviceId: string, before?: string | null) =>
 
 /** Closes the card's newest version, so a restore shows up as its own entry. */
 export const sealVersions = (cardId: string) => request<unknown>(`/cards/${encodeURIComponent(cardId)}/versions/seal`, { method: 'POST', body: '{}' });
-
-export interface ConnectedApp {
-  id: string;
-  name: string;
-  created_at: number;
-  last_used_at: number | null;
-}
 
 export const fetchOAuthClient = (clientId: string, redirectUri: string) =>
   request<{ name: string; redirect_host: string }>(`/oauth/client?${new URLSearchParams({ client_id: clientId, redirect_uri: redirectUri })}`);

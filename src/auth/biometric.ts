@@ -1,9 +1,8 @@
+import { fromBase64, toBase64 } from '../domain/base64';
+
 function randomBytes(): Uint8Array<ArrayBuffer> {
   return crypto.getRandomValues(new Uint8Array(32));
 }
-
-const toBase64 = (bytes: Uint8Array) => btoa(String.fromCharCode(...bytes));
-const fromBase64 = (text: string) => Uint8Array.from(atob(text), (c) => c.charCodeAt(0));
 
 export async function biometricAvailable(): Promise<boolean> {
   try {
@@ -38,7 +37,7 @@ export async function verifyBiometric(credentialId: string): Promise<boolean> {
     const result = await navigator.credentials.get({
       publicKey: {
         challenge: randomBytes(),
-        allowCredentials: [{ type: 'public-key', id: fromBase64(credentialId) as Uint8Array<ArrayBuffer> }],
+        allowCredentials: [{ type: 'public-key', id: fromBase64(credentialId) }],
         userVerification: 'required',
         timeout: 60_000,
       },

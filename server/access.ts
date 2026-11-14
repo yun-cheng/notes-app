@@ -1,3 +1,4 @@
+import type { SharedCard } from '../src/sync/protocol';
 import type { Database } from './db';
 
 /**
@@ -40,12 +41,6 @@ export async function cardAccess(db: Database, userId: string, cardId: string): 
 }
 
 export const allows = (access: CardAccess | null, need: AccessLevel) => !!access && RANK[access.level] >= RANK[need];
-
-export interface SharedCard {
-  card_id: string;
-  role: 'view' | 'comment' | 'edit';
-  shared_by: string;
-}
 
 /** Cards shared with the user outside their own vaults, with the strongest role each. */
 export async function sharedWith(db: Database, userId: string): Promise<SharedCard[]> {

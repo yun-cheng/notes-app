@@ -1,15 +1,16 @@
 /**
  * Fills the local server with a demo account: vaults, folders, tags, notes, todos, a private Diary vault,
  * a shared vault, a comment and a shared note, so the app can be tried without a Google sign-in.
- * Run with `npm run demo` while `npm run dev:api` is running. Running it again starts the demo over.
+ * Run with `npm run demo` while `npm run dev:api` is running. Running it again puts the demo's own cards back as they
+ * were, dated around today, and keeps anything else in the accounts.
  */
 import { execFileSync } from 'node:child_process';
 import { mkdirSync, writeFileSync } from 'node:fs';
-import { createVaultKey, encryptPayload } from '../src/crypto/vaultKeys';
+import { createVaultKey, encryptPayload, unlockWithPin } from '../src/crypto/vaultKeys';
 import { addDays, toDateKey } from '../src/domain/dates';
 import { hashPin } from '../src/domain/pin';
 import type { CardPayload, CardRecord, JSONNode, Vault } from '../src/domain/types';
-import { PUSH_LIMIT } from '../src/sync/protocol';
+import { PUSH_LIMIT, type SessionInfo } from '../src/sync/protocol';
 
 const API = 'http://localhost:8788/api';
 export const DEMO_PIN = '1234';
@@ -54,36 +55,35 @@ const sha256 = async (s: string) =>
 
 const sql = (s: string) => `'${s.replace(/'/g, "''")}'`;
 
-async function resetAccounts(people: Person[]) {
+/**
+ * Makes the demo accounts if they're missing and takes out the demo's own cards (IDs starting `demo-`), with their
+ * history, comments and shares, so they can go in again dated around today. Everything else in the accounts is
+ * kept: vaults and notes added by hand while trying the app survive a rerun.
+ */
+async function prepareAccounts(people: Person[]) {
   const ids = people.map((u) => sql(u.id)).join(', ');
   const vaults = `SELECT id FROM vaults WHERE owner_id IN (${ids})`;
-  const cards = `SELECT id FROM cards WHERE vault_id IN (${vaults})`;
+  const seeded = `SELECT id FROM cards WHERE id LIKE 'demo-%' AND vault_id IN (${vaults})`;
   const now = Date.now();
   const statements = [
-    `DELETE FROM card_shares WHERE shared_by IN (${ids}) OR card_id IN (${cards}) OR (target_type = 'user' AND target_id IN (${ids}))`,
-    `DELETE FROM card_share_invites WHERE shared_by IN (${ids}) OR card_id IN (${cards})`,
-    `DELETE FROM public_links WHERE created_by IN (${ids}) OR card_id IN (${cards})`,
-    `DELETE FROM comments WHERE author_id IN (${ids}) OR card_id IN (${cards})`,
-    `DELETE FROM card_versions WHERE card_id IN (${cards})`,
-    `DELETE FROM attachments WHERE owner_id IN (${ids})`,
-    `DELETE FROM cards WHERE vault_id IN (${vaults})`,
-    `DELETE FROM vault_invites WHERE invited_by IN (${ids}) OR vault_id IN (${vaults})`,
-    `DELETE FROM vault_members WHERE user_id IN (${ids}) OR vault_id IN (${vaults})`,
-    `DELETE FROM vaults WHERE owner_id IN (${ids})`,
-    `DELETE FROM sessions WHERE user_id IN (${ids})`,
-    `DELETE FROM users WHERE id IN (${ids})`,
+    `DELETE FROM card_shares WHERE card_id IN (${seeded})`,
+    `DELETE FROM card_share_invites WHERE card_id IN (${seeded})`,
+    `DELETE FROM public_links WHERE card_id IN (${seeded})`,
+    `DELETE FROM comments WHERE card_id IN (${seeded})`,
+    `DELETE FROM card_versions WHERE card_id IN (${seeded})`,
+    `DELETE FROM cards WHERE id LIKE 'demo-%' AND vault_id IN (${vaults})`,
   ];
   for (const u of people) {
     const vault = `vault-${u.id}`;
     const diary = `diary-${u.id}`;
     statements.push(
-      `INSERT INTO users (id, google_sub, email, name, created_at) VALUES (${sql(u.id)}, ${sql(u.sub)}, ${sql(u.email)}, ${sql(u.name)}, ${now})`,
-      `INSERT INTO sessions (token_hash, user_id, expires_at) VALUES (${sql(await sha256(u.token))}, ${sql(u.id)}, ${now + 30 * 86_400_000})`,
-      `INSERT INTO vaults (id, owner_id, name, created_at) VALUES (${sql(vault)}, ${sql(u.id)}, 'Personal', ${now})`,
-      `INSERT INTO vault_members (vault_id, user_id, role) VALUES (${sql(vault)}, ${sql(u.id)}, 'owner')`,
+      `INSERT OR IGNORE INTO users (id, google_sub, email, name, created_at) VALUES (${sql(u.id)}, ${sql(u.sub)}, ${sql(u.email)}, ${sql(u.name)}, ${now})`,
+      `INSERT OR REPLACE INTO sessions (token_hash, user_id, expires_at) VALUES (${sql(await sha256(u.token))}, ${sql(u.id)}, ${now + 30 * 86_400_000})`,
+      `INSERT OR IGNORE INTO vaults (id, owner_id, name, created_at) VALUES (${sql(vault)}, ${sql(u.id)}, 'Personal', ${now})`,
+      `INSERT OR IGNORE INTO vault_members (vault_id, user_id, role) VALUES (${sql(vault)}, ${sql(u.id)}, 'owner')`,
       // Made at sign-in for a real account, like the default vault.
-      `INSERT INTO vaults (id, owner_id, name, created_at) VALUES (${sql(diary)}, ${sql(u.id)}, 'Diary', ${now + 1})`,
-      `INSERT INTO vault_members (vault_id, user_id, role) VALUES (${sql(diary)}, ${sql(u.id)}, 'owner')`,
+      `INSERT OR IGNORE INTO vaults (id, owner_id, name, created_at) VALUES (${sql(diary)}, ${sql(u.id)}, 'Diary', ${now + 1})`,
+      `INSERT OR IGNORE INTO vault_members (vault_id, user_id, role) VALUES (${sql(diary)}, ${sql(u.id)}, 'owner')`,
     );
   }
   mkdirSync('.wrangler', { recursive: true });
@@ -141,17 +141,29 @@ export async function seed() {
     throw new Error('The local server isn\'t running. Start it with `npm run dev:api` first.');
   });
 
-  await resetAccounts([DEMO, SAM]);
+  await prepareAccounts([DEMO, SAM]);
 
   const personal = `vault-${DEMO.id}`;
   const samPersonal = `vault-${SAM.id}`;
-  const family = await call<Vault>(DEMO, '/vaults', { name: 'Family' });
+  const { vaults } = await call<SessionInfo>(DEMO, '/me');
+  // The Family vault from an earlier run is used again, with whatever was added to it.
+  const family = vaults.find((v) => v.name === 'Family' && v.owner_id === DEMO.id) ?? (await call<Vault>(DEMO, '/vaults', { name: 'Family' }));
   await call(DEMO, `/vaults/${family.id}/members`, { email: SAM.email, role: 'editor' });
-  const sealed = await createVaultKey(DEMO_PIN);
-  // The diary is private: locked with the PIN and encrypted.
+  // The diary is private: locked with the PIN and encrypted. A diary already encrypted keeps its key, so entries
+  // written in it stay readable; one whose PIN was changed is left alone, without the demo's entries.
   const diaryVault = `diary-${DEMO.id}`;
-  await call<Vault>(DEMO, `/vaults/${diaryVault}`, { pin: await hashPin(DEMO_PIN), hidden: false, encryption: sealed.encryption }, 'PATCH');
-  const keys = new Map([[diaryVault, sealed.key]]);
+  const diary = vaults.find((v) => v.id === diaryVault);
+  let diaryKey: CryptoKey | null;
+  let recoveryKey: string | null = null;
+  if (diary?.encryption) {
+    diaryKey = await unlockWithPin(diary.encryption, DEMO_PIN);
+  } else {
+    const sealed = await createVaultKey(DEMO_PIN);
+    await call<Vault>(DEMO, `/vaults/${diaryVault}`, { pin: await hashPin(DEMO_PIN), hidden: false, encryption: sealed.encryption }, 'PATCH');
+    diaryKey = sealed.key;
+    recoveryKey = sealed.recoveryKey;
+  }
+  const keys = new Map(diaryKey ? [[diaryVault, diaryKey]] : []);
 
   const mine: Draft[] = [];
   const add = (id: string, vaultId: string, when: number, payload: NewPayload) => {
@@ -242,7 +254,7 @@ export async function seed() {
   note('demo-family-groceries', at(2, 17, 0), doc(p('Shared shopping list'), bullets('Rice', 'Eggs', 'Dish soap')), [], '', family.id);
   note('demo-family-trip', at(1, 9, 30), lines('Summer trip: beach or mountains? Vote below.'), [], 'Summer trip', family.id);
 
-  await push(DEMO, mine, keys);
+  await push(DEMO, diaryKey ? mine : mine.filter((d) => d.vaultId !== diaryVault), keys);
 
   // Sam writes in the shared vault, comments, and shares a note of their own with you.
   const samDraft = (id: string, vaultId: string, when: number, payload: CardPayload): Draft => ({ id, vaultId, at: when, payload });
@@ -264,5 +276,5 @@ export async function seed() {
   await call(SAM, '/cards/demo-sam-recipe/shares', { email: DEMO.email, role: 'comment' });
 
   writeFileSync(SESSION_FILE, JSON.stringify({ token: DEMO.token, user: { id: DEMO.id, email: DEMO.email, name: DEMO.name } }));
-  return { cards: mine.length + 2, pin: DEMO_PIN, recoveryKey: sealed.recoveryKey };
+  return { cards: mine.length + 2, pin: DEMO_PIN, recoveryKey, diaryOpen: !!diaryKey };
 }

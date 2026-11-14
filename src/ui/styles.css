@@ -69,7 +69,7 @@ h1, h2, p { margin: 0; }
 .page__actions { display: flex; align-items: center; gap: 6px; flex: none; }
 .avatar { display: inline-flex; align-items: center; justify-content: center; flex: none; width: 28px; height: 28px; border-radius: 50%; background: var(--accent-soft); color: var(--accent); font: 600 13px/1 var(--sans); }
 .avatar.is-demo { background: var(--alert); color: var(--on-accent); }
-/* The demo account is marked wherever it shows, since `npm run demo` wipes what's in it. */
+/* The demo account is marked wherever it shows, so it isn't taken for your own. */
 .demo-tag { display: inline-flex; align-items: center; flex: none; padding: 1px 7px; border-radius: 999px; background: color-mix(in srgb, var(--alert) 16%, transparent); color: var(--alert); font: 600 11px/1.5 var(--sans); letter-spacing: 0.02em; text-transform: uppercase; }
 .demo-tag--head { padding: 3px 9px; }
 /* A narrow phone's title bar holds the title, Demo, sync and three buttons: closer together, so the title fits. */

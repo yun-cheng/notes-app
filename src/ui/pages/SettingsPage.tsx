@@ -67,8 +67,9 @@ export function SettingsPage() {
         {isDemoAccount(account) && (
           <div className="banner">
             <span>
-              This is the demo account on your local server. Running <code>npm run demo</code> wipes everything in it and starts it over,
-              so keep notes you want in your own account: sign out, then sign in with Google.
+              This is the demo account on your local server, for trying the app. Running <code>npm run demo</code> puts its sample notes
+              back as they were and keeps anything you added, but keep notes that matter in your own account: sign out, then sign in
+              with Google.
             </span>
           </div>
         )}

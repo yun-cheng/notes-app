@@ -2,7 +2,7 @@ import { NavLink, Link } from 'react-router';
 import { accountInitial, isDemoAccount } from '../auth/account';
 import { useAccount } from '../auth/AuthContext';
 
-const DEMO_WORDS = 'The demo account. Running npm run demo wipes it and starts it over.';
+const DEMO_WORDS = 'The demo account, for trying the app. Running npm run demo puts its sample notes back as they were.';
 
 /** A round badge with the account's first letter. */
 function Avatar() {
@@ -42,7 +42,7 @@ export function AccountButton({ className = '' }: { className?: string }) {
   );
 }
 
-/** "Demo" by every page's title while in the demo account, since anything added there can be wiped. */
+/** "Demo" by every page's title while in the demo account, so it isn't taken for your own. */
 export function DemoTag() {
   const { account } = useAccount();
   if (!isDemoAccount(account)) return null;

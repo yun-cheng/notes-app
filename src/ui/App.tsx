@@ -18,6 +18,7 @@ import { TagsPage } from './pages/tags';
 import { CalendarPage, SearchPage } from './pages/views';
 import { CommandPalette } from './CommandPalette';
 import { FilterPanel } from './FilterPanel';
+import { SidebarAccount } from './AccountBadge';
 import { journalPath, type SheetState } from './paths';
 import { isMac, ShortcutsDialog } from './Shortcuts';
 import { ToastProvider, useToast } from './Toast';
@@ -66,6 +67,7 @@ function Sidebar({ onCommands }: { onCommands: () => void }) {
         <Icon name="settings" />
         <span>Backup & settings</span>
       </NavLink>
+      <SidebarAccount />
     </aside>
   );
 }

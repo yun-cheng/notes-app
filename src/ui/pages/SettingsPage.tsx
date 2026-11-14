@@ -1,6 +1,7 @@
 import { useEffect, useRef, useState, type ChangeEvent } from 'react';
 import { makeBackup, markdownFiles, parseBackup, zipMarkdown } from '../../domain/backup';
 import { displayTitle } from '../../domain/content';
+import { isDemoAccount } from '../../auth/account';
 import { useAccount } from '../../auth/AuthContext';
 import { useCards, useSyncStatus, useToday } from '../../state/CardsContext';
 import { describeSync } from '../../sync/engine';
@@ -63,6 +64,14 @@ export function SettingsPage() {
           Signed in as {account.name} ({account.email}). {describeSync(sync)}
           {sync.lastSyncedAt ? `, last synced at ${new Date(sync.lastSyncedAt).toLocaleTimeString([], { hour: 'numeric', minute: '2-digit' })}` : ''}.
         </p>
+        {isDemoAccount(account) && (
+          <div className="banner">
+            <span>
+              This is the demo account on your local server. Running <code>npm run demo</code> wipes everything in it and starts it over,
+              so keep notes you want in your own account: sign out, then sign in with Google.
+            </span>
+          </div>
+        )}
         <div className="button-row">
           <button type="button" className="btn" disabled={sync.state === 'syncing'} onClick={() => void engine.sync()}>
             Sync now

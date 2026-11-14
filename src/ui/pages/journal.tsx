@@ -1,5 +1,5 @@
 import { useEffect, useLayoutEffect, useRef, useState } from 'react';
-import { Link, NavLink, Outlet, useLocation, useNavigate, useParams } from 'react-router';
+import { Link, Outlet, useLocation, useNavigate, useParams } from 'react-router';
 import { diaryVault, permissions } from '../../domain/access';
 import { linkTitle } from '../../domain/cardIndex';
 import { displayTitle, previewLines, splitLinks } from '../../domain/content';
@@ -26,6 +26,7 @@ import { useEntryShortcuts } from '../useEntryShortcuts';
 import { AddTag, BubbleTools, TypeSwitch } from '../BubbleTools';
 import { DueLabel, DueMenu, useTickTodo } from '../TodoDue';
 import { SyncMark } from '../SyncStatus';
+import { AccountButton } from '../AccountBadge';
 
 const time = (at: number) => new Date(at).toLocaleTimeString(undefined, { hour: 'numeric', minute: '2-digit' });
 
@@ -96,9 +97,7 @@ export function JournalPage() {
       >
         <Icon name="filter" />
       </button>
-      <NavLink className="icon-btn only-mobile" to="/settings" aria-label="Backup and settings">
-        <Icon name="settings" />
-      </NavLink>
+      <AccountButton className="only-mobile" />
     </>
   );
 

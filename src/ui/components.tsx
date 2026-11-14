@@ -14,12 +14,14 @@ import { usePopover } from './usePopover';
 import { colorClass } from './EntryStyle';
 import { DueLabel, useTickTodo } from './TodoDue';
 import { SyncBadge } from './SyncStatus';
+import { DemoTag } from './AccountBadge';
 
 export function Page({ title, actions, children }: { title: ReactNode; actions?: ReactNode; children: ReactNode }) {
   return (
     <div className="page">
       <header className="page__head">
         <h1>{title}</h1>
+        <DemoTag />
         <SyncBadge />
         {actions && <div className="page__actions">{actions}</div>}
       </header>

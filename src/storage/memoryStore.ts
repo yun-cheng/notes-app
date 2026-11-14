@@ -8,6 +8,7 @@ export class MemoryStore implements CardStore {
   private dirty = new Set<string>();
   private meta = new Map<string, unknown>();
   private listeners = new Set<(records: CardRecord[]) => void>();
+  private dirtyListeners = new Set<(ids: string[]) => void>();
   private vaultListeners = new Set<(vaults: Vault[]) => void>();
   private changes = new Map<number, ChangeEntry>();
   private changeListeners = new Set<(entries: ChangeEntry[]) => void>();
@@ -22,6 +23,11 @@ export class MemoryStore implements CardStore {
   private notify() {
     const all = [...this.cards.values()];
     this.listeners.forEach((l) => l(all));
+    this.notifyDirty();
+  }
+  private notifyDirty() {
+    const ids = [...this.dirty];
+    this.dirtyListeners.forEach((l) => l(ids));
   }
   async putCards(records: CardRecord[]) {
     records.forEach((r) => {
@@ -51,6 +57,7 @@ export class MemoryStore implements CardStore {
     if (!card) return;
     this.cards.set(id, { ...card, seq });
     if (card.updated_at === updatedAt) this.dirty.delete(id);
+    this.notifyDirty();
   }
   async getMeta(key: string) {
     return this.meta.get(key);
@@ -86,6 +93,11 @@ export class MemoryStore implements CardStore {
     this.listeners.add(listener);
     listener([...this.cards.values()]);
     return () => void this.listeners.delete(listener);
+  }
+  subscribeDirty(listener: (ids: string[]) => void) {
+    this.dirtyListeners.add(listener);
+    listener([...this.dirty]);
+    return () => void this.dirtyListeners.delete(listener);
   }
 
   private notifyChanges() {

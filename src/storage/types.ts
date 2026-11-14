@@ -28,6 +28,8 @@ export interface CardStore {
   subscribeVaults(listener: (vaults: Vault[]) => void): () => void;
   /** Calls back with every record now and after any change, including from other tabs. */
   subscribe(listener: (records: CardRecord[]) => void): () => void;
+  /** Calls back with the IDs of cards that have changes not yet pushed, now and after any change. */
+  subscribeDirty(listener: (ids: string[]) => void): () => void;
 
   // The change log: what this device changed, for the history and for undo. It never leaves the device.
 

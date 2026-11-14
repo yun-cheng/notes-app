@@ -14,6 +14,7 @@ import { PhotoService, type PhotoState } from '../photos/service';
 import { Keyring } from '../crypto/keyring';
 import { unlockWithPin } from '../crypto/vaultKeys';
 import { finishEncrypting } from './encrypting';
+import { Unsynced } from './unsynced';
 
 /** Each account has its own database and journal, so accounts on one browser stay apart. */
 export function openAccountStorage(accountId: string) {
@@ -45,7 +46,14 @@ function openAccount(accountId: string) {
     forget: (id) => keyring.forget(id),
     forgetAll: () => keyring.forgetAll(),
   };
-  return { repo, engine, keyring, locks: new VaultLocks(undefined, undefined, keys), photos: new PhotoService(store, photoTransport, preparePhoto) };
+  return {
+    repo,
+    engine,
+    keyring,
+    locks: new VaultLocks(undefined, undefined, keys),
+    photos: new PhotoService(store, photoTransport, preparePhoto),
+    unsynced: new Unsynced(),
+  };
 }
 
 interface CardsValue {
@@ -56,6 +64,8 @@ interface CardsValue {
   locks: VaultLocks;
   photos: PhotoService;
   keyring: Keyring;
+  /** Cards with changes not yet sent to the server. */
+  unsynced: Unsynced;
   accountId: string;
   /** Cards shared with this account from outside its vaults, by card ID. */
   shared: ReadonlyMap<string, SharedCard>;
@@ -66,7 +76,7 @@ interface CardsValue {
 const CardsContext = createContext<CardsValue | null>(null);
 
 export function CardsProvider({ accountId, children }: { accountId: string; children: ReactNode }) {
-  const [{ repo, engine, locks, photos, keyring }] = useState(() => openAccount(accountId));
+  const [{ repo, engine, locks, photos, keyring, unsynced }] = useState(() => openAccount(accountId));
   const [cards, setCards] = useState<Card[] | null>(null);
   const [vaults, setVaults] = useState<Vault[] | null>(null);
   const open = useSyncExternalStore(locks.subscribe, locks.getOpen);
@@ -77,8 +87,8 @@ export function CardsProvider({ accountId, children }: { accountId: string; chil
   const [shared, setShared] = useState<ReadonlyMap<string, SharedCard>>(new Map());
   // The same object until something in it changes, since every entry on screen reads it.
   const value = useMemo<CardsValue | null>(
-    () => (index && vaults ? { index, repo, engine, vaults, locks, locked, photos, keyring, accountId, shared } : null),
-    [index, repo, engine, vaults, locks, locked, photos, keyring, accountId, shared],
+    () => (index && vaults ? { index, repo, engine, vaults, locks, locked, photos, keyring, unsynced, accountId, shared } : null),
+    [index, repo, engine, vaults, locks, locked, photos, keyring, unsynced, accountId, shared],
   );
 
   // A vault whose encryption was turned on but not finished (the tab closed, a sync failed) is finished when opened.
@@ -147,6 +157,7 @@ export function CardsProvider({ accountId, children }: { accountId: string; chil
     const stop = repo.store.subscribe((records) => {
       load(records).catch((e: unknown) => setError(String(e)));
     });
+    const stopDirty = repo.store.subscribeDirty((ids) => unsynced.set(ids));
     const stopVaults = repo.store.subscribeVaults((list) => {
       keyring.setVaults(list);
       setVaults(sortVaults(list));
@@ -157,11 +168,12 @@ export function CardsProvider({ accountId, children }: { accountId: string; chil
       stop();
       stopKeys();
       stopVaults();
+      stopDirty();
       stopLocks();
       stopSync?.();
       stopPhotos?.();
     };
-  }, [repo, engine, locks, photos]);
+  }, [repo, engine, locks, photos, unsynced]);
 
   if (error) {
     return (
@@ -188,6 +200,18 @@ export function useSyncStatus(): SyncStatus {
 }
 
 /** Today's date key, kept current if the app stays open past midnight. */
+/** Every card with changes not yet sent to the server. */
+export function useUnsynced(): ReadonlySet<string> {
+  const { unsynced } = useCards();
+  return useSyncExternalStore(unsynced.subscribe, unsynced.getIds);
+}
+
+/** Whether this card has changes not yet sent. Redraws only when that answer changes. */
+export function useIsUnsynced(id: string): boolean {
+  const { unsynced } = useCards();
+  return useSyncExternalStore(unsynced.subscribe, () => unsynced.getIds().has(id));
+}
+
 export function useToday(): string {
   const [today, setToday] = useState(() => toDateKey(new Date()));
   useEffect(() => {

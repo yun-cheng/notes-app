@@ -130,6 +130,14 @@ export class DexieStore implements CardStore, PhotoStore {
     return () => subscription.unsubscribe();
   }
 
+  subscribeDirty(listener: (ids: string[]) => void) {
+    const subscription = liveQuery(() => this.db.dirty.toCollection().primaryKeys()).subscribe({
+      next: listener,
+      error: (err) => console.error('Reading unsynced cards failed', err),
+    });
+    return () => subscription.unsubscribe();
+  }
+
   listChanges() {
     return this.db.changes.toArray();
   }

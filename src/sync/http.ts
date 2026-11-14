@@ -5,14 +5,21 @@ import type { PhotoTransport } from '../photos/types';
 import { SyncAuthExpired, SyncOffline, type SyncTransport } from './engine';
 import type { ConfigResponse, ConnectedApp, LinkPreview, PullResponse, PushResponse, RecentVersionsResponse, SessionInfo, SharedCard, VersionResponse, VersionsResponse } from './protocol';
 
-async function request<T>(path: string, init?: RequestInit): Promise<T> {
-  let res: Response;
+/** Calls the API: `SyncOffline` when the server can't be reached, `SyncAuthExpired` when signed out, else the response. */
+async function rawRequest(path: string, init?: RequestInit): Promise<Response> {
   try {
-    res = await fetch(`/api${path}`, { credentials: 'same-origin', headers: { 'content-type': 'application/json' }, ...init });
-  } catch {
+    const res = await fetch(`/api${path}`, { credentials: 'same-origin', ...init });
+    if (res.status === 401) throw new SyncAuthExpired('Not signed in');
+    return res;
+  } catch (err) {
+    if (err instanceof SyncAuthExpired) throw err;
     throw new SyncOffline('The server could not be reached');
   }
-  if (res.status === 401) throw new SyncAuthExpired('Not signed in');
+}
+
+/** A JSON request to the API. Other failures than `rawRequest`'s throw a plain error. */
+async function request<T>(path: string, init?: RequestInit): Promise<T> {
+  const res = await rawRequest(path, { headers: { 'content-type': 'application/json' }, ...init });
   if (!res.ok) throw new Error(`Request to ${path} failed with status ${res.status}`);
   return (await res.json()) as T;
 }
@@ -92,16 +99,6 @@ export const startDriveConnect = async () => (await request<{ url: string }>('/d
 
 export const disconnectDrive = () => request<unknown>('/drive', { method: 'DELETE' });
 
-async function rawRequest(path: string, init?: RequestInit): Promise<Response> {
-  try {
-    const res = await fetch(`/api${path}`, { credentials: 'same-origin', ...init });
-    if (res.status === 401) throw new SyncAuthExpired('Not signed in');
-    return res;
-  } catch (err) {
-    if (err instanceof SyncAuthExpired) throw err;
-    throw new SyncOffline('The server could not be reached');
-  }
-}
 
 export const photoTransport: PhotoTransport = {
   async upload(photo) {

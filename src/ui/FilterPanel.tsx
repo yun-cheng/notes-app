@@ -1,4 +1,4 @@
-import { Children, isValidElement, useSyncExternalStore, type ReactNode } from 'react';
+import { Children, isValidElement, useState, useSyncExternalStore, type ReactNode } from 'react';
 import { Link, useLocation, useNavigate, useSearchParams } from 'react-router';
 import { sortVaults } from '../domain/locks';
 import {
@@ -19,6 +19,7 @@ import {
   type TodoStatus,
 } from '../domain/stream';
 import { useCards, useToday } from '../state/CardsContext';
+import { DatesDialog } from './DatesDialog';
 import { colorClass } from './EntryStyle';
 import { Icon, type IconName } from './Icon';
 import { historyPath, journalPath } from './paths';
@@ -105,6 +106,8 @@ export function FilterPanel({ onPick }: { onPick?: () => void }) {
   const onJournal = pathname === '/journal';
   const onHistory = pathname === '/history';
   const path = useFilterPath();
+  const navigate = useNavigate();
+  const [picking, setPicking] = useState(false);
 
   const link = (key: string, label: ReactNode, to: string, active: boolean, icon?: IconName, count?: number, tint = '') => (
     <Link key={key} to={to} className={`nav-item${active ? ' active' : ''}`} aria-current={active ? 'page' : undefined} onClick={onPick}>
@@ -133,6 +136,7 @@ export function FilterPanel({ onPick }: { onPick?: () => void }) {
   const pinned = index.pinnedTags.filter((t) => !groupOf.has(t.id));
   const tags = pinned.some((t) => t.id === filter.tagId) || groupOf.has(filter.tagId ?? '') ? pinned : [...pinned, ...index.tags.filter((t) => t.id === filter.tagId)];
   const tagCount = (id: string) => (index.backlinks.get(id) ?? []).filter((l) => l.kind === 'tag').length;
+  // A day or range picked in the dialog shows as its own choice, which turns it off when pressed.
   const pickedDay = filter.when && !WHEN_LABEL[filter.when] ? filter.when : undefined;
 
   return (
@@ -161,10 +165,21 @@ export function FilterPanel({ onPick }: { onPick?: () => void }) {
       <FilterSection id="written" title="Written">
         {['today', 'week', 'month'].map((w) => item(w, WHEN_LABEL[w], toggle('when', w), filter.when === w))}
         {pickedDay && item('day', whenLabel(pickedDay, today), toggle('when', pickedDay), true)}
-        <Link to="/calendar" className={`nav-item${pathname === '/calendar' ? ' active' : ''}`} onClick={onPick}>
+        <button type="button" className="nav-item" onClick={() => setPicking(true)}>
           <Icon name="calendar" />
-          <span>Pick a day</span>
-        </Link>
+          <span>Pick dates</span>
+        </button>
+        {picking && (
+          <DatesDialog
+            when={filter.when}
+            onClose={() => setPicking(false)}
+            onPick={(when) => {
+              setPicking(false);
+              navigate(path({ ...filter, when }));
+              onPick?.();
+            }}
+          />
+        )}
       </FilterSection>
 
       {index.tagGroups.groups

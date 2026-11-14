@@ -1,6 +1,6 @@
 import type { CardIndex } from './cardIndex';
 import { hasPhoto, linkUrls } from './content';
-import { addDays, isDateKey, relativeDay, toDateKey } from './dates';
+import { addDays, isDateKey, parseDateKey, relativeDay, toDateKey } from './dates';
 import { rankIn, type TagGroup } from './tagGroups';
 import type { Card, NoteCard, TodoCard } from './types';
 
@@ -18,6 +18,7 @@ export type EntryType = 'note' | 'todo';
 /** For todos: open or done, or open and due by today, after today, or with no date. */
 export type TodoStatus = 'open' | 'done' | 'today' | 'upcoming' | 'undated';
 /** When it was written: today, the past 7 or 30 days, or one day (a date key). */
+/** A preset, one day (a date key), or a range of days written `from..to` (`2026-11-03..2026-11-09`). */
 export type When = 'today' | 'week' | 'month' | string;
 
 /** Entries holding something besides text: web links or photos. */
@@ -59,7 +60,7 @@ export function parseFilter(params: URLSearchParams): StreamFilter {
     sort: sort === 'written' ? undefined : sort,
     type: pick<EntryType>('type', TYPES),
     status: pick<TodoStatus>('status', STATUSES),
-    when: when && (WHENS.includes(when) || isDateKey(when)) ? when : undefined,
+    when: when && (WHENS.includes(when) || isDateKey(when) || dayRange(when)) ? when : undefined,
     tagId: params.get('tag') || undefined,
     vaultId: params.get('vault') || undefined,
     has: pick<Contains>('has', CONTAINS),
@@ -83,12 +84,32 @@ export const isFiltered = (f: StreamFilter) => !!(f.type || f.status || f.when |
 /** A todo status only makes sense for todos, so it narrows to them. */
 export const effectiveType = (f: StreamFilter): EntryType | undefined => (f.status ? 'todo' : f.type);
 
+/** The first and last day of a `from..to` range, or null when it isn't one. */
+function dayRange(when: When): [string, string] | null {
+  const m = /^(\d{4}-\d{2}-\d{2})\.\.(\d{4}-\d{2}-\d{2})$/.exec(when);
+  return m && isDateKey(m[1]) && isDateKey(m[2]) && m[1] <= m[2] ? [m[1], m[2]] : null;
+}
+
+/** The `when` for the days from one to another, in either order: a single day when they're the same. */
+export function daysWhen(a: string, b: string): When {
+  if (a === b) return a;
+  return a < b ? `${a}..${b}` : `${b}..${a}`;
+}
+
 /** The first and last day of a `when`, as date keys. */
 export function whenRange(when: When, today: string): [string, string] {
   if (when === 'today') return [today, today];
   if (when === 'week') return [addDays(today, -6), today];
   if (when === 'month') return [addDays(today, -29), today];
-  return [when, when];
+  return dayRange(when) ?? [when, when];
+}
+
+/** "Nov 3 – 9", "Oct 28 – Nov 3", with the year when either end isn't this year. */
+function rangeLabel([from, to]: [string, string], today: string, locale?: string): string {
+  const year = today.slice(0, 4);
+  const opts: Intl.DateTimeFormatOptions = { month: 'short', day: 'numeric' };
+  if (from.slice(0, 4) !== year || to.slice(0, 4) !== year) opts.year = 'numeric';
+  return new Intl.DateTimeFormat(locale, opts).formatRange(parseDateKey(from), parseDateKey(to));
 }
 
 export const CONTAINS_LABEL: Record<Contains, string> = { link: 'With links', photo: 'With photos' };
@@ -108,8 +129,10 @@ export function sortLabel(sort: StreamSort, groups: TagGroup[]): string {
   return SORT_LABEL[sort as BaseSort] ?? SORT_LABEL.written;
 }
 
-export function whenLabel(when: When, today: string): string {
-  return WHEN_LABEL[when] ?? relativeDay(when, today);
+export function whenLabel(when: When, today: string, locale?: string): string {
+  if (WHEN_LABEL[when]) return WHEN_LABEL[when];
+  const range = dayRange(when);
+  return range ? rangeLabel(range, today, locale) : relativeDay(when, today, locale);
 }
 
 function matchesStatus(todo: TodoCard, status: TodoStatus, today: string): boolean {

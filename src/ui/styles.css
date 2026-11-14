@@ -307,6 +307,24 @@ body:has(.composer:focus-within) .tabbar { display: none; }
 .link-menu__type { color: var(--muted); font-size: 12px; }
 .link-menu__hint { padding: 10px; color: var(--muted); font-size: 14px; }
 
+/* The date picker: a month of days, one picked or a range from a first to a last. */
+.dialog.dates-dialog { max-width: 400px; }
+.dates { display: grid; grid-template-columns: repeat(7, minmax(0, 1fr)); row-gap: 2px; }
+.dates__weekday { padding: 2px 0 6px; text-align: center; font-size: 12px; color: var(--muted); }
+.dates__day { position: relative; display: flex; align-items: center; justify-content: center; height: 42px; font-size: 14px; font-variant-numeric: tabular-nums; }
+.dates__day.is-outside { color: var(--muted); }
+.dates__day.is-outside:not(.in-range) { opacity: 0.55; }
+.dates__num { display: inline-flex; align-items: center; justify-content: center; width: 34px; height: 34px; border-radius: 50%; }
+.dates__day:hover .dates__num { background: var(--sunken); }
+.dates__day.is-today .dates__num { box-shadow: inset 0 0 0 1.5px var(--accent); font-weight: 600; }
+.dates__day.in-range { background: var(--accent-soft); }
+.dates__day.is-start { border-radius: 999px 0 0 999px; }
+.dates__day.is-end { border-radius: 0 999px 999px 0; }
+.dates__day.is-start.is-end { border-radius: 999px; }
+.dates__day.is-start .dates__num, .dates__day.is-end .dates__num { background: var(--accent); color: var(--on-accent); font-weight: 600; }
+.dates__dot { position: absolute; bottom: 2px; width: 4px; height: 4px; border-radius: 50%; background: var(--muted); }
+.dates__day.is-start .dates__dot, .dates__day.is-end .dates__dot { display: none; }
+.dates__summary { min-height: 20px; color: var(--muted); font-size: 14px; }
 .calendar { display: grid; grid-template-columns: repeat(7, minmax(0, 1fr)); gap: 3px; }
 .calendar__weekday { text-align: center; font-size: 12px; color: var(--muted); padding-bottom: 4px; }
 .calendar__day { display: flex; flex-direction: column; align-items: center; gap: 2px; min-height: 58px; padding: 6px 0; border-radius: 9px; background: var(--surface); }

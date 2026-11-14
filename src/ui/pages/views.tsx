@@ -5,22 +5,9 @@ import { addMonths, formatMonth, formatShortMonth, monthGrid, monthKey, parseDat
 import { buildSearch } from '../../domain/search';
 import { useCards, useToday } from '../../state/CardsContext';
 import { CardRow, Empty, Page } from '../components';
+import { firstDayOfWeek } from '../DatesDialog';
 import { Icon } from '../Icon';
 import { journalPath } from '../paths';
-
-function firstDayOfWeek(): number {
-  try {
-    const locale = new Intl.Locale(navigator.language) as Intl.Locale & {
-      getWeekInfo?: () => { firstDay: number };
-      weekInfo?: { firstDay: number };
-    };
-    const info = locale.getWeekInfo?.() ?? locale.weekInfo;
-    if (info) return info.firstDay % 7;
-  } catch {
-    // Older browsers: fall through to Sunday.
-  }
-  return 0;
-}
 
 export function CalendarPage() {
   const { index, vaults, accountId } = useCards();

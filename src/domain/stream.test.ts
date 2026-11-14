@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import { buildIndex } from './cardIndex';
 import { parseDateKey } from './dates';
-import { filterParams, parseFilter, streamItems, type TodoStatus } from './stream';
+import { daysWhen, entryMatcher, filterParams, parseFilter, streamItems, whenLabel, type TodoStatus } from './stream';
 import { doc, note, p, tag, text, todo } from './testFixtures';
 
 const TODAY = '2026-11-12';
@@ -112,5 +112,35 @@ describe('filter in the address', () => {
     expect(parseFilter(filterParams(filter))).toEqual(filter);
     expect(parseFilter(new URLSearchParams('type=card&status=x&when=soon'))).toEqual({});
     expect(parseFilter(new URLSearchParams('sort=group:p'))).toEqual({ sort: 'group:p' });
+  });
+});
+
+describe('date ranges', () => {
+  const day = (id: string, date: string) => note(id, id, { createdAt: at(date, 12) });
+  const cards = [day('a', '2026-11-02'), day('b', '2026-11-03'), day('c', '2026-11-06'), day('d', '2026-11-09'), day('e', '2026-11-10')];
+
+  it('makes a range from two days in either order, or one day', () => {
+    expect(daysWhen('2026-11-09', '2026-11-03')).toBe('2026-11-03..2026-11-09');
+    expect(daysWhen('2026-11-03', '2026-11-03')).toBe('2026-11-03');
+  });
+
+  it('keeps the entries written from the first day to the last, both included', () => {
+    const shown = streamItems(buildIndex(cards), { when: '2026-11-03..2026-11-09' }, TODAY).map((i) => i.card.id);
+    expect(shown).toEqual(['b', 'c', 'd']);
+  });
+
+  it('reads a range from the address, and refuses a backwards or broken one', () => {
+    expect(parseFilter(new URLSearchParams('when=2026-11-03..2026-11-09')).when).toBe('2026-11-03..2026-11-09');
+    expect(parseFilter(new URLSearchParams('when=2026-11-09..2026-11-03')).when).toBeUndefined();
+    expect(parseFilter(new URLSearchParams('when=2026-11-03..soon')).when).toBeUndefined();
+    expect(entryMatcher({ when: '2026-11-03..2026-11-09' }, TODAY)(cards[0])).toBe(false);
+  });
+
+  it('names a range briefly, with the year only when it is another', () => {
+    // The formatter puts thin spaces around the dash.
+    const label = (when: string) => whenLabel(when, TODAY, 'en-US').replace(/\s/g, ' ');
+    expect(label('2026-11-03..2026-11-09')).toBe('Nov 3 – 9');
+    expect(label('2026-10-28..2026-11-03')).toBe('Oct 28 – Nov 3');
+    expect(label('2025-12-28..2026-01-03')).toBe('Dec 28, 2025 – Jan 3, 2026');
   });
 });

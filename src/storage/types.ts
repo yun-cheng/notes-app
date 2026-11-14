@@ -1,4 +1,5 @@
 import type { ChangeEntry } from '../domain/changes';
+import { parsePayload } from '../domain/payload';
 import type { CardPayload, CardRecord, Vault } from '../domain/types';
 
 /** Device storage. The UI never touches this directly, so a Tauri backend can replace it. */
@@ -60,5 +61,5 @@ export interface PayloadCodec {
 
 export const jsonCodec: PayloadCodec = {
   encode: async (payload) => JSON.stringify(payload),
-  decode: async (data) => JSON.parse(data) as CardPayload,
+  decode: async (data) => parsePayload(data),
 };

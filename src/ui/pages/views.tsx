@@ -1,6 +1,7 @@
 import { useMemo } from 'react';
 import { Link, useSearchParams } from 'react-router';
-import { addMonths, formatMonth, monthGrid, monthKey, parseDateKey } from '../../domain/dates';
+import { diaryVault } from '../../domain/access';
+import { addMonths, formatMonth, monthGrid, monthKey, parseDateKey, toDateKey } from '../../domain/dates';
 import { buildSearch } from '../../domain/search';
 import { useCards, useToday } from '../../state/CardsContext';
 import { CardRow, Empty, Page } from '../components';
@@ -22,13 +23,16 @@ function firstDayOfWeek(): number {
 }
 
 export function CalendarPage() {
-  const { index } = useCards();
+  const { index, vaults, accountId } = useCards();
   const today = useToday();
   const [params, setParams] = useSearchParams();
   const param = params.get('m');
   const month = param && /^\d{4}-\d{2}$/.test(param) ? param : monthKey(today);
   const grid = useMemo(() => monthGrid(month, firstDayOfWeek()), [month]);
   const go = (m: string) => setParams({ m }, { replace: true });
+  // Days with something written in the diary get a dot.
+  const diary = diaryVault(vaults, accountId)?.id;
+  const written = new Set(index.live.filter((c) => c.vaultId === diary && c.type !== 'tag').map((c) => toDateKey(new Date(c.createdAt))));
   const due = new Map<string, number>();
   index.todos.forEach((t) => {
     if (t.status === 'open' && t.due) due.set(t.due, (due.get(t.due) ?? 0) + 1);
@@ -58,10 +62,10 @@ export function CalendarPage() {
           </div>
         ))}
         {grid.map((d) => {
-          const hasDiary = index.diaryByDate.has(d);
+          const hasDiary = written.has(d);
           const count = due.get(d) ?? 0;
           const cls = ['calendar__day', monthKey(d) !== month && 'is-outside', d === today && 'is-today'].filter(Boolean).join(' ');
-          const label = `${parseDateKey(d).toLocaleDateString(undefined, { month: 'long', day: 'numeric' })}${hasDiary ? ', diary entry' : ''}${count ? `, ${count} todo${count > 1 ? 's' : ''} due` : ''}`;
+          const label = `${parseDateKey(d).toLocaleDateString(undefined, { month: 'long', day: 'numeric' })}${hasDiary ? ', written in the diary' : ''}${count ? `, ${count} todo${count > 1 ? 's' : ''} due` : ''}`;
           return (
             <Link key={d} className={cls} to={journalPath({ when: d })} aria-label={label}>
               <span className="calendar__num">{Number(d.slice(8))}</span>
@@ -90,7 +94,7 @@ export function SearchPage() {
         type="search"
         autoFocus
         value={query}
-        placeholder="Search notes, todos, diary and tags"
+        placeholder="Search notes, todos and tags"
         aria-label="Search"
         enterKeyHint="search"
         onChange={(e) => setParams(e.target.value ? { q: e.target.value } : {}, { replace: true })}

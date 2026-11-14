@@ -1,7 +1,6 @@
 import 'fake-indexeddb/auto';
 import Dexie from 'dexie';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
-import { diaryId } from '../domain/rehome';
 import type { Vault } from '../domain/types';
 import { DexieStore } from './dexieStore';
 import { localStorageJournal } from './journal';
@@ -42,7 +41,7 @@ describe('claimLegacyNotes', () => {
     await legacy.createNote({ title: 'Kept note' });
     const deleted = await legacy.createNote({ title: 'Trashed' });
     await legacy.setDeleted(deleted.id, true);
-    await legacy.saveDiary('2026-11-10', { content: { type: 'doc', content: [] } });
+    await legacy.createNote({ title: 'Another' });
     expect(oldVault.id).not.toBe(vault.id);
 
     const { repo, store } = await account();
@@ -50,7 +49,6 @@ describe('claimLegacyNotes', () => {
 
     const cards = await Promise.all((await store.listCards()).map((r) => repo.decode(r)));
     expect(cards.every((c) => c.vaultId === vault.id)).toBe(true);
-    expect(cards.map((c) => c.id)).toContain(diaryId(vault.id, '2026-11-10'));
     expect(cards.find((c) => c.title === 'Trashed')?.deleted).toBe(true);
     expect(await store.listDirty()).toHaveLength(3);
     expect(await Dexie.exists('notes-app')).toBe(false);

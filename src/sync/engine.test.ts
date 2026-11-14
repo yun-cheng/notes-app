@@ -1,7 +1,7 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { createApp } from '../../server/app';
 import { createTestDb } from '../../server/testDb';
-import type { DiaryCard, JSONNode, TodoCard, Vault } from '../domain/types';
+import type { JSONNode, TodoCard, Vault } from '../domain/types';
 import { MemoryStore } from '../storage/memoryStore';
 import { CardRepository } from '../storage/repository';
 import { jsonCodec } from '../storage/types';
@@ -121,11 +121,10 @@ describe('syncing between two devices', () => {
 
   it('keeps cards in the same place when a second device signs in later', async () => {
     const { phone, mac } = await twoDevices();
-    const entry = await phone.repo.saveDiary('2026-11-10', { content: doc('from phone') });
+    const entry = await phone.repo.createNote({ content: doc('from phone') });
     await phone.engine.sync();
     await mac.engine.sync();
-    const macEntry = (await mac.cards()).find((c) => c.type === 'diary') as DiaryCard;
-    expect(macEntry.id).toBe(entry.id);
+    expect((await mac.cards()).find((c) => c.id === entry.id)?.vaultId).toBe(entry.vaultId);
   });
 
   it('does not upload notes that were opened but never written in', async () => {
@@ -198,20 +197,6 @@ describe('conflicts', () => {
       expect(cards.find((c) => c.title === 'Base (conflict copy)')?.content).toEqual(doc('newer edit'));
     }
     expect(first.engine.getStatus().pending).toBe(0);
-  });
-
-  it('merges two diary entries written offline for the same day into one plus a copy', async () => {
-    const { phone, mac } = await twoDevices();
-    await phone.repo.saveDiary('2026-11-10', { content: doc('phone day') });
-    await mac.repo.saveDiary('2026-11-10', { content: doc('mac day') });
-    await phone.engine.sync();
-    await mac.engine.sync();
-    await phone.engine.sync();
-    const cards = await phone.cards();
-    expect(cards.filter((c) => c.type === 'diary')).toHaveLength(1);
-    expect(cards.find((c) => c.type === 'diary')?.content).toEqual(doc('mac day'));
-    const copy = cards.find((c) => c.type === 'note');
-    expect(copy).toMatchObject({ title: 'Diary 2026-11-10 (conflict copy)', content: doc('phone day') });
   });
 
   it('keeps an edit when the other device deleted the card', async () => {

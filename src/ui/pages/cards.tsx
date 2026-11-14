@@ -1,12 +1,10 @@
 import { useState } from 'react';
 import { Link, Navigate, useLocation, useNavigate, useParams } from 'react-router';
-import { addDays, formatDay, isDateKey } from '../../domain/dates';
-import { diaryVault } from '../../domain/locks';
-import { todosDueOn } from '../../domain/todos';
-import { EMPTY_DOC, type Card } from '../../domain/types';
-import { useCards, useToday } from '../../state/CardsContext';
+import { isDateKey } from '../../domain/dates';
+import type { Card } from '../../domain/types';
+import { useCards } from '../../state/CardsContext';
 import { permissions } from '../../domain/access';
-import { Backlinks, Empty, Page, QuickAddTodo, Section, TagChips, TagPicker, TitleField, TodoList, useDeleteCard, VaultField } from '../components';
+import { Backlinks, Empty, Page, TagChips, TagPicker, TitleField, useDeleteCard, VaultField } from '../components';
 import { Editor } from '../editor/Editor';
 import { LockPanel } from '../LockPanel';
 import { Comments } from '../Comments';
@@ -31,8 +29,8 @@ function TagsToggle({ on, onChange }: { on: boolean; onChange: (on: boolean) => 
   );
 }
 
-const HOME: Record<Card['type'], string> = { note: '/journal', todo: '/journal', tag: '/tags', diary: '/journal' };
-const LABEL: Record<Card['type'], string> = { note: 'Note', todo: 'Todo', tag: 'Tag', diary: 'Diary' };
+const HOME: Record<Card['type'], string> = { note: '/journal', todo: '/journal', tag: '/tags' };
+const LABEL: Record<Card['type'], string> = { note: 'Note', todo: 'Todo', tag: 'Tag' };
 
 export function CardPage() {
   const { id } = useParams();
@@ -54,7 +52,6 @@ export function CardPage() {
       </Page>
     );
   }
-  if (card.type === 'diary') return <Navigate to={`/day/${card.date}`} replace />;
   if ((card.type === 'note' || card.type === 'todo') && !card.deleted) return <Navigate to={entryPath(card.id)} replace />;
   if (card.deleted) {
     return (
@@ -69,7 +66,7 @@ export function CardPage() {
   return <CardDetail key={card.id} card={card} />;
 }
 
-function CardDetail({ card }: { card: Exclude<Card, { type: 'diary' }> }) {
+function CardDetail({ card }: { card: Card }) {
   const { repo, vaults, shared } = useCards();
   const can = permissions(card, vaults, shared);
   const remove = useDeleteCard();
@@ -174,85 +171,8 @@ function CardDetail({ card }: { card: Exclude<Card, { type: 'diary' }> }) {
   );
 }
 
+/** A day used to have one diary entry. Now its entries are in the journal, for that day. */
 export function DayPage() {
   const { date } = useParams();
-  const { index, repo, vaults, locked, shared } = useCards();
-  const today = useToday();
-  const remove = useDeleteCard();
-  const [tools, setTools] = useState(false);
-  const [tagging, setTagging] = useState(false);
-
-  if (!isDateKey(date)) {
-    return (
-      <Page title="Not found">
-        <Empty>That isn't a valid date.</Empty>
-      </Page>
-    );
-  }
-  const card = index.diaryByDate.get(date);
-  const todos = todosDueOn(index.todos, date);
-  const privateVault = diaryVault(vaults);
-  const lockedIn = card ? undefined : (index.lockedDiaries.get(date) ?? (privateVault && locked.has(privateVault.id) ? privateVault.id : undefined));
-
-  return (
-    <Page
-      title={formatDay(date)}
-      actions={
-        <>
-          <Link className="icon-btn" to={`/day/${addDays(date, -1)}`} aria-label="Previous day">
-            <Icon name="left" />
-          </Link>
-          <Link className="icon-btn" to={`/day/${addDays(date, 1)}`} aria-label="Next day">
-            <Icon name="right" />
-          </Link>
-          {!lockedIn && <FormattingToggle on={tools} onChange={setTools} />}
-          {!lockedIn && <TagsToggle on={tagging} onChange={setTagging} />}
-          {card && (
-            <Link className="icon-btn" to={`/day/${date}/history`} aria-label="Version history" title="Version history">
-              <Icon name="history" />
-            </Link>
-          )}
-          {card && (
-            <button type="button" className="icon-btn" aria-label="Move diary entry to Trash" title="Move to Trash" onClick={() => remove(card, '/calendar')}>
-              <Icon name="trash" />
-            </button>
-          )}
-        </>
-      }
-    >
-      {lockedIn ? (
-        <LockPanel vaultId={lockedIn} />
-      ) : (
-        <>
-          {card && <VaultField card={card} />}
-          <Editor
-            key={date}
-            content={card?.content ?? EMPTY_DOC}
-            selfId={card?.id}
-            vaultId={card?.vaultId ?? privateVault?.id}
-            editable={!card || permissions(card, vaults, shared).edit}
-            toolbar={tools}
-            placeholder={date === today ? 'How was today?' : 'Write about this day.'}
-            onChange={(content) => void repo.saveDiary(date, { content }, card?.id, privateVault?.id)}
-          />
-          {tagging ? (
-            <TagPicker tagIds={card?.tags ?? []} onChange={(tags) => void repo.saveDiary(date, { tags }, card?.id, privateVault?.id)} />
-          ) : (
-            !!card?.tags.length && (
-              <div className="card-tags">
-                <TagChips tagIds={card.tags} onChange={(tags) => void repo.saveDiary(date, { tags }, card.id, privateVault?.id)} />
-              </div>
-            )
-          )}
-        </>
-      )}
-
-      <Section title="Todos due">
-        {todos.length > 0 && <TodoList todos={todos} showDue={false} />}
-        <QuickAddTodo due={date} placeholder="Add a todo for this day" />
-      </Section>
-
-      {card && <Backlinks cardId={card.id} />}
-    </Page>
-  );
+  return <Navigate to={isDateKey(date) ? journalPath({ when: date }) : '/journal'} replace />;
 }

@@ -2,7 +2,6 @@ import { describe, expect, it } from 'vitest';
 import { decodeEntries, encodeEntries, entriesText, entryText, toEntries } from './clipboard';
 import { parseEntries } from './entry';
 import { doc, link, note, p, text, todo } from './testFixtures';
-import type { DiaryCard } from './types';
 
 const names: Record<string, string> = { w: 'work', h: 'home' };
 const tagName = (id: string) => names[id];
@@ -12,7 +11,6 @@ describe('copying entries', () => {
   const plan = todo('t', '2026-11-20', { title: 'Plan trip', tags: ['w'], content: doc(p(text('Book the train'))) });
   const done = todo('d', null, { title: 'Call mum', status: 'done' });
   const idea = note('n', '', { content: doc(p(text('Big '), text('idea', [{ type: 'bold' }])), p(link('x', 'Other note'))), tags: ['w', 'h', 'gone'] });
-  const day: DiaryCard = { ...note('dy', ''), type: 'diary', date: '2026-11-11', content: doc(p(text('Quiet day'))) };
 
   it('writes todos the way the journal box reads them, and notes as Markdown', () => {
     expect(entriesText([plan, done, idea], tagName, linkTitle)).toBe(
@@ -26,7 +24,6 @@ describe('copying entries', () => {
     expect(entryText({ ...plan, dueTime: '18:00' }, linkTitle)).toBe('Plan trip\n\nBook the train');
     expect(entryText(done, linkTitle)).toBe('Call mum');
     expect(entryText(idea, linkTitle)).toBe('Big idea\n\nOther note');
-    expect(entryText(day, linkTitle)).toBe('Quiet day');
   });
 
   it('copies plain text: links as addresses, lists with their markers, no photos or quote marks', () => {
@@ -69,13 +66,12 @@ describe('copying entries', () => {
     ]);
   });
 
-  it('keeps everything in the exact copy, with tags by name and a diary entry as a note', () => {
-    const entries = toEntries([plan, done, idea, day], tagName);
+  it('keeps everything in the exact copy, with tags by name', () => {
+    const entries = toEntries([plan, done, idea], tagName);
     expect(entries.map((e) => [e.kind, e.tags])).toEqual([
       ['todo', ['work']],
       ['todo', []],
       ['note', ['work', 'home']],
-      ['note', []],
     ]);
     expect(decodeEntries(encodeEntries(entries))).toEqual(entries);
   });

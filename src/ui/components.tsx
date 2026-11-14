@@ -39,7 +39,7 @@ export function Empty({ children }: { children: ReactNode }) {
   return <p className="empty">{children}</p>;
 }
 
-const TYPE_ICON: Record<Card['type'], IconName> = { note: 'note', todo: 'todo', diary: 'diary', tag: 'tag' };
+const TYPE_ICON: Record<Card['type'], IconName> = { note: 'note', todo: 'todo', tag: 'tag' };
 
 /**
  * An entry's tags, grouped ones first (Priority before Topics, in each group's order). A grouped tag is marked

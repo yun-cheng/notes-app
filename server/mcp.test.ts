@@ -124,27 +124,37 @@ describe('MCP server', () => {
     const refused = await tool('edit_card', { id: 'note-1', title: 'Hacked' });
     expect(refused).toEqual({ text: '"Tokyo plan" is in a vault that is read only for AI.', error: true });
   });
-  it('keeps diary writing out when the diary lives in a private vault', async () => {
-    const { tool } = await world();
-    expect((await tool('append_to_diary', { date: '2026-11-10', markdown: 'Nice day' })).text).toBe("New diary entries go to the user's private vault, which AI can't open.");
-  });
-  it('writes the diary in the main vault when there is no private vault', async () => {
+  it('writes in the diary as in any vault, once it is open to AI', async () => {
     const t = setup();
     const ann = await t.signIn('ann');
-    await t.call(`/api/vaults/${ann.vault}`, { method: 'PATCH', body: JSON.stringify({ ai_access: 'write' }) }, ann.cookie);
+    const diary = `diary-${ann.user.id}`;
+    await t.call(`/api/vaults/${diary}`, { method: 'PATCH', body: JSON.stringify({ ai_access: 'write' }) }, ann.cookie);
     const ai = await connectAi(t.call, ann.cookie);
     const tool = async (name: string, args: object) => {
       const res = await t.call('/api/mcp', { method: 'POST', body: JSON.stringify({ jsonrpc: '2.0', id: 1, method: 'tools/call', params: { name, arguments: args } }), headers: { authorization: `Bearer ${ai.access_token}` } });
       return ((await res.json()) as { result: { content: { text: string }[] } }).result.content[0].text;
     };
-    expect(await tool('append_to_diary', { date: '2026-11-10', markdown: 'Morning run.' })).toBe('Started the diary for 2026-11-10.');
-    expect(await tool('append_to_diary', { date: '2026-11-10', markdown: 'Evening tea.' })).toBe('Added to the diary for 2026-11-10.');
-    expect(await tool('get_diary', { from: '2026-11-01', to: '2026-11-30' })).toMatch(/## 2026-11-10 \(id: diary:vault-[^)]+:2026-11-10\)\n\nMorning run\.\n\nEvening tea\./);
+    expect(await tool('create_note', { title: 'Morning run', vault: 'Diary' })).toMatch(/^Created "Morning run" \(id: .+\) in Diary\.$/);
+    expect(await tool('search_cards', { vault: 'diary' })).toMatch(/^- Morning run \(note, id: .+, vault: Diary,/);
+    expect(await tool('search_cards', { vault: 'Personal' })).toBe('No vault named "Personal" is open to AI. Use list_vaults.');
+    const list = await t.call('/api/mcp', { method: 'POST', body: JSON.stringify({ jsonrpc: '2.0', id: 2, method: 'tools/list' }), headers: { authorization: `Bearer ${ai.access_token}` } });
+    expect(JSON.stringify(await list.json())).not.toMatch(/get_diary|append_to_diary/);
+  });
+  it('reads a diary card from before the diary was a vault as a note', async () => {
+    const t = setup();
+    const ann = await t.signIn('ann');
+    await t.call(`/api/vaults/${ann.vault}`, { method: 'PATCH', body: JSON.stringify({ ai_access: 'read' }) }, ann.cookie);
+    const old = { type: 'diary', date: '2026-11-10', title: '', tags: [], createdAt: 1, content: { type: 'doc', content: [{ type: 'paragraph', content: [{ type: 'text', text: 'Rainy walk' }] }] } };
+    await t.push(ann.cookie, [{ id: 'old-day', vault_id: ann.vault, updated_at: 1, deleted: false, seq: 0, payload: JSON.stringify(old) }]);
+    const ai = await connectAi(t.call, ann.cookie);
+    const res = await t.call('/api/mcp', { method: 'POST', body: JSON.stringify({ jsonrpc: '2.0', id: 1, method: 'tools/call', params: { name: 'get_card', arguments: { id: 'old-day' } } }), headers: { authorization: `Bearer ${ai.access_token}` } });
+    const text = ((await res.json()) as { result: { content: { text: string }[] } }).result.content[0].text;
+    expect(text).toContain('Type: note');
+    expect(text).toContain('Rainy walk');
   });
   it('validates arguments', async () => {
     const { tool } = await world();
-    expect(await tool('get_diary', { from: 'yesterday', to: '2026-11-10' })).toEqual({ text: '"from" must be a date like 2026-11-10.', error: true });
-    expect((await tool('get_diary', { from: '2026-01-01', to: '2026-12-31' })).error).toBe(true);
+    expect(await tool('list_todos', { due_after: 'yesterday' })).toEqual({ text: '"due_after" must be a date like 2026-11-10.', error: true });
     expect((await tool('complete_todo', { id: 'note-1' })).text).toBe('"Tokyo plan" is not a todo.');
   });
 });

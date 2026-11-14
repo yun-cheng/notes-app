@@ -3,9 +3,9 @@ import type { Backup } from '../domain/backup';
 import { canRedo, canUndo, changedFields, isTextChange, revertCard, type Change, type ChangeEntry } from '../domain/changes';
 import { isBlank } from '../domain/content';
 import { isEncryptedPayload } from '../crypto/vaultKeys';
-import { diaryId, rehomeCards } from '../domain/rehome';
+import { rehomeCards } from '../domain/rehome';
 import { changeType, retypePatch, type EntryType } from '../domain/retype';
-import { noJournal, type CardPatch, type DiaryPatch, type Journal, type JournalOp } from './journal';
+import { noJournal, type CardPatch, type Journal, type JournalOp } from './journal';
 import type { SharedCard } from '../sync/protocol';
 import type { CardStore, PayloadCodec } from './types';
 
@@ -14,10 +14,7 @@ export const SEALED = Symbol('sealed');
 
 /** What a card in a locked encrypted vault looks like to the app: nothing but its ID, vault and dates. */
 function sealedCard(record: CardRecord): Card {
-  const common = { id: record.id, vaultId: record.vault_id, updatedAt: record.updated_at, deleted: record.deleted, seq: record.seq, createdAt: 0, title: '', content: EMPTY_DOC, tags: [] };
-  // Diary IDs carry their date, so a locked day still knows it has an entry.
-  const date = record.id.startsWith('diary:') ? record.id.slice(record.id.lastIndexOf(':') + 1) : null;
-  const card: Card = date ? { ...common, type: 'diary', date } : { ...common, type: 'note' };
+  const card: Card = { id: record.id, vaultId: record.vault_id, updatedAt: record.updated_at, deleted: record.deleted, seq: record.seq, createdAt: 0, type: 'note', title: '', content: EMPTY_DOC, tags: [] };
   return Object.assign(card, { [SEALED]: true });
 }
 
@@ -121,15 +118,11 @@ export class CardRepository {
   }
 
   private async replayJournal(): Promise<void> {
+    // Only edits are journaled. A diary write from before the diary was a vault is let go.
     for (const op of this.journal.load()) {
-      if (op.kind === 'update') {
-        const card = await this.read(op.id);
-        if (card && card.updatedAt < op.at) await this.applyUpdate(card, op.patch, newAction());
-      } else {
-        const vault = await this.defaultVault();
-        const card = await this.read(op.existingId ?? diaryId(op.vaultId ?? vault.id, op.date));
-        if (!card || card.updatedAt < op.at) await this.applyDiary(op.date, op.patch, newAction(), op.existingId, op.vaultId);
-      }
+      if (op.kind !== 'update') continue;
+      const card = await this.read(op.id);
+      if (card && card.updatedAt < op.at) await this.applyUpdate(card, op.patch, newAction());
     }
     this.journal.save(this.uncommitted);
   }
@@ -345,18 +338,20 @@ export class CardRepository {
   private lastCreated = 0;
 
   /** Creation times never repeat, so entries saved together keep the order they were typed in. */
-  private async newEnvelope(id: string, vaultId?: string) {
+  private async newEnvelope(id: string, vaultId?: string, createdAt?: number) {
     const target = vaultId ?? (await this.defaultVault()).id;
     const at = Math.max(this.now(), this.lastCreated + 1);
     this.lastCreated = at;
-    return { id, vaultId: target, updatedAt: at, createdAt: at, deleted: false, seq: 0 };
+    // An entry written for another day says so in `createdAt`; it was still saved now.
+    return { id, vaultId: target, updatedAt: at, createdAt: createdAt ?? at, deleted: false, seq: 0 };
   }
 
-  createNote(init: { id?: string; title?: string; content?: JSONNode; tags?: string[]; vaultId?: string } = {}): Promise<Card> {
+  /** `createdAt` writes it on another day than today. */
+  createNote(init: { id?: string; title?: string; content?: JSONNode; tags?: string[]; vaultId?: string; createdAt?: number } = {}): Promise<Card> {
     const id = init.id ?? this.newId();
     const action = this.acting();
     return this.enqueue(async () =>
-      this.write({ ...(await this.newEnvelope(id, init.vaultId)), type: 'note', title: init.title ?? '', content: init.content ?? EMPTY_DOC, tags: init.tags ?? [] }, action),
+      this.write({ ...(await this.newEnvelope(id, init.vaultId, init.createdAt)), type: 'note', title: init.title ?? '', content: init.content ?? EMPTY_DOC, tags: init.tags ?? [] }, action),
     );
   }
 
@@ -369,10 +364,11 @@ export class CardRepository {
     tags?: string[];
     vaultId?: string;
     done?: boolean;
+    createdAt?: number;
   }): Promise<Card> {
     const action = this.acting();
     return this.enqueue(async () => {
-      const envelope = await this.newEnvelope(this.newId(), init.vaultId);
+      const envelope = await this.newEnvelope(this.newId(), init.vaultId, init.createdAt);
       return this.write({
         ...envelope,
         type: 'todo',
@@ -384,7 +380,7 @@ export class CardRepository {
         // Left off when unset, so todos without them look as they always have to the other apps.
         ...(init.due && init.dueTime ? { dueTime: init.dueTime } : {}),
         ...(init.due && init.repeat ? { repeat: init.repeat } : {}),
-        completedAt: init.done ? envelope.createdAt : null,
+        completedAt: init.done ? envelope.updatedAt : null,
       }, action);
     });
   }
@@ -434,23 +430,6 @@ export class CardRepository {
     const next = { ...base, ...patch, updatedAt: this.now() } as Card;
     if (next.type === 'todo' && patch.status) next.completedAt = patch.status === 'done' ? this.now() : null;
     return this.write(next, action, card);
-  }
-
-  /** Diary entries are created on first write. Their ID comes from the date, so two devices can't create two entries for one day. */
-  saveDiary(date: string, patch: DiaryPatch, existingId?: string, vaultId?: string): Promise<Card> {
-    const action = this.acting();
-    const work = () => this.applyDiary(date, patch, action, existingId, vaultId);
-    if (this.secret(existingId ?? '', vaultId)) return this.enqueue(work);
-    return this.journaled({ kind: 'diary', at: this.now(), date, patch, existingId, vaultId }, work);
-  }
-
-  private async applyDiary(date: string, patch: DiaryPatch, action: Action, existingId?: string, vaultId?: string): Promise<Card> {
-    const target = vaultId ?? (await this.defaultVault()).id;
-    const id = existingId ?? diaryId(target, date);
-    const card = await this.read(id);
-    if (card && !card.deleted) return this.write({ ...card, ...patch, updatedAt: this.now() } as Card, action, card);
-    const content: JSONNode = patch.content ?? EMPTY_DOC;
-    return this.write({ ...(await this.newEnvelope(id, target)), type: 'diary', date, title: '', content, tags: patch.tags ?? [] }, action, card);
   }
 
   setDeleted(id: string, deleted: boolean): Promise<void> {
@@ -622,7 +601,7 @@ export class CardRepository {
       if (loser.title === winner.title && JSON.stringify(loser.content) === JSON.stringify(winner.content)) return;
 
       const at = this.now();
-      const title = loser.type === 'diary' ? `Diary ${loser.date} (conflict copy)` : `${loser.title.trim() || 'Untitled'} (conflict copy)`;
+      const title = `${loser.title.trim() || 'Untitled'} (conflict copy)`;
       const common = {
         id: this.newId(),
         vaultId: loser.vaultId,

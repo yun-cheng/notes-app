@@ -1,6 +1,7 @@
 import { strToU8, zipSync } from 'fflate';
 import { linkTitle, resolveTags, type CardIndex } from './cardIndex';
 import { toMarkdown } from './markdown';
+import { modernCard } from './payload';
 import { repeatWord } from './repeat';
 import { CARD_TYPES, type Card, type Vault } from './types';
 
@@ -9,7 +10,7 @@ export interface MarkdownFile {
   text: string;
 }
 
-const FOLDER = { note: 'notes', todo: 'todos', diary: 'diary', tag: 'tags' } as const;
+const FOLDER = { note: 'notes', todo: 'todos', tag: 'tags' } as const;
 
 function safeName(title: string): string {
   const name = title.replace(/[/\\:*?"<>|\u0000-\u001f]/g, ' ').replace(/\s+/g, ' ').trim().replace(/^\.+/, '');
@@ -24,14 +25,13 @@ export function markdownFiles(index: CardIndex): MarkdownFile[] {
   const titleOf = (id: string, fallback: string) => linkTitle(index, id, fallback);
 
   return index.live.map((card) => {
-    const base = card.type === 'diary' ? card.date : safeName(card.title);
+    const base = safeName(card.title);
     let path = `${FOLDER[card.type]}/${base}.md`;
     for (let n = 2; used.has(path.toLowerCase()); n++) path = `${FOLDER[card.type]}/${base} (${n}).md`;
     used.add(path.toLowerCase());
 
     const front = [`id: ${card.id}`, `type: ${card.type}`];
-    if (card.type !== 'diary') front.push(`title: ${yamlString(card.title)}`);
-    if (card.type === 'diary') front.push(`date: ${card.date}`);
+    front.push(`title: ${yamlString(card.title)}`);
     if (card.type === 'todo') {
       front.push(`status: ${card.status}`);
       if (card.due) front.push(`due: ${card.due}`);
@@ -43,7 +43,7 @@ export function markdownFiles(index: CardIndex): MarkdownFile[] {
     front.push(`created: ${iso(card.createdAt)}`, `updated: ${iso(card.updatedAt)}`);
 
     const body = toMarkdown(card.content, titleOf);
-    const heading = card.type === 'diary' ? '' : `# ${card.title}\n\n`;
+    const heading = `# ${card.title}\n\n`;
     return { path, text: `---\n${front.join('\n')}\n---\n\n${heading}${body}\n` };
   });
 }
@@ -91,8 +91,10 @@ export function parseBackup(text: string): Backup {
   }
   if (data.format !== BACKUP_FORMAT) throw new Error('That file is not a backup from this app.');
   if (data.version !== 1) throw new Error(`This backup uses version ${String(data.version)}, which this app can't read.`);
-  if (!Array.isArray(data.cards) || !data.cards.every(isCard) || !Array.isArray(data.vaults)) {
+  // A backup from before the diary was a vault holds diary cards, which come back as notes.
+  const cards = Array.isArray(data.cards) ? data.cards.map((c) => (c && typeof c === 'object' ? modernCard(c) : c)) : null;
+  if (!cards || !cards.every(isCard) || !Array.isArray(data.vaults)) {
     throw new Error('That backup is damaged: some cards are missing required fields.');
   }
-  return data as Backup;
+  return { ...data, cards } as Backup;
 }

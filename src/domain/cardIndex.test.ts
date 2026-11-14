@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import { buildIndex, cardText, linkTitle, resolveTags } from './cardIndex';
 import { base, doc, link, note, p, tag, text } from './testFixtures';
-import type { Card, DiaryCard, TodoCard } from './types';
+import type { Card, NoteCard, TodoCard } from './types';
 
 describe('index', () => {
   const t = tag('t', 'Work', true);
@@ -37,7 +37,7 @@ describe('locked vaults', () => {
   const secretTag = tag('st', 'Secret tag', true);
   const secret = note('s', 'Secret title', { vaultId: 'private', tags: ['st'], content: doc(p(link('o', 'Open'))) });
   const lockedTag = { ...secretTag, vaultId: 'private' };
-  const entry: DiaryCard = { ...base, id: 'd', vaultId: 'private', title: '', type: 'diary', date: '2026-11-10', content: doc(p(text('dear diary'))) };
+  const entry: NoteCard = { ...base, id: 'd', vaultId: 'private', title: '', type: 'note', content: doc(p(text('dear diary'))) };
   const task: TodoCard = { ...base, id: 't', vaultId: 'private', title: 'Hidden task', type: 'todo', status: 'open', due: '2026-11-10', completedAt: null };
   const trashed = note('x', 'Trashed secret', { vaultId: 'private', deleted: true });
   const pointing = note('o', 'Open', { content: doc(p(text('see '), link('s', 'Secret title'))) });
@@ -49,13 +49,12 @@ describe('locked vaults', () => {
     expect(index.todos).toEqual([]);
     expect(index.tags).toEqual([]);
     expect(index.pinnedTags).toEqual([]);
-    expect(index.diaryByDate.size).toBe(0);
     expect(index.trash).toEqual([]);
   });
   it('cannot be reached by ID', () => {
     expect(index.byId.has('s')).toBe(false);
     expect(index.lockedCards.get('s')).toBe('private');
-    expect(index.lockedDiaries.get('2026-11-10')).toBe('private');
+    expect(index.lockedCards.get('d')).toBe('private');
   });
   it('shows no backlinks to or from locked cards', () => {
     expect(index.backlinks.get('o')).toBeUndefined();

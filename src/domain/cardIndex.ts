@@ -1,6 +1,6 @@
 import { buildTagGroups, isTagGroup, type TagGroups } from './tagGroups';
 import { displayTitle, isBlank, linkedCardIds, plainText } from './content';
-import type { Card, DiaryCard, TagCard, TodoCard } from './types';
+import type { Card, TagCard, TodoCard } from './types';
 
 export interface Backlink {
   from: Card;
@@ -13,8 +13,6 @@ export interface CardIndex {
   byId: Map<string, Card>;
   /** Card ID to vault ID, for cards in locked vaults. Nothing else about them is exposed here. */
   lockedCards: Map<string, string>;
-  /** Date to vault ID, for diary entries in locked vaults. */
-  lockedDiaries: Map<string, string>;
   /** Cards shown in lists, search and export. */
   live: Card[];
   /** Tags that can be put on entries, by title. Tag groups aren't among them. */
@@ -22,7 +20,6 @@ export interface CardIndex {
   tagGroups: TagGroups;
   pinnedTags: TagCard[];
   todos: TodoCard[];
-  diaryByDate: Map<string, DiaryCard>;
   trash: Card[];
   backlinks: Map<string, Backlink[]>;
 }
@@ -33,21 +30,14 @@ const byTitle = (a: Card, b: Card) => a.title.localeCompare(b.title);
 export function buildIndex(allCards: Card[], locked: ReadonlySet<string> = new Set()): CardIndex {
   const cards: Card[] = [];
   const lockedCards = new Map<string, string>();
-  const lockedDiaries = new Map<string, string>();
   for (const card of allCards) {
-    if (!locked.has(card.vaultId)) {
-      cards.push(card);
-      continue;
-    }
-    lockedCards.set(card.id, card.vaultId);
-    // An encrypted entry reads as blank while locked, so blankness can't decide this.
-    if (card.type === 'diary' && !card.deleted) lockedDiaries.set(card.date, card.vaultId);
+    if (locked.has(card.vaultId)) lockedCards.set(card.id, card.vaultId);
+    else cards.push(card);
   }
 
   const byId = new Map(cards.map((c) => [c.id, c]));
   const live = cards.filter((c) => !c.deleted && !isBlank(c)).sort((a, b) => b.updatedAt - a.updatedAt);
   const backlinks = new Map<string, Backlink[]>();
-  const diaryByDate = new Map<string, DiaryCard>();
   const add = (to: string, link: Backlink) => {
     if (to === link.from.id || lockedCards.has(to)) return;
     const list = backlinks.get(to);
@@ -58,10 +48,6 @@ export function buildIndex(allCards: Card[], locked: ReadonlySet<string> = new S
   for (const card of live) {
     card.tags.forEach((to) => add(to, { from: card, kind: 'tag' }));
     linkedCardIds(card.content).forEach((to) => add(to, { from: card, kind: 'link' }));
-    if (card.type === 'diary') {
-      const seen = diaryByDate.get(card.date);
-      if (!seen || seen.updatedAt < card.updatedAt) diaryByDate.set(card.date, card);
-    }
   }
 
   const tagCards = live.filter((c): c is TagCard => c.type === 'tag').sort(byTitle);
@@ -70,13 +56,11 @@ export function buildIndex(allCards: Card[], locked: ReadonlySet<string> = new S
   return {
     byId,
     lockedCards,
-    lockedDiaries,
     live,
     tags,
     pinnedTags: tags.filter((t) => t.pinned),
     tagGroups,
     todos: live.filter((c): c is TodoCard => c.type === 'todo'),
-    diaryByDate,
     trash: cards.filter((c) => c.deleted && !isBlank(c)).sort((a, b) => b.updatedAt - a.updatedAt),
     backlinks,
   };

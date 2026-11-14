@@ -20,7 +20,7 @@ import { useToast } from '../Toast';
 import { useSyncedChanges } from '../useSyncedChanges';
 import { useCanRevert, useUndo, type Direction } from '../useUndo';
 
-const TYPE_ICON: Record<Card['type'], IconName> = { note: 'note', todo: 'todo', diary: 'diary', tag: 'tag' };
+const TYPE_ICON: Record<Card['type'], IconName> = { note: 'note', todo: 'todo', tag: 'tag' };
 /** The fields a comparison of two versions can show. Where a card is, or whether it's in the Trash, isn't text. */
 const COMPARED = new Set(['title', 'content', 'tags', 'type', 'status', 'due', 'dueTime', 'repeat']);
 

@@ -1,3 +1,4 @@
+import { parsePayload } from '../domain/payload';
 import type { CardPayload, Vault } from '../domain/types';
 import type { CodecContext, PayloadCodec } from '../storage/types';
 import { decryptPayload, encryptPayload, isEncryptedPayload } from './vaultKeys';
@@ -62,9 +63,9 @@ export class Keyring implements PayloadCodec {
   }
 
   async decode(data: string, { id, vaultId }: CodecContext): Promise<CardPayload | null> {
-    if (!isEncryptedPayload(data)) return JSON.parse(data) as CardPayload;
+    if (!isEncryptedPayload(data)) return parsePayload(data);
     const key = this.keys.get(vaultId);
     const text = key && (await decryptPayload(key, data, id, vaultId));
-    return text ? (JSON.parse(text) as CardPayload) : null;
+    return text ? parsePayload(text) : null;
   }
 }

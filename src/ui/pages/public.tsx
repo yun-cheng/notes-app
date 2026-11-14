@@ -52,7 +52,7 @@ export function PublicPage() {
   }, [token]);
 
   useEffect(() => {
-    if (card) document.title = card.title || (card.date ? formatDay(card.date) : 'Shared note');
+    if (card) document.title = card.title || 'Shared note';
   }, [card]);
 
   return (
@@ -69,7 +69,7 @@ export function PublicPage() {
           </>
         ) : (
           <>
-            <h1>{card.type === 'diary' && card.date ? formatDay(card.date) : card.title || 'Untitled'}</h1>
+            <h1>{card.title || 'Untitled'}</h1>
             {card.type === 'todo' && (
               <p className="prose-note">
                 {card.status === 'done' ? 'Done' : 'To do'}

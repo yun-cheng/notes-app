@@ -1,5 +1,5 @@
 /**
- * Fills the local server with a demo account: vaults, folders, tags, notes, todos, diary entries,
+ * Fills the local server with a demo account: vaults, folders, tags, notes, todos, a private Diary vault,
  * a shared vault, a comment and a shared note, so the app can be tried without a Google sign-in.
  * Run with `npm run demo` while `npm run dev:api` is running. Running it again starts the demo over.
  */
@@ -8,7 +8,6 @@ import { mkdirSync, writeFileSync } from 'node:fs';
 import { createVaultKey, encryptPayload } from '../src/crypto/vaultKeys';
 import { addDays, toDateKey } from '../src/domain/dates';
 import { hashPin } from '../src/domain/pin';
-import { diaryId } from '../src/domain/rehome';
 import type { CardPayload, CardRecord, JSONNode, Vault } from '../src/domain/types';
 import { PUSH_LIMIT } from '../src/sync/protocol';
 
@@ -76,11 +75,15 @@ async function resetAccounts(people: Person[]) {
   ];
   for (const u of people) {
     const vault = `vault-${u.id}`;
+    const diary = `diary-${u.id}`;
     statements.push(
       `INSERT INTO users (id, google_sub, email, name, created_at) VALUES (${sql(u.id)}, ${sql(u.sub)}, ${sql(u.email)}, ${sql(u.name)}, ${now})`,
       `INSERT INTO sessions (token_hash, user_id, expires_at) VALUES (${sql(await sha256(u.token))}, ${sql(u.id)}, ${now + 30 * 86_400_000})`,
       `INSERT INTO vaults (id, owner_id, name, created_at) VALUES (${sql(vault)}, ${sql(u.id)}, 'Personal', ${now})`,
       `INSERT INTO vault_members (vault_id, user_id, role) VALUES (${sql(vault)}, ${sql(u.id)}, 'owner')`,
+      // Made at sign-in for a real account, like the default vault.
+      `INSERT INTO vaults (id, owner_id, name, created_at) VALUES (${sql(diary)}, ${sql(u.id)}, 'Diary', ${now + 1})`,
+      `INSERT INTO vault_members (vault_id, user_id, role) VALUES (${sql(diary)}, ${sql(u.id)}, 'owner')`,
     );
   }
   mkdirSync('.wrangler', { recursive: true });
@@ -90,9 +93,9 @@ async function resetAccounts(people: Person[]) {
 
 // ---- API ----
 
-async function call<T>(who: Person, path: string, body?: unknown): Promise<T> {
+async function call<T>(who: Person, path: string, body?: unknown, method = body === undefined ? 'GET' : 'POST'): Promise<T> {
   const res = await fetch(API + path, {
-    method: body === undefined ? 'GET' : 'POST',
+    method,
     headers: { authorization: `Bearer ${who.token}`, 'content-type': 'application/json' },
     body: body === undefined ? undefined : JSON.stringify(body),
   });
@@ -145,8 +148,10 @@ export async function seed() {
   const family = await call<Vault>(DEMO, '/vaults', { name: 'Family' });
   await call(DEMO, `/vaults/${family.id}/members`, { email: SAM.email, role: 'editor' });
   const sealed = await createVaultKey(DEMO_PIN);
-  const privateVault = await call<Vault>(DEMO, '/vaults', { name: 'Private', pin: await hashPin(DEMO_PIN), encryption: sealed.encryption });
-  const keys = new Map([[privateVault.id, sealed.key]]);
+  // The diary is private: locked with the PIN and encrypted.
+  const diaryVault = `diary-${DEMO.id}`;
+  await call<Vault>(DEMO, `/vaults/${diaryVault}`, { pin: await hashPin(DEMO_PIN), hidden: false, encryption: sealed.encryption }, 'PATCH');
+  const keys = new Map([[diaryVault, sealed.key]]);
 
   const mine: Draft[] = [];
   const add = (id: string, vaultId: string, when: number, payload: NewPayload) => {
@@ -217,7 +222,7 @@ export async function seed() {
   ));
   note('demo-note-today-1', ago(95), lines('Call the dentist about Thursday'));
   note('demo-note-today-2', ago(40), lines('Buy oat milk, bananas and coffee beans'), [home]);
-  note('demo-note-secret', at(2, 23, 0), lines('Gift budget this year: 300. Don\'t tell anyone.'), [], '', privateVault.id);
+  note('demo-note-secret', at(2, 23, 0), lines('Gift budget this year: 300. Don\'t tell anyone.'), [], '', diaryVault);
 
   // Todos: overdue, today, upcoming, no date, and done.
   todo('demo-todo-taxes', 'File the tax return', addDays(today, -2), { tags: [home] });
@@ -228,14 +233,10 @@ export async function seed() {
   todo('demo-todo-read', 'Finish chapter 3', null, { tags: [reading] });
   todo('demo-todo-groceries', 'Groceries', addDays(today, -1), { done: at(1, 18, 0), tags: [home] });
 
-  // The diary lives in the private vault, so it needs the PIN.
-  const diary = (days: number, content: JSONNode) => {
-    const date = addDays(today, -days);
-    add(diaryId(privateVault.id, date), privateVault.id, at(days, 22, 0), { type: 'diary', date, title: '', tags: [], content });
-  };
-  diary(3, lines('Quiet day. Long walk by the river after work.'));
-  diary(2, lines('Tried the curry recipe. Too much ginger, but good.'));
-  diary(1, doc(p('Design review went well.'), p('Grateful for:'), bullets('Sunny weather', 'A good book', 'Dinner with Sam')));
+  // Diary entries are notes in the Diary vault, which needs the PIN.
+  note('demo-diary-3', at(3, 22, 0), lines('Quiet day. Long walk by the river after work.'), [], '', diaryVault);
+  note('demo-diary-2', at(2, 22, 0), lines('Tried the curry recipe. Too much ginger, but good.'), [], '', diaryVault);
+  note('demo-diary-1', at(1, 22, 0), doc(p('Design review went well.'), p('Grateful for:'), bullets('Sunny weather', 'A good book', 'Dinner with Sam')), [], '', diaryVault);
 
   // A shared vault with Sam: notes from both of you.
   note('demo-family-groceries', at(2, 17, 0), doc(p('Shared shopping list'), bullets('Rice', 'Eggs', 'Dish soap')), [], '', family.id);

@@ -184,7 +184,6 @@ body:has(.composer:focus-within) .tabbar { display: none; }
 .search-input { width: 100%; min-height: 46px; padding: 0 14px; background: var(--surface); border: 1px solid var(--line); border-radius: 10px; margin-bottom: 8px; outline: none; }
 .search-input:focus { border-color: var(--accent); }
 
-.diary-link { display: flex; align-items: center; gap: 10px; padding: 12px 14px; border-radius: 10px; background: var(--accent-soft); font-weight: 500; }
 
 .chips { display: inline-flex; flex-wrap: wrap; align-items: center; gap: 6px; }
 .chips--scroll { flex-wrap: nowrap; overflow-x: auto; margin: 0 -16px 8px; padding: 2px 16px; scrollbar-width: none; }
@@ -456,8 +455,6 @@ a.change__title:hover { color: var(--accent); }
 .bubble__body { display: flex; flex-direction: column; gap: 2px; min-width: 0; }
 .bubble--todo .bubble__title { font-weight: 400; }
 .bubble--todo.is-done .bubble__title { color: var(--muted); text-decoration: line-through; }
-.bubble--diary { background: var(--sunken); }
-.bubble__kind { display: inline-flex; align-items: center; gap: 4px; color: var(--muted); font-size: 12px; font-weight: 600; }
 .bubble__due { font-weight: 600; }
 .bubble__vault { display: inline-flex; align-items: center; gap: 3px; color: var(--muted); text-decoration: underline; text-decoration-color: transparent; text-underline-offset: 2px; }
 .bubble__vault:hover { color: var(--text); text-decoration-color: currentColor; }

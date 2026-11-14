@@ -6,7 +6,7 @@ import { EditorContent, useEditor } from '@tiptap/react';
 import { StarterKit } from '@tiptap/starter-kit';
 import { Placeholder } from '@tiptap/extensions';
 import { useEffect, useRef, useState, type ChangeEvent } from 'react';
-import { mainVault } from '../domain/access';
+import { diaryVault, mainVault } from '../domain/access';
 import { addDays, formatTime, parseDateKey, parseTime, relativeDay } from '../domain/dates';
 import { dueWord, entriesFromDoc, parseDue } from '../domain/entry';
 import { parseRepeat, REPEAT_CHOICES, repeatLabel, repeatWord } from '../domain/repeat';
@@ -78,7 +78,7 @@ const matches = (words: string, query: string) => words.toLowerCase().includes(q
  * The box at the bottom of the journal: a small editor that formats as you type. `[] ` or `TODO ` makes a
  * checkbox, `#` suggests tags, `@` suggests due dates and `/` lists what can be added. Each checkbox saves as
  * a todo and the rest as a note (see `entriesFromDoc`), into whatever the journal is narrowed to: its tag and
- * vault, a todo when it shows todos (due today when it shows what's due today), the diary when it shows the diary.
+ * vault, a todo when it shows todos (due today when it shows what's due today), and the day it shows.
  */
 export function JournalBox({ filter }: { filter: StreamFilter }) {
   const { index, photos, vaults, accountId, locked } = useCards();
@@ -88,12 +88,13 @@ export function JournalBox({ filter }: { filter: StreamFilter }) {
   const menu = useTypeaheadMenu();
   const picker = useRef<HTMLInputElement>(null);
   const [, redraw] = useState(0);
-  // The vault to unlock before a diary line can be saved; its PIN is asked for right above the box.
+  // The vault to unlock before the text can be saved (a `#diary` line, say); its PIN is asked for right above the box.
   const [unlock, setUnlock] = useState<string | null>(null);
   const [saving, setSaving] = useState(false);
 
   const todoFirst = effectiveType(filter) === 'todo';
-  const diary = filter.type === 'diary';
+  const diaryId = diaryVault(vaults, accountId)?.id;
+  const diary = !!diaryId && filter.vaultId === diaryId;
   const start = todoFirst ? EMPTY_TODO : EMPTY;
   const photoVault = filter.vaultId ?? mainVault(vaults, accountId)?.id;
   const latest = useRef({ index, today, photoVault, diary, filter, saving });
@@ -200,7 +201,7 @@ export function JournalBox({ filter }: { filter: StreamFilter }) {
     extensions: [
       StarterKit.configure({ heading: { levels: [2, 3] }, link: { openOnClick: false, autolink: true, defaultProtocol: 'https' } }),
       Placeholder.configure({
-        placeholder: ({ editor: e }) => (e.isActive('taskItem') ? 'Todo · @ for a due date, time or repeat' : latest.current.diary ? "Write in today's diary" : 'Write a note · [] todo · #tag · / for more'),
+        placeholder: ({ editor: e }) => (e.isActive('taskItem') ? 'Todo · @ for a due date, time or repeat' : latest.current.diary ? 'Write in the diary' : 'Write a note · [] todo · #tag · / for more'),
       }),
       Photo,
       TaskList,
@@ -262,7 +263,7 @@ export function JournalBox({ filter }: { filter: StreamFilter }) {
     return () => window.removeEventListener(BOX_PASTE, take);
   }, [editor]);
 
-  // After unlocking the diary, back to the box to save again.
+  // After unlocking, back to the box to save again.
   const unlocked = !!unlock && !locked.has(unlock);
   useEffect(() => {
     if (unlocked) editor?.commands.focus('end');
@@ -280,7 +281,7 @@ export function JournalBox({ filter }: { filter: StreamFilter }) {
     <>
       {unlock && locked.has(unlock) && (
         <div className="composer__unlock">
-          <p>Your diary is locked. Unlock it, then save again.</p>
+          <p>{vaults.find((v) => v.id === unlock)?.name ?? 'That vault'} is locked. Unlock it, then save again.</p>
           <LockPanel vaultId={unlock} />
         </div>
       )}

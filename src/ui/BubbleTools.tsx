@@ -1,7 +1,7 @@
 import { useState } from 'react';
 import { createPortal } from 'react-dom';
 import { permissions } from '../domain/access';
-import type { DiaryCard, NoteCard, TodoCard } from '../domain/types';
+import type { NoteCard, TodoCard } from '../domain/types';
 import { useCards } from '../state/CardsContext';
 import { TagPicker } from './components';
 import { useEntryActions } from './entryActions';
@@ -9,7 +9,7 @@ import { Icon } from './Icon';
 import { ShareDialog } from './ShareDialog';
 import { usePopover } from './usePopover';
 
-type Entry = NoteCard | TodoCard | DiaryCard;
+type Entry = NoteCard | TodoCard;
 
 /**
  * The buttons beside a bubble on hover: open it to edit, make a note a todo or a todo a note, and share it.
@@ -28,7 +28,7 @@ export function BubbleTools({ card, open }: { card: Entry; open: () => void }) {
         <button type="button" className="bubble__open" aria-label={can.edit ? 'Edit' : 'Open'} title={can.edit ? 'Edit (Enter)' : 'Open (Enter)'} onClick={open}>
           <Icon name={can.edit ? 'edit' : 'open'} size={16} />
         </button>
-        {can.edit && card.type !== 'diary' && <TypeSwitch card={card} className="bubble__open" size={16} />}
+        {can.edit && <TypeSwitch card={card} className="bubble__open" size={16} />}
         {can.share && <ShareButton card={card} />}
       </span>
       {/* In the bubble's top right corner, in room the bubble keeps for it, so it covers none of the text. */}

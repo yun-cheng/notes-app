@@ -1,6 +1,7 @@
 import type { Context, Hono } from 'hono';
 import { photoIds, walk } from '../src/domain/content';
 import { isTimeKey } from '../src/domain/dates';
+import { parsePayload } from '../src/domain/payload';
 import type { CardPayload } from '../src/domain/types';
 import { allows, cardAccess, sharedWith } from './access';
 import { randomToken } from './auth';
@@ -62,7 +63,6 @@ export function unshare(db: Database, where: string, ...values: unknown[]): Stat
 interface PublicCard {
   type: CardPayload['type'];
   title: string;
-  date: string | null;
   content: unknown;
   status: string | null;
   due: string | null;
@@ -81,7 +81,7 @@ async function publicCard(db: Database, token: string, now: number): Promise<{ p
     .first<{ payload: string; updated_at: number; vault_id: string }>();
   // An encrypted card has nothing the server can show: a link made before its vault was encrypted is as good as off.
   if (!row || row.payload.startsWith('e1:')) return null;
-  return { payload: JSON.parse(row.payload) as CardPayload, updated_at: row.updated_at, vault_id: row.vault_id };
+  return { payload: parsePayload(row.payload), updated_at: row.updated_at, vault_id: row.vault_id };
 }
 
 /** Public links: no session, read only. The page itself is the app at /s/:token. */
@@ -97,7 +97,6 @@ export function publicRoutes(app: Hono<AppEnv>, googleFetch: GoogleFetch, now: (
     return c.json<PublicCard>({
       type: p.type,
       title: p.title,
-      date: p.type === 'diary' ? p.date : null,
       content: p.content,
       status: p.type === 'todo' ? p.status : null,
       due: p.type === 'todo' ? p.due : null,

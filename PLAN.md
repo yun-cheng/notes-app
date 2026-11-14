@@ -13,24 +13,24 @@ Existing apps were considered (Notesnook is the closest, then Anytype, then Obsi
 ## Product decisions
 
 ### Cards
-Everything is a card: `note`, `todo`, `diary`, `tag`.
+Everything is a card: `note`, `todo`, `tag`. (Until 2026-11-14 there was a `diary` card too, one per day; see "The diary is a vault" below.)
 
 - Todo adds status, due date, an optional due time and an optional repeat. Today and Upcoming are filters on the journal.
 - A note and a todo are the same entry written two ways, so one click turns either into the other (decided 2026-11-12): a todo's checkbox, due date, time and repeat go when it becomes a note, and a note becomes an open todo with no date. A note with no title gives its first line to the todo's title, and a todo with no details gives its title back as the note's text, so "buy milk" stays "buy milk" both ways. Undo puts back exactly what was there.
-- Diary adds a date, one entry per day. Main view: Calendar / daily page. Defaults to a private vault.
+- The diary is a vault every account starts with, named Diary. Its entries are notes and todos like any other, dated by when they were written.
 - Links and backlinks are in scope. Canvas/whiteboard is NOT needed for now.
 
 ### One journal for everything
-Decided 2026-11-12, like Logseq's journal. There is one place where everything is written and read: the Journal, a stream of compact bubbles holding notes, todos and diary entries together, oldest at the top and newest at the bottom like a chat, with a box at the bottom to write the next one. Kinds and places come from markers in the text, not from separate screens, and the box formats them as they're typed:
+Decided 2026-11-12, like Logseq's journal. There is one place where everything is written and read: the Journal, a stream of compact bubbles holding notes and todos together, oldest at the top and newest at the bottom like a chat, with a box at the bottom to write the next one. Kinds and places come from markers in the text, not from separate screens, and the box formats them as they're typed:
 
 - `[] ` or `TODO ` at the start turns the line into a checkbox (`#todo` makes a todo too); on a todo, `@today`, `@tomorrow`, `@fri` or `@2026-12-01` sets the due date, `@3pm` or `@15:00` the time, and `@daily`, `@weekdays`, `@weekly`, `@monthly`, `@yearly` or `@every-2-weeks` makes it repeat. A time or repeat with no date starts today.
 - Each line starting with `[] ` or `TODO ` starts its own entry, so a list of `[] …` lines makes a todo for each. With the box's todo button on, every line is a todo. A last line of only `#tags` applies to all of them.
-- `#diary` adds the text to the day's diary entry, in the private vault.
+- `#diary` files the entry in the Diary vault.
 - Any other `#tag` files it under that tag, making the tag if it's new.
 - Tags can be gathered in groups, made on the Tags page: a group of one choice, like Priority (High, Medium, Low), gives an entry at most one of its tags, so typing or adding another swaps it; a group of any number, like Topics, just gathers its tags. Groups show as their own sections in the sidebar, and a group's tags come first on an entry. Clicking a grouped tag on a message, or in an open entry, opens its group's tags, to switch it in place (High to Low) or clear it. An open entry with no tag from a one-choice group shows a faint "+ Priority" chip to set one. Any tag can have a color, picked from the dot beside it on the Tags page; its chips and its sidebar icon take that color (stored as the tag card's `color`, as on entries). A group is a tag card with `members` (its tags, in order), `choice` and `ordered`; it is never put on entries, and typing its name (`#priority`) adds nothing. Edits from two devices can leave two tags of a one-choice group on an entry; both stay, marked as a clash.
 - `#` suggests tags, `@` suggests due dates, a typed time and repeats, and `/` lists what can be added: a todo, tag, due date, the diary, a photo, a list, a quote or a heading.
 
-The sidebar is the journal's filter: by type (notes, todos, diary), by todo status (open, due today, upcoming, no date, done), by when it was written (today, the past 7 or 30 days, or a day picked in the Calendar), by tag, by vault, and by whether it holds links or photos (a link straight to a picture, like a .jpg, counts as a photo; a page's preview image doesn't). The journal's top bar sorts it by oldest first, newest first, recently edited, due date, or an ordered tag group (Priority, highest first, each tag under its own heading), with the order named beside an icon, or the icon alone on a phone. Filters combine. Picking a locked vault asks for its PIN right there. New entries go into whatever the journal is narrowed to. On a phone, the same filters open from a button at the top of the journal. Each section's heading folds it, remembered on the device; a folded section still shows the choice in use.
+The sidebar is the journal's filter: by type (notes, todos), by todo status (open, due today, upcoming, no date, done), by when it was written (today, the past 7 or 30 days, or a day picked in the Calendar), by tag, by vault, and by whether it holds links or photos (a link straight to a picture, like a .jpg, counts as a photo; a page's preview image doesn't). The journal's top bar sorts it by oldest first, newest first, recently edited, due date, or an ordered tag group (Priority, highest first, each tag under its own heading), with the order named beside an icon, or the icon alone on a phone. Filters combine. Picking a locked vault asks for its PIN right there. New entries go into whatever the journal is narrowed to; narrowed to one day, they are written on that day. On a phone, the same filters open from a button at the top of the journal. Each section's heading folds it, remembered on the device; a folded section still shows the choice in use.
 
 In a note, `/` adds a heading, list, quote, code, divider, photo or link to another note.
 
@@ -56,7 +56,7 @@ A vault answers "who can see this". Topics belong in tags, not vaults.
 - Each card has exactly one home vault.
 - A vault named after a group (e.g. "High school") only makes sense if those people are members, or it needs its own PIN.
 - Set per vault: lock (none or PIN), AI access (off, read, read + write), members.
-- When locked: left out of UI, search, backlinks and the journal (a locked diary day shows only as a "locked" placeholder). Links to its notes show as "Locked". A vault can be fully hidden until unlocked.
+- When locked: left out of UI, search, backlinks and the journal. Links to its notes show as "Locked". A vault can be fully hidden until unlocked.
 - Auto-lock on timeout or when the app goes to the background.
 - Search covers only unlocked vaults.
 
@@ -81,8 +81,8 @@ Runs beside the sync server on the same database, using Cloudflare's MCP setup f
 - Per-vault AI access: off (default), read, read + write. Private vaults can never have AI access.
 - The server enforces this, not the AI.
 - Write access is approved by the owner, once per vault (decided 2026-11-10): the AI access setting is the approval, with no per-change prompts. Every AI edit can be undone from history.
-- Tools, read: `search_cards`, `get_card` (with backlinks), `list_todos(due, status)`, `get_diary(date range)`.
-- Tools, write: `create_note`, `add_todo` (with a time and repeat), `complete_todo`, `append_to_diary`, plus editing existing notes.
+- Tools, read: `search_cards` (by type and vault), `get_card` (with backlinks), `list_todos(due, status)`.
+- Tools, write: `create_note`, `add_todo` (with a time and repeat), `complete_todo`, plus editing existing notes.
 - Every AI edit creates a version labeled as AI-authored, undoable in one click.
 - Notes shared with you by others are read-only to the AI, because they could contain text written to manipulate it.
 
@@ -116,7 +116,7 @@ User         id, google_sub, email, name
 Session      token_hash, user_id, expires_at
 Vault        id, owner_id, name, lock(none|pin), ai_access(off|read|write), pin_salt, pin_hash, pin_iterations, hidden
 VaultMember  vault_id, user_id, role(owner|editor|viewer)
-Card         id, home_vault_id, type(note|todo|diary|tag), payload(TipTap JSON + fields)
+Card         id, home_vault_id, type(note|todo|tag), payload(TipTap JSON + fields)
 Share        card_id, target(vault|user|public_link), role(view|comment|edit), expires_at
 Comment      id, card_id, author_id, anchor, body
 CardVersion  id, card_id, author_id, started_at, saved_at, payload, via, device, device_name, deleted
@@ -157,7 +157,6 @@ None. Defaults chosen while building are listed in the implementation notes, and
 ## Implementation notes from Milestone 1
 
 - Unsaved edits go to a synchronous `localStorage` journal first and are replayed on next launch, because an IndexedDB write started as a page closes never finishes. The journal holds plaintext, so Milestone 7 must encrypt or remove it.
-- Diary card IDs come from the vault and date, so two devices can't create two entries for one day once sync exists.
 - Each account has one default vault, with no vault UI until Milestone 3.
 - Backups are JSON and restore by merging, newest version of each card wins, and cards from other vaults move into the account's vault. Markdown export is one-way.
 - Search treats each Chinese, Japanese or Korean character as a term, so text in those scripts can be found without spaces.
@@ -170,7 +169,7 @@ None. Defaults chosen while building are listed in the implementation notes, and
 - Each account has its own local database and journal, so accounts on one browser stay apart in the app. Signing out keeps that account's local data, and unsynced changes go up at next sign-in. Until encryption ships, this does not stop someone tech-savvy with the unlocked device.
 - The first account to sign in on a browser takes over notes written before accounts existed, moved into that account's vault.
 - A push carries the last server version the device saw. Same version: it applies. Different: the newest `updated_at` wins, and the losing text is kept as a "(conflict copy)" card. No copy is made if only a todo's status or due date or a tag differs.
-- Each account's vault ID is derived from its user ID, so diary IDs match across devices.
+- Each account's vault ID is derived from its user ID.
 - Each account also gets a vault named Diary at sign-in (`diary-<user ID>`), a moment younger than the default vault so it lists second. An account from before it gets one at its next sign-in. It is an ordinary vault: it can be renamed, locked with a PIN, encrypted or shared.
 - Who can sign up is limited by the Google consent screen while it stays in Testing mode. Publishing it would need an allowlist first.
 
@@ -181,7 +180,6 @@ None. Defaults chosen while building are listed in the implementation notes, and
 - A PIN is typed into a text box with its letters masked, not a password box, so the browser's password manager and password-manager extensions leave it alone. In Chrome, their popup on a focused password box swallowed scrolling, so the sidebar wouldn't scroll beside a locked vault's PIN box.
 - Locked cards are removed where the index is built, so lists, search, backlinks, Today, Calendar and Markdown export can't reach them. Links into a locked vault read "Locked", and a JSON backup leaves locked vaults out.
 - Each account's default vault can't be locked, because new cards go there.
-- New diary entries go to the oldest private vault if there is one, otherwise the default vault. Existing entries stay where they are unless moved.
 - A hidden vault is unlocked by entering its PIN under Vaults, and its name is not shown until then.
 - Fingerprint unlock is per device and off by default. It uses the device's built-in authenticator through WebAuthn, and has not been tried on a real phone.
 - A forgotten PIN can't be recovered yet. Vault creation and PIN changes need a connection.
@@ -230,9 +228,9 @@ None. Defaults chosen while building are listed in the implementation notes, and
 - Approval happens in the app at `/oauth/authorize`, which uses the normal session. The session cookie stays SameSite=Strict, because the page calls the API from the app's own origin.
 - What an app can reach is set per vault (off, read, read and write) and enforced on the server. Private vaults are always off. Writes also need the user to own the vault, so shared vaults stay read only to AI.
 - Every vault closed to AI goes into the AI's index as locked, so links into it read "Locked" and its text never reaches search, through the same code that hides locked vaults in the app.
-- Tools: `list_vaults`, `search_cards`, `get_card`, `list_todos`, `get_diary`, `create_note`, `add_todo`, `complete_todo`, `append_to_diary`, `edit_card`. There is no delete. AI writes Markdown, which becomes the card's TipTap document; `[[Exact title]]` links to an existing card.
+- Tools: `list_vaults`, `search_cards`, `get_card`, `list_todos`, `create_note`, `add_todo`, `complete_todo`, `edit_card`. There is no delete. AI writes Markdown, which becomes the card's TipTap document; `[[Exact title]]` links to an existing card.
 - AI writes go through the same push path as devices, so they sync, and their versions record the app's name ("Ann via Claude (AI)"). An AI edit never extends a person's version.
-- New diary entries are refused while the diary lives in a private vault, because AI can't reach it.
+- The diary is the Diary vault, so AI reads or writes it only when the user opens that vault to AI, like any other.
 - The MCP `instructions` tell the model to treat card text as data, not instructions.
 - To connect Claude: Backup & settings, AI apps shows the address to add as a custom connector. Turn on AI access for a vault, under Vaults or on the approval page.
 
@@ -280,8 +278,8 @@ None. Defaults chosen while building are listed in the implementation notes, and
 
 ## Implementation notes from the journal
 
-- The stream orders notes and todos by when they were created, so editing doesn't move them, and groups them under day labels. A diary entry sits at the time it was started, or at the end of its day if it was written on another day.
-- Card types stay as they were (note, todo, diary, tag), so sync, MCP and the native apps are unchanged; only the web app's screens changed. Switching a note to a todo or back keeps the card's ID and syncs as an ordinary edit of its payload; the native app reads the type from the payload, so it shows the new type. The repository works out where the words go when the switch lands (`src/domain/retype.ts`), after any edit still on its way, and the editor saves when it loses focus, so words typed just before the click move too. The markers are read when the box is saved (`src/domain/entry.ts`), and `#todo` and `#diary` never become tags.
+- The stream orders notes and todos by when they were created, so editing doesn't move them, and groups them under day labels.
+- Card types stayed as they were (note, todo, diary, tag) when the journal came, so sync, MCP and the native apps were unchanged; only the web app's screens changed. Switching a note to a todo or back keeps the card's ID and syncs as an ordinary edit of its payload; the native app reads the type from the payload, so it shows the new type. The repository works out where the words go when the switch lands (`src/domain/retype.ts`), after any edit still on its way, and the editor saves when it loses focus, so words typed just before the click move too. The markers are read when the box is saved (`src/domain/entry.ts`), and `#todo` and `#diary` never become tags.
 - Web addresses typed in the box become links. The links filter finds addresses in links and in plain text alike (`linkUrls`), so older notes count too.
 - A weekday date (`@fri`) means the next one after today, so `@thu` on a Thursday is a week away.
 - A due time is `dueTime` (`HH:MM`, local) and a repeat is `repeat: {unit, every}` (day, week, month, year, or weekday for Monday to Friday) on the todo card; both are left off todos without them. A todo is overdue once its day has passed, or on its day once its time has. Sorting by due date puts a day's timed todos first, by time.
@@ -289,9 +287,9 @@ None. Defaults chosen while building are listed in the implementation notes, and
 - The filter lives in the address (`/journal?type=todo&status=today&tag=…&vault=…&when=week&sort=due`), so the back button and bookmarks work. `/today` and `/upcoming` redirect to their filters, and Calendar days open the journal for that day.
 - A tag's own page (rename, describe, pin) is still at `/card/:id`, reached from the tag button at the top of a tag-filtered journal or from All tags.
 - New entries take the filter's tag and vault; a todo filter makes the box write todos, and "Due today" makes them due today. A tag created from the box goes in the default vault.
-- With the diary locked, a `#diary` line stays in the box and the vault's PIN is asked for above it.
+- With the Diary vault locked (or any vault the entry would go into), the text stays in the box and the vault's PIN is asked for above it.
 - The box is a small TipTap editor (`JournalBox`). On saving, `entriesFromDoc` reads its rich text: each checkbox is a todo and the blocks between them one note, with formatting, links and photos kept. Checkbox lists never end up inside a note, so the note editor needn't support them. Enter saves on a computer, Shift+Enter starts a new line (the next checkbox in a list), and Cmd+Enter saves anywhere.
-- The command box still reads plain text (`parseEntries`). One text can hold several entries. A new tag typed in several of them is made once, `#diary` parts go into the diary in one save, and if part of the text can't be saved (the diary is locked) none of it is. Cards made together get creation times a millisecond apart, so they keep the order they were typed in.
+- The command box still reads plain text (`parseEntries`). One text can hold several entries. A new tag typed in several of them is made once, and if part of the text can't be saved (the Diary vault is locked) none of it is. Cards made together get creation times a millisecond apart, so they keep the order they were typed in.
 - Notes and todos open at `/journal/:id` in a sheet over the page they were opened from (Search, Calendar, a filtered journal), so the back button closes it. Old `/notes/:id` and `/card/:id` links to notes and todos redirect there.
 - The box saves on Enter on a computer (Shift+Enter for a new line). On a phone, Return makes a new line and the send button saves.
 - A batch change skips entries it doesn't apply to (a due date on a note) or that already match, and entries this account can't change, which the toast counts. Undo puts back each entry's own earlier value. Picks that fall outside a new filter are kept but not counted or changed.
@@ -299,6 +297,16 @@ None. Defaults chosen while building are listed in the implementation notes, and
 - The app keeps each preview on the device for a week (a page that gave nothing is asked again after an hour). Links in encrypted vaults are never previewed, so those addresses don't leave the device. A preview's image loads straight from the page's site, with no referrer.
 - In the command box, text with markers (`[]`, `#tag`, `@friday`) offers saving first; other text lists matching commands, then matching notes, then saving. Commands whose name matches come before ones that match by keyword.
 - The native apps still have the earlier layout; they follow once the web design settles.
+
+### The diary is a vault
+
+Decided 2026-11-14. A day used to have one diary card, with its own type, ID (`diary:<vault>:<date>`) and page, and `#diary` lines were added to it. Now the diary is an ordinary vault, made for every account at sign-in (`diary-<user ID>`, named Diary), and each `#diary` line is its own note (or todo) in it, like a message in a chat.
+
+- No `diary` card type. A diary card stored before this reads as a note on its day (`src/domain/payload.ts`), on devices, on the server for AI apps and public links, and in old backups. Nothing on the server was rewritten.
+- The journal narrowed to the Diary vault and a day is that day's diary; the Calendar dots days with something in the Diary vault, and its "Diary for this day" link goes there. `/day/<date>` leads to the journal for that day.
+- Written while the journal shows another day, an entry is dated that day.
+- The vault starts open, like any new vault; the PIN and encryption are the user's choice. AI sees it only when the user opens it to AI.
+- The native apps still know the old diary type; they need the same change.
 
 ## Implementation notes from the native apps
 

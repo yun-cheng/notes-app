@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { appendToDoc, dueWord, entriesFromDoc, parseDue, parseEntries, parseEntry } from './entry';
+import { dueWord, entriesFromDoc, parseDue, parseEntries, parseEntry } from './entry';
 import type { JSONNode } from './types';
 import { textToDoc } from './content';
 import { EMPTY_DOC } from './types';
@@ -57,8 +57,10 @@ describe('parseEntry', () => {
     expect(parseEntry('Lunch @friday was fun', TODAY)?.content).toEqual(textToDoc('Lunch @friday was fun'));
   });
 
-  it('sends #diary text to the diary', () => {
-    expect(parseEntry('Long walk by the river. #diary', TODAY)).toMatchObject({ kind: 'diary', content: textToDoc('Long walk by the river.') });
+  it('files #diary text, a note or a todo, in the diary', () => {
+    expect(parseEntry('Long walk by the river. #diary', TODAY)).toMatchObject({ kind: 'note', diary: true, content: textToDoc('Long walk by the river.'), tags: [] });
+    expect(parseEntry('[] Call grandma #diary', TODAY)).toMatchObject({ kind: 'todo', diary: true, title: 'Call grandma' });
+    expect(parseEntry('Long walk', TODAY)).not.toHaveProperty('diary');
   });
 });
 
@@ -141,7 +143,7 @@ describe('entriesFromDoc', () => {
 
   it('reads pasted [] lines and #diary, and skips what holds nothing', () => {
     expect(entriesFromDoc(docOf(para(t('[x] posted the letter'))), TODAY)).toMatchObject([{ kind: 'todo', title: 'posted the letter', done: true }]);
-    expect(entriesFromDoc(docOf(para(t('Quiet evening #diary'))), TODAY)).toMatchObject([{ kind: 'diary', content: docOf(para(t('Quiet evening'))) }]);
+    expect(entriesFromDoc(docOf(para(t('Quiet evening #diary'))), TODAY)).toMatchObject([{ kind: 'note', diary: true, content: docOf(para(t('Quiet evening'))) }]);
     expect(entriesFromDoc(docOf(para(), tasks(item(false, para())), para(t('#work'))), TODAY)).toEqual([]);
   });
 
@@ -194,12 +196,5 @@ describe('due times and repeats', () => {
 
   it('says what an @ word sets', () => {
     expect(['fri', '3pm', 'weekly', 'bob'].map((w) => dueWord(w, TODAY))).toEqual(['date', 'time', 'repeat', null]);
-  });
-});
-
-describe('appendToDoc', () => {
-  it('adds after what is there, dropping a trailing empty line', () => {
-    expect(appendToDoc(EMPTY_DOC, textToDoc('new'))).toEqual(textToDoc('new'));
-    expect(appendToDoc(textToDoc('one\n'), textToDoc('two'))).toEqual(textToDoc('one\ntwo'));
   });
 });

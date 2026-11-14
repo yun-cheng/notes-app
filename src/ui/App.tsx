@@ -196,7 +196,6 @@ function SignedInApp() {
           <Route path="card/:id" element={<CardPage />} />
           <Route path="card/:id/history" element={<HistoryPage />} />
           <Route path="day/:date" element={<DayPage />} />
-          <Route path="day/:date/history" element={<HistoryPage />} />
           <Route path="*" element={<Navigate to="/journal" replace />} />
         </Route>
       </Routes>

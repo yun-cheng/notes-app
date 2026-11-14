@@ -1,18 +1,20 @@
 import type { CardIndex } from './cardIndex';
 import { hasPhoto, linkUrls } from './content';
-import { addDays, isDateKey, parseDateKey, relativeDay, toDateKey } from './dates';
+import { addDays, isDateKey, relativeDay, toDateKey } from './dates';
 import { rankIn, type TagGroup } from './tagGroups';
-import type { Card, DiaryCard, NoteCard, TodoCard } from './types';
+import type { Card, NoteCard, TodoCard } from './types';
 
 /**
  * One bubble in the journal stream. `day` is the date it's grouped under: the day it was written, or with other
  * sorts the day it was edited or is due ('' for no due date). `at` orders it within the stream.
  */
-export type StreamItem =
-  | { kind: 'card'; card: NoteCard | TodoCard | DiaryCard; day: string; at: number }
-  | { kind: 'locked-diary'; date: string; vaultId: string; day: string; at: number };
+export interface StreamItem {
+  card: NoteCard | TodoCard;
+  day: string;
+  at: number;
+}
 
-export type EntryType = 'note' | 'todo' | 'diary';
+export type EntryType = 'note' | 'todo';
 /** For todos: open or done, or open and due by today, after today, or with no date. */
 export type TodoStatus = 'open' | 'done' | 'today' | 'upcoming' | 'undated';
 /** When it was written: today, the past 7 or 30 days, or one day (a date key). */
@@ -39,7 +41,7 @@ export interface StreamFilter {
   has?: Contains;
 }
 
-const TYPES: EntryType[] = ['note', 'todo', 'diary'];
+const TYPES: EntryType[] = ['note', 'todo'];
 const STATUSES: TodoStatus[] = ['open', 'done', 'today', 'upcoming', 'undated'];
 const WHENS = ['today', 'week', 'month'];
 const SORTS: BaseSort[] = ['written', 'newest', 'edited', 'due'];
@@ -92,7 +94,7 @@ export function whenRange(when: When, today: string): [string, string] {
 export const CONTAINS_LABEL: Record<Contains, string> = { link: 'With links', photo: 'With photos' };
 export const SORT_LABEL: Record<BaseSort, string> = { written: 'Oldest first', newest: 'Newest first', edited: 'Recently edited', due: 'Due date' };
 export const STATUS_LABEL: Record<TodoStatus, string> = { open: 'Open', done: 'Done', today: 'Due today', upcoming: 'Upcoming', undated: 'No date' };
-export const TYPE_LABEL: Record<EntryType, string> = { note: 'Notes', todo: 'Todos', diary: 'Diary' };
+export const TYPE_LABEL: Record<EntryType, string> = { note: 'Notes', todo: 'Todos' };
 export const WHEN_LABEL: Record<string, string> = { today: 'Written today', week: 'Past 7 days', month: 'Past 30 days' };
 
 /** The group a sort orders by, if it's a group sort and the group is still there. */
@@ -119,16 +121,8 @@ function matchesStatus(todo: TodoCard, status: TodoStatus, today: string): boole
   return true;
 }
 
-/** The end of a day, where a diary entry written on another day goes. */
-const endOfDay = (date: string) => parseDateKey(date).setHours(23, 59, 59, 999);
-
-/** When a diary entry sits in the stream: when it was started, if that was on its own day. */
-function diaryTime(card: DiaryCard): number {
-  return toDateKey(new Date(card.createdAt)) === card.date ? card.createdAt : endOfDay(card.date);
-}
-
-/** The day an entry belongs to: the one a diary entry is about, or the one a note or todo was written on. */
-const entryDay = (card: Card) => (card.type === 'diary' ? card.date : toDateKey(new Date(card.createdAt)));
+/** The day an entry was written on. */
+const entryDay = (card: Card) => toDateKey(new Date(card.createdAt));
 
 /** Whether an entry passes a filter. Tags aren't entries, so none does. */
 export function entryMatcher(filter: StreamFilter, today: string): (card: Card, day?: string) => boolean {
@@ -146,31 +140,14 @@ export function entryMatcher(filter: StreamFilter, today: string): (card: Card, 
     day <= to;
 }
 
-/**
- * Notes, todos and diary entries in the order they were written, oldest first, like messages in a chat.
- * Locked diary entries show as placeholders when nothing rules them out; their tags can't be read, so a tag hides them.
- */
+/** Notes and todos in the order they were written, oldest first, like messages in a chat. */
 export function streamItems(index: CardIndex, filter: StreamFilter = {}, today = toDateKey(new Date())): StreamItem[] {
-  const { tagId, vaultId, has } = filter;
-  const type = effectiveType(filter);
-  const [from, to] = filter.when ? whenRange(filter.when, today) : ['', '9999'];
-  const inRange = (day: string) => day >= from && day <= to;
   const keep = entryMatcher(filter, today);
-
   const items: StreamItem[] = [];
   for (const card of index.live) {
     if (card.type !== 'note' && card.type !== 'todo') continue;
-    const day = toDateKey(new Date(card.createdAt));
-    if (keep(card, day)) items.push({ kind: 'card', card, day, at: card.createdAt });
-  }
-  for (const card of index.diaryByDate.values()) {
-    if (keep(card, card.date)) items.push({ kind: 'card', card, day: card.date, at: diaryTime(card) });
-  }
-  if (!tagId && !has && (!type || type === 'diary')) {
-    for (const [date, locked] of index.lockedDiaries) {
-      if (index.diaryByDate.has(date) || !inRange(date) || (vaultId && vaultId !== locked)) continue;
-      items.push({ kind: 'locked-diary', date, vaultId: locked, day: date, at: endOfDay(date) });
-    }
+    const day = entryDay(card);
+    if (keep(card, day)) items.push({ card, day, at: card.createdAt });
   }
   const group = sortGroup(filter.sort, index.tagGroups.groups);
   if (group) return sortByGroup(items, group);
@@ -182,7 +159,7 @@ export function streamItems(index: CardIndex, filter: StreamFilter = {}, today =
 /** Highest in the group first, each of its tags under its own heading (`day` is the tag's ID), then entries with none. */
 function sortByGroup(items: StreamItem[], group: TagGroup): StreamItem[] {
   const ranked = items.map((i) => {
-    const rank = i.kind === 'card' ? rankIn(group, i.card.tags) : group.members.length;
+    const rank = rankIn(group, i.card.tags);
     return { item: { ...i, day: group.members[rank]?.id ?? '' }, rank };
   });
   return ranked.sort((a, b) => a.rank - b.rank || a.item.at - b.item.at).map((r) => r.item);
@@ -192,14 +169,13 @@ function sortItems(items: StreamItem[], sort: BaseSort): StreamItem[] {
   if (sort === 'written') return items.sort((a, b) => a.at - b.at);
   if (sort === 'newest') return items.sort((a, b) => b.at - a.at);
   if (sort === 'edited') {
-    // Locked entries can't say when they were edited, so they keep their written time.
-    const edited = items.map((i) => (i.kind === 'card' ? { ...i, at: i.card.updatedAt, day: toDateKey(new Date(i.card.updatedAt)) } : i));
+    const edited = items.map((i) => ({ ...i, at: i.card.updatedAt, day: toDateKey(new Date(i.card.updatedAt)) }));
     return edited.sort((a, b) => a.at - b.at);
   }
   // By due date, soonest first, and on a day by time, with todos due any time that day after the timed ones;
   // anything without a due date after, oldest written first.
-  const time = (i: StreamItem) => (i.kind === 'card' && i.card.type === 'todo' && i.card.dueTime) || '24:00';
-  const due = items.map((i) => ({ ...i, day: i.kind === 'card' && i.card.type === 'todo' ? (i.card.due ?? '') : '' }));
+  const time = (i: StreamItem) => (i.card.type === 'todo' && i.card.dueTime) || '24:00';
+  const due = items.map((i) => ({ ...i, day: i.card.type === 'todo' ? (i.card.due ?? '') : '' }));
   const order = (x: string, y: string) => (x < y ? -1 : x > y ? 1 : 0);
   return due.sort((a, b) => (a.day === b.day ? order(time(a), time(b)) || a.at - b.at : !a.day ? 1 : !b.day ? -1 : order(a.day, b.day)));
 }

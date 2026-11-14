@@ -42,5 +42,5 @@ export function permissions(card: Card, vaults: Vault[], shared: ReadonlyMap<str
 /** The account's own main vault, which new cards go into. */
 export const mainVault = (vaults: Vault[], accountId: string) => vaults.find((v) => v.id === `vault-${accountId}`) ?? vaults[0];
 
-/** A vault that is this account's alone: it owns it and nobody else is in it. */
-export const ownAlone = (vault: Vault | undefined): boolean => !!vault && (vault.role ?? 'owner') === 'owner' && (vault.members ?? 1) <= 1;
+/** The account's diary: the vault made for it at sign-in, whatever it has been renamed to. `#diary` files an entry there. */
+export const diaryVault = (vaults: Vault[], accountId: string) => vaults.find((v) => v.id === `diary-${accountId}`);

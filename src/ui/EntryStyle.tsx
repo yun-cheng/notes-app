@@ -1,10 +1,10 @@
 import { linkUrls, photoIds } from '../domain/content';
-import { CARD_COLORS, isCardColor, type CardColor, type DiaryCard, type NoteCard, type PreviewStyle, type TodoCard } from '../domain/types';
+import { CARD_COLORS, isCardColor, type CardColor, type NoteCard, type PreviewStyle, type TodoCard } from '../domain/types';
 import { useCards } from '../state/CardsContext';
 import { LINK_STYLES, PHOTO_STYLES, useDisplayPrefs } from './displayPrefs';
 import { usePopover } from './usePopover';
 
-type Entry = NoteCard | TodoCard | DiaryCard;
+type Entry = NoteCard | TodoCard;
 
 const COLOR_NAMES: Record<CardColor, string> = { red: 'Red', orange: 'Orange', yellow: 'Yellow', green: 'Green', blue: 'Blue', purple: 'Purple', pink: 'Pink', gray: 'Gray' };
 

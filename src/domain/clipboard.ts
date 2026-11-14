@@ -2,7 +2,7 @@ import { isDateKey, isTimeKey } from './dates';
 import type { Entry } from './entry';
 import { toMarkdown, toPlainText, type TitleResolver } from './markdown';
 import { isRepeat, repeatWord } from './repeat';
-import type { DiaryCard, JSONNode, NoteCard, TodoCard } from './types';
+import type { JSONNode, NoteCard, TodoCard } from './types';
 
 /**
  * Copying entries out of the journal and pasting them back. The clipboard gets readable text for other apps, and
@@ -11,14 +11,14 @@ import type { DiaryCard, JSONNode, NoteCard, TodoCard } from './types';
  */
 export const ENTRIES_TYPE = 'application/x-notes-entries+json';
 
-type Copyable = NoteCard | TodoCard | DiaryCard;
+type Copyable = NoteCard | TodoCard;
 type TagName = (id: string) => string | undefined;
 
 const MAX_ENTRIES = 1000;
 
 /**
  * Entries as pasting makes them again. Tags go by name, so they land on the same tags, or new ones with the same
- * names, wherever they're pasted. A diary entry comes back as a note, since a day has one diary entry.
+ * names, wherever they're pasted.
  */
 export function toEntries(cards: Copyable[], tagName: TagName): Entry[] {
   return cards.map((card) => {
@@ -66,7 +66,7 @@ export function entriesText(cards: Copyable[], tagName: TagName, linkTitle: Titl
  * and list markers kept and links as their addresses. No checkbox, tags, due date, formatting or photos.
  */
 export function entryText(card: Copyable, linkTitle: TitleResolver): string {
-  return [card.type === 'diary' ? '' : card.title.trim(), toPlainText(card.content, linkTitle)].filter(Boolean).join('\n\n');
+  return [card.title.trim(), toPlainText(card.content, linkTitle)].filter(Boolean).join('\n\n');
 }
 
 export function encodeEntries(entries: Entry[]): string {

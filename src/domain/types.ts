@@ -69,10 +69,6 @@ export interface TodoCard extends CardCommon {
   repeat?: Repeat | null;
   completedAt: number | null;
 }
-export interface DiaryCard extends CardCommon {
-  type: 'diary';
-  date: string;
-}
 export interface TagCard extends CardCommon {
   type: 'tag';
   /** A pinned tag appears in the sidebar and acts as a folder. */
@@ -88,9 +84,9 @@ export interface TagCard extends CardCommon {
   ordered?: boolean;
 }
 
-export type Card = NoteCard | TodoCard | DiaryCard | TagCard;
+export type Card = NoteCard | TodoCard | TagCard;
 export type CardType = Card['type'];
-export const CARD_TYPES: readonly CardType[] = ['note', 'todo', 'diary', 'tag'];
+export const CARD_TYPES: readonly CardType[] = ['note', 'todo', 'tag'];
 
 type DistributiveOmit<T, K extends PropertyKey> = T extends unknown ? Omit<T, K> : never;
 export type CardPayload = DistributiveOmit<Card, keyof CardEnvelope>;

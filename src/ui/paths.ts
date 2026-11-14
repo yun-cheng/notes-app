@@ -19,10 +19,10 @@ export function historyPath(filter: StreamFilter): string {
 
 export const opensInSheet = (card: Card) => card.type === 'note' || card.type === 'todo';
 
-export const cardPath = (card: Card) => (card.type === 'diary' ? `/day/${card.date}` : opensInSheet(card) ? entryPath(card.id) : `/card/${card.id}`);
+export const cardPath = (card: Card) => (opensInSheet(card) ? entryPath(card.id) : `/card/${card.id}`);
 
 /** An entry's own history: every version of it, with restore. */
-export const versionsPath = (card: Card) => (card.type === 'diary' ? `/day/${card.date}/history` : `/card/${card.id}/history`);
+export const versionsPath = (card: Card) => `/card/${card.id}/history`;
 
 /** Router state for a link that opens a sheet: the page to keep showing under it. */
 export interface SheetState {

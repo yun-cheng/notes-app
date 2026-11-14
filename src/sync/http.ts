@@ -184,9 +184,8 @@ export const deleteComment = async (cardId: string, id: string) =>
   (await request<{ comments: CardComment[] }>(`${cardPath(cardId)}/comments/${id}`, { method: 'DELETE' })).comments;
 
 export interface PublicCard {
-  type: 'note' | 'todo' | 'diary' | 'tag';
+  type: 'note' | 'todo' | 'tag';
   title: string;
-  date: string | null;
   content: JSONNode;
   status: string | null;
   due: string | null;

@@ -3,7 +3,7 @@ import { linkTitle } from '../domain/cardIndex';
 import { encodeEntries, entriesText, entryText, ENTRIES_TYPE, toEntries } from '../domain/clipboard';
 import type { Entry } from '../domain/entry';
 import type { EntryType } from '../domain/retype';
-import type { Card, DiaryCard, NoteCard, TodoCard } from '../domain/types';
+import type { Card, NoteCard, TodoCard } from '../domain/types';
 import { useCards } from '../state/CardsContext';
 import { useToast } from './Toast';
 import { useUndo } from './useUndo';
@@ -44,7 +44,7 @@ async function writeClipboard(text: string, json: string): Promise<boolean> {
   }
 }
 
-const copyable = (c: Card | undefined): c is NoteCard | TodoCard | DiaryCard => !!c && !c.deleted && c.type !== 'tag';
+const copyable = (c: Card | undefined): c is NoteCard | TodoCard => !!c && !c.deleted && c.type !== 'tag';
 
 /** Copy, cut, trash and paste for journal entries, each with a toast and, where it changes something, an undo. */
 export function useEntryActions() {
@@ -55,7 +55,7 @@ export function useEntryActions() {
 
   const cardsFor = (ids: string[]) => ids.map((id) => index.byId.get(id)).filter(copyable);
 
-  const write = (cards: (NoteCard | TodoCard | DiaryCard)[]) => {
+  const write = (cards: (NoteCard | TodoCard)[]) => {
     const tagName = (id: string) => index.tags.find((t) => t.id === id)?.title;
     const text = entriesText(cards, tagName, (id, label) => linkTitle(index, id, label));
     return writeClipboard(text, encodeEntries(toEntries(cards, tagName)));
@@ -104,7 +104,7 @@ export function useEntryActions() {
   /** Makes copied entries again, as new entries written now, in whatever the journal is narrowed to. */
   const paste = async (list: Entry[], opts: SaveOptions) => {
     const result = await saveEntries(list, opts);
-    if (result.unlock) return toast('Unlock the diary to paste into it.');
+    if (result.unlock) return toast(`Unlock ${vaults.find((v) => v.id === result.unlock)?.name ?? 'the vault'} to paste into it.`);
     if (!result.saved) return;
     const { action } = result;
     toast(`Pasted ${entries(result.saved)}`, { action: action ? { label: 'Undo', run: () => void undoAction(action) } : undefined });

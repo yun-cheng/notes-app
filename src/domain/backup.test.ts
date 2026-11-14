@@ -46,11 +46,9 @@ describe('backup', () => {
       note('a', 'Plan: A/B', { tags: ['t'] }),
       note('b', 'plan: a/b'),
       todo('x', '2026-11-12', { title: 'Call' }),
-      { ...base, id: 'd', title: '', type: 'diary', date: '2026-11-10', content: doc(p(text('hello'))) },
     ]);
     const files = markdownFiles(index);
     const paths = files.map((f) => f.path).sort();
-    expect(paths).toContain('diary/2026-11-10.md');
     expect(paths).toContain('todos/Call.md');
     expect(paths.filter((x) => x.toLowerCase().startsWith('notes/plan a b'))).toHaveLength(2);
     const noteFile = files.find((f) => f.text.includes('id: a'))!;
@@ -72,5 +70,11 @@ describe('backup', () => {
     expect(() => parseBackup('{"format":"x"}')).toThrow(/not a backup/);
     expect(() => parseBackup(JSON.stringify({ ...b, version: 9 }))).toThrow(/version 9/);
     expect(() => parseBackup(JSON.stringify({ ...b, cards: [{ id: 1 }] }))).toThrow(/damaged/);
+  });
+  it('restores an old backup’s diary cards as notes', () => {
+    const old = { ...base, id: 'd', title: '', type: 'diary', date: '2026-11-10', content: doc(p(text('hello'))) };
+    const [card] = parseBackup(JSON.stringify({ ...makeBackup([], [], 0), cards: [old] })).cards;
+    expect(card).toMatchObject({ id: 'd', type: 'note', content: old.content });
+    expect(card).not.toHaveProperty('date');
   });
 });

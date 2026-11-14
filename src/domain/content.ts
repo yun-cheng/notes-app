@@ -33,7 +33,6 @@ export function plainText(content: JSONNode, titleOf?: (id: string, label: strin
 
 /** The title, or for a card without one, its first line of text. */
 export function displayTitle(card: Card): string {
-  if (card.type === 'diary') return card.date;
   return card.title.trim() || firstLine(card.content) || 'Untitled';
 }
 

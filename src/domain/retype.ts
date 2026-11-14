@@ -7,7 +7,7 @@ import { EMPTY_DOC, type Card, type JSONNode, type NoteCard, type TodoCard } fro
  */
 export type EntryType = 'note' | 'todo';
 
-/** The card as the other type, before the patch from `retypePatch` moves its words. Diary entries and tags stay as they are. */
+/** The card as the other type, before the patch from `retypePatch` moves its words. Tags stay as they are. */
 export function changeType(card: Card, type: EntryType): Card {
   if (card.type === type) return card;
   if (card.type === 'todo') {

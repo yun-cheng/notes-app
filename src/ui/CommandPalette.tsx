@@ -30,8 +30,8 @@ interface Command {
   run: () => void;
 }
 
-const TYPE_ICON: Record<Card['type'], IconName> = { note: 'note', todo: 'todo', diary: 'diary', tag: 'tag' };
-const TYPE_NAME: Record<Card['type'], string> = { note: 'Note', todo: 'Todo', diary: 'Diary', tag: 'Tag' };
+const TYPE_ICON: Record<Card['type'], IconName> = { note: 'note', todo: 'todo', tag: 'tag' };
+const TYPE_NAME: Record<Card['type'], string> = { note: 'Note', todo: 'Todo', tag: 'Tag' };
 
 /** Every query word appears somewhere in the command's words. */
 function matches(command: Command, words: string[]): boolean {
@@ -127,8 +127,8 @@ export function CommandPalette({ onClose, onShortcuts }: { onClose: () => void; 
   let writing = false;
   const entry = text && !onlyCommands ? parseEntry(text, today) : null;
   if (entry) {
-    writing = entry.kind !== 'note' || entry.tags.length > 0;
-    const where = entry.kind === 'todo' ? 'as a todo' : entry.kind === 'diary' ? "to today's diary" : 'as a note';
+    writing = entry.kind !== 'note' || entry.tags.length > 0 || !!entry.diary;
+    const where = `${entry.kind === 'todo' ? 'as a todo' : 'as a note'}${entry.diary ? ' in the diary' : ''}`;
     const tags = entry.tags.length ? `, tagged ${entry.tags.map((t) => `#${t}`).join(' ')}` : '';
     const at = entry.dueTime ? ` at ${formatTime(entry.dueTime)}` : '';
     const repeats = entry.repeat ? `, ${repeatLabel(entry.repeat).toLowerCase()}` : '';
@@ -137,10 +137,10 @@ export function CommandPalette({ onClose, onShortcuts }: { onClose: () => void; 
       void saveText(text, { todo }).then((result) => {
         if (result.saved) toast(result.saved === 1 ? 'Saved to the journal' : `Saved ${result.saved} entries to the journal`, { action: { label: 'Show', run: () => void navigate('/journal') } });
         else if (result.unlock) {
-          toast('Unlock the diary first, then save it again.', { action: { label: 'Unlock', run: () => void navigate(journalPath({ vaultId: result.unlock })) } });
+          toast('Unlock the vault first, then save it again.', { action: { label: 'Unlock', run: () => void navigate(journalPath({ vaultId: result.unlock })) } });
         }
       });
-    const icon: IconName = entry.kind === 'todo' ? 'todo' : entry.kind === 'diary' ? 'diary' : 'note';
+    const icon: IconName = entry.kind === 'todo' ? 'todo' : entry.diary ? 'diary' : 'note';
     writes.push({ id: 'save', group: 'Write', label: `Save “${text}”`, hint: `${where}${due}${tags}`, icon, run: write(false) });
     if (entry.kind === 'note') writes.push({ id: 'save-todo', group: 'Write', label: `Add todo “${text}”`, icon: 'todo', run: write(true) });
   }

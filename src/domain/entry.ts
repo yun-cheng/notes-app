@@ -5,13 +5,15 @@ import type { JSONNode, Repeat } from './types';
 
 /**
  * What the composer turns typed text into. Everything is written in one stream, and markers in the text decide
- * where it goes: `[] ` or `TODO ` (or `#todo`) makes a todo, `#diary` adds to the day's diary, any other `#tag`
+ * where it goes: `[] ` or `TODO ` (or `#todo`) makes a todo, `#diary` files it in the Diary vault, any other `#tag`
  * files it under that tag, and on a todo `@tomorrow`, `@fri` or `@2026-12-01` sets the due date, `@3pm` or
  * `@15:00` its time, and `@weekly` or `@every-2-weeks` makes it repeat.
  */
 export interface Entry {
-  kind: 'note' | 'todo' | 'diary';
-  /** A todo's first line. Typed notes and diary entries have none and are named by their first line; a copied note keeps its title. */
+  kind: 'note' | 'todo';
+  /** Typed with `#diary`: it goes in the account's Diary vault. */
+  diary?: boolean;
+  /** A todo's first line. Typed notes have none and are named by their first line; a copied note keeps its title. */
   title: string;
   content: JSONNode;
   /** Tag names as typed, without `#`, each once. Never `todo` or `diary`. */
@@ -114,10 +116,11 @@ export function parseEntry(text: string, today: string): Entry | null {
 
   const body = lines.join('\n').trim();
   if (!body) return null;
-  if (!todo) return { kind: diary ? 'diary' : 'note', title: '', content: textToDoc(body), tags, due: null };
+  const where = diary ? { diary } : {};
+  if (!todo) return { kind: 'note', title: '', content: textToDoc(body), tags, due: null, ...where };
 
   const [head, ...rest] = body.split('\n');
-  return { kind: 'todo', title: head.trim(), content: textToDoc(rest.join('\n').trim()), tags, ...due.result(), ...(done ? { done } : {}) };
+  return { kind: 'todo', title: head.trim(), content: textToDoc(rest.join('\n').trim()), tags, ...due.result(), ...(done ? { done } : {}), ...where };
 }
 
 const TAGS_ONLY = /^\s*(#[\p{L}\p{N}_-]+\s*)+$/u;
@@ -254,7 +257,7 @@ export function entriesFromDoc(doc: JSONNode, today: string): Entry[] {
     if (!hasSubstance(body)) continue;
 
     if (!todo) {
-      entries.push({ kind: diary ? 'diary' : 'note', title: '', content: { type: 'doc', content: body }, tags, due: null });
+      entries.push({ kind: 'note', title: '', content: { type: 'doc', content: body }, tags, due: null, ...(diary ? { diary } : {}) });
       continue;
     }
     // A todo is named by its first line; anything after it, or a photo in it, is its details.
@@ -268,15 +271,8 @@ export function entriesFromDoc(doc: JSONNode, today: string): Entry[] {
       tags,
       ...due.result(),
       ...(chunk.done ? { done: true } : {}),
+      ...(diary ? { diary } : {}),
     });
   }
   return entries;
-}
-
-/** Adds typed text to the end of a diary entry, after what is already there. */
-export function appendToDoc(doc: JSONNode, addition: JSONNode): JSONNode {
-  const blocks = [...(doc.content ?? [])];
-  while (blocks.length && blocks[blocks.length - 1].type === 'paragraph' && !blocks[blocks.length - 1].content?.length) blocks.pop();
-  if (!blocks.length) return addition;
-  return { ...doc, content: [...blocks, ...(addition.content ?? [])] };
 }

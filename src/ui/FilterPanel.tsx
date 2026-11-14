@@ -89,7 +89,7 @@ export function SortMenu({ filter }: { filter: StreamFilter }) {
   );
 }
 
-const TYPE_ICON: Record<EntryType, IconName> = { note: 'note', todo: 'todo', diary: 'diary' };
+const TYPE_ICON: Record<EntryType, IconName> = { note: 'note', todo: 'todo' };
 const STATUSES: TodoStatus[] = ['open', 'today', 'upcoming', 'undated', 'done'];
 
 /**

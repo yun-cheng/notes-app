@@ -1,11 +1,10 @@
 import { beforeEach, describe, expect, it } from 'vitest';
 import { CardRepository } from './repository';
-import { diaryId } from '../domain/rehome';
 import { MemoryStore } from './memoryStore';
 import type { Journal, JournalOp } from './journal';
 import { jsonCodec, type PayloadCodec } from './types';
 import { makeBackup } from '../domain/backup';
-import type { DiaryCard, TodoCard, Vault } from '../domain/types';
+import type { NoteCard, TodoCard, Vault } from '../domain/types';
 
 const doc = (t: string) => ({ type: 'doc', content: [{ type: 'paragraph', content: [{ type: 'text', text: t }] }] });
 
@@ -111,30 +110,14 @@ describe('updates', () => {
   });
 });
 
-describe('diary', () => {
-  it('creates one entry per day and merges later saves', async () => {
-    const first = await repo.saveDiary('2026-11-10', { content: doc('one') });
-    const second = await repo.saveDiary('2026-11-10', { tags: ['t'] });
-    expect(first.id).toBe(second.id);
-    expect((await store.listCards())).toHaveLength(1);
-    expect(second.content).toEqual(doc('one'));
-    expect((second as DiaryCard).date).toBe('2026-11-10');
-  });
-  it('creates only one entry from concurrent first saves', async () => {
-    await Promise.all([repo.saveDiary('2026-11-10', { content: doc('a') }), repo.saveDiary('2026-11-10', { tags: ['t'] })]);
-    const records = await store.listCards();
-    expect(records).toHaveLength(1);
-    const card = await repo.decode(records[0]);
-    expect(card.content).toEqual(doc('a'));
-    expect(card.tags).toEqual(['t']);
-  });
-  it('starts fresh over a deleted entry', async () => {
-    const first = await repo.saveDiary('2026-11-10', { content: doc('old'), tags: ['t'] });
-    await repo.setDeleted(first.id, true);
-    const next = await repo.saveDiary('2026-11-10', { content: doc('new') });
-    expect(next.deleted).toBe(false);
-    expect(next.tags).toEqual([]);
-    expect(next.content).toEqual(doc('new'));
+describe('entries written for another day', () => {
+  it('are dated that day, and still saved now', async () => {
+    const before = clock;
+    const card = await repo.createNote({ title: 'x', createdAt: 5 });
+    expect(card.createdAt).toBe(5);
+    expect(card.updatedAt).toBeGreaterThanOrEqual(before);
+    const todo = await repo.createTodo({ title: 'y', done: true, createdAt: 6 });
+    expect(todo).toMatchObject({ createdAt: 6, completedAt: todo.updatedAt });
   });
 });
 
@@ -162,15 +145,22 @@ describe('journal', () => {
     const realPut = store.putCards.bind(store);
     hangAfter(store);
     void first.update(card.id, { title: 'after' });
-    void first.saveDiary('2026-11-10', { content: doc('last words') });
-    expect(journal.load()).toHaveLength(2);
+    expect(journal.load()).toHaveLength(1);
 
     store.putCards = realPut;
     const reopened = new CardRepository(store, jsonCodec, () => clock++, () => `j${++n}`, journal);
     await reopened.init();
     const records = await Promise.all((await store.listCards()).map((x) => reopened.decode(x)));
     expect(records.find((c) => c.id === card.id)?.title).toBe('after');
-    expect(records.find((c) => c.type === 'diary')?.content).toEqual(doc('last words'));
+    expect(journal.load()).toEqual([]);
+  });
+
+  it('lets go of a diary write left in a journal from before the diary was a vault', async () => {
+    const journal = memoryJournal();
+    journal.save([{ kind: 'diary', at: 1, date: '2026-11-10', patch: {} } as unknown as JournalOp]);
+    const r = new CardRepository(store, jsonCodec, () => clock++, () => `j${++n}`, journal);
+    await r.init();
+    expect(await store.listCards()).toEqual([]);
     expect(journal.load()).toEqual([]);
   });
 
@@ -192,14 +182,6 @@ describe('vaults', () => {
     const card = await repo.createNote({ title: 'x', vaultId: 'private' });
     expect(card.vaultId).toBe('private');
     expect((await repo.createNote({ title: 'y' })).vaultId).not.toBe('private');
-  });
-  it('files a diary entry under the chosen vault', async () => {
-    const card = await repo.saveDiary('2026-11-10', { content: doc('x') }, undefined, 'private');
-    expect(card.vaultId).toBe('private');
-    expect(card.id).toBe(diaryId('private', '2026-11-10'));
-    const again = await repo.saveDiary('2026-11-10', { tags: ['t'] }, undefined, 'private');
-    expect(again.id).toBe(card.id);
-    expect(await store.listCards()).toHaveLength(1);
   });
   it('moves a card, marking it for sync', async () => {
     const card = await repo.createNote({ title: 'x' });
@@ -242,11 +224,11 @@ describe('backup import', () => {
   });
   it('moves cards from another vault into this account', async () => {
     const vault = await repo.init();
-    const entry: DiaryCard = { id: diaryId('foreign', '2026-11-10'), vaultId: 'foreign', updatedAt: 5, createdAt: 5, deleted: false, seq: 0, title: '', content: doc('hi'), tags: [], type: 'diary', date: '2026-11-10' };
+    const entry: NoteCard = { id: 'n', vaultId: 'foreign', updatedAt: 5, createdAt: 5, deleted: false, seq: 0, title: '', content: doc('hi'), tags: [], type: 'note' };
     await repo.importBackup(makeBackup([], [entry]));
     const [record] = await store.listCards();
     expect(record.vault_id).toBe(vault.id);
-    expect(record.id).toBe(diaryId(vault.id, '2026-11-10'));
+    expect(record.id).toBe('n');
   });
   it('keeps the known server version when an import updates a synced card', async () => {
     const card = await repo.createNote({ title: 'x' });

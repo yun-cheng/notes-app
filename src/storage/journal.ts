@@ -1,4 +1,4 @@
-import type { CardColor, DiaryCard, JSONNode, PreviewStyle, Repeat } from '../domain/types';
+import type { CardColor, JSONNode, PreviewStyle, Repeat } from '../domain/types';
 
 export interface CardPatch {
   /** Turns a note into a todo or back. See `retype.ts`. */
@@ -21,11 +21,8 @@ export interface CardPatch {
   choice?: 'one' | 'many';
   ordered?: boolean;
 }
-export type DiaryPatch = Partial<Pick<DiaryCard, 'content' | 'tags'>>;
-
-export type JournalOp =
-  | { kind: 'update'; at: number; id: string; patch: CardPatch }
-  | { kind: 'diary'; at: number; date: string; patch: DiaryPatch; existingId?: string; vaultId?: string };
+/** An edit not yet stored. A journal saved before the diary was a vault may hold `diary` ops too, which are let go. */
+export type JournalOp = { kind: 'update'; at: number; id: string; patch: CardPatch } | { kind: 'diary' };
 
 /**
  * Edits not yet committed to the store. IndexedDB is asynchronous, so a write started

@@ -3,7 +3,6 @@ import { Link, useNavigate, useParams } from 'react-router';
 import { permissions } from '../../domain/access';
 import { linkTitle } from '../../domain/cardIndex';
 import { displayTitle } from '../../domain/content';
-import { formatDay } from '../../domain/dates';
 import { cardLines, changeSize, diffLines, restorePatch, sameContent, type DiffLine } from '../../domain/history';
 import type { Card } from '../../domain/types';
 import { useCards } from '../../state/CardsContext';
@@ -53,10 +52,10 @@ function problem(err: unknown): string {
 }
 
 export function HistoryPage() {
-  const { id, date } = useParams();
+  const { id } = useParams();
   const { index } = useCards();
-  const card = date ? index.diaryByDate.get(date) : id ? index.byId.get(id) : undefined;
-  const lockedIn = date ? index.lockedDiaries.get(date) : id ? index.lockedCards.get(id) : undefined;
+  const card = id ? index.byId.get(id) : undefined;
+  const lockedIn = id ? index.lockedCards.get(id) : undefined;
 
   if (lockedIn) {
     return (
@@ -68,7 +67,7 @@ export function HistoryPage() {
   if (!card) {
     return (
       <Page title="History">
-        <Empty>{date ? `There's no diary entry for ${formatDay(date)}.` : "This card doesn't exist on this device."}</Empty>
+        <Empty>This card doesn't exist on this device.</Empty>
       </Page>
     );
   }
@@ -169,7 +168,7 @@ function History({ card }: { card: Card }) {
       <Icon name="left" />
     </Link>
   );
-  const heading = card.type === 'diary' ? formatDay(card.date) : displayTitle(card);
+  const heading = displayTitle(card);
 
   if (unsynced || versions?.length === 0) {
     return (
@@ -234,7 +233,7 @@ function History({ card }: { card: Card }) {
               <Empty>Loading…</Empty>
             ) : mode === 'full' ? (
               <>
-                {shown!.type !== 'diary' && <h2 className="history__title">{displayTitle(shown!)}</h2>}
+                <h2 className="history__title">{displayTitle(shown!)}</h2>
                 <ReadOnlyDoc key={current} content={shown!.content} />
               </>
             ) : (

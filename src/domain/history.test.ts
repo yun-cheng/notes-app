@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import { cardLines, changeSize, diffExcerpt, diffLines, diffWords, restorePatch, sameContent } from './history';
 import { doc, link, note, p, text, todo } from './testFixtures';
-import type { DiaryCard, JSONNode } from './types';
+import type { JSONNode } from './types';
 
 const list = (type: 'bulletList' | 'orderedList', ...items: string[]): JSONNode => ({
   type,
@@ -27,9 +27,8 @@ describe('cardLines', () => {
       '> quoted',
     ]);
   });
-  it('leaves the title out of a diary entry and drops trailing blank lines', () => {
-    const entry: DiaryCard = { ...note('d', ''), type: 'diary', date: '2026-11-10', content: doc(p(text('Rain')), p()) };
-    expect(cardLines(entry)).toEqual(['Rain']);
+  it('drops trailing blank lines', () => {
+    expect(cardLines(note('d', '', { content: doc(p(text('Rain')), p()) }))).toEqual(['Title: Untitled', 'Rain']);
   });
 });
 

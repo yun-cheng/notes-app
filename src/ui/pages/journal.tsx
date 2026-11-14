@@ -1,11 +1,11 @@
 import { useEffect, useLayoutEffect, useRef, useState } from 'react';
 import { Link, NavLink, Outlet, useLocation, useNavigate, useParams } from 'react-router';
-import { permissions } from '../../domain/access';
+import { diaryVault, permissions } from '../../domain/access';
 import { linkTitle } from '../../domain/cardIndex';
 import { displayTitle, previewLines, splitLinks } from '../../domain/content';
 import { isDateKey, relativeDay, relativeDayInSentence, toDateKey } from '../../domain/dates';
 import { isFiltered, sortGroup, streamItems, type StreamItem, type StreamSort } from '../../domain/stream';
-import type { DiaryCard, NoteCard, TodoCard } from '../../domain/types';
+import type { NoteCard, TodoCard } from '../../domain/types';
 import { useCards, useToday } from '../../state/CardsContext';
 import { Comments } from '../Comments';
 import { Backlinks, Empty, Page, TagChips, TagPicker, TitleField, useDeleteCard, VaultField } from '../components';
@@ -29,20 +29,21 @@ import { DueLabel, DueMenu, useTickTodo } from '../TodoDue';
 const time = (at: number) => new Date(at).toLocaleTimeString(undefined, { hour: 'numeric', minute: '2-digit' });
 
 /**
- * The one place for everything written: notes, todos and diary entries in a stream like a chat. The sidebar's
+ * The one place for everything written: notes and todos, the diary's among them, in a stream like a chat. The sidebar's
  * filters narrow and order it, and a locked vault asks for its PIN right here.
  */
 export function JournalPage() {
-  const { index, vaults, locked } = useCards();
+  const { index, vaults, locked, accountId } = useCards();
   const today = useToday();
   const filter = useJournalFilter();
+  const diary = diaryVault(vaults, accountId);
   const title = useFilterTitle(filter);
   const [filtering, setFiltering] = useState(false);
   const tag = index.tags.find((t) => t.id === filter.tagId);
   const vault = vaults.find((v) => v.id === filter.vaultId);
   const filtered = isFiltered(filter);
   const items = streamItems(index, filter, today);
-  const order = items.flatMap((i) => (i.kind === 'card' ? [i.card.id] : []));
+  const order = items.map((i) => i.card.id);
   const selection = useSelectionState(order);
   const vaultLocked = !!vault && locked.has(vault.id);
   useEntryShortcuts(selection, filter, !vaultLocked);
@@ -75,8 +76,8 @@ export function JournalPage() {
           <Icon name="tag" />
         </Link>
       )}
-      {filter.when && isDateKey(filter.when) && (
-        <Link className="btn btn--quiet" to={`/day/${filter.when}`}>
+      {filter.when && isDateKey(filter.when) && diary && filter.vaultId !== diary.id && (
+        <Link className="btn btn--quiet" to={journalPath({ when: filter.when, vaultId: diary.id })}>
           Diary for this day
         </Link>
       )}
@@ -170,17 +171,13 @@ function Stream({ items, empty, sort }: { items: StreamItem[]; empty: string; so
         const separator = item.day !== lastDay;
         lastDay = item.day;
         return (
-          <div key={item.kind === 'card' ? item.card.id : `locked-${item.date}`} className="stream__item">
+          <div key={item.card.id} className="stream__item">
             {separator && <p className="stream__day">{label(item.day)}</p>}
-            {item.kind === 'locked-diary' ? (
-              <LockedDiaryBubble date={item.date} />
-            ) : (
-              <div className="stream__entry" data-entry-id={item.card.id}>
-                {selection && <PickCircle id={item.card.id} />}
-                <EntryBubble card={item.card} at={item.at} />
-                <Attachments card={item.card} />
-              </div>
-            )}
+            <div className="stream__entry" data-entry-id={item.card.id}>
+              {selection && <PickCircle id={item.card.id} />}
+              <EntryBubble card={item.card} at={item.at} />
+              <Attachments card={item.card} />
+            </div>
           </div>
         );
       })}
@@ -207,18 +204,17 @@ function PickCircle({ id }: { id: string }) {
   );
 }
 
-function EntryBubble({ card, at }: { card: NoteCard | TodoCard | DiaryCard; at: number }) {
+function EntryBubble({ card, at }: { card: NoteCard | TodoCard; at: number }) {
   if (card.type === 'todo') return <TodoBubble todo={card} at={at} />;
-  if (card.type === 'diary') return <DiaryBubble diary={card} at={at} />;
   return <NoteBubble note={card} at={at} />;
 }
 
-function useLines(card: NoteCard | TodoCard | DiaryCard) {
+function useLines(card: NoteCard | TodoCard) {
   const { index } = useCards();
   return previewLines(card.content, (id, label) => linkTitle(index, id, label));
 }
 
-function BubbleMeta({ card, at, fold }: { card: NoteCard | TodoCard | DiaryCard; at: number; fold: Fold }) {
+function BubbleMeta({ card, at, fold }: { card: NoteCard | TodoCard; at: number; fold: Fold }) {
   const { repo, vaults, shared } = useCards();
   // A grouped tag (Priority: High) can be switched right here.
   const retag = permissions(card, vaults, shared).edit ? (tags: string[]) => void repo.update(card.id, { tags }) : undefined;
@@ -247,7 +243,7 @@ function BubbleMeta({ card, at, fold }: { card: NoteCard | TodoCard | DiaryCard;
  * The vault an entry is in, which filters the journal to it. Left out with only one vault, or when the journal
  * already shows one. An entry shared from someone else's vault says so.
  */
-function VaultLabel({ card }: { card: NoteCard | TodoCard | DiaryCard }) {
+function VaultLabel({ card }: { card: NoteCard | TodoCard }) {
   const { vaults, shared } = useCards();
   const filter = useJournalFilter();
   if (filter.vaultId) return null;
@@ -339,8 +335,8 @@ function LinkedText({ text }: { text: string }) {
   );
 }
 
-/** Opens an entry: a note or todo in a sheet over this page, a diary entry on its day. */
-function useOpen(card: NoteCard | TodoCard | DiaryCard) {
+/** Opens an entry in a sheet over this page. */
+function useOpen(card: NoteCard | TodoCard) {
   const navigate = useNavigate();
   const location = useLocation();
   return () => void navigate(cardPath(card), { state: sheetState(location, card) });
@@ -393,35 +389,6 @@ function TodoBubble({ todo, at }: { todo: TodoCard; at: number }) {
       </div>
       <BubbleTools card={todo} open={open} />
     </div>
-  );
-}
-
-function DiaryBubble({ diary, at }: { diary: DiaryCard; at: number }) {
-  const lines = useLines(diary);
-  const text = useFold(diary.id, lines);
-  const open = useOpen(diary);
-  const { selected, handlers } = useSelectable(diary.id, open);
-  return (
-    <div className={`bubble bubble--diary${colorClass(diary)}${selected ? ' is-selected' : ''}`} role="article" aria-current={selected || undefined} {...handlers}>
-      <span className="bubble__kind">
-        <Icon name="diary" size={14} />
-        Diary
-      </span>
-      {text.view}
-      <BubbleMeta card={diary} at={at} fold={text.fold} />
-      <BubbleTools card={diary} open={open} />
-    </div>
-  );
-}
-
-function LockedDiaryBubble({ date }: { date: string }) {
-  return (
-    <Link className="bubble bubble--diary" to={`/day/${date}`}>
-      <span className="bubble__kind">
-        <Icon name="lock" size={14} />
-        Diary, locked
-      </span>
-    </Link>
   );
 }
 

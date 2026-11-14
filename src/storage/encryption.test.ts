@@ -50,13 +50,11 @@ describe('cards in an encrypted vault', () => {
   it('become sealed stand-ins once the key is forgotten, which locked vaults hide and nothing can save', async () => {
     const { repo, keyring, decodeAll } = await setup();
     const card = await repo.createNote({ title: 'Hidden title', vaultId: 'secret' });
-    await repo.saveDiary('2026-11-10', { content: { type: 'doc', content: [] } }, undefined, 'secret');
     keyring.forget('secret');
     const cards = await decodeAll();
     expect(cards.find((c) => c.id === card.id)!.title).toBe('');
     const index = buildIndex(cards, new Set(['secret']));
     expect(index.lockedCards.has(card.id)).toBe(true);
-    expect(index.lockedDiaries.get('2026-11-10')).toBe('secret');
     await expect(repo.update(card.id, { title: 'overwrite' })).rejects.toThrow();
   });
   it('keep their edits out of the plaintext journal', async () => {
@@ -65,7 +63,7 @@ describe('cards in an encrypted vault', () => {
     const open = await repo.createNote({ title: 'y' });
     saved.length = 0;
     await repo.update(secret.id, { title: 'Very secret' });
-    await repo.saveDiary('2026-11-10', { content: { type: 'doc', content: [] } }, undefined, 'secret');
+    await repo.createNote({ title: 'Also secret', vaultId: 'secret' });
     expect(JSON.stringify(saved)).not.toContain('Very secret');
     expect(saved.flat()).toHaveLength(0);
     await repo.update(open.id, { title: 'fine' });

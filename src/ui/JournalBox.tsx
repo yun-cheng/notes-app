@@ -5,7 +5,7 @@ import { Decoration, DecorationSet } from '@tiptap/pm/view';
 import { EditorContent, useEditor } from '@tiptap/react';
 import { StarterKit } from '@tiptap/starter-kit';
 import { Placeholder } from '@tiptap/extensions';
-import { useEffect, useRef, useState, type ChangeEvent } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { diaryVault, mainVault } from '../domain/access';
 import { addDays, formatTime, parseDateKey, parseTime, relativeDay } from '../domain/dates';
 import { DUE, dueWord, entriesFromDoc, parseDue, TAG } from '../domain/entry';
@@ -15,7 +15,8 @@ import { effectiveType, type StreamFilter } from '../domain/stream';
 import type { JSONNode } from '../domain/types';
 import { useCards, useToday } from '../state/CardsContext';
 import { Photo } from './editor/photo';
-import { typeahead, useTypeaheadMenu, type MenuItem } from './editor/suggest';
+import { usePhotoInput } from './editor/photoInput';
+import { commonSlashItems, slashBlock, typeahead, useTypeaheadMenu, type MenuItem } from './editor/suggest';
 import { Icon } from './Icon';
 import { LockPanel } from './LockPanel';
 import { useToast } from './Toast';
@@ -76,12 +77,11 @@ const matches = (words: string, query: string) => words.toLowerCase().includes(q
  * vault, a todo when it shows todos (due today when it shows what's due today), and the day it shows.
  */
 export function JournalBox({ filter }: { filter: StreamFilter }) {
-  const { index, photos, vaults, accountId, locked } = useCards();
+  const { index, vaults, accountId, locked } = useCards();
   const today = useToday();
   const toast = useToast();
   const { saveEntries } = useSaveEntries();
   const menu = useTypeaheadMenu();
-  const picker = useRef<HTMLInputElement>(null);
   const [, redraw] = useState(0);
   // The vault to unlock before the text can be saved (a `#diary` line, say); its PIN is asked for right above the box.
   const [unlock, setUnlock] = useState<string | null>(null);
@@ -96,18 +96,9 @@ export function JournalBox({ filter }: { filter: StreamFilter }) {
   latest.current = { index, today, photoVault, diary, filter, saving };
   const editorRef = useRef<TiptapEditor | null>(null);
 
-  const addPhotos = async (files: File[]) => {
-    for (const file of files.filter((f) => f.type.startsWith('image/'))) {
-      try {
-        const id = await photos.add(file, latest.current.photoVault!);
-        editorRef.current?.chain().focus().insertContent({ type: 'photo', attrs: { id } }).run();
-      } catch (err) {
-        toast(err instanceof Error ? err.message : "That photo couldn't be added.");
-      }
-    }
-  };
-  const addPhotosRef = useRef(addPhotos);
-  addPhotosRef.current = addPhotos;
+  const photoInput = usePhotoInput(editorRef, () => latest.current.photoVault);
+  const photoInputRef = useRef(photoInput);
+  photoInputRef.current = photoInput;
 
   const submit = async () => {
     const editor = editorRef.current;
@@ -135,21 +126,14 @@ export function JournalBox({ filter }: { filter: StreamFilter }) {
   submitRef.current = submit;
 
   const slashItems = (query: string): MenuItem[] => {
-    const replace = (text: string) => (editor: TiptapEditor, range: { from: number; to: number }) => editor.chain().focus().insertContentAt(range, text).run();
-    const block = (fn: (editor: TiptapEditor) => void) => (editor: TiptapEditor, range: { from: number; to: number }) => {
-      editor.chain().focus().deleteRange(range).run();
-      fn(editor);
-    };
+    const replace = (text: string): MenuItem['run'] => (editor, range) => editor.chain().focus().insertContentAt(range, text).run();
     const all: (MenuItem & { words: string })[] = [
-      { id: 'todo', label: 'Todo', hint: '[]', icon: 'todo', words: 'todo task checkbox', run: block((e) => e.chain().focus().toggleTaskList().run()) },
+      { id: 'todo', label: 'Todo', hint: '[]', icon: 'todo', words: 'todo task checkbox', run: slashBlock((e) => e.chain().focus().toggleTaskList().run()) },
       { id: 'tag', label: 'Tag', hint: '#', icon: 'tag', words: 'tag file folder', run: replace('#') },
       { id: 'due', label: 'Due date', hint: '@', icon: 'calendar', words: 'due date when deadline', run: replace('@') },
       { id: 'diary', label: 'Diary', hint: '#diary', icon: 'diary', words: 'diary journal private', run: replace('#diary ') },
-      { id: 'photo', label: 'Photo', icon: 'image', words: 'photo image picture', run: block(() => picker.current?.click()) },
-      { id: 'bullets', label: 'Bullet list', hint: '-', words: 'bullet list', run: block((e) => e.chain().focus().toggleBulletList().run()) },
-      { id: 'numbers', label: 'Numbered list', hint: '1.', words: 'numbered ordered list', run: block((e) => e.chain().focus().toggleOrderedList().run()) },
-      { id: 'quote', label: 'Quote', hint: '>', words: 'quote blockquote', run: block((e) => e.chain().focus().toggleBlockquote().run()) },
-      { id: 'heading', label: 'Heading', hint: '#', words: 'heading title', run: block((e) => e.chain().focus().toggleHeading({ level: 2 }).run()) },
+      ...commonSlashItems(photoInput.pick),
+      { id: 'heading', label: 'Heading', hint: '#', words: 'heading title', run: slashBlock((e) => e.chain().focus().toggleHeading({ level: 2 }).run()) },
     ];
     return all.filter((i) => matches(`${i.label} ${i.words}`, query));
   };
@@ -230,19 +214,7 @@ export function JournalBox({ filter }: { filter: StreamFilter }) {
         }
         return false;
       },
-      handlePaste: (_view, event) => {
-        const files = [...(event.clipboardData?.files ?? [])].filter((f) => f.type.startsWith('image/'));
-        if (!files.length) return false;
-        void addPhotosRef.current(files);
-        return true;
-      },
-      handleDrop: (_view, event, _slice, moved) => {
-        const files = [...(event.dataTransfer?.files ?? [])].filter((f) => f.type.startsWith('image/'));
-        if (moved || !files.length) return false;
-        event.preventDefault();
-        void addPhotosRef.current(files);
-        return true;
-      },
+      ...photoInput.editorProps,
     },
     onTransaction: () => redraw((n) => n + 1),
   });
@@ -254,7 +226,7 @@ export function JournalBox({ filter }: { filter: StreamFilter }) {
     const take = (e: Event) => {
       const { text, html, files } = (e as CustomEvent<ForwardedPaste>).detail;
       editor.commands.focus('end');
-      if (files.length) void addPhotosRef.current(files);
+      if (files.length) void photoInputRef.current.add(files);
       else if (html) editor.view.pasteHTML(html);
       else editor.view.pasteText(text);
     };
@@ -268,11 +240,6 @@ export function JournalBox({ filter }: { filter: StreamFilter }) {
     if (unlocked) editor?.commands.focus('end');
   }, [unlocked, editor]);
 
-  const picked = (e: ChangeEvent<HTMLInputElement>) => {
-    const files = [...(e.target.files ?? [])];
-    e.target.value = '';
-    if (files.length) void addPhotos(files);
-  };
 
   const empty = !editor || entriesFromDoc(editor.getJSON() as JSONNode, today).length === 0;
   const todo = !!editor?.isActive('taskList');
@@ -303,13 +270,13 @@ export function JournalBox({ filter }: { filter: StreamFilter }) {
           <Icon name="todo" size={20} />
         </button>
         <EditorContent editor={editor} className="composer__editor" />
-        <button type="button" className="composer__kind" aria-label="Add a photo" title="Add a photo" onMouseDown={(e) => e.preventDefault()} onClick={() => picker.current?.click()}>
+        <button type="button" className="composer__kind" aria-label="Add a photo" title="Add a photo" onMouseDown={(e) => e.preventDefault()} onClick={photoInput.pick}>
           <Icon name="image" size={20} />
         </button>
         <button type="submit" className="composer__send" aria-label="Save" disabled={empty || saving}>
           <Icon name="send" size={20} />
         </button>
-        <input ref={picker} type="file" accept="image/*" multiple hidden onChange={picked} />
+        {photoInput.input}
       </form>
       {menu.view}
     </>

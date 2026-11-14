@@ -112,3 +112,19 @@ export function useTypeaheadMenu() {
 
   return { render, view, open: () => !!latest.current?.items.length };
 }
+
+/** A `/` menu choice that takes the typed `/word` out, then does `fn`. */
+export const slashBlock = (fn: (editor: TiptapEditor) => void): MenuItem['run'] => (editor, range) => {
+  editor.chain().focus().deleteRange(range).run();
+  fn(editor);
+};
+
+/** The `/` menu choices both editors have: lists, a quote and a photo. */
+export function commonSlashItems(pickPhoto: () => void): (MenuItem & { words: string })[] {
+  return [
+    { id: 'bullets', label: 'Bullet list', hint: '-', words: 'bullet list', run: slashBlock((e) => e.chain().focus().toggleBulletList().run()) },
+    { id: 'numbers', label: 'Numbered list', hint: '1.', words: 'numbered ordered list', run: slashBlock((e) => e.chain().focus().toggleOrderedList().run()) },
+    { id: 'quote', label: 'Quote', hint: '>', words: 'quote blockquote', run: slashBlock((e) => e.chain().focus().toggleBlockquote().run()) },
+    { id: 'photo', label: 'Photo', icon: 'image', words: 'photo image picture', run: slashBlock(pickPhoto) },
+  ];
+}

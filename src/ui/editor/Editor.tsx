@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState, type ChangeEvent } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { createPortal } from 'react-dom';
 import { EditorContent, useEditor, type Editor as TiptapEditor } from '@tiptap/react';
 import { StarterKit } from '@tiptap/starter-kit';
@@ -11,10 +11,10 @@ import type { CardIndex } from '../../domain/cardIndex';
 import type { JSONNode } from '../../domain/types';
 import { useCards } from '../../state/CardsContext';
 import { Icon, type IconName } from '../Icon';
-import { useToast } from '../Toast';
 import { CardLink, insertCardLink, type LinkOption } from './cardLink';
 import { Photo } from './photo';
-import { typeahead, useTypeaheadMenu, type MenuItem } from './suggest';
+import { usePhotoInput } from './photoInput';
+import { commonSlashItems, slashBlock, typeahead, useTypeaheadMenu, type MenuItem } from './suggest';
 
 interface EditorProps {
   content: JSONNode;
@@ -69,8 +69,7 @@ interface Tool {
   className?: string;
 }
 
-function Toolbar({ editor, onPhotos }: { editor: TiptapEditor; onPhotos: (files: File[]) => void }) {
-  const picker = useRef<HTMLInputElement>(null);
+function Toolbar({ editor, onPhoto }: { editor: TiptapEditor; onPhoto: () => void }) {
   const mod = /Mac|iPhone|iPad/.test(navigator.platform) ? '⌘' : 'Ctrl+';
   const tools: Tool[] = [
     { label: 'Undo', title: `Undo (${mod}Z)`, icon: 'undo', run: () => editor.chain().focus().undo().run(), disabled: !editor.can().undo() },
@@ -89,13 +88,8 @@ function Toolbar({ editor, onPhotos }: { editor: TiptapEditor; onPhotos: (files:
     { label: '1.', title: 'Numbered list', run: () => editor.chain().focus().toggleOrderedList().run(), active: editor.isActive('orderedList') },
     { label: '“', title: 'Quote', run: () => editor.chain().focus().toggleBlockquote().run(), active: editor.isActive('blockquote') },
     { label: '[[', title: 'Link to a card', run: () => editor.chain().focus().insertContent('[[').run() },
-    { label: 'Photo', title: 'Add a photo', icon: 'image', run: () => picker.current?.click() },
+    { label: 'Photo', title: 'Add a photo', icon: 'image', run: onPhoto },
   ];
-  const picked = (e: ChangeEvent<HTMLInputElement>) => {
-    const files = [...(e.target.files ?? [])];
-    e.target.value = '';
-    if (files.length) onPhotos(files);
-  };
   return (
     <div className="toolbar" role="toolbar" aria-label="Formatting">
       {tools.map((t) => (
@@ -113,17 +107,14 @@ function Toolbar({ editor, onPhotos }: { editor: TiptapEditor; onPhotos: (files:
           {t.icon ? <Icon name={t.icon} size={18} /> : t.label}
         </button>
       ))}
-      <input ref={picker} type="file" accept="image/*" multiple hidden onChange={picked} />
     </div>
   );
 }
 
 export function Editor({ content, onChange, placeholder, selfId, vaultId, editable = true, toolbar = false, toolbarHost, autofocus = false }: EditorProps) {
-  const { index, repo, photos, vaults, accountId } = useCards();
-  const toast = useToast();
+  const { index, repo, vaults, accountId } = useCards();
   const [menu, setMenu] = useState<MenuState | null>(null);
   const slash = useTypeaheadMenu();
-  const picker = useRef<HTMLInputElement>(null);
   const [, redraw] = useState(0);
 
   const photoVault = vaultId ?? mainVault(vaults, accountId)?.id;
@@ -131,22 +122,7 @@ export function Editor({ content, onChange, placeholder, selfId, vaultId, editab
   latest.current = { index, onChange, menu, selfId, vaultId: photoVault, placeholder };
   const editorRef = useRef<TiptapEditor | null>(null);
 
-  /** Saves each image on the device and puts it in the text, at `at` or the cursor. */
-  const addPhotos = async (files: File[], at?: number) => {
-    for (const file of files.filter((f) => f.type.startsWith('image/'))) {
-      try {
-        const id = await photos.add(file, latest.current.vaultId!);
-        const node = { type: 'photo', attrs: { id } };
-        const chain = editorRef.current?.chain().focus();
-        if (at === undefined) chain?.insertContent(node).run();
-        else chain?.insertContentAt(at, node).run();
-      } catch (err) {
-        toast(err instanceof Error ? err.message : "That photo couldn't be added.");
-      }
-    }
-  };
-  const addPhotosRef = useRef(addPhotos);
-  addPhotosRef.current = addPhotos;
+  const photoInput = usePhotoInput(editorRef, () => latest.current.vaultId);
   const command = useRef<((item: LinkOption) => void) | null>(null);
   const pending = useRef<JSONNode | null>(null);
   const echoes = useRef(new Echoes()).current;
@@ -177,19 +153,12 @@ export function Editor({ content, onChange, placeholder, selfId, vaultId, editab
 
   /** What `/` offers: blocks, a photo, or a link to another card. */
   const slashItems = (query: string): MenuItem[] => {
-    const block = (fn: (ed: TiptapEditor) => void) => (ed: TiptapEditor, range: { from: number; to: number }) => {
-      ed.chain().focus().deleteRange(range).run();
-      fn(ed);
-    };
     const all: (MenuItem & { words: string })[] = [
-      { id: 'h2', label: 'Heading', hint: '##', words: 'heading title', run: block((ed) => ed.chain().focus().toggleHeading({ level: 2 }).run()) },
-      { id: 'h3', label: 'Small heading', hint: '###', words: 'heading subheading', run: block((ed) => ed.chain().focus().toggleHeading({ level: 3 }).run()) },
-      { id: 'bullets', label: 'Bullet list', hint: '-', words: 'bullet list', run: block((ed) => ed.chain().focus().toggleBulletList().run()) },
-      { id: 'numbers', label: 'Numbered list', hint: '1.', words: 'numbered ordered list', run: block((ed) => ed.chain().focus().toggleOrderedList().run()) },
-      { id: 'quote', label: 'Quote', hint: '>', words: 'quote blockquote', run: block((ed) => ed.chain().focus().toggleBlockquote().run()) },
-      { id: 'code', label: 'Code', hint: '```', words: 'code block', run: block((ed) => ed.chain().focus().toggleCodeBlock().run()) },
-      { id: 'divider', label: 'Divider', hint: '---', words: 'divider line rule', run: block((ed) => ed.chain().focus().setHorizontalRule().run()) },
-      { id: 'photo', label: 'Photo', icon: 'image', words: 'photo image picture', run: block(() => picker.current?.click()) },
+      { id: 'h2', label: 'Heading', hint: '##', words: 'heading title', run: slashBlock((ed) => ed.chain().focus().toggleHeading({ level: 2 }).run()) },
+      { id: 'h3', label: 'Small heading', hint: '###', words: 'heading subheading', run: slashBlock((ed) => ed.chain().focus().toggleHeading({ level: 3 }).run()) },
+      ...commonSlashItems(photoInput.pick),
+      { id: 'code', label: 'Code', hint: '```', words: 'code block', run: slashBlock((ed) => ed.chain().focus().toggleCodeBlock().run()) },
+      { id: 'divider', label: 'Divider', hint: '---', words: 'divider line rule', run: slashBlock((ed) => ed.chain().focus().setHorizontalRule().run()) },
       { id: 'link', label: 'Link to a note', hint: '[[', icon: 'link', words: 'link card note', run: (ed, range) => ed.chain().focus().insertContentAt(range, '[[').run() },
     ];
     const q = query.trim().toLowerCase();
@@ -264,19 +233,7 @@ export function Editor({ content, onChange, placeholder, selfId, vaultId, editab
     autofocus: autofocus && editable ? 'end' : false,
     editorProps: {
       attributes: { class: 'prose' },
-      handlePaste: (_view, event) => {
-        const files = [...(event.clipboardData?.files ?? [])].filter((f) => f.type.startsWith('image/'));
-        if (!files.length) return false;
-        void addPhotosRef.current(files);
-        return true;
-      },
-      handleDrop: (view, event, _slice, moved) => {
-        const files = [...(event.dataTransfer?.files ?? [])].filter((f) => f.type.startsWith('image/'));
-        if (moved || !files.length) return false;
-        event.preventDefault();
-        void addPhotosRef.current(files, view.posAtCoords({ left: event.clientX, top: event.clientY })?.pos);
-        return true;
-      },
+      ...photoInput.editorProps,
     },
     onUpdate: ({ editor: ed }) => {
       pending.current = ed.getJSON() as JSONNode;
@@ -334,22 +291,11 @@ export function Editor({ content, onChange, placeholder, selfId, vaultId, editab
       {editable &&
         toolbar &&
         (toolbarHost
-          ? createPortal(<Toolbar editor={editor} onPhotos={(files) => void addPhotos(files)} />, toolbarHost)
-          : <Toolbar editor={editor} onPhotos={(files) => void addPhotos(files)} />)}
+          ? createPortal(<Toolbar editor={editor} onPhoto={photoInput.pick} />, toolbarHost)
+          : <Toolbar editor={editor} onPhoto={photoInput.pick} />)}
       <EditorContent editor={editor} />
       {slash.view}
-      <input
-        ref={picker}
-        type="file"
-        accept="image/*"
-        multiple
-        hidden
-        onChange={(e) => {
-          const files = [...(e.target.files ?? [])];
-          e.target.value = '';
-          if (files.length) void addPhotos(files);
-        }}
-      />
+      {photoInput.input}
       {menu && (
         <ul className="link-menu" role="listbox" aria-label="Link to a card" style={{ left: menu.left, top: menu.top }}>
           {menu.items.length === 0 && <li className="link-menu__hint">Type a title to link or create a note</li>}

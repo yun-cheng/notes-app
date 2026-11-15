@@ -1,6 +1,7 @@
 import { Extension, wrappingInputRule, type Editor as TiptapEditor, type Range } from '@tiptap/core';
 import { TaskItem, TaskList } from '@tiptap/extension-list';
 import { Plugin } from '@tiptap/pm/state';
+import { ScrollJump } from './ScrollJump';
 import { Decoration, DecorationSet } from '@tiptap/pm/view';
 import { EditorContent, useEditor } from '@tiptap/react';
 import { StarterKit } from '@tiptap/starter-kit';
@@ -277,6 +278,8 @@ export function JournalBox({ filter }: { filter: StreamFilter }) {
           <Icon name="send" size={20} />
         </button>
         {photoInput.input}
+        {/* Back to where the newest entries are: the bottom in a chat, the top in other orders. */}
+        <ScrollJump to={(filter.sort ?? 'written') === 'written' ? 'bottom' : 'top'} />
       </form>
       {menu.view}
     </>

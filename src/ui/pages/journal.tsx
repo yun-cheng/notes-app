@@ -312,14 +312,14 @@ function BubbleMeta({ card, at, fold }: { card: NoteCard | TodoCard; at: number;
 /**
  * The vault an entry is in. Pressed, it opens a menu that moves the entry to another vault, or filters the journal
  * to this one; an entry that can't be moved (a vault shared to view, nowhere else to go) filters straight away.
- * Left out with only one vault, or when the journal already shows one. An entry shared from someone else's vault
- * says so.
+ * Left out with only one vault. When the journal already shows one vault, only an entry that can be moved names it,
+ * as the way to move it. An entry shared from someone else's vault says so.
  */
 function VaultLabel({ card }: { card: NoteCard | TodoCard }) {
   const { vaults, shared } = useCards();
   const filter = useJournalFilter();
   const vaultMove = useVaultMove(card);
-  if (filter.vaultId) return null;
+  if (filter.vaultId && !vaultMove) return null;
   const vault = vaults.find((v) => v.id === card.vaultId);
   if (!vault) {
     return shared.has(card.id) ? (
@@ -343,10 +343,15 @@ function VaultLabel({ card }: { card: NoteCard | TodoCard }) {
       </Link>
     );
   }
-  return <VaultMenu vault={vault} {...vaultMove}>{name}</VaultMenu>;
+  return (
+    <VaultMenu vault={vault} filtered={!!filter.vaultId} {...vaultMove}>
+      {name}
+    </VaultMenu>
+  );
 }
 
-function VaultMenu({ vault, options, move, children }: { vault: Vault; options: Vault[]; move: (id: string) => void; children: ReactNode }) {
+/** Moves an entry to another vault, or (unless the journal already shows only one, `filtered`) filters to its own. */
+function VaultMenu({ vault, filtered, options, move, children }: { vault: Vault; filtered: boolean; options: Vault[]; move: (id: string) => void; children: ReactNode }) {
   const { open, root, toggle, fixedStyle, close } = usePopover();
   const navigate = useNavigate();
   return (
@@ -375,11 +380,13 @@ function VaultMenu({ vault, options, move, children }: { vault: Vault; options: 
               </button>
             ))}
           </div>
-          <div className="style-menu__group">
-            <button type="button" role="menuitem" onClick={() => navigate(journalPath({ vaultId: vault.id }))}>
-              Show only {vault.name}
-            </button>
-          </div>
+          {!filtered && (
+            <div className="style-menu__group">
+              <button type="button" role="menuitem" onClick={() => navigate(journalPath({ vaultId: vault.id }))}>
+                Show only {vault.name}
+              </button>
+            </div>
+          )}
         </div>
       )}
     </div>

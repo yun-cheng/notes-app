@@ -230,7 +230,6 @@ export function Editor({ content, onChange, placeholder, selfId, vaultId, editab
     ],
     content,
     editable,
-    autofocus: autofocus && editable ? 'end' : false,
     editorProps: {
       attributes: { class: 'prose' },
       ...photoInput.editorProps,
@@ -245,6 +244,20 @@ export function Editor({ content, onChange, placeholder, selfId, vaultId, editab
     onSelectionUpdate: () => redraw((n) => n + 1),
     onTransaction: () => redraw((n) => n + 1),
   });
+
+  // Focused when it first shows, with the cursor after the text. Done here rather than with TipTap's own option,
+  // which doesn't take when the editor mounts inside a sheet opening over the page.
+  const focusOnOpen = useRef(autofocus && editable);
+  useEffect(() => {
+    if (!editor || !focusOnOpen.current) return;
+    const timer = setTimeout(() => {
+      focusOnOpen.current = false;
+      // Straight away, not on the next frame as TipTap's focus command does.
+      editor.commands.setTextSelection(editor.state.doc.content.size);
+      editor.view.focus();
+    });
+    return () => clearTimeout(timer);
+  }, [editor]);
 
   // Save straight away when the app is backgrounded: Android may kill it without warning.
   useEffect(() => {

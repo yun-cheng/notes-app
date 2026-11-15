@@ -236,6 +236,16 @@ export function TitleField({ value, onSave, autoFocus, readOnly }: { value: stri
   const pending = useRef<string | null>(null);
   const save = useRef(onSave);
   save.current = onSave;
+  const field = useRef<HTMLTextAreaElement>(null);
+
+  // Focused on opening, the cursor goes after the title, to carry on typing, rather than before it.
+  useEffect(() => {
+    const el = field.current;
+    if (!autoFocus || readOnly || !el) return;
+    el.focus();
+    el.setSelectionRange(el.value.length, el.value.length);
+    // Only when it first shows.
+  }, []);
 
   const flush = useRef(() => {
     if (timer.current) clearTimeout(timer.current);
@@ -266,11 +276,11 @@ export function TitleField({ value, onSave, autoFocus, readOnly }: { value: stri
 
   return (
     <textarea
+      ref={field}
       className="title-field"
       rows={1}
       value={draft}
       readOnly={readOnly}
-      autoFocus={autoFocus && !readOnly}
       placeholder="Untitled"
       aria-label="Title"
       onFocus={() => (focused.current = true)}

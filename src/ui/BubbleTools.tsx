@@ -17,7 +17,7 @@ type Entry = NoteCard | TodoCard;
  * date are changed in its bottom row (`AddTag`, `StyleMenu` and `DueMenu`). A phone has no hover; a tap opens the
  * entry, whose sheet has them all, and a todo's due date in its bubble can be tapped.
  */
-export function BubbleTools({ card, open }: { card: Entry; open: () => void }) {
+export function BubbleTools({ card, open }: { card: Entry; open: (edit?: boolean) => void }) {
   const { vaults, shared } = useCards();
   const { copyText } = useEntryActions();
   const can = permissions(card, vaults, shared);
@@ -25,7 +25,7 @@ export function BubbleTools({ card, open }: { card: Entry; open: () => void }) {
     <>
       <span className="bubble__tools">
         {/* A pencil where the entry can be changed; an entry shared only to read just opens. */}
-        <button type="button" className="bubble__open" aria-label={can.edit ? 'Edit' : 'Open'} title={can.edit ? 'Edit (Enter)' : 'Open (Enter)'} onClick={open}>
+        <button type="button" className="bubble__open" aria-label={can.edit ? 'Edit' : 'Open'} title={can.edit ? 'Edit (Enter)' : 'Open (Enter)'} onClick={() => open(can.edit)}>
           <Icon name={can.edit ? 'edit' : 'open'} size={16} />
         </button>
         {can.edit && <TypeSwitch card={card} className="bubble__open" size={16} />}

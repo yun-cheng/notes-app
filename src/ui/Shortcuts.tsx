@@ -25,7 +25,7 @@ const GROUPS: { title: string; keys: [string, string][] }[] = [
       ['↑ ↓', 'Move between entries'],
       ['Shift ↑ ↓', 'Select while moving'],
       ['Space', 'Select or unselect the focused entry'],
-      ['Enter', 'Open the focused entry'],
+      ['Enter', 'Edit the focused entry'],
       [`${MOD}C`, 'Copy the selected entries'],
       [`${MOD}X`, 'Cut them'],
       [`${MOD}V`, 'Paste copied entries; anything else goes in the writing box'],

@@ -402,11 +402,11 @@ function LinkedText({ text }: { text: string }) {
   );
 }
 
-/** Opens an entry in a sheet over this page. */
+/** Opens an entry in a sheet over this page: to edit, with its text focused, or (a tap on a phone) just to read. */
 function useOpen(card: NoteCard | TodoCard) {
   const navigate = useNavigate();
   const location = useLocation();
-  return () => void navigate(cardPath(card), { state: sheetState(location, card) });
+  return (edit = false) => void navigate(cardPath(card), { state: sheetState(location, card, edit ? { edit } : {}) });
 }
 
 /** What every bubble does: its text, folded when long; opening it; and picking it. */
@@ -491,7 +491,7 @@ export function EntrySheet() {
   if (lockedIn) body = <LockPanel vaultId={lockedIn} />;
   else if (!card || card.deleted) body = <Empty>{card ? 'This is in the Trash.' : "This doesn't exist on this device."}</Empty>;
   else if (!entry) body = <Empty>That isn't a note or a todo.</Empty>;
-  else body = <EntryDetail key={entry.id} card={entry} fresh={!!state?.fresh} onClose={close} />;
+  else body = <EntryDetail key={entry.id} card={entry} fresh={!!state?.fresh} edit={!!state?.edit} onClose={close} />;
 
   return (
     <div className="dialog-backdrop" onClick={(e) => e.target === e.currentTarget && close()}>
@@ -510,7 +510,7 @@ export function EntrySheet() {
   );
 }
 
-function EntryDetail({ card, fresh, onClose }: { card: NoteCard | TodoCard; fresh: boolean; onClose: () => void }) {
+function EntryDetail({ card, fresh, edit, onClose }: { card: NoteCard | TodoCard; fresh: boolean; edit: boolean; onClose: () => void }) {
   const { repo, vaults, shared } = useCards();
   const tick = useTickTodo();
   const can = permissions(card, vaults, shared);
@@ -524,6 +524,9 @@ function EntryDetail({ card, fresh, onClose }: { card: NoteCard | TodoCard; fres
   const [toolbarHost, setToolbarHost] = useState<HTMLDivElement | null>(null);
   const isTodo = card.type === 'todo';
   const showTitle = isTodo || !!card.title.trim() || titled;
+  // Opened to edit, the cursor waits at the end of the text: a todo's title, a note's body.
+  const focusTitle = titled || ((fresh || edit) && isTodo);
+  const focusBody = (fresh || edit) && !isTodo;
 
   return (
     <>
@@ -541,7 +544,7 @@ function EntryDetail({ card, fresh, onClose }: { card: NoteCard | TodoCard; fres
               />
             </label>
           )}
-          <TitleField value={card.title} autoFocus={titled || (fresh && isTodo)} readOnly={!can.edit} onSave={(title) => void repo.update(card.id, { title })} />
+          <TitleField value={card.title} autoFocus={focusTitle} readOnly={!can.edit} onSave={(title) => void repo.update(card.id, { title })} />
         </div>
       )}
       <Editor
@@ -551,7 +554,7 @@ function EntryDetail({ card, fresh, onClose }: { card: NoteCard | TodoCard; fres
         editable={can.edit}
         toolbar={tools}
         toolbarHost={toolbarHost}
-        autofocus={fresh && !isTodo}
+        autofocus={focusBody}
         placeholder={isTodo ? 'Details' : 'Note'}
         onChange={(content) => void repo.update(card.id, { content })}
       />

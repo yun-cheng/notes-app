@@ -29,6 +29,8 @@ export interface SheetState {
   background?: Location;
   /** Just created from the sidebar, so the editor starts focused. */
   fresh?: boolean;
+  /** Opened with Edit (or Enter), so its text starts focused, ready to type. */
+  edit?: boolean;
 }
 
 /** Keeps the page under an open sheet when one sheet links to another. */

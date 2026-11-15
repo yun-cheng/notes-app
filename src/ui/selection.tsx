@@ -86,7 +86,7 @@ const LONG_PRESS_MS = 450;
  * it and a long press starts picking. Cmd/Ctrl-click picks it, Shift-click picks a range, and while picking any
  * click or tap picks. Up and down arrows move between bubbles, picking along the way with Shift.
  */
-export function useSelectable(id: string, open: () => void) {
+export function useSelectable(id: string, open: (edit?: boolean) => void) {
   const selection = useContext(SelectionContext);
   const timer = useRef<ReturnType<typeof setTimeout> | null>(null);
   const start = useRef<{ x: number; y: number } | null>(null);
@@ -124,7 +124,8 @@ export function useSelectable(id: string, open: () => void) {
         if (e.target !== e.currentTarget) return;
         if (e.key === 'Enter') {
           e.preventDefault();
-          open();
+          // Enter is Edit's shortcut, so it opens ready to type too.
+          open(true);
         } else if (e.key === ' ' && selection) {
           e.preventDefault();
           selection.toggle(id, e.shiftKey);

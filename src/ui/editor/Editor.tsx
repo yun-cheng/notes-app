@@ -114,6 +114,14 @@ function HistoryButtons({ editor }: { editor: TiptapEditor }) {
   );
 }
 
+/** Code for the words picked within one line, or a code block (in or out of one) where nothing is picked. */
+function toggleCode(editor: TiptapEditor) {
+  const { from, to, $from, $to } = editor.state.selection;
+  const words = from !== to && $from.sameParent($to) && !editor.isActive('codeBlock');
+  if (words) editor.chain().focus().toggleCode().run();
+  else editor.chain().focus().toggleCodeBlock().run();
+}
+
 function Toolbar({ editor, onPhoto, history }: { editor: TiptapEditor; onPhoto: () => void; history: boolean }) {
   const undoRedo = history ? historyTools(editor) : [];
   if (undoRedo.length) undoRedo[undoRedo.length - 1].className = 'tool-sep';
@@ -125,6 +133,7 @@ function Toolbar({ editor, onPhoto, history }: { editor: TiptapEditor; onPhoto: 
     { label: '•', title: 'Bullet list', run: () => editor.chain().focus().toggleBulletList().run(), active: editor.isActive('bulletList') },
     { label: '1.', title: 'Numbered list', run: () => editor.chain().focus().toggleOrderedList().run(), active: editor.isActive('orderedList') },
     { label: '“', title: 'Quote', run: () => editor.chain().focus().toggleBlockquote().run(), active: editor.isActive('blockquote') },
+    { label: 'Code', title: `Code: words picked in a line, or a code block (${MOD}E for words)`, icon: 'code', run: () => toggleCode(editor), active: editor.isActive('code') || editor.isActive('codeBlock') },
     { label: '[[', title: 'Link to a card', run: () => editor.chain().focus().insertContent('[[').run() },
     { label: 'Photo', title: 'Add a photo', icon: 'image', run: onPhoto },
   ];

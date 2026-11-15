@@ -5,6 +5,8 @@ import type { StreamFilter } from '../domain/stream';
 import { isGroupName, settleTags } from '../domain/tagGroups';
 import type { Card } from '../domain/types';
 import { useCards, useToday } from '../state/CardsContext';
+import { useToast } from './Toast';
+import { useViewOnly, VIEW_ONLY_NOTE } from './viewOnly';
 
 /** How many entries were saved, or the vault to unlock first when it's locked. Unsaved text stays in the box. */
 export interface SaveResult {
@@ -42,9 +44,15 @@ function onDay(date: string, now = new Date()): number {
 export function useSaveEntries() {
   const { repo, index, vaults, locked, accountId } = useCards();
   const today = useToday();
+  const viewOnly = useViewOnly();
+  const toast = useToast();
 
   const saveEntries = async (entries: Entry[], opts: SaveOptions = {}): Promise<SaveResult> => {
     if (!entries.length) return { saved: 0, ids: [] };
+    if (viewOnly) {
+      toast(VIEW_ONLY_NOTE);
+      return { saved: 0, ids: [] };
+    }
     const diary = diaryVault(vaults, accountId)?.id;
     const vaultOf = (entry: Entry) => (entry.diary && diary ? diary : opts.vaultId);
 

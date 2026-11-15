@@ -1,9 +1,9 @@
 import { useState } from 'react';
-import { permissions } from '../domain/access';
 import { planBatch, tagCounts, type BatchEdit } from '../domain/batch';
 import { addDays } from '../domain/dates';
 import type { Card } from '../domain/types';
 import { useCards, useToday } from '../state/CardsContext';
+import { usePermissions } from './viewOnly';
 import { entries, useEntryActions } from './entryActions';
 import { colorClass } from './EntryStyle';
 import { Icon } from './Icon';
@@ -18,15 +18,16 @@ import { useUndo } from './useUndo';
  * Every change can be undone from its toast. Entries this account can't change are left alone and counted.
  */
 export function BatchBar({ selection }: { selection: Selection }) {
-  const { index, repo, vaults, locked, shared } = useCards();
+  const { index, repo, vaults, locked } = useCards();
+  const may = usePermissions();
   const toast = useToast();
   const today = useToday();
   const actions = useEntryActions();
   const { undoAction } = useUndo();
   const [panel, setPanel] = useState<'tags' | 'due' | null>(null);
   const cards = selection.ids.map((id) => index.byId.get(id)).filter((c): c is Card => !!c && !c.deleted);
-  const editable = cards.filter((c) => permissions(c, vaults, shared).edit);
-  const manageable = cards.filter((c) => permissions(c, vaults, shared).manage);
+  const editable = cards.filter((c) => may(c).edit);
+  const manageable = cards.filter((c) => may(c).manage);
   const todos = editable.filter((c) => c.type === 'todo');
   const skipped = (n: number) => (n ? `; ${entries(n)} couldn't be changed` : '');
 

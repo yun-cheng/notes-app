@@ -1,7 +1,7 @@
 import { useEffect, useState, type FormEvent } from 'react';
-import { permissions } from '../domain/access';
 import type { Card } from '../domain/types';
 import { useCards } from '../state/CardsContext';
+import { usePermissions } from './viewOnly';
 import { SyncOffline } from '../sync/engine';
 import { addComment, deleteComment, fetchComments, resolveComment, type CardComment } from '../sync/http';
 import { useToast } from './Toast';
@@ -12,9 +12,10 @@ function when(at: number) {
 
 /** Comments live on the server only, so they need a connection. A card never synced has none yet. */
 export function Comments({ card }: { card: Card }) {
-  const { vaults, shared, accountId } = useCards();
+  const { vaults, accountId } = useCards();
+  const may = usePermissions();
   const toast = useToast();
-  const can = permissions(card, vaults, shared);
+  const can = may(card);
   const [comments, setComments] = useState<CardComment[] | null>(null);
   const [offline, setOffline] = useState(false);
   const [draft, setDraft] = useState('');

@@ -3,7 +3,7 @@ import { Link, Navigate, useLocation, useNavigate, useParams } from 'react-route
 import { isDateKey } from '../../domain/dates';
 import type { Card } from '../../domain/types';
 import { useCards } from '../../state/CardsContext';
-import { permissions } from '../../domain/access';
+import { usePermissions } from '../viewOnly';
 import { Backlinks, Empty, Page, TagChips, TagPicker, TitleField, useDeleteCard, VaultField } from '../components';
 import { Editor } from '../editor/Editor';
 import { LockPanel } from '../LockPanel';
@@ -67,8 +67,9 @@ export function CardPage() {
 }
 
 function CardDetail({ card }: { card: Card }) {
-  const { repo, vaults, shared } = useCards();
-  const can = permissions(card, vaults, shared);
+  const { repo } = useCards();
+  const may = usePermissions();
+  const can = may(card);
   const remove = useDeleteCard();
   const tick = useTickTodo();
   const fresh = !!(useLocation().state as { fresh?: boolean } | null)?.fresh;

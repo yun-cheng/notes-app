@@ -1,12 +1,14 @@
 import { useEffect, useLayoutEffect, useRef, useState, type ReactNode } from 'react';
 import { Link, Outlet, useLocation, useNavigate, useParams } from 'react-router';
-import { diaryVault, permissions } from '../../domain/access';
+import { diaryVault } from '../../domain/access';
 import { linkTitle } from '../../domain/cardIndex';
 import { displayTitle, previewLines, splitLinks } from '../../domain/content';
 import { isDateKey, relativeDay, relativeDayInSentence, toDateKey } from '../../domain/dates';
 import { isFiltered, sortGroup, streamItems, type StreamItem, type StreamSort } from '../../domain/stream';
 import type { NoteCard, TodoCard, Vault } from '../../domain/types';
 import { useCards, useToday } from '../../state/CardsContext';
+import { setViewOnly, usePermissions, useViewOnly } from '../viewOnly';
+import { ScrollJump } from '../ScrollJump';
 import { Comments } from '../Comments';
 import { Backlinks, Empty, Page, TagChips, TagPicker, TitleField, useDeleteCard, useVaultMove, VaultField } from '../components';
 import { Editor } from '../editor/Editor';
@@ -41,6 +43,7 @@ const time = (at: number) => new Date(at).toLocaleTimeString(undefined, { hour: 
  */
 export function JournalPage() {
   const { index, vaults, locked, accountId, sharedInto } = useCards();
+  const viewOnly = useViewOnly();
   const today = useToday();
   const filter = useJournalFilter();
   const diary = diaryVault(vaults, accountId);
@@ -129,8 +132,9 @@ export function JournalPage() {
               empty={filtered ? 'Nothing here yet. Write below and it lands here.' : 'Nothing written yet. Write a note below, or start with [] for a todo.'}
             />
             {selecting && <BatchBar selection={selection} />}
-            {/* Hidden, not removed, while picking, so a half-written entry survives. */}
-            <div style={{ display: selecting ? 'none' : 'contents' }}>
+            {viewOnly && !selecting && <ViewOnlyBar to={(filter.sort ?? 'written') === 'written' ? 'bottom' : 'top'} />}
+            {/* Hidden, not removed, while picking or viewing only, so a half-written entry survives. */}
+            <div style={{ display: selecting || viewOnly ? 'none' : 'contents' }}>
               <JournalBox key={`composer:${journalPath({ ...filter, sort: undefined })}`} filter={filter} />
             </div>
           </>
@@ -286,9 +290,10 @@ function EntryBubble({ card, at }: { card: NoteCard | TodoCard; at: number }) {
 }
 
 function BubbleMeta({ card, at, fold }: { card: NoteCard | TodoCard; at: number; fold: Fold }) {
-  const { repo, vaults, shared } = useCards();
+  const { repo } = useCards();
+  const may = usePermissions();
   // A grouped tag (Priority: High) can be switched right here.
-  const retag = permissions(card, vaults, shared).edit ? (tags: string[]) => void repo.update(card.id, { tags }) : undefined;
+  const retag = may(card).edit ? (tags: string[]) => void repo.update(card.id, { tags }) : undefined;
   return (
     // Tags and the vault on the left; More or Less, the due date and the time it was written on the right.
     <span className="bubble__meta">
@@ -454,6 +459,20 @@ function useAlsoIn(card: NoteCard | TodoCard) {
   };
 }
 
+/** In the writing box's place while view only is on: says so, with a way back to writing. */
+function ViewOnlyBar({ to }: { to: 'top' | 'bottom' }) {
+  return (
+    <div className="composer composer--view-only">
+      <Icon name="eye" size={18} />
+      <p>View only. Entries can be read and copied, not changed.</p>
+      <button type="button" className="btn btn--quiet" onClick={() => setViewOnly(false)}>
+        Turn off
+      </button>
+      <ScrollJump to={to} />
+    </div>
+  );
+}
+
 const FOLDED_LINES = 6;
 
 /** Entries folded in the stream, kept while the app is open so a filter change doesn't unfold them. */
@@ -556,7 +575,7 @@ function NoteBubble({ note, at }: { note: NoteCard; at: number }) {
 }
 
 function TodoBubble({ todo, at }: { todo: TodoCard; at: number }) {
-  const { vaults, shared } = useCards();
+  const may = usePermissions();
   const tick = useTickTodo();
   const { text, open, selected, handlers } = useBubble(todo);
   const done = todo.status === 'done';
@@ -566,7 +585,7 @@ function TodoBubble({ todo, at }: { todo: TodoCard; at: number }) {
         <input
           type="checkbox"
           checked={done}
-          disabled={!permissions(todo, vaults, shared).edit}
+          disabled={!may(todo).edit}
           aria-label={`Mark "${displayTitle(todo)}" ${done ? 'not done' : 'done'}`}
           onChange={() => tick(todo)}
         />
@@ -633,9 +652,10 @@ export function EntrySheet() {
 }
 
 function EntryDetail({ card, fresh, edit, onClose }: { card: NoteCard | TodoCard; fresh: boolean; edit: boolean; onClose: () => void }) {
-  const { repo, vaults, shared } = useCards();
+  const { repo } = useCards();
+  const may = usePermissions();
   const tick = useTickTodo();
-  const can = permissions(card, vaults, shared);
+  const can = may(card);
   const remove = useDeleteCard();
   const { copyText } = useEntryActions();
   const [tools, setTools] = useState(false);

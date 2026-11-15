@@ -1,12 +1,12 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
 import { Link, useNavigate, useParams } from 'react-router';
-import { permissions } from '../../domain/access';
 import { linkTitle } from '../../domain/cardIndex';
 import { displayTitle } from '../../domain/content';
 import { DAY } from '../../domain/dates';
 import { cardLines, changeSize, diffLines, restorePatch, sameContent, type DiffLine } from '../../domain/history';
 import type { Card } from '../../domain/types';
 import { useCards } from '../../state/CardsContext';
+import { usePermissions } from '../viewOnly';
 import { SyncAuthExpired, SyncOffline } from '../../sync/engine';
 import { fetchVersion, fetchVersions, sealVersions } from '../../sync/http';
 import type { VersionInfo } from '../../sync/protocol';
@@ -76,8 +76,9 @@ export function HistoryPage() {
 }
 
 function History({ card }: { card: Card }) {
-  const { index, repo, vaults, shared } = useCards();
-  const canEdit = permissions(card, vaults, shared).edit;
+  const { index, repo } = useCards();
+  const may = usePermissions();
+  const canEdit = may(card).edit;
   const toast = useToast();
   const { undoAction } = useUndo();
   const navigate = useNavigate();

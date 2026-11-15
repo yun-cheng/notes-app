@@ -17,6 +17,7 @@ import { cardPath, historyPath, journalPath, sheetState } from './paths';
 import { MOD, REDO_KEYS } from './Shortcuts';
 import { useToast } from './Toast';
 import { useSaveEntries } from './useSaveEntry';
+import { setViewOnly, useViewOnly } from './viewOnly';
 import { useUndo } from './useUndo';
 
 interface Command {
@@ -61,6 +62,7 @@ export function CommandPalette({ onClose, onShortcuts }: { onClose: () => void; 
   const searching = !!query.trim() && !query.trimStart().startsWith('/');
   const engine = useMemo(() => (searching ? buildSearch(index) : null), [index, searching]);
 
+  const viewOnly = useViewOnly();
   const go = (to: string) => () => void navigate(to);
   // A filter narrows the page it's picked on: the history from there, the journal from anywhere else.
   const narrow = (next: StreamFilter) => go(filterPath({ ...current, ...next }));
@@ -78,6 +80,7 @@ export function CommandPalette({ onClose, onShortcuts }: { onClose: () => void; 
       { id: 'go-settings', group: 'Go to', label: 'Backup & settings', icon: 'settings', keywords: 'trash export import ai photos account sign out', run: go('/settings') },
       { id: 'undo', group: 'Edit', label: 'Undo', hint: `${MOD}Z`, icon: 'undo', keywords: 'take back revert last change', run: () => void undo() },
       { id: 'redo', group: 'Edit', label: 'Redo', hint: REDO_KEYS, icon: 'redo', keywords: 'put back again', run: () => void redo() },
+      { id: 'view-only', group: 'Edit', label: viewOnly ? 'Turn off view only' : 'Turn on view only', icon: 'eye', keywords: 'read only lock editing protect', run: () => setViewOnly(!viewOnly) },
       { id: 'shortcuts', group: 'Help', label: 'Keyboard shortcuts', hint: '?', keywords: 'keys help copy paste select', run: onShortcuts },
       { id: 'show-all', group: 'Filter', label: 'Show everything', icon: 'notes', keywords: 'clear reset all', run: go(filterPath({ sort: current.sort })) },
     ];

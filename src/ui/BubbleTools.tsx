@@ -1,8 +1,8 @@
 import { useState } from 'react';
 import { createPortal } from 'react-dom';
-import { permissions } from '../domain/access';
 import type { NoteCard, TodoCard } from '../domain/types';
 import { useCards } from '../state/CardsContext';
+import { usePermissions } from './viewOnly';
 import { TagPicker } from './components';
 import { useEntryActions } from './entryActions';
 import { Icon } from './Icon';
@@ -18,9 +18,9 @@ type Entry = NoteCard | TodoCard;
  * entry, whose sheet has them all, and a todo's due date in its bubble can be tapped.
  */
 export function BubbleTools({ card, open }: { card: Entry; open: (edit?: boolean) => void }) {
-  const { vaults, shared } = useCards();
+  const may = usePermissions();
   const { copyText } = useEntryActions();
-  const can = permissions(card, vaults, shared);
+  const can = may(card);
   return (
     <>
       <span className="bubble__tools">

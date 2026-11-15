@@ -1,11 +1,11 @@
 import { useEffect, useRef, useState, type FormEvent, type ReactNode } from 'react';
 import { Link, useLocation, useNavigate } from 'react-router';
-import { permissions } from '../domain/access';
 import { cardText, resolveTags, type Backlink } from '../domain/cardIndex';
 import { displayTitle } from '../domain/content';
 import { clashingTags, orderTags, pickInGroup, withTag, type TagGroup } from '../domain/tagGroups';
 import type { Card, TagCard, TodoCard } from '../domain/types';
 import { useCards } from '../state/CardsContext';
+import { usePermissions, useViewOnly, VIEW_ONLY_NOTE, ViewOnlyToggle } from './viewOnly';
 import { Icon, type IconName } from './Icon';
 import { cardPath, entryPath, journalPath, sheetState } from './paths';
 import { useToast } from './Toast';
@@ -33,6 +33,7 @@ export function Page({ title, actions, children }: { title: ReactNode; actions?:
         <h1>{title}</h1>
         <DemoTag />
         <SyncBadge />
+        <ViewOnlyToggle />
         {actions && <div className="page__actions">{actions}</div>}
         {/* Phones have no sidebar, so the account shows on every page here. */}
         <AccountButton className="only-mobile" />
@@ -174,8 +175,8 @@ export function CardRow({ card, detail }: { card: Card; detail?: string }) {
 }
 
 export function TodoRow({ todo, showDue = true }: { todo: TodoCard; showDue?: boolean }) {
-  const { vaults, shared } = useCards();
-  const { edit } = permissions(todo, vaults, shared);
+  const may = usePermissions();
+  const { edit } = may(todo);
   const tick = useTickTodo();
   const done = todo.status === 'done';
   return (
@@ -382,11 +383,12 @@ export function TagPicker({ tagIds, onChange, autoFocus = false }: { tagIds: str
  * when there's nowhere to move it, or it isn't this account's to move.
  */
 export function useVaultMove(card: Card) {
-  const { repo, vaults, locked, shared } = useCards();
+  const { repo, vaults, locked } = useCards();
+  const may = usePermissions();
   const toast = useToast();
   const { undoAction } = useUndo();
   const options = vaults.filter((v) => !locked.has(v.id) && (v.role ?? 'owner') !== 'viewer');
-  if (options.length < 2 || !permissions(card, vaults, shared).manage) return null;
+  if (options.length < 2 || !may(card).manage) return null;
   const move = (vaultId: string) => {
     if (vaultId === card.vaultId) return;
     const action = repo.action();
@@ -481,7 +483,10 @@ export function useNewNote() {
   const { repo } = useCards();
   const navigate = useNavigate();
   const location = useLocation();
+  const viewOnly = useViewOnly();
+  const toast = useToast();
   return async (tags: string[] = [], vaultId?: string) => {
+    if (viewOnly) return toast(VIEW_ONLY_NOTE);
     const card = await repo.createNote({ tags, vaultId });
     void navigate(entryPath(card.id), { state: sheetState(location, card, { fresh: true }) });
   };

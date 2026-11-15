@@ -1,10 +1,10 @@
 import { useCallback } from 'react';
 import { useLocation, useSearchParams } from 'react-router';
-import { permissions } from '../domain/access';
 import { canRedo, canUndo, changeTitle, describeChange, matchesChange, nextRedo, nextUndo, type Change } from '../domain/changes';
 import { isFiltered, parseFilter, type StreamFilter } from '../domain/stream';
 import type { Card } from '../domain/types';
 import { useCards, useToday } from '../state/CardsContext';
+import { usePermissions } from './viewOnly';
 import { useToast } from './Toast';
 
 export type Direction = 'undo' | 'redo';
@@ -14,13 +14,14 @@ export type Direction = 'undo' | 'redo';
  * no vault it touches is locked, and this account may still change the card that way.
  */
 export function useCanRevert() {
-  const { vaults, locked, shared } = useCards();
+  const { vaults, locked } = useCards();
+  const may = usePermissions();
   return useCallback(
     (change: Change, current: Card | undefined, direction: Direction): boolean => {
       if (!current || !(direction === 'undo' ? canUndo(change, current) : canRedo(change, current))) return false;
       const touched = [change.after.vaultId, change.before?.vaultId, current.vaultId];
       if (touched.some((id) => id && locked.has(id))) return false;
-      const can = permissions(current, vaults, shared);
+      const can = may(current);
       if (change.fields.includes('vaultId')) {
         // The vault it goes back to has to be one this account can still write to.
         const target = direction === 'undo' ? change.before?.vaultId : change.after.vaultId;
@@ -30,7 +31,7 @@ export function useCanRevert() {
       const managing = !change.before || change.fields.includes('deleted') || change.fields.includes('vaultId');
       return managing ? can.manage : can.edit;
     },
-    [vaults, locked, shared],
+    [vaults, locked, may],
   );
 }
 

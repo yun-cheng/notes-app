@@ -1,10 +1,10 @@
-import { permissions } from '../domain/access';
 import { linkTitle } from '../domain/cardIndex';
 import { encodeEntries, entriesText, entryText, ENTRIES_TYPE, toEntries } from '../domain/clipboard';
 import type { Entry } from '../domain/entry';
 import type { EntryType } from '../domain/retype';
 import type { Card, NoteCard, TodoCard } from '../domain/types';
 import { useCards } from '../state/CardsContext';
+import { usePermissions } from './viewOnly';
 import { useToast } from './Toast';
 import { useUndo } from './useUndo';
 import { useSaveEntries, type SaveOptions } from './useSaveEntry';
@@ -48,7 +48,8 @@ const copyable = (c: Card | undefined): c is NoteCard | TodoCard => !!c && !c.de
 
 /** Copy, cut, trash and paste for journal entries, each with a toast and, where it changes something, an undo. */
 export function useEntryActions() {
-  const { index, repo, vaults, shared } = useCards();
+  const { index, repo, vaults } = useCards();
+  const may = usePermissions();
   const toast = useToast();
   const { saveEntries } = useSaveEntries();
   const { undoAction } = useUndo();
@@ -80,7 +81,7 @@ export function useEntryActions() {
   /** Moves the entries this account may remove to the Trash. `verb` starts the toast ("Cut 3 entries"). */
   const trash = async (ids: string[], verb = 'Moved') => {
     const cards = cardsFor(ids);
-    const removable = cards.filter((c) => permissions(c, vaults, shared).manage).map((c) => c.id);
+    const removable = cards.filter((c) => may(c).manage).map((c) => c.id);
     const skipped = cards.length - removable.length;
     const note = skipped ? `; ${entries(skipped)} couldn't be removed` : '';
     if (!removable.length) {

@@ -1,4 +1,4 @@
-import type { SharedCard } from '../src/sync/protocol';
+import type { SharedCard, VaultShare } from '../src/sync/protocol';
 import type { Database } from './db';
 
 /**
@@ -41,6 +41,19 @@ export async function cardAccess(db: Database, userId: string, cardId: string): 
 }
 
 export const allows = (access: CardAccess | null, need: AccessLevel) => !!access && RANK[access.level] >= RANK[need];
+
+/** Cards shared with everyone in a vault the user belongs to, wherever they live: theirs too, so they show in that vault. */
+export async function sharedIntoVaults(db: Database, userId: string): Promise<VaultShare[]> {
+  const { results } = await db
+    .prepare(
+      `SELECT s.card_id, s.target_id AS vault_id FROM card_shares s
+       WHERE s.target_type = 'vault' AND s.target_id IN (SELECT vault_id FROM vault_members WHERE user_id = ?)
+       ORDER BY s.card_id, s.target_id`,
+    )
+    .bind(userId)
+    .all<VaultShare>();
+  return results;
+}
 
 /** Cards shared with the user outside their own vaults, with the strongest role each. */
 export async function sharedWith(db: Database, userId: string): Promise<SharedCard[]> {

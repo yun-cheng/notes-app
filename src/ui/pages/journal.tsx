@@ -38,7 +38,7 @@ const time = (at: number) => new Date(at).toLocaleTimeString(undefined, { hour: 
  * filters narrow and order it, and a locked vault asks for its PIN right here.
  */
 export function JournalPage() {
-  const { index, vaults, locked, accountId } = useCards();
+  const { index, vaults, locked, accountId, sharedInto } = useCards();
   const today = useToday();
   const filter = useJournalFilter();
   const diary = diaryVault(vaults, accountId);
@@ -47,7 +47,7 @@ export function JournalPage() {
   const tag = index.tags.find((t) => t.id === filter.tagId);
   const vault = vaults.find((v) => v.id === filter.vaultId);
   const filtered = isFiltered(filter);
-  const items = streamItems(index, filter, today);
+  const items = streamItems(index, filter, today, sharedInto);
   const order = items.map((i) => i.card.id);
   const selection = useSelectionState(order);
   const vaultLocked = !!vault && locked.has(vault.id);
@@ -312,14 +312,16 @@ function BubbleMeta({ card, at, fold }: { card: NoteCard | TodoCard; at: number;
 /**
  * The vault an entry is in. Pressed, it opens a menu that moves the entry to another vault, or filters the journal
  * to this one; an entry that can't be moved (a vault shared to view, nowhere else to go) filters straight away.
- * Left out with only one vault. When the journal already shows one vault, only an entry that can be moved names it,
- * as the way to move it. An entry shared from someone else's vault says so.
+ * Left out with only one vault. When the journal already shows one vault, it names an entry's vault only when that
+ * can be moved from there, or the entry is there because it was shared into it from another. An entry shared from
+ * someone else's vault says so.
  */
 function VaultLabel({ card }: { card: NoteCard | TodoCard }) {
   const { vaults, shared } = useCards();
   const filter = useJournalFilter();
   const vaultMove = useVaultMove(card);
-  if (filter.vaultId && !vaultMove) return null;
+  const sharedIn = !!filter.vaultId && card.vaultId !== filter.vaultId;
+  if (filter.vaultId && !vaultMove && !sharedIn) return null;
   const vault = vaults.find((v) => v.id === card.vaultId);
   if (!vault) {
     return shared.has(card.id) ? (
@@ -344,13 +346,13 @@ function VaultLabel({ card }: { card: NoteCard | TodoCard }) {
     );
   }
   return (
-    <VaultMenu vault={vault} filtered={!!filter.vaultId} {...vaultMove}>
+    <VaultMenu vault={vault} filtered={filter.vaultId === vault.id} {...vaultMove}>
       {name}
     </VaultMenu>
   );
 }
 
-/** Moves an entry to another vault, or (unless the journal already shows only one, `filtered`) filters to its own. */
+/** Moves an entry to another vault, or (unless the journal already shows only its vault, `filtered`) filters to its own. */
 function VaultMenu({ vault, filtered, options, move, children }: { vault: Vault; filtered: boolean; options: Vault[]; move: (id: string) => void; children: ReactNode }) {
   const { open, root, toggle, fixedStyle, close } = usePopover();
   const navigate = useNavigate();

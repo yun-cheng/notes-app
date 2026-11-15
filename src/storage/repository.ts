@@ -6,7 +6,7 @@ import { isEncryptedPayload } from '../crypto/vaultKeys';
 import { rehomeCards } from '../domain/rehome';
 import { changeType, retypePatch, type EntryType } from '../domain/retype';
 import { noJournal, type CardPatch, type Journal, type JournalOp } from './journal';
-import type { SharedCard } from '../sync/protocol';
+import type { SharedCard, VaultShare } from '../sync/protocol';
 import type { CardStore, PayloadCodec } from './types';
 
 /** Marks a stand-in for a card that couldn't be decrypted. It must never be written back. */
@@ -545,11 +545,14 @@ export class CardRepository {
   }
 
   /**
-   * Takes the server's word on what this account can see: its vaults, and cards shared with it.
-   * Cards it can no longer see are removed from the device. Returns true if access grew.
+   * Takes the server's word on what this account can see: its vaults, and cards shared with it, along with the
+   * cards shared into its vaults, which show there too. Cards it can no longer see are removed from the device.
+   * Returns true if access grew.
    */
-  applyAccess(vaults: Vault[], shared: SharedCard[]): Promise<boolean> {
+  applyAccess(vaults: Vault[], shared: SharedCard[], vaultShares: VaultShare[] = []): Promise<boolean> {
     return this.enqueue(async () => {
+      const knownVaultShares = await this.store.getMeta('vaultShares');
+      if (JSON.stringify(knownVaultShares ?? []) !== JSON.stringify(vaultShares)) await this.store.setMeta('vaultShares', vaultShares);
       const [known, knownShared] = await Promise.all([this.store.listVaults(), this.store.getMeta('shared') as Promise<SharedCard[] | undefined>]);
       const vaultIds = new Set(vaults.map((v) => v.id));
       const sharedIds = new Set(shared.map((s) => s.card_id));

@@ -6,7 +6,7 @@ import { MemoryStore } from '../storage/memoryStore';
 import { CardRepository } from '../storage/repository';
 import { jsonCodec } from '../storage/types';
 import { describeSync, syncSummary, SyncAuthExpired, SyncEngine, SyncOffline, type SyncTransport } from './engine';
-import { PUSH_LIMIT, type PullResponse, type PushResult, type SessionInfo, type SharedCard } from './protocol';
+import { PUSH_LIMIT, type PullResponse, type PushResult, type SessionInfo, type SharedResponse } from './protocol';
 
 const doc = (t: string): JSONNode => ({ type: 'doc', content: [{ type: 'paragraph', content: [{ type: 'text', text: t }] }] });
 
@@ -48,7 +48,7 @@ function createServer() {
         if (!t.online) throw new SyncOffline();
         const res = await app.request('/api/shared', { headers: { cookie } }, env);
         if (res.status === 401) throw new SyncAuthExpired();
-        return ((await res.json()) as { cards: SharedCard[] }).cards;
+        return (await res.json()) as SharedResponse;
       },
     };
     return t;
@@ -434,6 +434,26 @@ describe('sharing', () => {
     expect(await a.titles()).toEqual(['Diary-ish', 'Recipe, improved']);
     const fresh = await b.repo.createNote({ title: 'Mine' });
     expect(fresh.vaultId).toBe(ben.info.vaults[0].id);
+  });
+  it('tells everyone in a vault which cards are shared into it, the sharer too', async () => {
+    const { ann, a, b, call } = await annAndBen();
+    const family = ((await (await call(ann.cookie, 'POST', '/api/vaults', { name: 'Family' })).json()) as Vault).id;
+    await call(ann.cookie, 'POST', `/api/vaults/${family}/members`, { email: 'ben@x.y', role: 'viewer' });
+    const card = await a.repo.createNote({ title: 'Trip plan' });
+    await a.engine.sync();
+    await call(ann.cookie, 'POST', `/api/cards/${card.id}/shares`, { vault_id: family, role: 'view' });
+    await a.engine.sync();
+    await b.engine.sync();
+    const into = [{ card_id: card.id, vault_id: family }];
+    expect(await a.store.getMeta('vaultShares')).toEqual(into);
+    expect(await b.store.getMeta('vaultShares')).toEqual(into);
+    expect(await b.titles()).toEqual(['Trip plan']);
+
+    await call(ann.cookie, 'DELETE', `/api/cards/${card.id}/shares/vault/${family}`);
+    await a.engine.sync();
+    await b.engine.sync();
+    expect(await a.store.getMeta('vaultShares')).toEqual([]);
+    expect(await b.titles()).toEqual([]);
   });
 });
 

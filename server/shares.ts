@@ -3,7 +3,8 @@ import { photoIds, walk } from '../src/domain/content';
 import { DAY, isTimeKey } from '../src/domain/dates';
 import { parsePayload } from '../src/domain/payload';
 import type { CardPayload } from '../src/domain/types';
-import { allows, cardAccess, sharedWith } from './access';
+import { allows, cardAccess, sharedIntoVaults, sharedWith } from './access';
+import type { SharedResponse } from '../src/sync/protocol';
 import { randomToken } from './auth';
 import type { AppEnv, Database, Statement } from './db';
 import { isEmail } from './members';
@@ -128,7 +129,10 @@ export function publicRoutes(app: Hono<AppEnv>, googleFetch: GoogleFetch, now: (
 
 /** Sharing one card with people, with everyone in a vault, or with anyone who has a link. */
 export function shareRoutes(app: Hono<AppEnv>, now: () => number) {
-  app.get('/shared', async (c) => c.json({ cards: await sharedWith(c.env.DB, c.get('user').id) }));
+  app.get('/shared', async (c) => {
+    const [cards, vaults] = await Promise.all([sharedWith(c.env.DB, c.get('user').id), sharedIntoVaults(c.env.DB, c.get('user').id)]);
+    return c.json({ cards, vaults } satisfies SharedResponse);
+  });
 
   app.get('/cards/:id/shares', async (c) => {
     const cardId = c.req.param('id');

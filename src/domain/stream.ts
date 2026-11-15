@@ -181,8 +181,11 @@ function matchesStatus(todo: TodoCard, status: TodoStatus, today: string): boole
 /** The day an entry was written on. */
 const entryDay = (card: Card) => toDateKey(new Date(card.createdAt));
 
+/** The vaults each card is shared into besides its own, by card ID. A card shows in those vaults too. */
+export type SharedInto = ReadonlyMap<string, readonly string[]>;
+
 /** Whether an entry passes a filter. Tags aren't entries, so none does. */
-export function entryMatcher(filter: StreamFilter, today: string): (card: Card, day?: string) => boolean {
+export function entryMatcher(filter: StreamFilter, today: string, sharedInto?: SharedInto): (card: Card, day?: string) => boolean {
   const { tagId, vaultId, status, has } = filter;
   const type = effectiveType(filter);
   const [from, to] = filter.when ? whenRange(filter.when, today) : ['', '9999'];
@@ -190,7 +193,7 @@ export function entryMatcher(filter: StreamFilter, today: string): (card: Card, 
     card.type !== 'tag' &&
     (!type || card.type === type) &&
     (!tagId || card.tags.includes(tagId)) &&
-    (!vaultId || card.vaultId === vaultId) &&
+    (!vaultId || card.vaultId === vaultId || !!sharedInto?.get(card.id)?.includes(vaultId)) &&
     (!status || (card.type === 'todo' && matchesStatus(card, status, today))) &&
     (!has || (has === 'link' ? linkUrls(card.content).length > 0 : hasPhoto(card.content))) &&
     day >= from &&
@@ -198,8 +201,8 @@ export function entryMatcher(filter: StreamFilter, today: string): (card: Card, 
 }
 
 /** Notes and todos in the order they were written, oldest first, like messages in a chat. */
-export function streamItems(index: CardIndex, filter: StreamFilter = {}, today = toDateKey(new Date())): StreamItem[] {
-  const keep = entryMatcher(filter, today);
+export function streamItems(index: CardIndex, filter: StreamFilter = {}, today = toDateKey(new Date()), sharedInto?: SharedInto): StreamItem[] {
+  const keep = entryMatcher(filter, today, sharedInto);
   const items: StreamItem[] = [];
   for (const card of index.live) {
     if (card.type !== 'note' && card.type !== 'todo') continue;

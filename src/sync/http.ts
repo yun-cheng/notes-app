@@ -3,7 +3,7 @@ import type { VaultPin } from '../domain/pin';
 import type { CardRecord, JSONNode, Vault } from '../domain/types';
 import type { PhotoTransport } from '../photos/types';
 import { SyncAuthExpired, SyncOffline, type SyncTransport } from './engine';
-import type { ConfigResponse, ConnectedApp, LinkPreview, PullResponse, PushResponse, RecentVersionsResponse, SessionInfo, SharedCard, SignedInAccounts, VersionResponse, VersionsResponse } from './protocol';
+import type { ConfigResponse, ConnectedApp, LinkPreview, PullResponse, PushResponse, RecentVersionsResponse, SessionInfo, SharedResponse, SignedInAccounts, VersionResponse, VersionsResponse } from './protocol';
 
 let requestAccount: string | null = null;
 
@@ -48,7 +48,7 @@ export const httpTransport = (deviceId: () => Promise<string>): SyncTransport =>
     (await request<PushResponse>('/sync/push', { method: 'POST', headers: deviceHeaders(await deviceId()), body: JSON.stringify({ records }) })).results,
   pull: (since) => request<PullResponse>(`/sync/pull?since=${since}`),
   vaults: async () => (await request<SessionInfo>('/me')).vaults,
-  shared: async () => (await request<{ cards: SharedCard[] }>('/shared')).cards,
+  shared: () => request<SharedResponse>('/shared'),
 });
 
 export const fetchConfig = () => request<ConfigResponse>('/config');

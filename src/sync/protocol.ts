@@ -40,6 +40,18 @@ export interface PushResponse {
   results: PushResult[];
 }
 
+/** A card shared with everyone in one of this account's vaults. It shows in that vault as well as its own. */
+export interface VaultShare {
+  card_id: string;
+  vault_id: string;
+}
+
+/** What `/shared` answers. `vaults` is left out by servers from before it, and then there are none. */
+export interface SharedResponse {
+  cards: SharedCard[];
+  vaults?: VaultShare[];
+}
+
 /** A card shared with this account from outside its vaults, and the strongest role it has. */
 export interface SharedCard {
   card_id: string;

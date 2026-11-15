@@ -33,6 +33,13 @@ describe('stream', () => {
     expect(ids(streamItems(buildIndex([...cards, family]), { vaultId: 'v', tagId: 'work' }, TODAY))).toEqual(['n1', 't1']);
   });
 
+  it('shows an entry in a vault it was shared into, besides its own', () => {
+    const into = new Map([['n1', ['family']]]);
+    const ids = (vaultId: string) => streamItems(buildIndex(cards), { vaultId }, TODAY, into).map((i) => i.card.id);
+    expect(ids('family')).toEqual(['n1']);
+    expect(ids('v')).toEqual(['n1', 't1', 'n2']);
+  });
+
   it('leaves out what is in a locked vault, diary entries among it', () => {
     expect(streamItems(buildIndex(cards, new Set(['diary'])), {}, TODAY).map((i) => i.card.id)).toEqual(['n1', 't1', 'n2']);
   });

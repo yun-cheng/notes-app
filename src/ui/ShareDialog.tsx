@@ -30,7 +30,7 @@ function RoleSelect({ value, onChange, label }: { value: ShareRole; onChange: (r
 
 /** Share one card with people, with another vault's members, or with anyone who has a link. */
 export function ShareDialog({ card, onClose }: { card: Card; onClose: () => void }) {
-  const { vaults, locked } = useCards();
+  const { vaults, locked, engine } = useCards();
   const toast = useToast();
   const dialog = useRef<HTMLDivElement>(null);
   const [shares, setShares] = useState<CardShares | null>(null);
@@ -63,6 +63,8 @@ export function ShareDialog({ card, onClose }: { card: Card; onClose: () => void
   const run = async (work: () => Promise<CardShares>, done?: string) => {
     try {
       setShares(await work());
+      // Brings the new list of what's shared into which vault, so the card shows there straight away.
+      void engine.sync();
       if (done) toast(done);
       return true;
     } catch (err) {

@@ -203,6 +203,11 @@ export function JournalBox({ filter }: { filter: StreamFilter }) {
         if (event.key !== 'Enter' || event.isComposing || menu.open()) return false;
         const ed = editorRef.current;
         if (!ed) return false;
+        // In code, Enter is a new line, as in any code editor; three in a row leave the block. Cmd+Enter still saves.
+        if (ed.isActive('codeBlock') && !event.metaKey && !event.ctrlKey) {
+          if (event.shiftKey) ed.commands.newlineInCode();
+          return event.shiftKey;
+        }
         if (event.metaKey || event.ctrlKey || (!event.shiftKey && enterSaves())) {
           event.preventDefault();
           void submitRef.current();

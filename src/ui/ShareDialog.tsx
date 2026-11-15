@@ -147,7 +147,7 @@ export function ShareDialog({ card, onClose }: { card: Card; onClose: () => void
                   <span>
                     {i.email} <span className="muted">invited, sees it after signing up</span>
                   </span>
-                  <span className="muted">{ROLE_LABEL[i.role]}</span>
+                  <RoleSelect value={i.role} label={`Access for ${i.email}`} onChange={(r) => void run(() => shareCard(card.id, { email: i.email }, r))} />
                   <button type="button" className="btn btn--quiet" onClick={() => void run(() => unshareCard(card.id, 'invite', i.email))}>
                     Remove
                   </button>
@@ -188,7 +188,12 @@ export function ShareDialog({ card, onClose }: { card: Card; onClose: () => void
                       <span>
                         {v.name} <span className="muted">{people(v.members)}</span>
                       </span>
-                      <span className="muted">{ROLE_LABEL[v.role]}</span>
+                      {/* Only a vault the sharer is in can have its access changed by them; one shared by someone else just says it. */}
+                      {vaults.some((own) => own.id === v.vault_id) ? (
+                        <RoleSelect value={v.role} label={`Access for ${v.name}'s members`} onChange={(r) => void run(() => shareCard(card.id, { vault_id: v.vault_id }, r))} />
+                      ) : (
+                        <span className="muted">{ROLE_LABEL[v.role]}</span>
+                      )}
                       <button type="button" className="btn btn--quiet" onClick={() => void run(() => unshareCard(card.id, 'vault', v.vault_id))}>
                         Remove
                       </button>

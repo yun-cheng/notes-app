@@ -37,6 +37,16 @@ interface EditorProps {
 
 const SAVE_DELAY = 300;
 
+/**
+ * A document as text to compare, without empty paragraphs at its end: the editor adds one after a last code block,
+ * list or quote, so there's somewhere to type, and that alone isn't a change to save.
+ */
+function settledText(doc: JSONNode): string {
+  const blocks = [...(doc.content ?? [])];
+  while (blocks.length && blocks[blocks.length - 1].type === 'paragraph' && !blocks[blocks.length - 1].content?.length) blocks.pop();
+  return JSON.stringify({ ...doc, content: blocks });
+}
+
 export function linkOptions(index: CardIndex, rawQuery: string, selfId?: string): LinkOption[] {
   const typed = rawQuery.replace(/\]+$/, '').trim();
   const q = typed.toLowerCase();
@@ -155,6 +165,8 @@ export function Editor({ content, onChange, placeholder, selfId, vaultId, editab
   const pending = useRef<JSONNode | null>(null);
   const echoes = useRef(new Echoes()).current;
   const timer = useRef<ReturnType<typeof setTimeout> | null>(null);
+  // What's stored, as `settledText`, so opening a note doesn't save it when the editor only adds a line at its end.
+  const saved = useRef(settledText(content));
 
   const flush = useRef(() => {
     if (timer.current) clearTimeout(timer.current);
@@ -162,6 +174,7 @@ export function Editor({ content, onChange, placeholder, selfId, vaultId, editab
     if (pending.current) {
       const value = pending.current;
       pending.current = null;
+      saved.current = settledText(value);
       echoes.sent(JSON.stringify(value));
       latest.current.onChange(value);
     }
@@ -263,8 +276,13 @@ export function Editor({ content, onChange, placeholder, selfId, vaultId, editab
       ...photoInput.editorProps,
     },
     onUpdate: ({ editor: ed }) => {
-      pending.current = ed.getJSON() as JSONNode;
+      const value = ed.getJSON() as JSONNode;
       if (timer.current) clearTimeout(timer.current);
+      if (settledText(value) === saved.current) {
+        pending.current = null;
+        return;
+      }
+      pending.current = value;
       timer.current = setTimeout(flush, SAVE_DELAY);
     },
     // Saved as soon as the text loses focus, so a button clicked next works on what was just typed.
@@ -306,6 +324,7 @@ export function Editor({ content, onChange, placeholder, selfId, vaultId, editab
     if (!editor || pending.current) return;
     const incoming = JSON.stringify(content);
     if (echoes.isEcho(incoming) || incoming === JSON.stringify(editor.getJSON())) return;
+    saved.current = settledText(content);
     const { from, to } = editor.state.selection;
     const focused = editor.isFocused;
     // Not undoable here: undo would otherwise revert a change made on another device.

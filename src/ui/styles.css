@@ -181,7 +181,7 @@ body:has(.composer:focus-within) .tabbar { display: none; }
 .row__preview { color: var(--muted); font-size: 14px; display: -webkit-box; -webkit-box-orient: vertical; -webkit-line-clamp: 2; overflow: hidden; }
 .row__due { color: var(--muted); font-size: 13px; }
 .is-alert { color: var(--alert); }
-.row.is-done .row__title { color: var(--muted); text-decoration: line-through; }
+.row.is-done .row__title { color: var(--muted); }
 
 .check { display: inline-flex; align-items: center; justify-content: center; width: 28px; height: 28px; margin: -2px 0; flex: none; }
 .check input { width: 20px; height: 20px; margin: 0; accent-color: var(--accent); cursor: pointer; }
@@ -559,7 +559,7 @@ a.change__title:hover { color: var(--accent); }
 .bubble--todo .check { height: 24px; margin: 0; }
 .bubble__body { display: flex; flex-direction: column; gap: 2px; min-width: 0; }
 .bubble--todo .bubble__title { font-weight: 400; }
-.bubble--todo.is-done .bubble__title { color: var(--muted); text-decoration: line-through; }
+.bubble--todo.is-done .bubble__title { color: var(--muted); }
 .bubble__due { font-weight: 600; }
 .bubble__vault { display: inline-flex; align-items: center; gap: 3px; color: var(--muted); text-decoration: underline; text-decoration-color: transparent; text-underline-offset: 2px; }
 .bubble__vault:hover { color: var(--text); text-decoration-color: currentColor; }
@@ -596,7 +596,7 @@ body:has(.composer:focus-within) .composer { bottom: 8px; }
 .composer__prose ul[data-type="taskList"] > li > label { flex: none; margin-top: 2px; }
 .composer__prose ul[data-type="taskList"] > li > label input { width: 17px; height: 17px; margin: 0; accent-color: var(--accent); }
 .composer__prose ul[data-type="taskList"] > li > div { flex: 1; min-width: 0; }
-.composer__prose ul[data-type="taskList"] > li[data-checked="true"] > div { color: var(--muted); text-decoration: line-through; }
+.composer__prose ul[data-type="taskList"] > li[data-checked="true"] > div { color: var(--muted); }
 .composer__prose figure.photo { margin: 6px 0; }
 .composer__prose figure.photo img { max-height: 160px; border-radius: 10px; }
 .token { border-radius: 4px; padding: 0 2px; }

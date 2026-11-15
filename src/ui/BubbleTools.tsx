@@ -1,12 +1,9 @@
-import { useState } from 'react';
-import { createPortal } from 'react-dom';
 import type { NoteCard, TodoCard } from '../domain/types';
 import { useCards } from '../state/CardsContext';
 import { usePermissions } from './viewOnly';
 import { TagPicker } from './components';
 import { useEntryActions } from './entryActions';
 import { Icon } from './Icon';
-import { ShareDialog } from './ShareDialog';
 import { usePopover } from './usePopover';
 import { useToast } from './Toast';
 import { useUndo } from './useUndo';
@@ -14,31 +11,24 @@ import { useUndo } from './useUndo';
 type Entry = NoteCard | TodoCard;
 
 /**
- * The buttons beside a bubble on hover: open it to edit, make a note a todo or a todo a note, and share it.
- * Copying its text is a button on the bubble's top right corner. Its tags, color and previews, and a todo's due
- * date are changed in its bottom row (`AddTag`, `StyleMenu` and `DueMenu`). A phone has no hover; a tap opens the
- * entry, whose sheet has them all, and a todo's due date in its bubble can be tapped.
+ * The buttons beside a bubble on hover: open it to edit, and ⋯ for the rest, the same menu a right-click on the
+ * bubble opens (`useEntryMenu`). Its tags and a todo's due date are changed in its bottom row (`AddTag` and
+ * `DueMenu`). A phone has no hover; a tap opens the entry, whose sheet has every action, and a todo's due date in its
+ * bubble can be tapped.
  */
-export function BubbleTools({ card, open }: { card: Entry; open: (edit?: boolean) => void }) {
+export function BubbleTools({ card, open, menu }: { card: Entry; open: (edit?: boolean) => void; menu: { openFrom: (el: HTMLElement) => void; isOpen: boolean } }) {
   const may = usePermissions();
-  const { copyText } = useEntryActions();
   const can = may(card);
   return (
-    <>
-      <span className="bubble__tools">
-        {/* A pencil where the entry can be changed; an entry shared only to read just opens. */}
-        <button type="button" className="bubble__open" aria-label={can.edit ? 'Edit' : 'Open'} title={can.edit ? 'Edit (Enter)' : 'Open (Enter)'} onClick={() => open(can.edit)}>
-          <Icon name={can.edit ? 'edit' : 'open'} size={16} />
-        </button>
-        {can.edit && <TypeSwitch card={card} className="bubble__open" size={16} />}
-        {can.protect && <ViewOnlyButton card={card} className="bubble__open" size={16} />}
-        {can.share && <ShareButton card={card} />}
-      </span>
-      {/* In the bubble's top right corner, in room the bubble keeps for it, so it covers none of the text. */}
-      <button type="button" className="bubble__copy" aria-label="Copy text" title="Copy text" onClick={() => copyText(card.id)}>
-        <Icon name="copy" size={14} />
+    <span className={`bubble__tools${menu.isOpen ? ' is-open' : ''}`}>
+      {/* A pencil where the entry can be changed; an entry shared only to read just opens. */}
+      <button type="button" className="bubble__open" aria-label={can.edit ? 'Edit' : 'Open'} title={can.edit ? 'Edit (Enter)' : 'Open (Enter)'} onClick={() => open(can.edit)}>
+        <Icon name={can.edit ? 'edit' : 'open'} size={16} />
       </button>
-    </>
+      <button type="button" className="bubble__open" aria-label="More" aria-haspopup="menu" aria-expanded={menu.isOpen} title="More (or right-click the entry)" onClick={(e) => menu.openFrom(e.currentTarget)}>
+        <Icon name="more" size={16} />
+      </button>
+    </span>
   );
 }
 
@@ -73,7 +63,6 @@ export function AddTag({ card }: { card: Entry }) {
   );
 }
 
-/** Sharing an entry from beside its bubble. The dialog goes over the whole page, outside the bubble. */
 /** Turns an entry's own view only on or off, with an undo. */
 export function useEntryViewOnly(card: Entry) {
   const { repo } = useCards();
@@ -102,24 +91,5 @@ export function ViewOnlyButton({ card, className, size }: { card: Entry; classNa
     >
       <Icon name="eye" size={size} />
     </button>
-  );
-}
-
-function ShareButton({ card }: { card: Entry }) {
-  const [sharing, setSharing] = useState(false);
-  return (
-    <>
-      <button type="button" className="bubble__open" aria-label="Share" title="Share" onClick={() => setSharing(true)}>
-        <Icon name="share" size={16} />
-      </button>
-      {sharing &&
-        createPortal(
-          // React passes events up through a portal, so they're stopped here before they reach the bubble.
-          <div onClick={(e) => e.stopPropagation()} onPointerDown={(e) => e.stopPropagation()} onKeyDown={(e) => e.stopPropagation()}>
-            <ShareDialog card={card} onClose={() => setSharing(false)} />
-          </div>,
-          document.body,
-        )}
-    </>
   );
 }

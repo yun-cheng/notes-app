@@ -84,9 +84,10 @@ const LONG_PRESS_MS = 450;
  * Click, key and touch handling for a bubble. With a mouse, a click leaves the bubble alone, so its text can be
  * selected and copied; the open button, or Enter on the focused bubble, opens it. On a touch screen a tap opens
  * it and a long press starts picking. Cmd/Ctrl-click picks it, Shift-click picks a range, and while picking any
- * click or tap picks. Up and down arrows move between bubbles, picking along the way with Shift.
+ * click or tap picks. Up and down arrows move between bubbles, picking along the way with Shift. A right-click
+ * with a mouse, or the menu key, opens `onMenu`.
  */
-export function useSelectable(id: string, open: (edit?: boolean) => void) {
+export function useSelectable(id: string, open: (edit?: boolean) => void, onMenu?: (e: ReactMouseEvent<HTMLElement>) => void) {
   const selection = useContext(SelectionContext);
   const timer = useRef<ReturnType<typeof setTimeout> | null>(null);
   const start = useRef<{ x: number; y: number } | null>(null);
@@ -161,8 +162,10 @@ export function useSelectable(id: string, open: (edit?: boolean) => void) {
       },
       onPointerUp: cancel,
       onPointerCancel: cancel,
-      onContextMenu: (e: ReactMouseEvent) => {
-        if (timer.current || pressed.current) e.preventDefault();
+      onContextMenu: (e: ReactMouseEvent<HTMLElement>) => {
+        // A long press picks the entry instead.
+        if (timer.current || pressed.current) return e.preventDefault();
+        if (!touch.current) onMenu?.(e);
       },
     },
   };
@@ -179,7 +182,7 @@ interface Drag {
 }
 
 /** Where a click doesn't end picking: the entries, the bar acting on them, and the page's own controls. */
-const KEEPS_PICKING = '.stream__entry, .batch, .page__head, .sidebar, .tabbar, .dialog-backdrop, .toast-slot, .link-menu';
+const KEEPS_PICKING = '.stream__entry, .batch, .page__head, .sidebar, .tabbar, .dialog-backdrop, .toast-slot, .link-menu, .context-menu';
 
 /** Things a drag can't start on, so clicks on them still work. */
 const INTERACTIVE = '.bubble, .attachments, .pick, a, button, input, textarea, select, label, [contenteditable="true"]';

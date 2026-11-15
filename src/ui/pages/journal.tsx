@@ -26,6 +26,7 @@ import { SelectionProvider, useBoxSelect, useSelectable, useSelection, useSelect
 import { entries, useEntryActions } from '../entryActions';
 import { useEntryShortcuts } from '../useEntryShortcuts';
 import { AddTag, BubbleTools, TypeSwitch, useEntryViewOnly, ViewOnlyButton } from '../BubbleTools';
+import { useEntryMenu } from '../EntryMenu';
 import { DueLabel, DueMenu, useTickTodo } from '../TodoDue';
 import { SyncMark } from '../SyncStatus';
 import { useToast } from '../Toast';
@@ -299,7 +300,6 @@ function BubbleMeta({ card, at, fold }: { card: NoteCard | TodoCard; at: number;
     <span className="bubble__meta">
       <TagChips tagIds={card.tags} onChange={retag} />
       {retag && <AddTag card={card} />}
-      {retag && <StyleMenu card={card} />}
       <VaultLabel card={card} />
       {card.viewOnly && <ViewOnlyMark card={card} />}
       <span className="bubble__end">
@@ -570,16 +570,17 @@ function useOpen(card: NoteCard | TodoCard) {
   return (edit = false) => void navigate(cardPath(card), { state: sheetState(location, card, edit ? { edit } : {}) });
 }
 
-/** What every bubble does: its text, folded when long; opening it; and picking it. */
+/** What every bubble does: its text, folded when long; opening it; its menu; and picking it. */
 function useBubble(card: NoteCard | TodoCard) {
   const { index } = useCards();
   const text = useFold(card.id, previewLines(card.content, (id, label) => linkTitle(index, id, label)));
   const open = useOpen(card);
-  return { text, open, ...useSelectable(card.id, open) };
+  const menu = useEntryMenu(card, open);
+  return { text, open, menu, ...useSelectable(card.id, open, menu.onContextMenu) };
 }
 
 function NoteBubble({ note, at }: { note: NoteCard; at: number }) {
-  const { text, open, selected, handlers } = useBubble(note);
+  const { text, open, menu, selected, handlers } = useBubble(note);
   return (
     <div className={`bubble${colorClass(note)}${selected ? ' is-selected' : ''}`} role="article" aria-current={selected || undefined} {...handlers}>
       {note.title.trim() && (
@@ -589,7 +590,8 @@ function NoteBubble({ note, at }: { note: NoteCard; at: number }) {
       )}
       {text.view}
       <BubbleMeta card={note} at={at} fold={text.fold} />
-      <BubbleTools card={note} open={open} />
+      <BubbleTools card={note} open={open} menu={menu} />
+      {menu.view}
     </div>
   );
 }
@@ -597,7 +599,7 @@ function NoteBubble({ note, at }: { note: NoteCard; at: number }) {
 function TodoBubble({ todo, at }: { todo: TodoCard; at: number }) {
   const may = usePermissions();
   const tick = useTickTodo();
-  const { text, open, selected, handlers } = useBubble(todo);
+  const { text, open, menu, selected, handlers } = useBubble(todo);
   const done = todo.status === 'done';
   return (
     <div className={`bubble bubble--todo${colorClass(todo)}${done ? ' is-done' : ''}${selected ? ' is-selected' : ''}`} role="article" aria-current={selected || undefined} {...handlers}>
@@ -617,7 +619,8 @@ function TodoBubble({ todo, at }: { todo: TodoCard; at: number }) {
         {text.view}
         <BubbleMeta card={todo} at={at} fold={text.fold} />
       </div>
-      <BubbleTools card={todo} open={open} />
+      <BubbleTools card={todo} open={open} menu={menu} />
+      {menu.view}
     </div>
   );
 }

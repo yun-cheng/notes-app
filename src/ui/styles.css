@@ -773,13 +773,8 @@ body:has(.batch) .toast-slot { bottom: calc(var(--tabbar) + env(safe-area-inset-
 /* A bubble's text can be selected; the open button beside it, Enter, or a tap on a phone opens it. */
 .bubble { position: relative; color: var(--text); }
 .bubble:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
-.bubble__tools .is-open .bubble__open { opacity: 1; }
+.bubble__tools.is-open .bubble__open { opacity: 1; }
 .bubble__tools { position: absolute; top: 2px; left: calc(100% + 4px); z-index: 5; display: grid; grid-template-columns: repeat(2, 28px); gap: 4px; }
-.bubble__copy { position: absolute; top: 5px; right: 5px; display: grid; place-items: center; width: 24px; height: 24px; padding: 0; border: 0; border-radius: 7px; background: none; color: var(--muted); opacity: 0; cursor: pointer; transition: opacity 0.12s; }
-.bubble__copy:hover { color: var(--text); background: color-mix(in srgb, var(--text) 8%, transparent); }
-/* Room for it on the right, kept when it's hidden so nothing moves on hover; the bottom row still runs to the edge. */
-@media (pointer: fine) { .bubble { padding-right: 32px; } .bubble__meta { margin-right: -20px; } }
-.stream__entry:hover .bubble__copy, .bubble:focus-within .bubble__copy { opacity: 1; }
 .bubble__add { display: inline-grid; place-items: center; width: 22px; height: 18px; padding: 0; border: 1px dashed var(--line); border-radius: 9px; background: none; color: var(--muted); opacity: 0; cursor: pointer; transition: opacity 0.12s; }
 .bubble__add:hover { color: var(--text); border-color: var(--muted); }
 .stream__entry:hover .bubble__add, .bubble:focus-within .bubble__add, .is-open > .bubble__add { opacity: 1; }
@@ -796,7 +791,7 @@ body:has(.batch) .toast-slot { bottom: calc(var(--tabbar) + env(safe-area-inset-
 .bubble__open.is-active { color: var(--accent); border-color: var(--accent); }
 .stream__entry:hover .bubble__open, .bubble:focus-within .bubble__open { opacity: 1; }
 .entry-style { position: relative; }
-@media (pointer: coarse) { .bubble__tools, .bubble__copy { display: none; } }
+@media (pointer: coarse) { .bubble__tools { display: none; } }
 .style-menu { position: absolute; top: 32px; left: 0; z-index: 20; width: 232px; padding: 6px; display: flex; flex-direction: column; gap: 6px; background: var(--surface); border: 1px solid var(--line); border-radius: 12px; box-shadow: var(--shadow); cursor: default; }
 .style-menu--up { top: auto; bottom: 32px; }
 @media (max-width: 1100px) { .style-menu { left: auto; right: 0; } }
@@ -826,6 +821,18 @@ body:has(.batch) .toast-slot { bottom: calc(var(--tabbar) + env(safe-area-inset-
 .tint--gray { --tint: #8a8f8c; }
 .bubble.tint { background: color-mix(in srgb, var(--tint) 16%, var(--surface)); border-color: color-mix(in srgb, var(--tint) 50%, var(--line)); }
 .bubble.tint.is-selected { border-color: var(--accent); background: color-mix(in srgb, var(--tint) 16%, var(--accent-soft)); }
+/* An entry's menu, from a right-click or the ⋯ beside it: the style menu's look, at the pointer. */
+.context-menu { z-index: 45; width: 240px; gap: 4px; }
+.context-menu .swatches { flex-wrap: nowrap; }
+.context-menu .swatch { width: 18px; height: 18px; }
+.context-menu:focus { outline: none; }
+.context-menu .style-menu__group + .style-menu__group { padding-top: 4px; }
+.context-menu .style-menu__group > .context-menu__item { gap: 10px; min-height: 30px; padding: 0 8px; }
+.context-menu__item > svg { flex: none; color: var(--muted); }
+.context-menu .style-menu__group > .context-menu__item:focus-visible { outline: none; background: var(--sunken); }
+.context-menu .style-menu__group > .context-menu__item[aria-checked="true"]::before { content: none; }
+.context-menu__tick { margin-left: auto; display: inline-flex; color: var(--accent); }
+.context-menu__item--danger, .context-menu__item--danger > svg { color: var(--alert); }
 /* A row beside its bubble is clickable too, to pick it. */
 .stream__entry { border-radius: 12px; }
 @media (pointer: fine) { .stream__entry:hover { background: color-mix(in srgb, var(--sunken) 55%, transparent); } }

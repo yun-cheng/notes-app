@@ -96,6 +96,40 @@ export function daysWhen(a: string, b: string): When {
   return a < b ? `${a}..${b}` : `${b}..${a}`;
 }
 
+/** A length of time the date picker can measure from a picked day: "2 weeks ending Nov 9". */
+export type SpanUnit = 'day' | 'week' | 'month' | 'year';
+/** Whether the days start on the picked day, end on it, or reach the same length to each side of it. */
+export type SpanSide = 'starting' | 'ending' | 'around';
+export interface Span {
+  count: number;
+  unit: SpanUnit;
+  side: SpanSide;
+}
+
+/** The date `count` units on from `day` (back, when negative): the same date of the month, or the month's last day when it's shorter. */
+function moveBy(day: string, count: number, unit: SpanUnit): string {
+  if (unit === 'day' || unit === 'week') return addDays(day, count * (unit === 'week' ? 7 : 1));
+  const months = count * (unit === 'month' ? 1 : 12);
+  const [y, m, d] = day.split('-').map(Number);
+  const last = new Date(y, m - 1 + months + 1, 0, 12).getDate();
+  return toDateKey(new Date(y, m - 1 + months, Math.min(d, last), 12));
+}
+
+/**
+ * The first and last day of a span from a picked day, both included: a week starting Nov 3 is Nov 3 to 9, a week
+ * ending Nov 9 is Nov 3 to 9, and a week either side of Nov 9 is Nov 2 to 16.
+ */
+export function spanRange(day: string, { count, unit, side }: Span): [string, string] {
+  if (side === 'starting') return [day, addDays(moveBy(day, count, unit), -1)];
+  if (side === 'ending') return [addDays(moveBy(day, -count, unit), 1), day];
+  return [moveBy(day, -count, unit), moveBy(day, count, unit)];
+}
+
+/** Starting from the day, unless that would run past today, where nothing is written yet. */
+export function spanSide(day: string, count: number, unit: SpanUnit, today: string): SpanSide {
+  return spanRange(day, { count, unit, side: 'starting' })[1] > today ? 'ending' : 'starting';
+}
+
 /** The first and last day of a `when`, as date keys. */
 export function whenRange(when: When, today: string): [string, string] {
   if (when === 'today') return [today, today];

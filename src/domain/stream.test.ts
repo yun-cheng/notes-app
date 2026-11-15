@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import { buildIndex } from './cardIndex';
 import { parseDateKey } from './dates';
-import { daysWhen, entryMatcher, filterParams, parseFilter, streamItems, whenLabel, type TodoStatus } from './stream';
+import { daysWhen, entryMatcher, filterParams, parseFilter, spanRange, spanSide, streamItems, whenLabel, type TodoStatus } from './stream';
 import { doc, note, p, tag, text, todo } from './testFixtures';
 
 const TODAY = '2026-11-12';
@@ -134,6 +134,23 @@ describe('date ranges', () => {
     expect(parseFilter(new URLSearchParams('when=2026-11-09..2026-11-03')).when).toBeUndefined();
     expect(parseFilter(new URLSearchParams('when=2026-11-03..soon')).when).toBeUndefined();
     expect(entryMatcher({ when: '2026-11-03..2026-11-09' }, TODAY)(cards[0])).toBe(false);
+  });
+
+  it('measures a span starting on, ending on, or either side of a day, both ends included', () => {
+    expect(spanRange('2026-11-03', { count: 1, unit: 'week', side: 'starting' })).toEqual(['2026-11-03', '2026-11-09']);
+    expect(spanRange('2026-11-09', { count: 1, unit: 'week', side: 'ending' })).toEqual(['2026-11-03', '2026-11-09']);
+    expect(spanRange('2026-11-09', { count: 1, unit: 'week', side: 'around' })).toEqual(['2026-11-02', '2026-11-16']);
+    expect(spanRange('2026-11-09', { count: 3, unit: 'day', side: 'starting' })).toEqual(['2026-11-09', '2026-11-11']);
+    expect(spanRange('2026-10-01', { count: 1, unit: 'month', side: 'starting' })).toEqual(['2026-10-01', '2026-10-31']);
+    expect(spanRange('2026-03-31', { count: 2, unit: 'year', side: 'ending' })).toEqual(['2024-04-01', '2026-03-31']);
+    // A month either side of March 31 reaches each shorter month's last day.
+    expect(spanRange('2026-03-31', { count: 1, unit: 'month', side: 'around' })).toEqual(['2026-02-28', '2026-04-30']);
+  });
+
+  it('starts from the day unless that would run past today', () => {
+    expect(spanSide('2026-10-01', 1, 'month', TODAY)).toBe('starting');
+    expect(spanSide('2026-11-06', 1, 'week', TODAY)).toBe('starting');
+    expect(spanSide('2026-11-07', 1, 'week', TODAY)).toBe('ending');
   });
 
   it('names a range briefly, with the year only when it is another', () => {

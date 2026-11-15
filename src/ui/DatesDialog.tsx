@@ -1,7 +1,7 @@
 import { useEffect, useMemo, useRef, useState, type KeyboardEvent } from 'react';
 import { createPortal } from 'react-dom';
 import { addDays, addMonths, formatMonth, monthGrid, monthKey, parseDateKey, relativeDay, toDateKey } from '../domain/dates';
-import { daysWhen, WHEN_LABEL, whenLabel, whenRange, type When } from '../domain/stream';
+import { daysWhen, spanRange, spanSide, WHEN_LABEL, whenLabel, whenRange, type SpanSide, type SpanUnit, type When } from '../domain/stream';
 import { useCards, useToday } from '../state/CardsContext';
 import { Icon } from './Icon';
 
@@ -25,6 +25,18 @@ const STEPS: Record<string, number> = { ArrowLeft: -1, ArrowRight: 1, ArrowUp: -
 type View = 'days' | 'months' | 'years';
 /** Years on a page of the year picker: four rows of three. */
 const YEARS_SHOWN = 12;
+
+const UNITS: SpanUnit[] = ['day', 'week', 'month', 'year'];
+const SIDE_LABEL: Record<SpanSide, string> = { starting: 'starting', ending: 'ending', around: 'either side of' };
+const MAX_COUNT = 99;
+
+/** "today", or "Nov 9", with the year when it's another: short, to fit the length's sentence on one line. */
+function shortDay(day: string, today: string): string {
+  if (day === today) return 'today';
+  const opts: Intl.DateTimeFormatOptions = { month: 'short', day: 'numeric' };
+  if (day.slice(0, 4) !== today.slice(0, 4)) opts.year = 'numeric';
+  return parseDateKey(day).toLocaleDateString(undefined, opts);
+}
 
 /**
  * Picks one day, or a first and last day, to show what was written then. The first press picks a day; the next
@@ -70,8 +82,18 @@ export function DatesDialog({ when, onPick, onClose }: { when?: When; onPick: (w
     if (focusDay) gridRef.current?.querySelector<HTMLButtonElement>(`[data-day="${focusDay}"]`)?.focus();
   }, [focusDay, month]);
 
+  // A length measured from the picked day, like "2 weeks ending Nov 9", once any of its fields is changed. Until the side
+  // is chosen, it starts on the day, or ends there when starting would run past today.
+  const [count, setCount] = useState(1);
+  const [unit, setUnit] = useState<SpanUnit>('week');
+  const [side, setSide] = useState<SpanSide | null>(null);
+  const [spanning, setSpanning] = useState(false);
+  const span = start ? { count, unit, side: side ?? spanSide(start, count, unit, today) } : null;
+  const spanned = spanning && span && start ? spanRange(start, span) : null;
+
   const choose = (day: string) => {
-    if (!start || end) {
+    // With a span on, a press moves the day it's measured from.
+    if (!start || end || spanning) {
       setStart(day);
       setEnd(null);
     } else {
@@ -91,13 +113,19 @@ export function DatesDialog({ when, onPick, onClose }: { when?: When; onPick: (w
 
   // While the second end is being chosen, the range follows the pointer.
   const other = end ?? hover ?? start;
-  const [lo, hi] = start && other ? (start <= other ? [start, other] : [other, start]) : [null, null];
+  const [lo, hi] = spanned ?? (start && other ? (start <= other ? [start, other] : [other, start]) : [null, null]);
+  const chosen = spanned ? daysWhen(...spanned) : start ? daysWhen(start, end ?? start) : null;
   const summary =
-    start && end
-      ? whenLabel(daysWhen(start, end), today)
+    spanned || (start && end)
+      ? whenLabel(chosen!, today)
       : start
-        ? `From ${relativeDay(start, today)}. Pick the last day, or Show for just this day.`
+        ? `From ${relativeDay(start, today)}. Pick the last day, set a length below, or Show for just this day.`
         : 'Pick a day, or a first and last day.';
+  const changeSpan = (change: () => void) => {
+    change();
+    setEnd(null);
+    setSpanning(true);
+  };
 
   const year = Number(month.slice(0, 4));
   const firstYear = year - (year % YEARS_SHOWN);
@@ -197,6 +225,8 @@ export function DatesDialog({ when, onPick, onClose }: { when?: When; onPick: (w
               inRange && 'in-range',
               d === lo && 'is-start',
               d === hi && 'is-end',
+              // The day a length is measured from, ringed inside the range.
+              spanned && d === start && 'is-anchor',
             ]
               .filter(Boolean)
               .join(' ');
@@ -219,6 +249,48 @@ export function DatesDialog({ when, onPick, onClose }: { when?: When; onPick: (w
             );
           })}
         </div>
+        {start && span && view === 'days' && (
+          // Reads as a sentence: "2 weeks ending Nov 9". Changing any part sets the days from the picked one.
+          <div className={`dates__span${spanning ? ' is-on' : ''}`} role="group" aria-label="Length from the picked day">
+            <span className="dates__count">
+              <button type="button" className="icon-btn" aria-label="Fewer" disabled={count <= 1} onClick={() => changeSpan(() => setCount(Math.max(1, count - 1)))}>
+                −
+              </button>
+              <input
+                type="number"
+                inputMode="numeric"
+                min={1}
+                max={MAX_COUNT}
+                aria-label="How many"
+                // Selected on focus, so typing replaces the number.
+                onFocus={(e) => e.target.select()}
+                value={count}
+                onChange={(e) => {
+                  const n = Math.round(Number(e.target.value));
+                  if (n >= 1) changeSpan(() => setCount(Math.min(MAX_COUNT, n)));
+                }}
+              />
+              <button type="button" className="icon-btn" aria-label="More" disabled={count >= MAX_COUNT} onClick={() => changeSpan(() => setCount(Math.min(MAX_COUNT, count + 1)))}>
+                +
+              </button>
+            </span>
+            <select aria-label="Unit" value={unit} onChange={(e) => changeSpan(() => setUnit(e.target.value as SpanUnit))}>
+              {UNITS.map((u) => (
+                <option key={u} value={u}>
+                  {count === 1 ? u : `${u}s`}
+                </option>
+              ))}
+            </select>
+            <select aria-label="Which side of the day" value={span.side} onChange={(e) => changeSpan(() => setSide(e.target.value as SpanSide))}>
+              {(Object.keys(SIDE_LABEL) as SpanSide[]).map((s) => (
+                <option key={s} value={s}>
+                  {SIDE_LABEL[s]}
+                </option>
+              ))}
+            </select>
+            <span className="dates__anchor">{shortDay(start, today)}</span>
+          </div>
+        )}
         <p className="dates__summary" aria-live="polite">
           {summary}
         </p>
@@ -230,6 +302,7 @@ export function DatesDialog({ when, onPick, onClose }: { when?: When; onPick: (w
               onClick={() => {
                 setStart(null);
                 setEnd(null);
+                setSpanning(false);
               }}
             >
               Clear
@@ -239,7 +312,7 @@ export function DatesDialog({ when, onPick, onClose }: { when?: When; onPick: (w
           <button type="button" className="btn" onClick={onClose}>
             Cancel
           </button>
-          <button type="button" className="btn btn--primary" disabled={!start} onClick={() => start && onPick(daysWhen(start, end ?? start))}>
+          <button type="button" className="btn btn--primary" disabled={!chosen} onClick={() => chosen && onPick(chosen)}>
             Show
           </button>
         </div>

@@ -793,6 +793,7 @@ body:has(.batch) .toast-slot { bottom: calc(var(--tabbar) + env(safe-area-inset-
 .due-menu__label .repeat-label { font-weight: 400; }
 .bubble__open { display: grid; place-items: center; width: 28px; height: 28px; padding: 0; border: 1px solid var(--line); border-radius: 50%; background: var(--surface); color: var(--muted); opacity: 0; cursor: pointer; transition: opacity 0.12s; }
 .bubble__open:hover { color: var(--text); border-color: var(--muted); }
+.bubble__open.is-active { color: var(--accent); border-color: var(--accent); }
 .stream__entry:hover .bubble__open, .bubble:focus-within .bubble__open { opacity: 1; }
 .entry-style { position: relative; }
 @media (pointer: coarse) { .bubble__tools, .bubble__copy { display: none; } }

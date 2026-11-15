@@ -8,6 +8,8 @@ import { useEntryActions } from './entryActions';
 import { Icon } from './Icon';
 import { ShareDialog } from './ShareDialog';
 import { usePopover } from './usePopover';
+import { useToast } from './Toast';
+import { useUndo } from './useUndo';
 
 type Entry = NoteCard | TodoCard;
 
@@ -29,6 +31,7 @@ export function BubbleTools({ card, open }: { card: Entry; open: (edit?: boolean
           <Icon name={can.edit ? 'edit' : 'open'} size={16} />
         </button>
         {can.edit && <TypeSwitch card={card} className="bubble__open" size={16} />}
+        {can.protect && <ViewOnlyButton card={card} className="bubble__open" size={16} />}
         {can.share && <ShareButton card={card} />}
       </span>
       {/* In the bubble's top right corner, in room the bubble keeps for it, so it covers none of the text. */}
@@ -71,6 +74,37 @@ export function AddTag({ card }: { card: Entry }) {
 }
 
 /** Sharing an entry from beside its bubble. The dialog goes over the whole page, outside the bubble. */
+/** Turns an entry's own view only on or off, with an undo. */
+export function useEntryViewOnly(card: Entry) {
+  const { repo } = useCards();
+  const toast = useToast();
+  const { undoAction } = useUndo();
+  return () => {
+    const on = !card.viewOnly;
+    const action = repo.action();
+    void repo.update(card.id, { viewOnly: on });
+    toast(on ? 'Made view only' : 'It can be changed again', { action: { label: 'Undo', run: () => void undoAction(action) } });
+  };
+}
+
+/** An eye that sets an entry to view only, or (pressed) lets it be changed again: beside its bubble, and in its sheet's bar. */
+export function ViewOnlyButton({ card, className, size }: { card: Entry; className: string; size?: number }) {
+  const toggle = useEntryViewOnly(card);
+  const on = !!card.viewOnly;
+  return (
+    <button
+      type="button"
+      className={`${className}${on ? ' is-active' : ''}`}
+      aria-pressed={on}
+      aria-label="View only"
+      title={on ? 'View only: press to allow changes again' : "Make view only, so it isn't changed by mistake"}
+      onClick={toggle}
+    >
+      <Icon name="eye" size={size} />
+    </button>
+  );
+}
+
 function ShareButton({ card }: { card: Entry }) {
   const [sharing, setSharing] = useState(false);
   return (

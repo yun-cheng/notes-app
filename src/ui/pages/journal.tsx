@@ -25,7 +25,7 @@ import { BatchBar } from '../BatchBar';
 import { SelectionProvider, useBoxSelect, useSelectable, useSelection, useSelectionState } from '../selection';
 import { entries, useEntryActions } from '../entryActions';
 import { useEntryShortcuts } from '../useEntryShortcuts';
-import { AddTag, BubbleTools, TypeSwitch } from '../BubbleTools';
+import { AddTag, BubbleTools, TypeSwitch, useEntryViewOnly, ViewOnlyButton } from '../BubbleTools';
 import { DueLabel, DueMenu, useTickTodo } from '../TodoDue';
 import { SyncMark } from '../SyncStatus';
 import { useToast } from '../Toast';
@@ -460,30 +460,10 @@ function useAlsoIn(card: NoteCard | TodoCard) {
   };
 }
 
-/** An entry's own view only, in its sheet's bar: an eye, pressed while the entry can't be changed. */
-function ViewOnlySwitch({ card }: { card: NoteCard | TodoCard }) {
-  const { repo } = useCards();
-  const on = !!card.viewOnly;
-  return (
-    <button
-      type="button"
-      className={`icon-btn${on ? ' is-active' : ''}`}
-      aria-pressed={on}
-      aria-label="View only"
-      title={on ? 'View only: press to allow changes again' : 'Make view only, so it isn\'t changed by mistake'}
-      onClick={() => void repo.update(card.id, { viewOnly: !on })}
-    >
-      <Icon name="eye" />
-    </button>
-  );
-}
-
 /** Marks an entry set to view only in its bubble's bottom row; pressed, by whoever may, it can be changed again. */
 function ViewOnlyMark({ card }: { card: NoteCard | TodoCard }) {
-  const { repo } = useCards();
   const may = usePermissions();
-  const toast = useToast();
-  const { undoAction } = useUndo();
+  const allow = useEntryViewOnly(card);
   if (!may(card).protect) {
     return (
       <span className="bubble__view-only" title="View only">
@@ -491,11 +471,6 @@ function ViewOnlyMark({ card }: { card: NoteCard | TodoCard }) {
       </span>
     );
   }
-  const allow = () => {
-    const action = repo.action();
-    void repo.update(card.id, { viewOnly: false });
-    toast('It can be changed again', { action: { label: 'Undo', run: () => void undoAction(action) } });
-  };
   return (
     // Its click stays out of the bubble's own click handling (picking).
     <button type="button" className="bubble__view-only" aria-label="View only. Allow changes" title="View only: press to allow changes again" onClick={(e) => (e.stopPropagation(), allow())}>
@@ -793,7 +768,7 @@ function EntryDetail({ card, fresh, edit, onClose }: { card: NoteCard | TodoCard
           </button>
         )}
         {can.edit && <StyleMenu card={card} inBar />}
-        {can.protect && <ViewOnlySwitch card={card} />}
+        {can.protect && <ViewOnlyButton card={card} className="icon-btn" />}
         <button type="button" className="icon-btn" aria-label="Copy text" title="Copy text" onClick={() => copyText(card.id)}>
           <Icon name="copy" />
         </button>

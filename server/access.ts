@@ -8,6 +8,9 @@ import type { Database } from './db';
  * - read: see it
  * - comment: also comment on it (vault viewers, and shares with comment access)
  * - write: also edit it (vault owners and editors, and shares with edit access)
+ *
+ * A card shared with a vault is in that vault too, so its members get no more than the vault gives them: a viewer
+ * can comment on it at most, whatever the share allows.
  */
 export type AccessLevel = 'read' | 'comment' | 'write';
 
@@ -24,13 +27,22 @@ export interface CardAccess {
 /** SQL matching shares that reach `?` (the user, bound twice): directly, or through a vault they belong to. */
 export const SHARED_WITH = `((s.target_type = 'user' AND s.target_id = ?) OR (s.target_type = 'vault' AND s.target_id IN (SELECT vault_id FROM vault_members WHERE user_id = ?)))`;
 
+/** SQL matching shares that let `?` (the user, bound twice) edit: directly, or through a vault they can edit. */
+export const EDITABLE_SHARE = `(s.role = 'edit' AND ((s.target_type = 'user' AND s.target_id = ?) OR (s.target_type = 'vault' AND s.target_id IN (SELECT vault_id FROM vault_members WHERE user_id = ? AND role IN ('owner', 'editor')))))`;
+
+/** SQL for a share's role as it reaches `?` (the user): edit through a vault they only view is comment. */
+const REACHING_ROLE = `CASE WHEN s.role = 'edit' AND s.target_type = 'vault' AND NOT EXISTS (SELECT 1 FROM vault_members vm WHERE vm.vault_id = s.target_id AND vm.user_id = ? AND vm.role IN ('owner', 'editor')) THEN 'comment' ELSE s.role END`;
+
 export async function cardAccess(db: Database, userId: string, cardId: string): Promise<CardAccess | null> {
   const [member, shares] = await Promise.all([
     db
       .prepare(`SELECT m.role FROM cards c JOIN vault_members m ON m.vault_id = c.vault_id AND m.user_id = ? WHERE c.id = ?`)
       .bind(userId, cardId)
       .first<{ role: string }>(),
-    db.prepare(`SELECT s.role FROM card_shares s WHERE s.card_id = ? AND ${SHARED_WITH}`).bind(cardId, userId, userId).all<{ role: string }>(),
+    db
+      .prepare(`SELECT ${REACHING_ROLE} AS role FROM card_shares s WHERE s.card_id = ? AND ${SHARED_WITH}`)
+      .bind(userId, cardId, userId, userId)
+      .all<{ role: string }>(),
   ]);
   let best: AccessLevel | null = member ? VAULT_LEVEL[member.role] : null;
   for (const { role } of shares.results) {
@@ -59,11 +71,11 @@ export async function sharedIntoVaults(db: Database, userId: string): Promise<Va
 export async function sharedWith(db: Database, userId: string): Promise<SharedCard[]> {
   const { results } = await db
     .prepare(
-      `SELECT s.card_id, s.role, u.name AS shared_by FROM card_shares s JOIN users u ON u.id = s.shared_by
+      `SELECT s.card_id, ${REACHING_ROLE} AS role, u.name AS shared_by FROM card_shares s JOIN users u ON u.id = s.shared_by
        WHERE ${SHARED_WITH}
          AND s.card_id NOT IN (SELECT c.id FROM cards c JOIN vault_members m ON m.vault_id = c.vault_id WHERE m.user_id = ?)`,
     )
-    .bind(userId, userId, userId)
+    .bind(userId, userId, userId, userId)
     .all<SharedCard>();
   const best = new Map<string, SharedCard>();
   const rank = { view: 1, comment: 2, edit: 3 };

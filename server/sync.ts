@@ -1,7 +1,7 @@
 import { DAY } from '../src/domain/dates';
 import type { CardRecord } from '../src/domain/types';
 import { MAX_PAYLOAD_BYTES, PULL_LIMIT, type PullResponse, type PushResult } from '../src/sync/protocol';
-import { SHARED_WITH } from './access';
+import { EDITABLE_SHARE, SHARED_WITH } from './access';
 import type { Database, Statement } from './db';
 import { unshare } from './shares';
 import { recordVersions, type Device, type Written } from './versions';
@@ -15,7 +15,7 @@ const toRecord = (row: CardRow): CardRecord => ({ ...row, deleted: !!row.deleted
 /** Cards among `ids` shared with the user for editing. */
 async function editableShares(db: Database, userId: string, ids: string[]): Promise<Set<string>> {
   const { results } = await db
-    .prepare(`SELECT s.card_id FROM card_shares s WHERE s.role = 'edit' AND s.card_id IN (${ids.map(() => '?').join(',')}) AND ${SHARED_WITH}`)
+    .prepare(`SELECT s.card_id FROM card_shares s WHERE s.card_id IN (${ids.map(() => '?').join(',')}) AND ${EDITABLE_SHARE}`)
     .bind(...ids, userId, userId)
     .all<{ card_id: string }>();
   return new Set(results.map((r) => r.card_id));

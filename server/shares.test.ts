@@ -36,6 +36,22 @@ describe('sharing one card', () => {
     expect(await ids(ben.cookie)).toEqual(['a1']);
     expect((await send(ann.cookie, 'POST', '/api/cards/a1/shares', { vault_id: ben.vault, role: 'view' })).status).toBe(404);
   });
+  it("gives a vault's members no more than the vault gives them", async () => {
+    const { ann, ben, push, send, json } = await people();
+    const family = await json<Vault>(send(ann.cookie, 'POST', '/api/vaults', { name: 'Family' }));
+    await send(ann.cookie, 'POST', `/api/vaults/${family.id}/members`, { email: 'ben@example.com', role: 'viewer' });
+    const [first] = await push(ann.cookie, [rec(ann.vault, 'a1', { payload: note('Trip') })]);
+    await send(ann.cookie, 'POST', '/api/cards/a1/shares', { vault_id: family.id, role: 'edit' });
+    const edit = rec(ann.vault, 'a1', { seq: seqOf(first), updated_at: 200, payload: note('Trip v2') });
+    expect(await json(send(ben.cookie, 'GET', '/api/shared'))).toMatchObject({ cards: [{ card_id: 'a1', role: 'comment' }] });
+    expect((await push(ben.cookie, [edit]))[0].status).toBe('forbidden');
+    // A viewer can still comment.
+    expect((await send(ben.cookie, 'POST', '/api/cards/a1/comments', { body: 'Looks good' })).status).toBe(201);
+
+    await send(ann.cookie, 'POST', `/api/vaults/${family.id}/members`, { email: 'ben@example.com', role: 'editor' });
+    expect(await json(send(ben.cookie, 'GET', '/api/shared'))).toMatchObject({ cards: [{ card_id: 'a1', role: 'edit' }] });
+    expect((await push(ben.cookie, [edit]))[0].status).toBe('ok');
+  });
   it('lets only members who can edit share a card', async () => {
     const { ann, ben, push, send } = await people();
     await push(ann.cookie, [rec(ann.vault, 'a1')]);

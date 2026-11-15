@@ -22,6 +22,10 @@ export function firstDayOfWeek(): number {
 
 const STEPS: Record<string, number> = { ArrowLeft: -1, ArrowRight: 1, ArrowUp: -7, ArrowDown: 7 };
 
+type View = 'days' | 'months' | 'years';
+/** Years on a page of the year picker: four rows of three. */
+const YEARS_SHOWN = 12;
+
 /**
  * Picks one day, or a first and last day, to show what was written then. The first press picks a day; the next
  * picks the other end of a range, in either direction. Show applies it, so one day is a press and Show. Opened at
@@ -37,23 +41,29 @@ export function DatesDialog({ when, onPick, onClose }: { when?: When; onPick: (w
   const [hover, setHover] = useState<string | null>(null);
   const [month, setMonth] = useState(monthKey(picked?.[1] ?? today));
   const [focusDay, setFocusDay] = useState<string | null>(null);
+  // The month's title opens its year's months, and the year's title a page of years, to get far quickly.
+  const [view, setView] = useState<View>('days');
   const grid = useMemo(() => monthGrid(month, firstDayOfWeek()), [month]);
   const gridRef = useRef<HTMLDivElement>(null);
 
-  // A dot marks the days something was written on, as a hint of where to look.
+  // A dot marks the days something was written on, as a hint of where to look; and the months and years holding them.
   const written = useMemo(() => new Set(index.live.filter((c) => c.type !== 'tag').map((c) => toDateKey(new Date(c.createdAt)))), [index]);
+  const writtenIn = useMemo(() => new Set([...written].flatMap((d) => [d.slice(0, 7), d.slice(0, 4)])), [written]);
 
   useEffect(() => {
     const onKey = (e: globalThis.KeyboardEvent) => {
       if (e.key !== 'Escape') return;
       e.preventDefault();
       e.stopImmediatePropagation();
-      onClose();
+      // In the months or years, Escape steps back toward the days; there, it closes.
+      if (view === 'years') setView('months');
+      else if (view === 'months') setView('days');
+      else onClose();
     };
     // Before other Escape handlers, so this closes only the dialog, not a sheet under it.
     window.addEventListener('keydown', onKey, true);
     return () => window.removeEventListener('keydown', onKey, true);
-  }, [onClose]);
+  }, [onClose, view]);
 
   // A day moved to by the arrow keys, perhaps in the next month, takes focus once it's drawn.
   useEffect(() => {
@@ -89,19 +99,90 @@ export function DatesDialog({ when, onPick, onClose }: { when?: When; onPick: (w
         ? `From ${relativeDay(start, today)}. Pick the last day, or Show for just this day.`
         : 'Pick a day, or a first and last day.';
 
+  const year = Number(month.slice(0, 4));
+  const firstYear = year - (year % YEARS_SHOWN);
+  const head =
+    view === 'days'
+      ? { title: formatMonth(month), up: 'Choose a month', step: 1, unit: 'month' }
+      : view === 'months'
+        ? { title: String(year), up: 'Choose a year', step: 12, unit: 'year' }
+        : { title: `${firstYear} – ${firstYear + YEARS_SHOWN - 1}`, up: null, step: 12 * YEARS_SHOWN, unit: 'years' };
+  // A month or year is marked when the days picked reach into it.
+  const touches = (from: string, to: string) => lo !== null && hi !== null && lo <= to && hi >= from;
+  const thisMonth = monthKey(today);
+
   return createPortal(
     <div className="dialog-backdrop" onMouseDown={(e) => e.target === e.currentTarget && onClose()}>
       <div className="dialog dates-dialog" role="dialog" aria-modal="true" aria-label="Pick dates">
         <div className="dialog__head">
-          <h2>{formatMonth(month)}</h2>
-          <button type="button" className="icon-btn" aria-label="Previous month" onClick={() => setMonth(addMonths(month, -1))}>
+          <h2>
+            {head.up ? (
+              <button type="button" className="dates__title" aria-label={`${head.title}. ${head.up}`} title={head.up} onClick={() => setView(view === 'days' ? 'months' : 'years')}>
+                {head.title}
+                <Icon name="down" size={16} />
+              </button>
+            ) : (
+              head.title
+            )}
+          </h2>
+          <button type="button" className="icon-btn" aria-label={`Previous ${head.unit}`} onClick={() => setMonth(addMonths(month, -head.step))}>
             <Icon name="left" />
           </button>
-          <button type="button" className="icon-btn" aria-label="Next month" onClick={() => setMonth(addMonths(month, 1))}>
+          <button type="button" className="icon-btn" aria-label={`Next ${head.unit}`} onClick={() => setMonth(addMonths(month, head.step))}>
             <Icon name="right" />
           </button>
         </div>
-        <div className="dates" role="grid" aria-label={formatMonth(month)} ref={gridRef} onKeyDown={onGridKey} onMouseLeave={() => setHover(null)}>
+        {view === 'months' && (
+          <div className="dates-pick" role="group" aria-label={`Months of ${year}`}>
+            {Array.from({ length: 12 }, (_, i) => {
+              const key = `${year}-${String(i + 1).padStart(2, '0')}`;
+              const cls = ['dates-pick__item', key === thisMonth && 'is-today', key === month && 'is-current', touches(`${key}-01`, `${key}-31`) && 'in-range']
+                .filter(Boolean)
+                .join(' ');
+              return (
+                <button
+                  key={key}
+                  type="button"
+                  className={cls}
+                  aria-label={`${formatMonth(key)}${writtenIn.has(key) ? ', has entries' : ''}`}
+                  onClick={() => {
+                    setMonth(key);
+                    setView('days');
+                  }}
+                >
+                  {parseDateKey(`${key}-01`).toLocaleDateString(undefined, { month: 'short' })}
+                  {writtenIn.has(key) && <span className="dates__dot" />}
+                </button>
+              );
+            })}
+          </div>
+        )}
+        {view === 'years' && (
+          <div className="dates-pick" role="group" aria-label="Years">
+            {Array.from({ length: YEARS_SHOWN }, (_, i) => {
+              const y = String(firstYear + i);
+              const cls = ['dates-pick__item', y === today.slice(0, 4) && 'is-today', y === String(year) && 'is-current', touches(`${y}-01-01`, `${y}-12-31`) && 'in-range']
+                .filter(Boolean)
+                .join(' ');
+              return (
+                <button
+                  key={y}
+                  type="button"
+                  className={cls}
+                  aria-label={`${y}${writtenIn.has(y) ? ', has entries' : ''}`}
+                  onClick={() => {
+                    setMonth(`${y}${month.slice(4)}`);
+                    setView('months');
+                  }}
+                >
+                  {y}
+                  {writtenIn.has(y) && <span className="dates__dot" />}
+                </button>
+              );
+            })}
+          </div>
+        )}
+        <div className="dates" hidden={view !== 'days'} role="grid" aria-label={formatMonth(month)} ref={gridRef} onKeyDown={onGridKey} onMouseLeave={() => setHover(null)}>
           {grid.slice(0, 7).map((d) => (
             <div className="dates__weekday" key={d} role="columnheader">
               {parseDateKey(d).toLocaleDateString(undefined, { weekday: 'narrow' })}

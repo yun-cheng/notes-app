@@ -26,6 +26,8 @@ import { useEntryShortcuts } from '../useEntryShortcuts';
 import { AddTag, BubbleTools, TypeSwitch } from '../BubbleTools';
 import { DueLabel, DueMenu, useTickTodo } from '../TodoDue';
 import { SyncMark } from '../SyncStatus';
+import { useToast } from '../Toast';
+import { useUndo } from '../useUndo';
 import { DatesDialog } from '../DatesDialog';
 
 const time = (at: number) => new Date(at).toLocaleTimeString(undefined, { hour: 'numeric', minute: '2-digit' });
@@ -520,8 +522,10 @@ function EntryDetail({ card, fresh, edit, onClose }: { card: NoteCard | TodoCard
   const [tagging, setTagging] = useState(false);
   const [titled, setTitled] = useState(false);
   const [sharing, setSharing] = useState(false);
-  // The formatting toolbar shows in the bottom bar, by the other tools, not over the text.
+  // The formatting toolbar shows in the bottom bar, by the other tools, not over the text; Undo and Redo, at its end.
   const [toolbarHost, setToolbarHost] = useState<HTMLDivElement | null>(null);
+  const [historyHost, setHistoryHost] = useState<HTMLSpanElement | null>(null);
+  const discard = useDiscard(card, fresh);
   const isTodo = card.type === 'todo';
   const showTitle = isTodo || !!card.title.trim() || titled;
   // Opened to edit, the cursor waits at the end of the text: a todo's title, a note's body.
@@ -554,6 +558,7 @@ function EntryDetail({ card, fresh, edit, onClose }: { card: NoteCard | TodoCard
         editable={can.edit}
         toolbar={tools}
         toolbarHost={toolbarHost}
+        historyHost={historyHost}
         autofocus={focusBody}
         placeholder={isTodo ? 'Details' : 'Note'}
         onChange={(content) => void repo.update(card.id, { content })}
@@ -621,13 +626,63 @@ function EntryDetail({ card, fresh, edit, onClose }: { card: NoteCard | TodoCard
         <Link className="note-sheet__when" to={`/card/${card.id}/history`} title="See every version">
           {edited(card)}
         </Link>
-        <button type="button" className="btn" onClick={onClose}>
-          Done
-        </button>
+        {/* Changes save as they're made, so there's no Done: Escape or a press outside closes the sheet. */}
+        <span ref={setHistoryHost} className="note-sheet__history" />
+        {can.edit && (
+          <button
+            type="button"
+            className="btn btn--quiet"
+            disabled={!discard.changed}
+            title={fresh ? 'Move this new entry to the Trash' : 'Put back how it was when opened, and close'}
+            onClick={() => {
+              discard.run();
+              onClose();
+            }}
+          >
+            Discard
+          </button>
+        )}
       </div>
       {sharing && <ShareDialog card={card} onClose={() => setSharing(false)} />}
     </>
   );
+}
+
+/** What Discard puts back: everything about an entry its sheet can change. */
+const DISCARDED: (keyof TodoCard)[] = ['type', 'title', 'content', 'tags', 'color', 'preview', 'vaultId', 'status', 'due', 'dueTime', 'repeat'];
+const sameAs = (a: NoteCard | TodoCard, b: NoteCard | TodoCard) =>
+  DISCARDED.every((k) => JSON.stringify((a as TodoCard)[k] ?? null) === JSON.stringify((b as TodoCard)[k] ?? null));
+
+/**
+ * Discard in an entry's sheet: puts the entry back as it was when the sheet opened, as one action that Undo in its
+ * toast takes back. An entry made in this sheet goes to the Trash instead.
+ */
+function useDiscard(card: NoteCard | TodoCard, fresh: boolean) {
+  const { repo } = useCards();
+  const toast = useToast();
+  const { undoAction } = useUndo();
+  const remove = useDeleteCard();
+  const [opened] = useState(card);
+  return {
+    changed: !sameAs(card, opened),
+    run: () => {
+      if (fresh) return remove(card, null);
+      const was = opened as TodoCard;
+      const action = repo.action();
+      // Its words come with the type, so a note turned todo gets back its own title and text.
+      void repo.update(card.id, {
+        type: was.type,
+        title: was.title,
+        content: was.content,
+        tags: was.tags,
+        color: was.color ?? null,
+        preview: was.preview ?? {},
+        ...(was.type === 'todo' ? { status: was.status, due: was.due, dueTime: was.dueTime ?? null, repeat: was.repeat ?? null } : {}),
+      });
+      if (card.vaultId !== was.vaultId) void repo.moveToVault(card.id, was.vaultId);
+      toast('Discarded changes', { action: { label: 'Undo', run: () => void undoAction(action) } });
+    },
+  };
 }
 
 function edited(card: NoteCard | TodoCard): string {

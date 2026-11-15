@@ -29,6 +29,8 @@ interface EditorProps {
   toolbar?: boolean;
   /** Where the toolbar goes instead of above the text, like an entry sheet's bottom bar. */
   toolbarHost?: HTMLElement | null;
+  /** Where Undo and Redo go as buttons of their own, always shown, instead of in the toolbar. */
+  historyHost?: HTMLElement | null;
   /** Puts the cursor at the end when the editor opens. */
   autofocus?: boolean;
 }
@@ -69,18 +71,44 @@ interface Tool {
   className?: string;
 }
 
-function Toolbar({ editor, onPhoto }: { editor: TiptapEditor; onPhoto: () => void }) {
-  const mod = /Mac|iPhone|iPad/.test(navigator.platform) ? '⌘' : 'Ctrl+';
+const MOD = /Mac|iPhone|iPad/.test(navigator.platform) ? '⌘' : 'Ctrl+';
+
+/** Undo and Redo for the text typed in this editor. */
+function historyTools(editor: TiptapEditor): Tool[] {
+  return [
+    { label: 'Undo', title: `Undo (${MOD}Z)`, icon: 'undo', run: () => editor.chain().focus().undo().run(), disabled: !editor.can().undo() },
+    { label: 'Redo', title: `Redo (${MOD}Shift+Z)`, icon: 'redo', run: () => editor.chain().focus().redo().run(), disabled: !editor.can().redo() },
+  ];
+}
+
+/** Undo and Redo on their own, as icon buttons, like in an entry sheet's bottom bar. */
+function HistoryButtons({ editor }: { editor: TiptapEditor }) {
+  return (
+    <>
+      {historyTools(editor).map((t) => (
+        <button
+          key={t.label}
+          type="button"
+          className="icon-btn"
+          title={t.title}
+          aria-label={t.label}
+          disabled={t.disabled}
+          // Keeps the cursor where it was in the text.
+          onMouseDown={(e) => e.preventDefault()}
+          onClick={t.run}
+        >
+          <Icon name={t.icon!} />
+        </button>
+      ))}
+    </>
+  );
+}
+
+function Toolbar({ editor, onPhoto, history }: { editor: TiptapEditor; onPhoto: () => void; history: boolean }) {
+  const undoRedo = history ? historyTools(editor) : [];
+  if (undoRedo.length) undoRedo[undoRedo.length - 1].className = 'tool-sep';
   const tools: Tool[] = [
-    { label: 'Undo', title: `Undo (${mod}Z)`, icon: 'undo', run: () => editor.chain().focus().undo().run(), disabled: !editor.can().undo() },
-    {
-      label: 'Redo',
-      title: `Redo (${mod}Shift+Z)`,
-      icon: 'redo',
-      className: 'tool-sep',
-      run: () => editor.chain().focus().redo().run(),
-      disabled: !editor.can().redo(),
-    },
+    ...undoRedo,
     { label: 'B', title: 'Bold', className: 'tool-b', run: () => editor.chain().focus().toggleBold().run(), active: editor.isActive('bold') },
     { label: 'I', title: 'Italic', className: 'tool-i', run: () => editor.chain().focus().toggleItalic().run(), active: editor.isActive('italic') },
     { label: 'H', title: 'Heading', run: () => editor.chain().focus().toggleHeading({ level: 2 }).run(), active: editor.isActive('heading') },
@@ -111,7 +139,7 @@ function Toolbar({ editor, onPhoto }: { editor: TiptapEditor; onPhoto: () => voi
   );
 }
 
-export function Editor({ content, onChange, placeholder, selfId, vaultId, editable = true, toolbar = false, toolbarHost, autofocus = false }: EditorProps) {
+export function Editor({ content, onChange, placeholder, selfId, vaultId, editable = true, toolbar = false, toolbarHost, historyHost, autofocus = false }: EditorProps) {
   const { index, repo, vaults, accountId } = useCards();
   const [menu, setMenu] = useState<MenuState | null>(null);
   const slash = useTypeaheadMenu();
@@ -304,8 +332,9 @@ export function Editor({ content, onChange, placeholder, selfId, vaultId, editab
       {editable &&
         toolbar &&
         (toolbarHost
-          ? createPortal(<Toolbar editor={editor} onPhoto={photoInput.pick} />, toolbarHost)
-          : <Toolbar editor={editor} onPhoto={photoInput.pick} />)}
+          ? createPortal(<Toolbar editor={editor} onPhoto={photoInput.pick} history={!historyHost} />, toolbarHost)
+          : <Toolbar editor={editor} onPhoto={photoInput.pick} history={!historyHost} />)}
+      {editor && editable && historyHost && createPortal(<HistoryButtons editor={editor} />, historyHost)}
       <EditorContent editor={editor} />
       {slash.view}
       {photoInput.input}

@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { displayTitle, hasPhoto, isBlank, isImageUrl, linkedCardIds, linkUrls, photoIds, plainText, previewLines, siteName, splitLinks, textToDoc } from './content';
+import { CODE_CLOSE, CODE_OPEN, displayTitle, hasPhoto, isBlank, isImageUrl, linkedCardIds, linkUrls, photoIds, plainText, previewLines, previewParts, siteName, splitLinks, textToDoc } from './content';
 import { doc, link, note, p, tag, text } from './testFixtures';
 
 describe('content', () => {
@@ -43,6 +43,21 @@ describe('previews', () => {
     const body = textToDoc('one\n\ntwo\n');
     expect(body).toEqual(doc(p(text('one')), { type: 'paragraph' }, p(text('two'))));
     expect(previewLines(body)).toEqual(['one', '', 'two']);
+  });
+  it('keeps code blocks as typed, apart from the text around them', () => {
+    const body = doc(
+      p(text('Run '), { type: 'text', text: 'npm test', marks: [{ type: 'code' }] }, text(':')),
+      { type: 'codeBlock', attrs: { language: 'js' }, content: [text('if (a) {\n  b();\n}\n')] },
+      p(text('Done')),
+      { type: 'codeBlock', attrs: { language: null } },
+    );
+    expect(previewParts(body, undefined, { markCode: true })).toEqual([
+      { kind: 'text', lines: [`Run ${CODE_OPEN}npm test${CODE_CLOSE}:`] },
+      { kind: 'code', text: 'if (a) {\n  b();\n}', language: 'js', prefix: '' },
+      { kind: 'text', lines: ['Done'] },
+    ]);
+    // Lines elsewhere (titles, comparing versions) keep code's lines, without marks.
+    expect(previewLines(body)).toEqual(['Run npm test:', 'if (a) {', '  b();', '}', 'Done']);
   });
 });
 

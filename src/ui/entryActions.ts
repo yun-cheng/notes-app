@@ -12,22 +12,23 @@ import { useSaveEntries, type SaveOptions } from './useSaveEntry';
 export const entries = (n: number) => `${n} ${n === 1 ? 'entry' : 'entries'}`;
 
 /** What the clipboard should get on the next copy, set just before asking the browser to copy. */
-let pending: { text: string; json: string } | null = null;
+let pending: { text: string; json?: string } | null = null;
 
 if (typeof document !== 'undefined') {
   document.addEventListener('copy', (e) => {
     if (!pending || !e.clipboardData) return;
     e.preventDefault();
     e.clipboardData.setData('text/plain', pending.text);
-    e.clipboardData.setData(ENTRIES_TYPE, pending.json);
+    if (pending.json) e.clipboardData.setData(ENTRIES_TYPE, pending.json);
   });
 }
 
 /**
- * Puts text and an exact copy on the clipboard. The browser's own copy command fires a copy event, which is the
- * one place a page can add a type of its own; without it, the text alone is copied, which can be refused.
+ * Puts text, and an exact copy of entries when given, on the clipboard. The browser's own copy command fires a copy
+ * event, which is the one place a page can add a type of its own; without it, the text alone is copied, which can
+ * be refused. Plain text (a code block's) goes the same way, since the copy command works where the newer way is refused.
  */
-async function writeClipboard(text: string, json: string): Promise<boolean> {
+export async function writeClipboard(text: string, json?: string): Promise<boolean> {
   pending = { text, json };
   try {
     if (document.execCommand('copy')) return true;

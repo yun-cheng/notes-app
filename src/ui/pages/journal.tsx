@@ -2,7 +2,7 @@ import { useEffect, useLayoutEffect, useRef, useState, type ReactNode } from 're
 import { Link, Outlet, useLocation, useNavigate, useParams } from 'react-router';
 import { diaryVault } from '../../domain/access';
 import { linkTitle } from '../../domain/cardIndex';
-import { displayTitle, previewLines, splitLinks } from '../../domain/content';
+import { CODE_CLOSE, CODE_OPEN, displayTitle, previewParts, splitLinks, type PreviewPart } from '../../domain/content';
 import { isDateKey, relativeDay, relativeDayInSentence, toDateKey } from '../../domain/dates';
 import { isFiltered, sortGroup, streamItems, type StreamItem, type StreamSort } from '../../domain/stream';
 import type { NoteCard, TodoCard, Vault } from '../../domain/types';
@@ -23,7 +23,7 @@ import { Attachments } from '../Attachments';
 import { colorClass, StyleMenu } from '../EntryStyle';
 import { BatchBar } from '../BatchBar';
 import { SelectionProvider, useBoxSelect, useSelectable, useSelection, useSelectionState } from '../selection';
-import { entries, useEntryActions } from '../entryActions';
+import { entries, useEntryActions, writeClipboard } from '../entryActions';
 import { useEntryShortcuts } from '../useEntryShortcuts';
 import { AddTag, BubbleTools, TypeSwitch, useEntryViewOnly, ViewOnlyButton } from '../BubbleTools';
 import { useEntryMenu } from '../EntryMenu';
@@ -506,12 +506,14 @@ interface Fold {
 }
 
 /**
- * A bubble's text, shown in full. A long one can be folded to its first few lines, and unfolded again, with the
- * toggle in the bubble's bottom row (`BubbleMeta`), without opening the entry.
+ * A bubble's text, shown in full: lines of text, with inline code, and code blocks as code, indent kept, each with a
+ * copy button. A long one can be folded to its first few lines, and unfolded again, with the toggle in the bubble's
+ * bottom row (`BubbleMeta`), without opening the entry.
  */
-function useFold(id: string, lines: string[]) {
-  const text = lines.join('\n');
-  const ref = useRef<HTMLSpanElement>(null);
+function useFold(id: string, parts: PreviewPart[]) {
+  // What the bubble shows, as one string, so its length is measured again only when it changes.
+  const shown = parts.map((p) => (p.kind === 'text' ? p.lines.join('\n') : `\u0000${p.language ?? ''}\u0000${p.text}`)).join('\u0001');
+  const ref = useRef<HTMLDivElement>(null);
   const [folded, setFolded] = useState(() => foldedEntries.has(id));
   const [long, setLong] = useState(false);
 
@@ -527,7 +529,7 @@ function useFold(id: string, lines: string[]) {
     const watch = new ResizeObserver(check);
     watch.observe(el);
     return () => watch.disconnect();
-  }, [text, folded]);
+  }, [shown, folded]);
 
   const fold: Fold = {
     folded,
@@ -538,25 +540,62 @@ function useFold(id: string, lines: string[]) {
       setFolded(!folded);
     },
   };
-  const view = lines.length ? (
-    <span ref={ref} className={`bubble__text${folded ? ' is-folded' : ''}`}>
-      <LinkedText text={text} />
-    </span>
+  const view = parts.length ? (
+    <div ref={ref} className={`bubble__text${folded ? ' is-folded' : ''}`}>
+      {parts.map((part, i) =>
+        part.kind === 'text' ? (
+          <span key={i} className="bubble__lines">
+            <LinkedText text={part.lines.join('\n')} />
+          </span>
+        ) : (
+          <CodeSnippet key={i} code={part.text} />
+        ),
+      )}
+    </div>
   ) : null;
   return { fold, view };
 }
 
-/** Text with its web addresses as links that open in a new tab. Clicking one doesn't open or pick the entry. */
+/** A code block in a bubble: as typed, in a code font, scrolling sideways when wide, with a button that copies it. */
+function CodeSnippet({ code }: { code: string }) {
+  const toast = useToast();
+  const copy = async () => toast((await writeClipboard(code)) ? 'Copied the code' : "Couldn't copy here. Select the code instead.");
+  return (
+    <div className="bubble__snippet">
+      <pre>
+        <code>{code}</code>
+      </pre>
+      <button type="button" className="bubble__snippet-copy" aria-label="Copy code" title="Copy code" onClick={() => void copy()}>
+        <Icon name="copy" size={13} />
+      </button>
+    </div>
+  );
+}
+
+/**
+ * Text with its web addresses as links that open in a new tab, and inline code (between `CODE_OPEN` and
+ * `CODE_CLOSE`) as code. Clicking a link doesn't open or pick the entry.
+ */
 function LinkedText({ text }: { text: string }) {
+  // Split on inline code: the odd pieces are code.
+  const pieces = text.split(new RegExp(`${CODE_OPEN}([^${CODE_CLOSE}]*)${CODE_CLOSE}`));
   return (
     <>
-      {splitLinks(text).map((part, i) =>
-        part.href ? (
-          <a key={i} className="bubble__link" href={part.href} target="_blank" rel="noopener noreferrer" referrerPolicy="no-referrer">
-            {part.text}
-          </a>
+      {pieces.map((piece, n) =>
+        n % 2 ? (
+          <code key={n} className="bubble__code">
+            {piece}
+          </code>
         ) : (
-          part.text
+          splitLinks(piece).map((part, i) =>
+            part.href ? (
+              <a key={`${n}-${i}`} className="bubble__link" href={part.href} target="_blank" rel="noopener noreferrer" referrerPolicy="no-referrer">
+                {part.text}
+              </a>
+            ) : (
+              part.text
+            ),
+          )
         ),
       )}
     </>
@@ -573,7 +612,7 @@ function useOpen(card: NoteCard | TodoCard) {
 /** What every bubble does: its text, folded when long; opening it; its menu; and picking it. */
 function useBubble(card: NoteCard | TodoCard) {
   const { index } = useCards();
-  const text = useFold(card.id, previewLines(card.content, (id, label) => linkTitle(index, id, label)));
+  const text = useFold(card.id, previewParts(card.content, (id, label) => linkTitle(index, id, label), { markCode: true }));
   const open = useOpen(card);
   const menu = useEntryMenu(card, open);
   return { text, open, menu, ...useSelectable(card.id, open, menu.onContextMenu) };

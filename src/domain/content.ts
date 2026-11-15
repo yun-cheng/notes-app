@@ -44,23 +44,45 @@ export function firstLine(content: JSONNode): string {
   return line.length > FIRST_LINE_MAX ? `${line.slice(0, FIRST_LINE_MAX - 1).trimEnd()}…` : line;
 }
 
-/** A block's text on one line, with card links as their titles. */
-export function inlineText(node: JSONNode, titleOf?: (id: string, label: string) => string): string {
-  if (node.type === 'text') return node.text ?? '';
+/** Wrap inline code in a bubble's lines (`previewParts` with `markCode`), so it can be shown as code. */
+export const CODE_OPEN = '\uE000';
+export const CODE_CLOSE = '\uE001';
+
+/** A block's text on one line, with card links as their titles; `markCode` wraps inline code in `CODE_OPEN`/`CODE_CLOSE`. */
+export function inlineText(node: JSONNode, titleOf?: (id: string, label: string) => string, markCode = false): string {
+  if (node.type === 'text') {
+    const text = node.text ?? '';
+    return markCode && text && node.marks?.some((m) => m.type === 'code') ? `${CODE_OPEN}${text}${CODE_CLOSE}` : text;
+  }
   if (node.type === 'hardBreak') return '\n';
   if (node.type === 'cardLink') {
     const label = String(node.attrs?.label ?? '');
     return titleOf ? titleOf(String(node.attrs?.id), label) : label;
   }
-  return (node.content ?? []).map((n) => inlineText(n, titleOf)).join('');
+  return (node.content ?? []).map((n) => inlineText(n, titleOf, markCode)).join('');
+}
+
+/** A run of a document's text: lines of plain text, or a code block, kept as typed. */
+export type PreviewPart = { kind: 'text'; lines: string[] } | { kind: 'code'; text: string; language: string | null; prefix: string };
+
+interface PreviewOptions {
+  /** Keeps photos and rules as lines of their own and marks quotes with "> ", for comparing versions. */
+  full?: boolean;
+  /** Wraps inline code in `CODE_OPEN`/`CODE_CLOSE`. */
+  markCode?: boolean;
 }
 
 /**
- * A document as lines of text, with list markers. A preview leaves out photos and rules; `full` (for comparing
- * versions) keeps them as lines of their own and marks quotes with "> ". Trailing empty lines are dropped.
+ * A document as runs of text lines, with list markers, and code blocks between them, for a bubble to show code as
+ * code. Trailing empty lines are dropped.
  */
-export function previewLines(content: JSONNode, titleOf?: (id: string, label: string) => string, full = false): string[] {
-  const lines: string[] = [];
+export function previewParts(content: JSONNode, titleOf?: (id: string, label: string) => string, { full = false, markCode = false }: PreviewOptions = {}): PreviewPart[] {
+  const parts: PreviewPart[] = [];
+  const line = (text: string) => {
+    const last = parts[parts.length - 1];
+    if (last?.kind === 'text') last.lines.push(text);
+    else parts.push({ kind: 'text', lines: [text] });
+  };
   const block = (node: JSONNode, prefix = '') => {
     switch (node.type) {
       case 'bulletList':
@@ -79,18 +101,42 @@ export function previewLines(content: JSONNode, titleOf?: (id: string, label: st
         (node.content ?? []).forEach((child) => block(child, prefix));
         return;
       case 'photo':
-        if (full) lines.push(`${prefix}[Photo${node.attrs?.alt ? `: ${String(node.attrs.alt)}` : ''}]`);
+        if (full) line(`${prefix}[Photo${node.attrs?.alt ? `: ${String(node.attrs.alt)}` : ''}]`);
         return;
       case 'horizontalRule':
-        if (full) lines.push(`${prefix}———`);
+        if (full) line(`${prefix}———`);
         return;
+      case 'codeBlock': {
+        const language = typeof node.attrs?.language === 'string' && node.attrs.language ? node.attrs.language : null;
+        parts.push({ kind: 'code', text: inlineText(node).replace(/\n+$/, ''), language, prefix });
+        return;
+      }
       default:
-        lines.push(...`${prefix}${inlineText(node, titleOf)}`.split('\n'));
+        `${prefix}${inlineText(node, titleOf, markCode)}`.split('\n').forEach(line);
     }
   };
   block(content);
-  while (lines.length && !lines[lines.length - 1].trim()) lines.pop();
-  return lines;
+  // Empty lines and empty code at the end are dropped.
+  while (parts.length) {
+    const last = parts[parts.length - 1];
+    if (last.kind === 'code') {
+      if (last.text.trim()) break;
+      parts.pop();
+      continue;
+    }
+    while (last.lines.length && !last.lines[last.lines.length - 1].trim()) last.lines.pop();
+    if (last.lines.length) break;
+    parts.pop();
+  }
+  return parts;
+}
+
+/**
+ * A document as lines of text, with list markers; a code block's lines are lines too. A preview leaves out photos
+ * and rules; `full` (for comparing versions) keeps them as lines of their own and marks quotes with "> ".
+ */
+export function previewLines(content: JSONNode, titleOf?: (id: string, label: string) => string, full = false): string[] {
+  return previewParts(content, titleOf, { full }).flatMap((p) => (p.kind === 'text' ? p.lines : p.text.split('\n').map((l, i) => (i === 0 ? p.prefix : p.prefix.replace(/\S/g, ' ')) + l)));
 }
 
 /** A web address in text. It stops before trailing punctuation, so "see https://a.com." links just the address. */

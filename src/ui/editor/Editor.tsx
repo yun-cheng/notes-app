@@ -12,6 +12,7 @@ import type { JSONNode } from '../../domain/types';
 import { useCards } from '../../state/CardsContext';
 import { Icon, type IconName } from '../Icon';
 import { CardLink, insertCardLink, type LinkOption } from './cardLink';
+import { CodeHighlight } from './codeHighlight';
 import { Photo } from './photo';
 import { usePhotoInput } from './photoInput';
 import { commonSlashItems, slashBlock, typeahead, useTypeaheadMenu, type MenuItem } from './suggest';
@@ -221,6 +222,7 @@ export function Editor({ content, onChange, placeholder, selfId, vaultId, editab
       // Read when drawn, so a note turned into a todo asks for details.
       Placeholder.configure({ placeholder: () => latest.current.placeholder }),
       Photo,
+      CodeHighlight,
       typeahead('slashMenu', '/', slashItems, slash.render('Add')),
       CardLink.configure({
         suggestion: {

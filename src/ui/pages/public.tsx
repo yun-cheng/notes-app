@@ -3,6 +3,7 @@ import { EditorContent, useEditor } from '@tiptap/react';
 import { StarterKit } from '@tiptap/starter-kit';
 import { useEffect, useState } from 'react';
 import { useParams } from 'react-router';
+import { CodeHighlight } from '../editor/codeHighlight';
 import { formatDay, formatTime } from '../../domain/dates';
 import type { JSONNode } from '../../domain/types';
 import { fetchPublicCard, type PublicCard } from '../../sync/http';
@@ -34,7 +35,7 @@ function publicPhoto(token: string) {
 function Body({ content, token }: { content: JSONNode; token: string }) {
   const editor = useEditor({
     editable: false,
-    extensions: [StarterKit.configure({ heading: { levels: [1, 2, 3] }, link: { openOnClick: true } }), PublicLink, publicPhoto(token)],
+    extensions: [StarterKit.configure({ heading: { levels: [1, 2, 3] }, link: { openOnClick: true } }), PublicLink, publicPhoto(token), CodeHighlight],
     content,
     editorProps: { attributes: { class: 'prose prose--readonly' } },
   });

@@ -15,6 +15,7 @@ import { isGroupName } from '../domain/tagGroups';
 import { effectiveType, type StreamFilter } from '../domain/stream';
 import type { JSONNode } from '../domain/types';
 import { useCards, useToday } from '../state/CardsContext';
+import { CodeHighlight } from './editor/codeHighlight';
 import { Photo } from './editor/photo';
 import { usePhotoInput } from './editor/photoInput';
 import { commonSlashItems, slashBlock, typeahead, useTypeaheadMenu, type MenuItem } from './editor/suggest';
@@ -188,6 +189,7 @@ export function JournalBox({ filter }: { filter: StreamFilter }) {
         placeholder: ({ editor: e }) => (e.isActive('taskItem') ? 'Todo · @ for a due date, time or repeat' : latest.current.diary ? 'Write in the diary' : 'Write a note · [] todo · #tag · / for more'),
       }),
       Photo,
+      CodeHighlight,
       TaskList,
       TaskItem.configure({ nested: true }),
       TodoWord,

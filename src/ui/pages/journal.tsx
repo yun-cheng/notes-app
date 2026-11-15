@@ -29,6 +29,7 @@ import { AddTag, BubbleTools, TypeSwitch, useEntryViewOnly, ViewOnlyButton } fro
 import { useEntryMenu } from '../EntryMenu';
 import { DueLabel, DueMenu, useTickTodo } from '../TodoDue';
 import { SyncMark } from '../SyncStatus';
+import { HighlightedCode } from '../highlight';
 import { useToast } from '../Toast';
 import { useUndo } from '../useUndo';
 import { DatesDialog } from '../DatesDialog';
@@ -548,7 +549,7 @@ function useFold(id: string, parts: PreviewPart[]) {
             <LinkedText text={part.lines.join('\n')} />
           </span>
         ) : (
-          <CodeSnippet key={i} code={part.text} />
+          <CodeSnippet key={i} code={part.text} language={part.language} />
         ),
       )}
     </div>
@@ -556,14 +557,17 @@ function useFold(id: string, parts: PreviewPart[]) {
   return { fold, view };
 }
 
-/** A code block in a bubble: as typed, in a code font, scrolling sideways when wide, with a button that copies it. */
-function CodeSnippet({ code }: { code: string }) {
+/**
+ * A code block in a bubble: as typed, in a code font and its language's colors, scrolling sideways when wide, with a
+ * button that copies it.
+ */
+function CodeSnippet({ code, language }: { code: string; language: string | null }) {
   const toast = useToast();
   const copy = async () => toast((await writeClipboard(code)) ? 'Copied the code' : "Couldn't copy here. Select the code instead.");
   return (
     <div className="bubble__snippet">
       <pre>
-        <code>{code}</code>
+        <HighlightedCode code={code} language={language} />
       </pre>
       <button type="button" className="bubble__snippet-copy" aria-label="Copy code" title="Copy code" onClick={() => void copy()}>
         <Icon name="copy" size={13} />

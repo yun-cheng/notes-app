@@ -377,20 +377,31 @@ export function TagPicker({ tagIds, onChange, autoFocus = false }: { tagIds: str
   );
 }
 
-/** Moves a card between the vaults that are open. Hidden when there's nowhere to move it. `compact` is the select alone, for a toolbar. */
-export function VaultField({ card, compact = false }: { card: Card; compact?: boolean }) {
+/**
+ * The open vaults a card can move between, this account can write to, and a move with an undo in its toast; null
+ * when there's nowhere to move it, or it isn't this account's to move.
+ */
+export function useVaultMove(card: Card) {
   const { repo, vaults, locked, shared } = useCards();
   const toast = useToast();
   const { undoAction } = useUndo();
-  // Only into vaults this account can write to.
   const options = vaults.filter((v) => !locked.has(v.id) && (v.role ?? 'owner') !== 'viewer');
   if (options.length < 2 || !permissions(card, vaults, shared).manage) return null;
   const move = (vaultId: string) => {
+    if (vaultId === card.vaultId) return;
     const action = repo.action();
     void repo.moveToVault(card.id, vaultId);
     const name = vaults.find((v) => v.id === vaultId)?.name ?? 'another vault';
     toast(`Moved to ${name}`, { action: { label: 'Undo', run: () => void undoAction(action) } });
   };
+  return { options, move };
+}
+
+/** Moves a card between the vaults that are open. Hidden when there's nowhere to move it. `compact` is the select alone, for a toolbar. */
+export function VaultField({ card, compact = false }: { card: Card; compact?: boolean }) {
+  const vaultMove = useVaultMove(card);
+  if (!vaultMove) return null;
+  const { options, move } = vaultMove;
   const select = (
     <select className={compact ? 'vault-select' : undefined} value={card.vaultId} aria-label={compact ? 'Vault' : undefined} title={compact ? 'Move to another vault' : undefined} onChange={(e) => move(e.target.value)}>
       {options.map((v) => (

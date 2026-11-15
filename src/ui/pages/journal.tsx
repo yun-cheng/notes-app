@@ -1,14 +1,14 @@
-import { useEffect, useLayoutEffect, useRef, useState } from 'react';
+import { useEffect, useLayoutEffect, useRef, useState, type ReactNode } from 'react';
 import { Link, Outlet, useLocation, useNavigate, useParams } from 'react-router';
 import { diaryVault, permissions } from '../../domain/access';
 import { linkTitle } from '../../domain/cardIndex';
 import { displayTitle, previewLines, splitLinks } from '../../domain/content';
 import { isDateKey, relativeDay, relativeDayInSentence, toDateKey } from '../../domain/dates';
 import { isFiltered, sortGroup, streamItems, type StreamItem, type StreamSort } from '../../domain/stream';
-import type { NoteCard, TodoCard } from '../../domain/types';
+import type { NoteCard, TodoCard, Vault } from '../../domain/types';
 import { useCards, useToday } from '../../state/CardsContext';
 import { Comments } from '../Comments';
-import { Backlinks, Empty, Page, TagChips, TagPicker, TitleField, useDeleteCard, VaultField } from '../components';
+import { Backlinks, Empty, Page, TagChips, TagPicker, TitleField, useDeleteCard, useVaultMove, VaultField } from '../components';
 import { Editor } from '../editor/Editor';
 import { FilterSheet, SortMenu, useFilterTitle, useJournalFilter } from '../FilterPanel';
 import { Icon } from '../Icon';
@@ -29,6 +29,7 @@ import { SyncMark } from '../SyncStatus';
 import { useToast } from '../Toast';
 import { useUndo } from '../useUndo';
 import { DatesDialog } from '../DatesDialog';
+import { usePopover } from '../usePopover';
 
 const time = (at: number) => new Date(at).toLocaleTimeString(undefined, { hour: 'numeric', minute: '2-digit' });
 
@@ -309,12 +310,15 @@ function BubbleMeta({ card, at, fold }: { card: NoteCard | TodoCard; at: number;
 }
 
 /**
- * The vault an entry is in, which filters the journal to it. Left out with only one vault, or when the journal
- * already shows one. An entry shared from someone else's vault says so.
+ * The vault an entry is in. Pressed, it opens a menu that moves the entry to another vault, or filters the journal
+ * to this one; an entry that can't be moved (a vault shared to view, nowhere else to go) filters straight away.
+ * Left out with only one vault, or when the journal already shows one. An entry shared from someone else's vault
+ * says so.
  */
 function VaultLabel({ card }: { card: NoteCard | TodoCard }) {
   const { vaults, shared } = useCards();
   const filter = useJournalFilter();
+  const vaultMove = useVaultMove(card);
   if (filter.vaultId) return null;
   const vault = vaults.find((v) => v.id === card.vaultId);
   if (!vault) {
@@ -326,11 +330,59 @@ function VaultLabel({ card }: { card: NoteCard | TodoCard }) {
     ) : null;
   }
   if (vaults.length < 2) return null;
-  return (
-    <Link className="bubble__vault" to={journalPath({ vaultId: vault.id })} title={`In ${vault.name}. Show only this vault`}>
+  const name = (
+    <>
       {vault.lock === 'pin' && <Icon name="lock" size={11} />}
       {vault.name}
-    </Link>
+    </>
+  );
+  if (!vaultMove) {
+    return (
+      <Link className="bubble__vault" to={journalPath({ vaultId: vault.id })} title={`In ${vault.name}. Show only this vault`}>
+        {name}
+      </Link>
+    );
+  }
+  return <VaultMenu vault={vault} {...vaultMove}>{name}</VaultMenu>;
+}
+
+function VaultMenu({ vault, options, move, children }: { vault: Vault; options: Vault[]; move: (id: string) => void; children: ReactNode }) {
+  const { open, root, toggle, fixedStyle, close } = usePopover();
+  const navigate = useNavigate();
+  return (
+    // Clicks in the menu stay out of the bubble's own click handling (picking).
+    <div ref={root} className="vault-menu" onClick={(e) => e.stopPropagation()}>
+      <button type="button" className="bubble__vault" aria-haspopup="menu" aria-expanded={!!open} title={`In ${vault.name}. Move to another vault`} onClick={toggle}>
+        {children}
+      </button>
+      {open && (
+        <div className={`style-menu${open === 'up' ? ' style-menu--up' : ''}`} style={fixedStyle(200)} role="menu" aria-label="Vault">
+          <div className="style-menu__group" role="group" aria-label="Move to">
+            <span className="style-menu__label">Move to</span>
+            {options.map((v) => (
+              <button
+                key={v.id}
+                type="button"
+                role="menuitemradio"
+                aria-checked={v.id === vault.id}
+                onClick={() => {
+                  move(v.id);
+                  close();
+                }}
+              >
+                {v.name}
+                {v.lock === 'pin' && <Icon name="lock" size={12} />}
+              </button>
+            ))}
+          </div>
+          <div className="style-menu__group">
+            <button type="button" role="menuitem" onClick={() => navigate(journalPath({ vaultId: vault.id }))}>
+              Show only {vault.name}
+            </button>
+          </div>
+        </div>
+      )}
+    </div>
   );
 }
 

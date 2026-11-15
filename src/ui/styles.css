@@ -563,6 +563,9 @@ a.change__title:hover { color: var(--accent); }
 .bubble__due { font-weight: 600; }
 .bubble__vault { display: inline-flex; align-items: center; gap: 3px; color: var(--muted); text-decoration: underline; text-decoration-color: transparent; text-underline-offset: 2px; }
 .bubble__vault:hover { color: var(--text); text-decoration-color: currentColor; }
+.vault-menu { position: relative; display: inline-flex; }
+button.bubble__vault { padding: 0; border: 0; background: none; font: inherit; cursor: pointer; }
+.vault-menu .style-menu__group > button svg { margin-left: auto; color: var(--muted); }
 .due-label { display: inline-flex; align-items: center; gap: 6px; }
 .repeat-label { display: inline-flex; align-items: center; gap: 3px; color: var(--muted); font-size: 12px; }
 .due-fields select { max-width: 11em; }

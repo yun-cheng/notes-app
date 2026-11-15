@@ -46,6 +46,8 @@ interface CardCommon extends CardEnvelope {
   preview?: PreviewStyle;
   /** The bubble's tint, or none. */
   color?: CardColor | null;
+  /** Kept from being changed by mistake: it opens to read until this is turned off. Missing on most cards. */
+  viewOnly?: boolean;
 }
 
 export interface NoteCard extends CardCommon {

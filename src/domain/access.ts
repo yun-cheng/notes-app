@@ -9,17 +9,25 @@ export interface Permissions {
   manage: boolean;
   /** Share it onward. */
   share: boolean;
+  /** Turn the card's own view only on or off: whoever could edit it without that. */
+  protect: boolean;
   /** Set when the card reaches this account through a share rather than a vault. */
   sharedBy: string | null;
   /** A short description of how this account reaches the card, when it isn't simply its own. */
   note: string | null;
 }
 
-const NONE: Permissions = { edit: false, comment: false, manage: false, share: false, sharedBy: null, note: null };
+const NONE: Permissions = { edit: false, comment: false, manage: false, share: false, protect: false, sharedBy: null, note: null };
 const SHARE_NOTE = { view: 'You can view it', comment: 'You can view and comment', edit: 'You can edit it' };
 
 /** What this account may do with a card, from its role in the card's vault or the share that reached it. */
 export function permissions(card: Card, vaults: Vault[], shared: ReadonlyMap<string, SharedCard>): Permissions {
+  const can = reach(card, vaults, shared);
+  // A card set to view only can still be read, commented on and shared; nothing changes it until that's turned off.
+  return card.viewOnly ? { ...can, edit: false, manage: false, protect: can.edit } : { ...can, protect: can.edit };
+}
+
+function reach(card: Card, vaults: Vault[], shared: ReadonlyMap<string, SharedCard>): Omit<Permissions, 'protect'> {
   const vault = vaults.find((v) => v.id === card.vaultId);
   if (vault) {
     const role = vault.role ?? 'owner';

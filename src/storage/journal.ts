@@ -17,6 +17,7 @@ export interface CardPatch {
   preview?: PreviewStyle;
   /** null takes the color off. */
   color?: CardColor | null;
+  viewOnly?: boolean;
   members?: string[];
   choice?: 'one' | 'many';
   ordered?: boolean;

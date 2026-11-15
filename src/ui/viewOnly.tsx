@@ -49,7 +49,7 @@ export function useViewOnly(): boolean {
   return useSyncExternalStore(subscribe, () => current, () => false);
 }
 
-const READ_ONLY = { edit: false, comment: false, manage: false, share: false } as const;
+const READ_ONLY = { edit: false, comment: false, manage: false, share: false, protect: false } as const;
 
 /** What this account may do with a card: nothing that changes it while view only is on. */
 export function usePermissions(): (card: Card) => Permissions {

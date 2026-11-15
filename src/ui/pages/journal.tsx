@@ -301,6 +301,7 @@ function BubbleMeta({ card, at, fold }: { card: NoteCard | TodoCard; at: number;
       {retag && <AddTag card={card} />}
       {retag && <StyleMenu card={card} />}
       <VaultLabel card={card} />
+      {card.viewOnly && <ViewOnlyMark card={card} />}
       <span className="bubble__end">
         {(fold.long || fold.folded) && (
           <button type="button" className="bubble__fold" aria-expanded={!fold.folded} onClick={fold.toggle}>
@@ -457,6 +458,50 @@ function useAlsoIn(card: NoteCard | TodoCard) {
       failed(err);
     }
   };
+}
+
+/** An entry's own view only, in its sheet's bar: an eye, pressed while the entry can't be changed. */
+function ViewOnlySwitch({ card }: { card: NoteCard | TodoCard }) {
+  const { repo } = useCards();
+  const on = !!card.viewOnly;
+  return (
+    <button
+      type="button"
+      className={`icon-btn${on ? ' is-active' : ''}`}
+      aria-pressed={on}
+      aria-label="View only"
+      title={on ? 'View only: press to allow changes again' : 'Make view only, so it isn\'t changed by mistake'}
+      onClick={() => void repo.update(card.id, { viewOnly: !on })}
+    >
+      <Icon name="eye" />
+    </button>
+  );
+}
+
+/** Marks an entry set to view only in its bubble's bottom row; pressed, by whoever may, it can be changed again. */
+function ViewOnlyMark({ card }: { card: NoteCard | TodoCard }) {
+  const { repo } = useCards();
+  const may = usePermissions();
+  const toast = useToast();
+  const { undoAction } = useUndo();
+  if (!may(card).protect) {
+    return (
+      <span className="bubble__view-only" title="View only">
+        <Icon name="eye" size={12} />
+      </span>
+    );
+  }
+  const allow = () => {
+    const action = repo.action();
+    void repo.update(card.id, { viewOnly: false });
+    toast('It can be changed again', { action: { label: 'Undo', run: () => void undoAction(action) } });
+  };
+  return (
+    // Its click stays out of the bubble's own click handling (picking).
+    <button type="button" className="bubble__view-only" aria-label="View only. Allow changes" title="View only: press to allow changes again" onClick={(e) => (e.stopPropagation(), allow())}>
+      <Icon name="eye" size={12} />
+    </button>
+  );
 }
 
 /** In the writing box's place while view only is on: says so, with a way back to writing. */
@@ -748,6 +793,7 @@ function EntryDetail({ card, fresh, edit, onClose }: { card: NoteCard | TodoCard
           </button>
         )}
         {can.edit && <StyleMenu card={card} inBar />}
+        {can.protect && <ViewOnlySwitch card={card} />}
         <button type="button" className="icon-btn" aria-label="Copy text" title="Copy text" onClick={() => copyText(card.id)}>
           <Icon name="copy" />
         </button>

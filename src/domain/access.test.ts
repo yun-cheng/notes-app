@@ -16,6 +16,12 @@ describe('permissions', () => {
     expect(permissions(note('n', 'x', { vaultId: 'elsewhere' }), [vault('v')], shared)).toMatchObject({ edit: true, manage: false, share: false, sharedBy: 'Ann' });
     expect(permissions(note('m', 'x', { vaultId: 'elsewhere' }), [vault('v')], shared)).toMatchObject({ edit: false, comment: false });
   });
+  it('keeps a card set to view only from being changed, by anyone who could, until they turn it off', () => {
+    const kept = note('n', 'x', { vaultId: 'v', viewOnly: true });
+    expect(permissions(kept, [vault('v', 'owner')], new Map())).toMatchObject({ edit: false, manage: false, comment: true, share: true, protect: true });
+    expect(permissions(kept, [vault('v', 'viewer')], new Map())).toMatchObject({ edit: false, protect: false });
+    expect(permissions(note('n', 'x', { vaultId: 'v' }), [vault('v', 'editor')], new Map())).toMatchObject({ edit: true, protect: true });
+  });
   it('finds the account’s diary by its ID, whatever it is called', () => {
     expect(diaryVault([vault('vault-ann'), { ...vault('diary-ann'), name: 'Journal' }], 'ann')?.name).toBe('Journal');
     expect(diaryVault([vault('diary-ben', 'editor')], 'ann')).toBeUndefined();

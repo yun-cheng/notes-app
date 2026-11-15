@@ -216,6 +216,7 @@ function writableVault(scope: Scope, name?: string): ScopeVault {
 
 function requireWrite(scope: Scope, card: Card) {
   if (!scope.vaults.get(card.vaultId)?.write) throw new ToolError(`"${displayTitle(card)}" is in a vault that is read only for AI.`);
+  if (card.viewOnly) throw new ToolError(`"${displayTitle(card)}" is set to view only. The user can turn that off in the app.`);
 }
 
 const resolver = (scope: Scope) => (title: string) => {

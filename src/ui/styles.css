@@ -570,6 +570,9 @@ a.change__title:hover { color: var(--accent); }
 .bubble__vault { display: inline-flex; align-items: center; gap: 3px; color: var(--muted); text-decoration: underline; text-decoration-color: transparent; text-underline-offset: 2px; }
 .bubble__vault:hover { color: var(--text); text-decoration-color: currentColor; }
 .vault-menu { position: relative; display: inline-flex; }
+.bubble__view-only { display: inline-flex; align-items: center; padding: 0; border: 0; background: none; color: var(--accent); cursor: default; }
+button.bubble__view-only { cursor: pointer; }
+button.bubble__view-only:hover { color: var(--text); }
 .bubble__vault-name { display: inline-flex; align-items: center; gap: 3px; }
 button.bubble__vault { padding: 0; border: 0; background: none; font: inherit; cursor: pointer; }
 .vault-menu .style-menu__group > button svg { margin-left: auto; color: var(--muted); }

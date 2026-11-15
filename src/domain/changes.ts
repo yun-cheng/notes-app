@@ -95,6 +95,7 @@ export function describeChange({ before, after, fields }: Pick<Change, 'before' 
   if (has('pinned') && after.type === 'tag') return after.pinned ? 'Pinned' : 'Unpinned';
   if (has('color')) return 'Changed color';
   if (has('preview')) return 'Changed style';
+  if (has('viewOnly')) return after.viewOnly ? 'Made view only' : 'Made editable';
   if (has('members') || has('choice') || has('ordered')) return 'Changed tag group';
   return 'Changed';
 }

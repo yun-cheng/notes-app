@@ -127,6 +127,12 @@ describe('MCP server', () => {
     const refused = await tool('edit_card', { id: 'note-1', title: 'Hacked' });
     expect(refused).toEqual({ text: '"Tokyo plan" is in a vault that is read only for AI.', error: true });
   });
+  it('leaves alone a card set to view only', async () => {
+    const { tool, push, ann } = await world();
+    await push(ann.cookie, [rec(ann.vault, 'kept', { payload: payload({ type: 'todo', title: 'Lease terms', status: 'open', due: null, completedAt: null, viewOnly: true }) })]);
+    expect(await tool('edit_card', { id: 'kept', title: 'Changed' })).toEqual({ text: '"Lease terms" is set to view only. The user can turn that off in the app.', error: true });
+    expect((await tool('complete_todo', { id: 'kept' })).error).toBe(true);
+  });
   it('writes in the diary as in any vault, once it is open to AI', async () => {
     const t = setup();
     const ann = await t.signIn('ann');

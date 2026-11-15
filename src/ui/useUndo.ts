@@ -29,6 +29,8 @@ export function useCanRevert() {
         if (!vault || vault.role === 'viewer') return false;
       }
       const managing = !change.before || change.fields.includes('deleted') || change.fields.includes('vaultId');
+      // Turning a card's view only on or off is taken back by whoever may turn it.
+      if (change.fields.every((f) => f === 'viewOnly' || f === 'updatedAt')) return can.protect;
       return managing ? can.manage : can.edit;
     },
     [vaults, locked, may],

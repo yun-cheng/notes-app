@@ -17,6 +17,7 @@ import { EntrySheet, JournalPage, OldNoteRedirect } from './pages/journal';
 import { TagsPage } from './pages/tags';
 import { SearchPage } from './pages/views';
 import { CalendarPage } from './pages/calendar';
+import { TimelinePage } from './pages/timeline';
 import { CommandPalette } from './CommandPalette';
 import { FilterPanel } from './FilterPanel';
 import { SidebarAccount } from './AccountBadge';
@@ -181,6 +182,7 @@ function SignedInApp() {
           <Route path="today" element={<Navigate to={journalPath({ status: 'today' })} replace />} />
           <Route path="upcoming" element={<Navigate to={journalPath({ status: 'upcoming' })} replace />} />
           <Route path="calendar" element={<CalendarPage />} />
+          <Route path="timeline" element={<TimelinePage />} />
           <Route path="journal" element={<JournalPage />}>
             <Route path=":id" element={<EntrySheet />} />
           </Route>

@@ -111,6 +111,9 @@ export function CalendarPage() {
           <button type="button" className="icon-btn" aria-label="Next month" onClick={() => go(addMonths(month, 1))}>
             <Icon name="right" />
           </button>
+          <Link className="icon-btn" to="/timeline" aria-label="Timeline" title="Timeline: todos as bars from start to due">
+            <Icon name="timeline" />
+          </Link>
         </>
       }
     >

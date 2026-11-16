@@ -61,6 +61,21 @@ export function shiftDates(todo: TodoCard, days: number): { due?: string; start?
   };
 }
 
+/**
+ * Moving one end of a todo's span by some days: its start (a start on its due date is none) or its due date (a todo
+ * that only had a start gets one). An end can't pass the other.
+ */
+export function endPatch(span: Span, end: 'start' | 'end', days: number): { start?: string | null; due?: string } {
+  const todo = span.card;
+  if (end === 'start') {
+    const start = addDays(span.from, days);
+    const from = start > span.to ? span.to : start;
+    return { start: todo.due && from === todo.due ? null : from };
+  }
+  const due = addDays(span.to, days);
+  return { due: due < span.from ? span.from : due };
+}
+
 /** The days a span covers within a run of days, as the index of its first and how many. */
 export function placeIn(days: string[], span: Span): { at: number; length: number } | null {
   const first = days[0];

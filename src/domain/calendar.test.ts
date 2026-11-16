@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { lanes, placeIn, shiftDates, spanOn, spans, todoSpan } from './calendar';
+import { endPatch, lanes, placeIn, shiftDates, spanOn, spans, todoSpan } from './calendar';
 import { todo } from './testFixtures';
 
 const week = ['2026-11-16', '2026-11-17', '2026-11-18', '2026-11-19', '2026-11-20', '2026-11-21', '2026-11-22'];
@@ -37,5 +37,15 @@ describe('the calendar', () => {
     expect(shiftDates(todo('a', '2026-11-20', { start: '2026-11-17' }), 3)).toEqual({ due: '2026-11-23', start: '2026-11-20' });
     expect(shiftDates(todo('b', '2026-11-20'), -1)).toEqual({ due: '2026-11-19' });
     expect(shiftDates(todo('c', '2026-11-20'), 0)).toEqual({});
+  });
+
+  it('moves one end, never past the other, and a start on the due date is none', () => {
+    const span = todoSpan(todo('a', '2026-11-20', { start: '2026-11-17' }))!;
+    expect(endPatch(span, 'start', 1)).toEqual({ start: '2026-11-18' });
+    expect(endPatch(span, 'start', 9)).toEqual({ start: null });
+    expect(endPatch(span, 'end', 2)).toEqual({ due: '2026-11-22' });
+    expect(endPatch(span, 'end', -9)).toEqual({ due: '2026-11-17' });
+    expect(endPatch(todoSpan(todo('b', '2026-11-20'))!, 'start', -2)).toEqual({ start: '2026-11-18' });
+    expect(endPatch(todoSpan(todo('c', null, { start: '2026-11-18' }))!, 'end', 3)).toEqual({ due: '2026-11-21' });
   });
 });

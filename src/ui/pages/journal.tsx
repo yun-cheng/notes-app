@@ -388,7 +388,7 @@ function BubbleMeta({ card, at, fold, flip, lead }: { card: NoteCard | TodoCard;
           </button>
         )}
         {card.type === 'todo' && card.waiting && card.status === 'open' && <WaitingMark />}
-        {card.type === 'todo' && (retag ? <DueMenu card={card} look={card.due ? 'label' : 'add'} /> : <DueLabel todo={card} className="bubble__due" />)}
+        {card.type === 'todo' && (retag ? <DueMenu card={card} look={card.due || card.start ? 'label' : 'add'} /> : <DueLabel todo={card} className="bubble__due" />)}
         <SyncMark id={card.id} />
         <time dateTime={new Date(at).toISOString()}>{time(at)}</time>
       </span>
@@ -1256,7 +1256,7 @@ function StackList({ stack }: { stack: NoteCard }) {
 }
 
 /** What Discard puts back: everything about an entry its sheet can change. */
-const DISCARDED: (keyof TodoCard)[] = ['type', 'title', 'content', 'back', 'tags', 'color', 'preview', 'vaultId', 'status', 'due', 'dueTime', 'repeat'];
+const DISCARDED: (keyof TodoCard)[] = ['type', 'title', 'content', 'back', 'tags', 'color', 'preview', 'vaultId', 'status', 'due', 'dueTime', 'start', 'repeat'];
 const sameAs = (a: NoteCard | TodoCard, b: NoteCard | TodoCard) =>
   DISCARDED.every((k) => JSON.stringify((a as TodoCard)[k] ?? null) === JSON.stringify((b as TodoCard)[k] ?? null));
 
@@ -1285,7 +1285,7 @@ function useDiscard(card: NoteCard | TodoCard, fresh: boolean) {
         tags: was.tags,
         color: was.color ?? null,
         preview: was.preview ?? {},
-        ...(was.type === 'todo' ? { status: was.status, due: was.due, dueTime: was.dueTime ?? null, repeat: was.repeat ?? null } : {}),
+        ...(was.type === 'todo' ? { status: was.status, due: was.due, dueTime: was.dueTime ?? null, start: was.start ?? null, repeat: was.repeat ?? null } : {}),
       });
       if (card.vaultId !== was.vaultId) void repo.moveToVault(card.id, was.vaultId);
       toast('Discarded changes', { action: { label: 'Undo', run: () => void undoAction(action) } });

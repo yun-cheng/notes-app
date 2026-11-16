@@ -37,6 +37,7 @@ export function markdownFiles(index: CardIndex): MarkdownFile[] {
     front.push(`title: ${yamlString(card.title)}`);
     if (card.type === 'todo') {
       front.push(`status: ${card.status}`);
+      if (card.start) front.push(`start: ${card.start}`);
       if (card.due) front.push(`due: ${card.due}`);
       if (card.due && card.dueTime) front.push(`time: "${card.dueTime}"`);
       if (card.due && card.repeat) front.push(`repeat: ${repeatWord(card.repeat)}`);
@@ -109,6 +110,7 @@ function isCard(value: unknown): value is Card {
       (c.status === 'open' || c.status === 'done') &&
       (c.due === null || isDateKey(c.due)) &&
       optional(c.dueTime, (t) => t === null || isTimeKey(t)) &&
+      optional(c.start, (s) => s === null || isDateKey(s)) &&
       optional(c.repeat, (r) => r === null || isRepeat(r)) &&
       optional(c.waiting, (w) => typeof w === 'boolean') &&
       (c.completedAt === null || isTime(c.completedAt))

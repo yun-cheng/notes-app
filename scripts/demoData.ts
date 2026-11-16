@@ -220,14 +220,15 @@ export async function seed() {
     id: string,
     title: string,
     due: string | null,
-    extra: Extras & { done?: number; tags?: string[]; when?: number; dueTime?: string; repeat?: Repeat; waiting?: boolean; content?: JSONNode } = {},
+    extra: Extras & { done?: number; tags?: string[]; when?: number; dueTime?: string; start?: string; repeat?: Repeat; waiting?: boolean; content?: JSONNode } = {},
   ) => {
-    const { done, tags = [], when, dueTime, repeat, waiting, content, ...extras } = extra;
+    const { done, tags = [], when, dueTime, start, repeat, waiting, content, ...extras } = extra;
     return add(id, personal, done ?? when ?? at(3, 10), {
       type: 'todo',
       title,
       due,
       ...(due && dueTime ? { dueTime } : {}),
+      ...(start ? { start } : {}),
       ...(due && repeat ? { repeat } : {}),
       ...(waiting && !done ? { waiting: true } : {}),
       status: done ? 'done' : 'open',
@@ -348,11 +349,12 @@ export async function seed() {
   note('demo-note-old-flat', at(9, 20, 0), doc(p('Old flat'), bullets('Meter reading: 4821', 'Deposit back in 30 days')), [home], 'Old flat', personal, { archived: true });
 
   // Todos: overdue, due today (one at a time), upcoming, no date, repeating, waiting, done and archived. Those
-  // are what the board by todo state shows: Open, Waiting and Done.
-  todo('demo-todo-taxes', 'File the tax return', addDays(today, -2), { tags: [home, high] });
+  // are what the board by todo state shows: Open, Waiting and Done. Some have a start date too, so they span days
+  // on the calendar and the timeline.
+  todo('demo-todo-taxes', 'File the tax return', addDays(today, -2), { tags: [home, high], start: addDays(today, -9) });
   todo('demo-todo-plants', 'Water the plants', today, { tags: [home], repeat: { unit: 'day', every: 3 } });
   todo('demo-todo-review', 'Review the export PR', today, { tags: [work, high], dueTime: '15:00' });
-  todo('demo-todo-flights', 'Book flights to Kyoto', addDays(today, 3), { tags: [travel, medium] });
+  todo('demo-todo-flights', 'Book flights to Kyoto', addDays(today, 3), { tags: [travel, medium], start: addDays(today, 1) });
   todo('demo-todo-dentist', 'Dentist appointment', addDays(today, 7), { dueTime: '10:30', waiting: true, color: 'pink' });
   todo('demo-todo-read', 'Finish chapter 3', null, { tags: [reading, low] });
   todo('demo-todo-groceries', 'Groceries', addDays(today, -1), { done: at(1, 18, 0), tags: [home] });
@@ -361,9 +363,10 @@ export async function seed() {
   todo('demo-todo-onboarding', 'Onboarding design', addDays(today, 5), {
     tags: [work, medium],
     waiting: true,
+    start: addDays(today, -3),
     content: doc(p('Waiting on the designs from Lee.'), checklist(['Wireframes', true], ['Copy review', true], ['Handoff to engineering', false])),
   });
-  todo('demo-todo-migration', 'Plan the API migration', addDays(today, 10), { tags: [work, medium], when: at(2, 9, 30) });
+  todo('demo-todo-migration', 'Plan the API migration', addDays(today, 10), { tags: [work, medium], when: at(2, 9, 30), start: addDays(today, 4) });
   todo('demo-todo-slides', 'Send the conference slides', addDays(today, -3), { done: at(3, 17, 0), tags: [work] });
   todo('demo-todo-passport', 'Renew passport', addDays(today, -20), { done: at(8, 12, 0), tags: [travel], archived: true });
 

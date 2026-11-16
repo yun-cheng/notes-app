@@ -22,6 +22,8 @@ export interface Entry {
   tags: string[];
   /** A todo's due date, or null. */
   due: string | null;
+  /** A copied todo's start date. */
+  start?: string;
   /** A todo's due time (HH:MM). Set only with a due date. */
   dueTime?: string;
   /** How a todo repeats. Set only with a due date. */

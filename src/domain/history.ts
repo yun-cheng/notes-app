@@ -17,6 +17,7 @@ export function cardLines(card: Card, titleOf?: TitleOf, tagName: (id: string) =
   lines.push(`Title: ${card.title.trim() || 'Untitled'}`);
   if (card.type === 'todo') {
     lines.push(`Status: ${card.status === 'done' ? 'Done' : 'Open'}`);
+    if (card.start) lines.push(`Starts: ${card.start}`);
     if (card.due) lines.push(`Due: ${card.due}${card.dueTime ? ` ${card.dueTime}` : ''}`);
     if (card.repeat) lines.push(`Repeats: ${repeatLabel(card.repeat)}`);
   }
@@ -180,6 +181,7 @@ export interface RestoreFields {
   status?: 'open' | 'done';
   due?: string | null;
   dueTime?: string | null;
+  start?: string | null;
   repeat?: Repeat | null;
   pinned?: boolean;
   back?: JSONNode | null;
@@ -202,6 +204,7 @@ export function restorePatch(version: Card): RestoreFields {
         status: version.status,
         due: version.due,
         dueTime: version.dueTime ?? null,
+        start: version.start ?? null,
         repeat: version.repeat ?? null,
       };
     case 'tag':

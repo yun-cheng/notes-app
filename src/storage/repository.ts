@@ -363,6 +363,7 @@ export class CardRepository {
     title: string;
     due?: string | null;
     dueTime?: string | null;
+    start?: string | null;
     repeat?: Repeat | null;
     content?: JSONNode;
     /** A pasted card's back. */
@@ -388,6 +389,7 @@ export class CardRepository {
         due: init.due ?? null,
         // Left off when unset, so todos without them look as they always have to the other apps.
         ...(init.due && init.dueTime ? { dueTime: init.dueTime } : {}),
+        ...(init.start ? { start: init.start } : {}),
         ...(init.due && init.repeat ? { repeat: init.repeat } : {}),
         ...(init.waiting && !init.done ? { waiting: true } : {}),
         completedAt: init.done ? envelope.updatedAt : null,

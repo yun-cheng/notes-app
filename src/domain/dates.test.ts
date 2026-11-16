@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { addDays, addMonths, formatShortMonth, formatTime, isDateKey, isTimeKey, monthGrid, parseDateKey, parseTime, relativeDay, relativeDayInSentence, toDateKey } from './dates';
+import { addDays, addMonths, daysBetween, formatShortMonth, formatTime, isDateKey, isTimeKey, monthGrid, parseDateKey, parseTime, relativeDay, relativeDayInSentence, toDateKey } from './dates';
 
 describe('dates', () => {
   it('round-trips local date keys', () => {
@@ -62,5 +62,14 @@ describe('formatShortMonth', () => {
   it('leaves out this year, and keeps another', () => {
     expect(formatShortMonth('2026-11', '2026-11-15', 'en-US')).toBe('Nov');
     expect(formatShortMonth('2027-01', '2026-11-15', 'en-US')).toBe('Jan 2027');
+  });
+});
+
+describe('days between', () => {
+  it('counts calendar days, across months and a clock change', () => {
+    expect(daysBetween('2026-11-17', '2026-11-18')).toBe(1);
+    expect(daysBetween('2026-10-30', '2026-11-02')).toBe(3);
+    expect(daysBetween('2026-03-01', '2026-03-31')).toBe(30);
+    expect(daysBetween('2026-11-18', '2026-11-17')).toBe(-1);
   });
 });

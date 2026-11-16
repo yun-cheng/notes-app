@@ -26,6 +26,11 @@ export function addDays(key: string, days: number): string {
   return toDateKey(d);
 }
 
+/** How many days from one date key to another: 1 from today to tomorrow. */
+export function daysBetween(from: string, to: string): number {
+  return Math.round((parseDateKey(to).getTime() - parseDateKey(from).getTime()) / DAY);
+}
+
 export function monthKey(key: string): string {
   return key.slice(0, 7);
 }

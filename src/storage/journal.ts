@@ -10,6 +10,8 @@ export interface CardPatch {
   due?: string | null;
   /** null for any time that day. */
   dueTime?: string | null;
+  /** null takes the start date off. */
+  start?: string | null;
   /** null to stop repeating. */
   repeat?: Repeat | null;
   waiting?: boolean;

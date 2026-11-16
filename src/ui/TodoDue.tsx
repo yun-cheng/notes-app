@@ -63,18 +63,23 @@ export function WaitingMark() {
   );
 }
 
-/** "Due today at 3:00 PM", or in a list's narrow column, "Today, 3:00 PM". */
+/**
+ * "Due today at 3:00 PM", or in a list's narrow column, "Today, 3:00 PM"; a todo that starts later says so first:
+ * "Starts Monday, due Friday". Once started, only when it's due.
+ */
 export function dueText(todo: TodoCard, today: string, short = false): string {
-  if (!todo.due) return '';
+  const starts = todo.status === 'open' && todo.start && todo.start > today ? todo.start : null;
+  if (!todo.due) return starts ? (short ? `From ${relativeDay(starts, today)}` : `Starts ${relativeDayInSentence(starts, today)}`) : '';
   const time = todo.dueTime ? formatTime(todo.dueTime) : '';
-  if (short) return `${relativeDay(todo.due, today)}${time ? `, ${time}` : ''}`;
-  return `Due ${relativeDayInSentence(todo.due, today)}${time ? ` at ${time}` : ''}`;
+  if (short) return `${starts ? `${relativeDay(starts, today)} – ` : ''}${relativeDay(todo.due, today)}${time ? `, ${time}` : ''}`;
+  const due = `${relativeDayInSentence(todo.due, today)}${time ? ` at ${time}` : ''}`;
+  return starts ? `Starts ${relativeDayInSentence(starts, today)}, due ${due}` : `Due ${due}`;
 }
 
 /** A todo's due date and time, red once it's past, and how it repeats. */
 export function DueLabel({ todo, short = false, className }: { todo: TodoCard; short?: boolean; className: string }) {
   const today = useToday();
-  if (!todo.due) return null;
+  if (!todo.due && !todo.start) return null;
   const due = <span className={`${className}${isOverdue(todo, today) ? ' is-alert' : ''}`}>{dueText(todo, today, short)}</span>;
   if (!todo.repeat) return due;
   const label = repeatLabel(todo.repeat);
@@ -106,8 +111,11 @@ function useDueEdits(card: TodoCard) {
   return {
     today,
     clear,
-    setDate: (date: string) => (date ? update({ due: date }) : clear()),
+    // A due date before the start moves the start to it.
+    setDate: (date: string) => (date ? update({ due: date, ...(card.start && date < card.start ? { start: date } : {}) }) : clear()),
     setTime: (time: string) => update({ dueTime: time || null, ...(!card.due && time ? { due: today } : {}) }),
+    // A start after the due date moves the due date to it, so it's never due before it starts.
+    setStart: (start: string) => update({ start: start || null, ...(start && card.due && start > card.due ? { due: start } : {}) }),
     repeatSelect: (editable: boolean) => (
       <select
         value={repeatKey(card.repeat)}
@@ -155,8 +163,8 @@ export function DueMenu({ card, look = 'bar' }: { card: TodoCard; look?: 'bar' |
         className={looks[look]}
         aria-haspopup="dialog"
         aria-expanded={!!open}
-        aria-label={card.due ? `${dueText(card, today)}${card.repeat ? `, ${repeatLabel(card.repeat).toLowerCase()}` : ''}` : 'Set a due date'}
-        title="Due date, time, repeat and waiting"
+        aria-label={card.due || card.start ? `${dueText(card, today)}${card.repeat ? `, ${repeatLabel(card.repeat).toLowerCase()}` : ''}` : 'Set a due date'}
+        title="Due date, start date, time, repeat and waiting"
         onClick={toggle}
       >
         {look === 'label' ? (
@@ -172,7 +180,7 @@ export function DueMenu({ card, look = 'bar' }: { card: TodoCard; look?: 'bar' |
         ) : (
           <>
             <Icon name="calendar" size={look === 'add' ? 12 : 18} />
-            {look === 'bar' && card.due && <span>{dueText(card, today, true)}</span>}
+            {look === 'bar' && (card.due || card.start) && <span>{dueText(card, today, true)}</span>}
             {look === 'bar' && card.repeat && <Icon name="repeat" size={12} />}
           </>
         )}
@@ -197,6 +205,10 @@ export function DueMenu({ card, look = 'bar' }: { card: TodoCard; look?: 'bar' |
           <label className="due-menu__row">
             <span>Repeat</span>
             {edits.repeatSelect(true)}
+          </label>
+          <label className="due-menu__row" title="The day work on it starts: the calendar and the timeline show it from then until it's due">
+            <span>Starts</span>
+            <input type="date" value={card.start ?? ''} max={card.due ?? undefined} onChange={(e) => edits.setStart(e.target.value)} />
           </label>
           {card.status === 'open' && (
             <label className="due-menu__waiting">

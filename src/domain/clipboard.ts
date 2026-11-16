@@ -35,6 +35,7 @@ export function toEntries(cards: Copyable[], tagName: TagName): Entry[] {
         ...flip,
         tags,
         due: card.due,
+        ...(isDateKey(card.start) ? { start: card.start } : {}),
         ...(card.due && isTimeKey(card.dueTime) ? { dueTime: card.dueTime } : {}),
         ...(card.due && isRepeat(card.repeat) ? { repeat: card.repeat } : {}),
         ...(card.status === 'done' ? { done: true } : {}),
@@ -125,7 +126,7 @@ export function decodeEntries(raw: string): Entry[] | null {
   const entries: Entry[] = [];
   for (const item of list.entries as Record<string, unknown>[]) {
     if (typeof item !== 'object' || item === null) return null;
-    const { kind, title, content, back, tags, due, dueTime, repeat, done } = item;
+    const { kind, title, content, back, tags, due, dueTime, start, repeat, done } = item;
     if ((kind !== 'note' && kind !== 'todo') || typeof title !== 'string' || !isDoc(content)) return null;
     if (!Array.isArray(tags) || !tags.every((t) => typeof t === 'string')) return null;
     if (due !== null && due !== undefined && !(typeof due === 'string' && isDateKey(due))) return null;
@@ -137,6 +138,7 @@ export function decodeEntries(raw: string): Entry[] | null {
       ...(isDoc(back) ? { back } : {}),
       tags: tags as string[],
       due: dated,
+      ...(kind === 'todo' && typeof start === 'string' && isDateKey(start) ? { start } : {}),
       // A time or repeat that doesn't make sense is dropped rather than refusing the paste.
       ...(dated && isTimeKey(dueTime) ? { dueTime } : {}),
       ...(dated && isRepeat(repeat) ? { repeat: { unit: repeat.unit, every: repeat.every } } : {}),

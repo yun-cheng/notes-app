@@ -94,6 +94,7 @@ export function describeChange({ before, after, fields }: Pick<Change, 'before' 
   if (has('title')) return after.type === 'todo' ? 'Edited' : 'Renamed';
   if (has('tags')) return has('position') ? 'Moved on the board' : 'Changed tags';
   if (has('due') || has('dueTime')) return 'Changed due date';
+  if (has('start')) return 'Changed start date';
   if (has('repeat')) return 'Changed repeat';
   if (has('pinned') && after.type === 'tag') return after.pinned ? 'Pinned' : 'Unpinned';
   if (has('color')) return 'Changed color';

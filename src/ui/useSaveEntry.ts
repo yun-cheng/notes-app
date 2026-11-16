@@ -92,7 +92,7 @@ export function useSaveEntries() {
       const common = { title: entry.title, content: entry.content, back: entry.back, tags: tagIdsFor(entry.tags), vaultId: vaultOf(entry), createdAt: at === undefined ? undefined : at + i };
       if (entry.kind === 'note') return repo.createNote(common);
       const due = entry.due ?? opts.due ?? null;
-      return repo.createTodo({ ...common, due, dueTime: entry.dueTime, repeat: entry.repeat, done: entry.done, waiting: opts.waiting });
+      return repo.createTodo({ ...common, due, start: entry.start, dueTime: entry.dueTime, repeat: entry.repeat, done: entry.done, waiting: opts.waiting });
     });
     const [ids] = await Promise.all([Promise.all(making).then((cards) => cards.map((card) => card.id)), Promise.all(tagging)]);
     return { saved: entries.length, ids, action };

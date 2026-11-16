@@ -21,6 +21,13 @@ describe('ticking a todo', () => {
       next: '2026-11-19',
     });
   });
+  it('moves a repeating todo’s start date as far as its due date', () => {
+    const weekly = todo('w', '2026-11-20', { start: '2026-11-17', repeat: { unit: 'week', every: 1 } });
+    const { patch, undo } = completeTodo(weekly, '2026-11-18');
+    expect(patch).toEqual({ due: '2026-11-27', start: '2026-11-24' });
+    expect(undo).toEqual({ due: '2026-11-20', start: '2026-11-17' });
+  });
+
   it('takes waiting off as it finishes or moves on, and puts it back on undo', () => {
     expect(completeTodo(todo('t', TODAY, { waiting: true }), TODAY)).toEqual({ patch: { status: 'done', waiting: false }, undo: { status: 'open', waiting: true } });
     const weekly = completeTodo(todo('t', TODAY, { waiting: true, repeat: { unit: 'week', every: 1 } }), TODAY);

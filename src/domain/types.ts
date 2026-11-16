@@ -84,6 +84,11 @@ export interface TodoCard extends CardCommon {
   due: string | null;
   /** Local time on the due date (HH:MM, 24-hour). Missing or null: any time that day. */
   dueTime?: string | null;
+  /**
+   * The day work on it starts (YYYY-MM-DD), on or before its due date: the calendar and the timeline show the todo
+   * from then until it's due. Missing or null on most todos.
+   */
+  start?: string | null;
   /** Set on a repeating todo: ticking it moves `due` to the next time instead of finishing it. See `repeat.ts`. */
   repeat?: Repeat | null;
   /**

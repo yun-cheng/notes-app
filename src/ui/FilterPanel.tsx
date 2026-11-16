@@ -325,6 +325,7 @@ export function FilterPanel({ onPick }: { onPick?: () => void }) {
         {/* Journal is the one in use unless a tag or vault here is: the title bar shows the other filters. */}
         {link('all', 'Journal', journalPath(onHistory ? filter : { sort: filter.sort, board: filter.board }), onJournal && !filter.tagId && !filter.vaultId, 'notes')}
         {link('history', 'History', historyPath(onJournal ? filter : { sort: filter.sort }), onHistory, 'history')}
+        {link('calendar', 'Calendar', '/calendar', pathname === '/calendar', 'calendar')}
       </nav>
 
       {index.tagGroups.groups

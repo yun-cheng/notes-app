@@ -51,6 +51,8 @@ function paragraph(lines: string[], resolve: LinkResolver): JSONNode {
 }
 
 const LIST_ITEM = /^(\s*)([-*+]|\d+[.)])\s+(.*)$/;
+/** A checklist item's box at the start of a bullet: `[ ]`, `[x]` or `[X]`, then a space or nothing. */
+const TASK_BOX = /^\[([ xX])\](?:\s+|$)/;
 /** A photo already in the app, as the Markdown export writes it. */
 const PHOTO = /^!\[([^\]]*)\]\(attachment:([\w-]{8,64})\)$/;
 const indentOf = (line: string) => line.match(/^\s*/)![0].replace(/\t/g, '  ').length;
@@ -136,11 +138,15 @@ function parseList(lines: string[], start: number, resolve: LinkResolver): [JSON
   const base = indentOf(lines[start]);
   const ordered = /\d/.test(first[2]);
   const items: JSONNode[] = [];
+  // Each bullet's box, when it starts with one (`- [ ] `, `- [x] `): a list of only those is a checklist.
+  const boxes: (boolean | null)[] = [];
   let i = start;
   while (i < lines.length) {
     const m = lines[i].match(LIST_ITEM);
     if (!m || indentOf(lines[i]) !== base || /\d/.test(m[2]) !== ordered) break;
-    const body = [m[3]];
+    const box = ordered ? null : m[3].match(TASK_BOX);
+    boxes.push(box ? box[1] !== ' ' : null);
+    const body = [box ? m[3].slice(box[0].length) : m[3]];
     i++;
     while (i < lines.length) {
       const line = lines[i];
@@ -160,6 +166,18 @@ function parseList(lines: string[], start: number, resolve: LinkResolver): [JSON
     }
     items.push({ type: 'listItem', content: blocksOrEmpty(body, resolve) });
   }
+  if (!ordered && boxes.every((b) => b !== null)) {
+    return [{ type: 'taskList', content: items.map((item, n) => ({ type: 'taskItem', attrs: { checked: boxes[n] }, content: item.content })) }, i];
+  }
+  // In a list that isn't all boxes, an item's box stays as it was written.
+  boxes.forEach((b, n) => {
+    if (b === null) return;
+    const para = items[n].content?.[0];
+    if (para?.type !== 'paragraph') return;
+    const box = `[${b ? 'x' : ' '}] `;
+    const [head, ...rest] = para.content ?? [];
+    para.content = head?.type === 'text' && !head.marks ? [{ ...head, text: box + head.text }, ...rest] : [{ type: 'text', text: box }, ...(para.content ?? [])];
+  });
   const startAt = ordered ? Number.parseInt(first[2], 10) : 1;
   return [{ type: ordered ? 'orderedList' : 'bulletList', ...(ordered && startAt !== 1 ? { attrs: { start: startAt } } : {}), content: items }, i];
 }

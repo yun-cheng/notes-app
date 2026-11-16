@@ -94,6 +94,12 @@ export function previewParts(content: JSONNode, titleOf?: (id: string, label: st
         });
         return;
       }
+      case 'taskList':
+        (node.content ?? []).forEach((item) => {
+          const marker = item.attrs?.checked === true ? '☑ ' : '☐ ';
+          (item.content ?? []).forEach((child, j) => block(child, j === 0 ? prefix + marker : `${prefix}  `));
+        });
+        return;
       case 'blockquote':
         (node.content ?? []).forEach((child) => block(child, full ? `${prefix}> ` : prefix));
         return;

@@ -48,6 +48,8 @@ function plainBlock(node: JSONNode, title: TitleResolver): string {
   switch (node.type) {
     case 'bulletList':
       return (node.content ?? []).map((item) => `- ${indent(plainBlocks(item.content, title), '  ')}`).join('\n');
+    case 'taskList':
+      return (node.content ?? []).map((item) => `${item.attrs?.checked === true ? '☑' : '☐'} ${indent(plainBlocks(item.content, title), '  ')}`).join('\n');
     case 'orderedList': {
       const start = Number(node.attrs?.start ?? 1);
       return (node.content ?? []).map((item, i) => `${start + i}. ${indent(plainBlocks(item.content, title), '   ')}`).join('\n');
@@ -84,6 +86,9 @@ function renderBlock(node: JSONNode, title: TitleResolver): string {
       return `${'#'.repeat(Number(node.attrs?.level ?? 1))} ${renderInline(node.content, title)}`;
     case 'bulletList':
       return (node.content ?? []).map((item) => `- ${indent(renderBlocks(item.content, title), '  ')}`).join('\n');
+    case 'taskList':
+      // GitHub's checklist, which AI apps write and read too.
+      return (node.content ?? []).map((item) => `- [${item.attrs?.checked === true ? 'x' : ' '}] ${indent(renderBlocks(item.content, title), '  ')}`).join('\n');
     case 'orderedList': {
       const start = Number(node.attrs?.start ?? 1);
       return (node.content ?? [])

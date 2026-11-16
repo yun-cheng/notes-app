@@ -1,6 +1,7 @@
 import { useEffect, useRef, useState } from 'react';
 import { createPortal } from 'react-dom';
 import { EditorContent, useEditor, type Editor as TiptapEditor } from '@tiptap/react';
+import { TaskItem, TaskList } from '@tiptap/extension-list';
 import { StarterKit } from '@tiptap/starter-kit';
 import { Placeholder } from '@tiptap/extensions';
 import type { SuggestionKeyDownProps, SuggestionProps } from '@tiptap/suggestion';
@@ -136,6 +137,7 @@ function Toolbar({ editor, onPhoto, history }: { editor: TiptapEditor; onPhoto: 
     { label: 'H', title: 'Heading', run: () => editor.chain().focus().toggleHeading({ level: 2 }).run(), active: editor.isActive('heading') },
     { label: '•', title: 'Bullet list', run: () => editor.chain().focus().toggleBulletList().run(), active: editor.isActive('bulletList') },
     { label: '1.', title: 'Numbered list', run: () => editor.chain().focus().toggleOrderedList().run(), active: editor.isActive('orderedList') },
+    { label: '☐', title: 'Checklist', run: () => editor.chain().focus().toggleTaskList().run(), active: editor.isActive('taskList') },
     { label: '“', title: 'Quote', run: () => editor.chain().focus().toggleBlockquote().run(), active: editor.isActive('blockquote') },
     { label: 'Code', title: `Code: words picked in a line, or a code block (${MOD}E for words)`, icon: 'code', run: () => toggleCode(editor), active: editor.isActive('code') || editor.isActive('codeBlock') },
     { label: '[[', title: 'Link to a card', run: () => editor.chain().focus().insertContent('[[').run() },
@@ -218,6 +220,7 @@ export function Editor({ content, onChange, placeholder, selfId, vaultId, editab
     const all: (MenuItem & { words: string })[] = [
       { id: 'h2', label: 'Heading', hint: '##', words: 'heading title', run: slashBlock((ed) => ed.chain().focus().toggleHeading({ level: 2 }).run()) },
       { id: 'h3', label: 'Small heading', hint: '###', words: 'heading subheading', run: slashBlock((ed) => ed.chain().focus().toggleHeading({ level: 3 }).run()) },
+      { id: 'checklist', label: 'Checklist', hint: '[ ]', words: 'checklist check todo task tick box', run: slashBlock((ed) => ed.chain().focus().toggleTaskList().run()) },
       ...commonSlashItems(photoInput.pick),
       { id: 'code', label: 'Code', hint: '```', words: 'code block', run: slashBlock((ed) => ed.chain().focus().toggleCodeBlock().run()) },
       { id: 'divider', label: 'Divider', hint: '---', words: 'divider line rule', run: slashBlock((ed) => ed.chain().focus().setHorizontalRule().run()) },
@@ -230,6 +233,9 @@ export function Editor({ content, onChange, placeholder, selfId, vaultId, editab
   const editor = useEditor({
     extensions: [
       StarterKit.configure({ heading: { levels: [1, 2, 3] } }),
+      // A checklist in the body: its items tick here, not in the journal, and `[ ] ` at a line's start makes one.
+      TaskList,
+      TaskItem.configure({ nested: true }),
       // Read when drawn, so a note turned into a todo asks for details.
       Placeholder.configure({ placeholder: () => latest.current.placeholder }),
       Photo,

@@ -1,5 +1,6 @@
 import { Node } from '@tiptap/core';
 import { EditorContent, useEditor } from '@tiptap/react';
+import { TaskItem, TaskList } from '@tiptap/extension-list';
 import { StarterKit } from '@tiptap/starter-kit';
 import { useEffect, useState } from 'react';
 import { useParams } from 'react-router';
@@ -35,7 +36,7 @@ function publicPhoto(token: string) {
 function Body({ content, token }: { content: JSONNode; token: string }) {
   const editor = useEditor({
     editable: false,
-    extensions: [StarterKit.configure({ heading: { levels: [1, 2, 3] }, link: { openOnClick: true } }), PublicLink, publicPhoto(token), CodeHighlight],
+    extensions: [StarterKit.configure({ heading: { levels: [1, 2, 3] }, link: { openOnClick: true } }), TaskList, TaskItem.configure({ nested: true }), PublicLink, publicPhoto(token), CodeHighlight],
     content,
     editorProps: { attributes: { class: 'prose prose--readonly' } },
   });

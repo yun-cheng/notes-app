@@ -1,5 +1,6 @@
 import { useRef } from 'react';
 import { EditorContent, useEditor } from '@tiptap/react';
+import { TaskItem, TaskList } from '@tiptap/extension-list';
 import { StarterKit } from '@tiptap/starter-kit';
 import type { JSONNode } from '../../domain/types';
 import { CardLink } from './cardLink';
@@ -15,7 +16,7 @@ export function ReadOnlyDoc({ content }: { content: JSONNode }) {
   const clipboard = useRef(clipboardProps(() => (_id, label) => label, (message, actions) => toast(message, { actions }))).current;
   const editor = useEditor({
     editable: false,
-    extensions: [StarterKit.configure({ heading: { levels: [1, 2, 3] } }), CardLink.configure({ suggestion: { char: '[[', items: () => [] } }), Photo, CodeHighlight],
+    extensions: [StarterKit.configure({ heading: { levels: [1, 2, 3] } }), TaskList, TaskItem.configure({ nested: true }), CardLink.configure({ suggestion: { char: '[[', items: () => [] } }), Photo, CodeHighlight],
     content,
     editorProps: { attributes: { class: 'prose prose--readonly' }, handleDOMEvents: clipboard.handleDOMEvents, clipboardTextSerializer: clipboard.clipboardTextSerializer },
   });

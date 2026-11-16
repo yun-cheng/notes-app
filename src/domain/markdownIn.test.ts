@@ -1,5 +1,6 @@
 import { describe, expect, it } from 'vitest';
-import { toMarkdown } from './markdown';
+import { previewLines } from './content';
+import { toMarkdown, toPlainText } from './markdown';
 import { fromMarkdown } from './markdownIn';
 
 const titles: Record<string, string> = { Shop: 'c-shop' };
@@ -67,5 +68,37 @@ describe('photos', () => {
     expect(doc.content!.map((n) => n.type)).toEqual(['paragraph', 'photo', 'paragraph']);
     expect(doc.content![1].attrs).toEqual({ id: 'photo-1234', alt: 'Beach' });
     expect(toMarkdown(doc, plain)).toBe('Before\n\n![Beach](attachment:photo-1234)\n\nAfter');
+  });
+});
+
+describe('checklists', () => {
+  const md = '- [ ] Passport\n- [x] Charger\n  - [ ] Adapter\n- [ ]';
+  const doc = fromMarkdown(md);
+
+  it('reads a list of boxes as a checklist, nested ones too', () => {
+    const list = doc.content![0];
+    expect(list.type).toBe('taskList');
+    expect(list.content!.map((i) => [i.type, i.attrs?.checked])).toEqual([
+      ['taskItem', false],
+      ['taskItem', true],
+      ['taskItem', false],
+    ]);
+    expect(list.content![1].content!.map((n) => n.type)).toEqual(['paragraph', 'taskList']);
+  });
+
+  it('writes it back the same, as plain boxes, and as lines in a bubble', () => {
+    const out = toMarkdown(doc, plain);
+    expect(out).toBe('- [ ] Passport\n- [x] Charger\n\n  - [ ] Adapter\n- [ ]');
+    expect(fromMarkdown(out)).toEqual(doc);
+    expect(toPlainText(doc, plain)).toBe('☐ Passport\n☑ Charger\n\n  ☐ Adapter\n☐');
+    expect(previewLines(doc)).toEqual(['☐ Passport', '☑ Charger', '  ☐ Adapter', '☐ ']);
+  });
+
+  it('keeps a box as written in a list that is not all boxes', () => {
+    const mixed = fromMarkdown('- [ ] Passport\n- Charger');
+    expect(mixed.content![0].type).toBe('bulletList');
+    // Escaped, so it isn't read as a box when it comes back.
+    expect(toMarkdown(mixed, plain)).toBe('- \\[ ] Passport\n- Charger');
+    expect(fromMarkdown(toMarkdown(mixed, plain))).toEqual(mixed);
   });
 });

@@ -1,3 +1,4 @@
+import { tagsForStatus } from '../domain/board';
 import { displayTitle } from '../domain/content';
 import { addDays, formatTime, relativeDay, relativeDayInSentence } from '../domain/dates';
 import { firstDue, REPEAT_CHOICES, repeatLabel } from '../domain/repeat';
@@ -12,18 +13,24 @@ import { usePopover } from './usePopover';
 
 /**
  * Ticking a todo, from any checkbox. A repeating todo stays open and moves to its next due date, which a toast
- * says, with Undo. `announce` gives a plain done todo that toast too, for lists it drops out of.
+ * says, with Undo. `announce` gives a plain done todo that toast too, for lists it drops out of. On a board with a
+ * Done column, ticking moves the todo there and reopening moves it back (`tagsForStatus`), as one change to undo.
  */
 export function useTickTodo() {
-  const { repo } = useCards();
+  const { repo, index } = useCards();
   const today = useToday();
   const toast = useToast();
   const { undoAction } = useUndo();
+  // Only a change of tags goes in the patch, so a todo on no board changes as it always has.
+  const retag = (todo: TodoCard, status: 'open' | 'done') => {
+    const tags = tagsForStatus(todo.tags, index.tagGroups.groups, status);
+    return tags === todo.tags ? {} : { tags };
+  };
   return (todo: TodoCard, { announce = false } = {}) => {
-    if (todo.status === 'done') return void repo.update(todo.id, { status: 'open' });
+    if (todo.status === 'done') return void repo.update(todo.id, { status: 'open', ...retag(todo, 'open') });
     const { patch, next } = completeTodo(todo, today);
     const action = repo.action();
-    void repo.update(todo.id, patch);
+    void repo.update(todo.id, { ...patch, ...(patch.status === 'done' ? retag(todo, 'done') : {}) });
     const back = { label: 'Undo', run: () => void undoAction(action) };
     if (next) toast(`Done for now. “${displayTitle(todo)}” is due again ${relativeDayInSentence(next, today)}`, { action: back });
     else if (announce) toast(`Done: ${displayTitle(todo)}`, { action: back });

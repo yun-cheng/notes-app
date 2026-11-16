@@ -80,3 +80,39 @@ export function placeAt(others: Entry[], index: number, moved: Entry): Map<strin
   });
   return spaced;
 }
+
+/**
+ * The tag in a one-choice group that stands for a ticked todo: the one named Done. A board by such a group keeps
+ * its Done column and todos' boxes in step (`statusForMove`, `tagsForStatus`).
+ */
+export function doneTagOf(group: TagGroup): TagCard | undefined {
+  return group.choice === 'one' ? group.members.find((t) => t.title.trim().toLowerCase() === 'done') : undefined;
+}
+
+/** The status a todo takes when dragged from one column to another: done into Done, open again out of it; null for no change. */
+export function statusForMove(card: Entry, group: TagGroup, from: string, to: string): 'open' | 'done' | null {
+  const done = doneTagOf(group);
+  if (card.type !== 'todo' || !done || from === to) return null;
+  if (to === done.id && card.status !== 'done') return 'done';
+  if (from === done.id && card.status === 'done') return 'open';
+  return null;
+}
+
+/**
+ * A todo's tags after it's ticked or reopened, on each board it's on: ticked, it moves to its group's Done; reopened
+ * from Done, to the group's first other tag. Only groups with a Done tag, and only when the todo already has one of
+ * the group's tags, so ticking a todo that's on no board tags nothing. The same array when nothing changes.
+ */
+export function tagsForStatus(tags: string[], groups: TagGroup[], status: 'open' | 'done'): string[] {
+  let next = tags;
+  for (const group of groups) {
+    const done = doneTagOf(group);
+    if (!done || !group.members.some((m) => next.includes(m.id))) continue;
+    if (status === 'done' && !next.includes(done.id)) next = pickInGroup(next, group, done.id);
+    if (status === 'open' && next.includes(done.id)) {
+      const back = group.members.find((m) => m.id !== done.id);
+      next = back ? pickInGroup(next, group, back.id) : next;
+    }
+  }
+  return next;
+}

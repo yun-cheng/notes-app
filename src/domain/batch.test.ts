@@ -78,4 +78,20 @@ describe('batch edits', () => {
     expect(rangeBetween(order, 'd', 'b')).toEqual(['b', 'c', 'd']);
     expect(rangeBetween(order, 'gone', 'c')).toEqual(['c']);
   });
+
+  it('moves todos marked done into a board’s Done column, and reopened ones out of it', () => {
+    const status = { ...tag('status', 'Status'), members: ['todo', 'done'], choice: 'one' as const, ordered: true };
+    const { groupOf } = buildTagGroups([tag('todo', 'To do'), tag('done', 'Done'), status]);
+    const onBoard = todo('b', null, { tags: ['todo'] });
+    const offBoard = todo('o', null);
+    expect(planBatch([onBoard, offBoard], { kind: 'status', status: 'done' }, groupOf)).toEqual([
+      { id: 'b', patch: { status: 'done', tags: ['done'] }, undo: { status: 'open', tags: ['todo'] } },
+      { id: 'o', patch: { status: 'done' }, undo: { status: 'open' } },
+    ]);
+    const finished = todo('f', null, { tags: ['done'], status: 'done' });
+    expect(planBatch([finished], { kind: 'status', status: 'open' }, groupOf)).toEqual([
+      { id: 'f', patch: { status: 'open', tags: ['todo'] }, undo: { status: 'done', tags: ['done'] } },
+    ]);
+  });
 });
+

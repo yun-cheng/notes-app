@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { boardColumns, boardTags, columnOf, placeAt, positionOf } from './board';
+import { boardColumns, boardTags, columnOf, doneTagOf, placeAt, positionOf, statusForMove, tagsForStatus } from './board';
 import type { StreamItem } from './stream';
 import { buildTagGroups, type TagGroup } from './tagGroups';
 import { note, tag, todo } from './testFixtures';
@@ -85,6 +85,34 @@ describe('board', () => {
         ['b', 3048],
         ['c', 4072],
       ]);
+    });
+  });
+
+  describe('the Done column', () => {
+    const topics: TagGroup = { ...status, choice: 'many' };
+
+    it('is the tag named Done in a one-choice group', () => {
+      expect(doneTagOf(status)?.id).toBe('done');
+      expect(doneTagOf(topics)).toBeUndefined();
+    });
+
+    it('ticks a todo dragged into it and reopens one dragged out', () => {
+      const open = todo('t', null, { tags: ['doing'] });
+      const done = todo('t', null, { tags: ['done'], status: 'done', completedAt: 1 });
+      expect(statusForMove(open, status, 'doing', 'done')).toBe('done');
+      expect(statusForMove(done, status, 'done', 'todo')).toBe('open');
+      expect(statusForMove(open, status, 'todo', 'doing')).toBeNull();
+      expect(statusForMove(note('n', '', { tags: ['doing'] }), status, 'doing', 'done')).toBeNull();
+      expect(statusForMove(open, topics, 'doing', 'done')).toBeNull();
+    });
+
+    it('takes a todo there when ticked, and back to the first column when reopened, if it is on the board', () => {
+      expect(tagsForStatus(['x', 'doing'], [status], 'done')).toEqual(['x', 'done']);
+      expect(tagsForStatus(['done', 'x'], [status], 'open')).toEqual(['x', 'todo']);
+      const off = ['x'];
+      expect(tagsForStatus(off, [status], 'done')).toBe(off);
+      const there = ['done'];
+      expect(tagsForStatus(there, [status], 'done')).toBe(there);
     });
   });
 });

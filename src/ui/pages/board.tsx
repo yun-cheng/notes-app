@@ -1,6 +1,8 @@
 import { useEffect, useRef, useState, type KeyboardEvent as ReactKeyboardEvent, type PointerEvent as ReactPointerEvent } from 'react';
 import { useLocation, useNavigate } from 'react-router';
-import { boardColumns, boardTags, columnOf, placeAt, type BoardColumn } from '../../domain/board';
+import { boardColumns, boardTags, columnOf, placeAt, statusForMove, type BoardColumn } from '../../domain/board';
+import { relativeDayInSentence } from '../../domain/dates';
+import { completeTodo } from '../../domain/todos';
 import { displayTitle } from '../../domain/content';
 import { effectiveType, type StreamFilter, type StreamItem } from '../../domain/stream';
 import type { TagGroup } from '../../domain/tagGroups';
@@ -76,6 +78,7 @@ export function Board({ items, group, filter }: { items: StreamItem[]; group: Ta
   const { index, repo } = useCards();
   const may = usePermissions();
   const toast = useToast();
+  const today = useToday();
   const { undoAction } = useUndo();
   const columns = boardColumns(items, group);
   const [folded, setFolded] = useState(readFolded);
@@ -108,21 +111,35 @@ export function Board({ items, group, filter }: { items: StreamItem[]; group: Ta
       return;
     }
     const from = columnOf(card, group);
+    // Whichever change is made below, its toast's Undo takes back all of it.
+    let action = '';
+    const undo = { label: 'Undo', run: () => void undoAction(action) };
+    // Dropped in Done, a todo is ticked; dragged out of it, reopened.
+    const status = statusForMove(card, group, from, to.key);
+    if (status === 'done' && card.type === 'todo' && card.repeat) {
+      // A repeating todo is never done: like its box, Done moves it on to its next date, and it stays where it was.
+      const { patch, next } = completeTodo(card, today);
+      action = repo.action();
+      void repo.update(id, patch);
+      if (next) toast(`Done for now. “${displayTitle(card)}” is due again ${relativeDayInSentence(next, today)}`, { action: undo });
+      return;
+    }
     const others = column.items.map((i) => i.card).filter((c) => c.id !== id);
     const positions = placeAt(others, to.index, card);
     const tags = boardTags(card.tags, group, from, to.key);
     const retag = tags !== card.tags;
     if (!positions.size && !retag) return;
+    const done = card.type === 'todo' && status === 'done' ? completeTodo(card, today).patch : status === 'open' ? { status: 'open' as const } : {};
     // Asked for together, with no waiting in between, so it's one change to undo.
-    const action = repo.action();
-    if (retag) void repo.update(id, { tags, ...(positions.has(id) ? { position: positions.get(id) } : {}) });
+    action = repo.action();
+    if (retag) void repo.update(id, { tags, ...done, ...(positions.has(id) ? { position: positions.get(id) } : {}) });
     for (const [other, position] of positions) {
       if (other === id && retag) continue;
       const entry = index.byId.get(other);
       // Spacing out a column skips what this account can't change; those keep their place by when they were written.
       if (entry && (entry.type === 'note' || entry.type === 'todo') && may(entry).edit) void repo.update(other, { position });
     }
-    if (retag) toast(`Moved to ${title(to.key)}`, { action: { label: 'Undo', run: () => void undoAction(action) } });
+    if (retag) toast(status === 'done' ? `Done: ${displayTitle(card)}` : status === 'open' ? `Reopened: ${displayTitle(card)}` : `Moved to ${title(to.key)}`, { action: undo });
   };
 
   const drag = useCardDrag(drop);

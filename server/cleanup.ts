@@ -2,7 +2,8 @@ import type { Database } from './db';
 
 /**
  * Removes what has expired and can never be used again: sessions, one-time sign-in and pairing codes, Drive
- * connection attempts, and AI app grants whose refresh token ran out (with their access tokens). Run once a day.
+ * connection attempts, AI app grants whose refresh token ran out (with their access tokens), and the record of
+ * reminders sent a week ago. Run once a day.
  * Public links are left: their page says when one has expired.
  */
 export async function removeExpired(db: Database, now: number): Promise<void> {
@@ -13,5 +14,7 @@ export async function removeExpired(db: Database, now: number): Promise<void> {
     db.prepare(`DELETE FROM oauth_grants WHERE refresh_expires_at < ?`).bind(now),
     db.prepare(`DELETE FROM drive_states WHERE expires_at < ?`).bind(now),
     db.prepare(`DELETE FROM device_pairings WHERE expires_at < ?`).bind(now),
+    // A reminder sent more than a week ago won't be due again.
+    db.prepare(`DELETE FROM reminders_sent WHERE sent_at < ?`).bind(now - 7 * 86_400_000),
   ]);
 }

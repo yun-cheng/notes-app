@@ -16,8 +16,9 @@
       "migrations_dir": "migrations"
     }
   ],
-  // Once a day: removing expired sessions and codes (server/cleanup.ts).
-  "triggers": { "crons": ["17 4 * * *"] },
+  // Once a day: removing expired sessions and codes (server/cleanup.ts). Every five minutes: sending due-date
+  // reminders (server/reminders.ts), which need VAPID_PUBLIC_KEY and VAPID_PRIVATE_KEY set as secrets.
+  "triggers": { "crons": ["17 4 * * *", "*/5 * * * *"] },
   "vars": {
     "GOOGLE_CLIENT_ID": "468133721722-vll21ap6270hafml9rc7gra71sbbmg3i.apps.googleusercontent.com"
   }

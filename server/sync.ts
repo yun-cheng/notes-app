@@ -5,6 +5,7 @@ import { EDITABLE_SHARE, SHARED_WITH } from './access';
 import type { Database, Statement } from './db';
 import { unshare } from './shares';
 import { recordVersions, type Device, type Written } from './versions';
+import { syncReminders } from './reminders';
 
 interface CardRow extends Omit<CardRecord, 'deleted'> {
   deleted: number;
@@ -138,6 +139,8 @@ export async function pushRecords(
     });
     // History is a convenience: a failure here must not fail a push that already landed.
     await recordVersions(db, userId, written, via, device).catch((err) => console.error('Could not record versions', err));
+    // So are reminders.
+    await syncReminders(db, written.map((w) => w.record)).catch((err) => console.error('Could not note reminders', err));
   }
   return records.map((r) => results.get(r.id)!);
 }

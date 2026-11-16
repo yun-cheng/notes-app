@@ -18,6 +18,11 @@ export interface Bindings {
   GOOGLE_CLIENT_ID: string;
   /** Only needed for photos: the server's side of the Google Drive connection. A secret, never in config files. */
   GOOGLE_CLIENT_SECRET?: string;
+  /** Only needed for due-date reminders: the server's VAPID key pair (base64url), set by the owner. The private one is a secret. */
+  VAPID_PUBLIC_KEY?: string;
+  VAPID_PRIVATE_KEY?: string;
+  /** Who push services are told sends the reminders: the app's address, or a mailto: link. */
+  PUSH_SUBJECT?: string;
 }
 
 /** Hono's environment for every route: D1 and settings, plus the signed-in user once known. */

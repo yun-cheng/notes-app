@@ -220,3 +220,24 @@ export const purgePlaintextHistory = (vaultId: string) => request<unknown>(`/vau
 
 export const pairingCode = async (pair: string) => (await request<{ code: string }>(`/auth/pair/code?pair=${encodeURIComponent(pair)}`)).code;
 export const approvePairing = (pair: string) => request<unknown>('/auth/pair/approve', { method: 'POST', body: JSON.stringify({ pair }) });
+
+/** The server's public key for push, or null when reminders aren't set up there. */
+export const pushKey = async () => (await request<{ key: string | null }>('/api/push/key')).key;
+
+/** What this browser's reminders are: where to push them, and when. */
+export interface PushSettings {
+  /** Minutes before a todo's due time. */
+  lead: number;
+  /** When a todo with only a date reminds (HH:MM). */
+  remindAt: string;
+}
+
+export const savePushSubscription = (subscription: PushSubscriptionJSON, settings: PushSettings) =>
+  request<{ ok: true }>('/api/push/subscription', {
+    method: 'PUT',
+    body: JSON.stringify({ ...subscription, ...settings, timeZone: Intl.DateTimeFormat().resolvedOptions().timeZone, locale: navigator.language }),
+  });
+
+export const removePushSubscription = (endpoint: string) => request<{ ok: true }>('/api/push/subscription', { method: 'DELETE', body: JSON.stringify({ endpoint }) });
+
+export const sendTestPush = () => request<{ sent: number; browsers: number }>('/api/push/test', { method: 'POST' });

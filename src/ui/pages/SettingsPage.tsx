@@ -8,6 +8,7 @@ import { describeSync } from '../../sync/engine';
 import { Empty, Page, Section } from '../components';
 import { ClipboardSection } from '../ClipboardSection';
 import { DisplaySection } from '../DisplaySection';
+import { RemindersSection } from '../RemindersSection';
 import { useToast } from '../Toast';
 import { AiAppsSection } from './ai';
 import { PhotosSection } from './photosSettings';
@@ -105,6 +106,7 @@ export function SettingsPage() {
           <input ref={fileInput} type="file" accept="application/json,.json" hidden onChange={(e) => void restore(e)} />
         </div>
       </Section>
+      <RemindersSection />
       <DisplaySection />
       <ClipboardSection />
       <PhotosSection />

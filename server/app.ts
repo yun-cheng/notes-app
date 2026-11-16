@@ -25,6 +25,7 @@ import { memberRoutes } from './members';
 import { pairingPublicRoutes, pairingSessionRoutes } from './pairing';
 import { publicRoutes, shareRoutes } from './shares';
 import { pullRecords, pushRecords } from './sync';
+import { reminderRoutes } from './reminders';
 import { createVault, listVaults, updateVault, type VaultUpdate } from './vaults';
 import { getVersion, listRecentVersions, listVersions, sealVersions, type Device } from './versions';
 import { unfurlRoutes, type WebFetch } from './unfurl';
@@ -325,6 +326,7 @@ export function createApp({
   shareRoutes(app, now);
   commentRoutes(app, now);
   pairingSessionRoutes(app, now);
+  reminderRoutes(app, now);
 
   app.onError((err, c) => {
     console.error(err);

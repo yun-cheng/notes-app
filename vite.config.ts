@@ -79,6 +79,8 @@ export default defineConfig({
         globPatterns: ['**/*.{js,css,html,svg,png,ico}'],
         navigateFallback: '/index.html',
         navigateFallbackDenylist: [/^\/api\//],
+        // Shows due-date reminders pushed by the server (public/push-sw.js).
+        importScripts: ['push-sw.js'],
       },
     }),
   ],

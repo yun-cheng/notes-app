@@ -32,6 +32,8 @@ const items = (type: 'bulletList' | 'orderedList', lines: string[]): JSONNode =>
 const bullets = (...lines: string[]) => items('bulletList', lines);
 const steps = (...lines: string[]) => items('orderedList', lines);
 const quote = (t: string): JSONNode => ({ type: 'blockquote', content: [p(t)] });
+/** A code block, colored by its language (like typing ```js). */
+const code = (language: string, ...ls: string[]): JSONNode => ({ type: 'codeBlock', attrs: { language }, content: [text(ls.join('\n'))] });
 const doc = (...blocks: JSONNode[]): JSONNode => ({ type: 'doc', content: blocks });
 const lines = (...ls: string[]) => doc(...ls.map((l) => (l ? p(l) : { type: 'paragraph' })));
 
@@ -232,6 +234,23 @@ export async function seed() {
     'Line eleven, hidden in the bubble but there when you open it.',
     'Line twelve.',
   ));
+  note('demo-note-deploy', at(1, 16, 20), doc(
+    p('Deploying: run ', text('npm run check', ['code']), ' first, then push to ', text('main', ['code']), '.'),
+    code('sh', 'npm run check', 'git push origin main', '# Workers Builds deploys it in about a minute'),
+  ), [work], 'Deploy steps');
+  note('demo-note-snippet', ago(150), doc(
+    p('Debounce helper for the search box:'),
+    code(
+      'js',
+      'export function debounce(fn, ms = 300) {',
+      '  let timer;',
+      '  return (...args) => {',
+      '    clearTimeout(timer);',
+      '    timer = setTimeout(() => fn(...args), ms);',
+      '  };',
+      '}',
+    ),
+  ), [work, ideas]);
   note('demo-note-today-1', ago(95), lines('Call the dentist about Thursday'));
   note('demo-note-today-2', ago(40), lines('Buy oat milk, bananas and coffee beans'), [home]);
   note('demo-note-secret', at(2, 23, 0), lines('Gift budget this year: 300. Don\'t tell anyone.'), [], '', diaryVault);

@@ -35,7 +35,7 @@ To try the app without signing in, fill the local server with a demo account and
 npm run demo
 ```
 
-Then open http://localhost:5191/demo while `npm run dev` is running. It signs this browser in as "Demo", with folders, tags, a week of notes, todos, a Family vault shared with a second demo user (Sam, who comments and shares a note), and a Diary vault that is private and encrypted. The Diary vault's PIN is `1234`. Running `npm run demo` again puts the demo's own notes back as they were, with dates moved to today, and keeps anything added to the demo accounts by hand (vaults, notes, todos). The app marks the demo account with a red Demo tag by every page title, so it isn't taken for your own. `/demo` exists only in the dev server, never in a build.
+Then open http://localhost:5191/demo while `npm run dev` is running. It signs this browser in as "Demo", with folders, tags, a week of notes (two with code snippets), todos, a Family vault shared with a second demo user (Sam, who comments and shares a note), and a Diary vault that is private and encrypted. The Diary vault's PIN is `1234`. Running `npm run demo` again puts the demo's own notes back as they were, with dates moved to today, and keeps anything added to the demo accounts by hand (vaults, notes, todos). The app marks the demo account with a red Demo tag by every page title, so it isn't taken for your own. `/demo` exists only in the dev server, never in a build.
 
 Sign-in needs a Google OAuth client ID in `GOOGLE_CLIENT_ID` in `wrangler.jsonc`, with `http://localhost:5191` as an authorized origin. Photo upload also needs the client secret in `.dev.vars` as `GOOGLE_CLIENT_SECRET`; see PLAN.md, Milestone 5.
 

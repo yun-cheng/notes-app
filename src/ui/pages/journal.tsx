@@ -731,7 +731,7 @@ function EntryDetail({ card, fresh, edit, onClose }: { card: NoteCard | TodoCard
   const tick = useTickTodo();
   const can = may(card);
   const remove = useDeleteCard();
-  const { copyText, archive } = useEntryActions();
+  const { copy, archive } = useEntryActions();
   const [tools, setTools] = useState(false);
   const [tagging, setTagging] = useState(false);
   const [titled, setTitled] = useState(false);
@@ -823,7 +823,7 @@ function EntryDetail({ card, fresh, edit, onClose }: { card: NoteCard | TodoCard
         )}
         {can.edit && <StyleMenu card={card} inBar />}
         {can.protect && <ViewOnlyButton card={card} className="icon-btn" />}
-        <button type="button" className="icon-btn" aria-label="Copy text" title="Copy text" onClick={() => copyText(card.id)}>
+        <button type="button" className="icon-btn" aria-label="Copy" title="Copy" onClick={() => copy([card.id])}>
           <Icon name="copy" />
         </button>
         {can.share && (

@@ -12,13 +12,13 @@ type Entry = NoteCard | TodoCard;
 
 /**
  * The buttons beside a bubble on hover: open it to edit, and ⋯ for the rest, the same menu a right-click on the
- * bubble opens (`useEntryMenu`). Copying its text is a button in the bubble's top right corner too. Its tags and a todo's due date are changed in its bottom row (`AddTag` and
+ * bubble opens (`useEntryMenu`). Copying it is a button in the bubble's top right corner too. Its tags and a todo's due date are changed in its bottom row (`AddTag` and
  * `DueMenu`). A phone has no hover; a tap opens the entry, whose sheet has every action, and a todo's due date in its
  * bubble can be tapped.
  */
 export function BubbleTools({ card, open, menu }: { card: Entry; open: (edit?: boolean) => void; menu: { openFrom: (el: HTMLElement) => void; isOpen: boolean } }) {
   const may = usePermissions();
-  const { copyText } = useEntryActions();
+  const { copy } = useEntryActions();
   const can = may(card);
   return (
     <>
@@ -32,7 +32,7 @@ export function BubbleTools({ card, open, menu }: { card: Entry; open: (edit?: b
         </button>
       </span>
       {/* In the bubble's top right corner, in room the bubble keeps for it, so it covers none of the text. */}
-      <button type="button" className="bubble__copy" aria-label="Copy text" title="Copy text" onClick={() => copyText(card.id)}>
+      <button type="button" className="bubble__copy" aria-label="Copy" title="Copy" onClick={() => copy([card.id])}>
         <Icon name="copy" size={14} />
       </button>
     </>

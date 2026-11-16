@@ -1,5 +1,6 @@
 import { isDateKey, isTimeKey } from './dates';
 import type { Entry } from './entry';
+import { escapeHTML, toHTML } from './html';
 import { toMarkdown, toPlainText, type TitleResolver } from './markdown';
 import { isRepeat, repeatWord } from './repeat';
 import type { JSONNode, NoteCard, TodoCard } from './types';
@@ -67,6 +68,31 @@ export function entriesText(cards: Copyable[], tagName: TagName, linkTitle: Titl
  */
 export function entryText(card: Copyable, linkTitle: TitleResolver): string {
   return [card.title.trim(), toPlainText(card.content, linkTitle)].filter(Boolean).join('\n\n');
+}
+
+/**
+ * How copied text reaches other apps, a setting on each device: with its formatting (HTML, and plain words for
+ * apps that take only text), as Markdown, or as plain words.
+ */
+export type CopyStyle = 'rich' | 'markdown' | 'plain';
+
+/**
+ * What the clipboard gets for entries in each style. Markdown is the way the journal box reads it (todos as
+ * `[ ] Title @date #tag`); plain text and rich text are each entry's words, a todo's with its box (☐ or ☑) in
+ * rich text, where it reads as a list.
+ */
+export function entriesClipboard(cards: Copyable[], tagName: TagName, linkTitle: TitleResolver, style: CopyStyle): { text: string; html?: string } {
+  if (style === 'markdown') return { text: entriesText(cards, tagName, linkTitle) };
+  const text = cards.map((card) => entryText(card, linkTitle)).join('\n\n');
+  if (style === 'plain') return { text };
+  const html = cards
+    .map((card) => {
+      const head = card.type === 'todo' ? `${card.status === 'done' ? '☑' : '☐'} ${escapeHTML(card.title.trim())}` : card.title.trim() && `<strong>${escapeHTML(card.title.trim())}</strong>`;
+      // A body of no words (an empty line, or only photos) adds nothing.
+      return (head ? `<p>${head}</p>` : '') + (toPlainText(card.content, linkTitle) ? toHTML(card.content, linkTitle) : '');
+    })
+    .join('');
+  return { text, html };
 }
 
 export function encodeEntries(entries: Entry[]): string {

@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { decodeEntries, encodeEntries, entriesText, entryText, toEntries } from './clipboard';
+import { decodeEntries, encodeEntries, entriesClipboard, entriesText, entryText, toEntries } from './clipboard';
 import { parseEntries } from './entry';
 import { doc, link, note, p, text, todo } from './testFixtures';
 
@@ -18,6 +18,16 @@ describe('copying entries', () => {
     );
     const call = todo('c', null, { title: 'Call dad' });
     expect(entriesText([done, call, plan], tagName, linkTitle)).toBe('[x] Call mum\n[ ] Call dad\n\n[ ] Plan trip @2026-11-20 #work\nBook the train');
+  });
+
+  it('copies in the style picked: Markdown, plain words, or HTML with plain words beside it', () => {
+    expect(entriesClipboard([plan, idea], tagName, linkTitle, 'markdown')).toEqual({ text: entriesText([plan, idea], tagName, linkTitle) });
+    expect(entriesClipboard([plan, done], tagName, linkTitle, 'plain')).toEqual({ text: 'Plan trip\n\nBook the train\n\nCall mum' });
+    const titled = note('m', 'Ideas <b>', { content: doc(p(text('Big '), text('idea', [{ type: 'bold' }]))) });
+    expect(entriesClipboard([plan, done, titled], tagName, linkTitle, 'rich')).toEqual({
+      text: 'Plan trip\n\nBook the train\n\nCall mum\n\nIdeas <b>\n\nBig idea',
+      html: '<p>☐ Plan trip</p><p>Book the train</p><p>☑ Call mum</p><p><strong>Ideas &lt;b&gt;</strong></p><p>Big <strong>idea</strong></p>',
+    });
   });
 
   it('copies just the words of one entry', () => {

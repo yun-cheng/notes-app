@@ -13,7 +13,7 @@ export function DisplaySection() {
   );
 }
 
-function Choice<T extends string>({ label, options, value, onPick }: { label: string; options: Record<T, string>; value: T; onPick: (value: T) => void }) {
+export function Choice<T extends string>({ label, options, value, onPick }: { label: string; options: Record<T, string>; value: T; onPick: (value: T) => void }) {
   return (
     <div className="field-row">
       <span className="field-row__label">{label}</span>

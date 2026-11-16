@@ -6,6 +6,7 @@ import { useAccount } from '../../auth/AuthContext';
 import { useCards, useSyncStatus, useToday } from '../../state/CardsContext';
 import { describeSync } from '../../sync/engine';
 import { Empty, Page, Section } from '../components';
+import { ClipboardSection } from '../ClipboardSection';
 import { DisplaySection } from '../DisplaySection';
 import { useToast } from '../Toast';
 import { AiAppsSection } from './ai';
@@ -105,6 +106,7 @@ export function SettingsPage() {
         </div>
       </Section>
       <DisplaySection />
+      <ClipboardSection />
       <PhotosSection />
       <AiAppsSection />
       <Section title={`Trash (${index.trash.length})`}>

@@ -142,8 +142,8 @@ function EntryMenu({ card, at, open, onShare, onClose }: MenuProps) {
         <Item icon={can.edit ? 'edit' : 'open'} hint="Enter" onClick={run(() => open(can.edit))}>
           {can.edit ? 'Edit' : 'Open'}
         </Item>
-        <Item icon="copy" onClick={run(() => actions.copyText(card.id))}>
-          Copy text
+        <Item icon="copy" onClick={run(() => actions.copy([card.id]))}>
+          Copy
         </Item>
         {selection && (
           <Item icon="check" onClick={run(() => selection.toggle(card.id))}>

@@ -11,7 +11,9 @@ import type { CardIndex } from '../../domain/cardIndex';
 import type { JSONNode } from '../../domain/types';
 import { useCards } from '../../state/CardsContext';
 import { Icon, type IconName } from '../Icon';
+import { linkTitle } from '../../domain/cardIndex';
 import { CardLink, insertCardLink, type LinkOption } from './cardLink';
+import { clipboardProps, titleResolver } from './clipboardStyle';
 import { CodeHighlight } from './codeHighlight';
 import { Photo } from './photo';
 import { usePhotoInput } from './photoInput';
@@ -171,6 +173,12 @@ export function Editor({ content, onChange, placeholder, selfId, vaultId, editab
   const editorRef = useRef<TiptapEditor | null>(null);
 
   const photoInput = usePhotoInput(editorRef, () => latest.current.vaultId);
+  const clipboard = useRef(
+    clipboardProps(
+      () => (id, label) => linkTitle(latest.current.index, id, label),
+      () => titleResolver(latest.current.index.live),
+    ),
+  ).current;
   const command = useRef<((item: LinkOption) => void) | null>(null);
   const pending = useRef<JSONNode | null>(null);
   const echoes = useRef(new Echoes()).current;
@@ -285,6 +293,9 @@ export function Editor({ content, onChange, placeholder, selfId, vaultId, editab
     editorProps: {
       attributes: { class: 'prose' },
       ...photoInput.editorProps,
+      handleDOMEvents: clipboard.handleDOMEvents,
+      clipboardTextSerializer: clipboard.clipboardTextSerializer,
+      handlePaste: (view, event) => photoInput.editorProps.handlePaste(view, event) || clipboard.handlePaste(view, event),
     },
     onUpdate: ({ editor: ed }) => {
       const value = ed.getJSON() as JSONNode;

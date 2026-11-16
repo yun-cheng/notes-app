@@ -1,9 +1,10 @@
 import { linkTitle } from '../domain/cardIndex';
-import { encodeEntries, entriesText, entryText, ENTRIES_TYPE, toEntries } from '../domain/clipboard';
+import { encodeEntries, entriesClipboard, ENTRIES_TYPE, toEntries } from '../domain/clipboard';
 import type { Entry } from '../domain/entry';
 import type { EntryType } from '../domain/retype';
 import type { Card, NoteCard, TodoCard } from '../domain/types';
 import { useCards } from '../state/CardsContext';
+import { clipboardPrefs } from './clipboardPrefs';
 import { usePermissions } from './viewOnly';
 import { useToast } from './Toast';
 import { useUndo } from './useUndo';
@@ -12,24 +13,25 @@ import { useSaveEntries, type SaveOptions } from './useSaveEntry';
 export const entries = (n: number) => `${n} ${n === 1 ? 'entry' : 'entries'}`;
 
 /** What the clipboard should get on the next copy, set just before asking the browser to copy. */
-let pending: { text: string; json?: string } | null = null;
+let pending: { text: string; json?: string; html?: string } | null = null;
 
 if (typeof document !== 'undefined') {
   document.addEventListener('copy', (e) => {
     if (!pending || !e.clipboardData) return;
     e.preventDefault();
     e.clipboardData.setData('text/plain', pending.text);
+    if (pending.html) e.clipboardData.setData('text/html', pending.html);
     if (pending.json) e.clipboardData.setData(ENTRIES_TYPE, pending.json);
   });
 }
 
 /**
- * Puts text, and an exact copy of entries when given, on the clipboard. The browser's own copy command fires a copy
+ * Puts text, with HTML and an exact copy of entries when given, on the clipboard. The browser's own copy command fires a copy
  * event, which is the one place a page can add a type of its own; without it, the text alone is copied, which can
  * be refused. Plain text (a code block's) goes the same way, since the copy command works where the newer way is refused.
  */
-export async function writeClipboard(text: string, json?: string): Promise<boolean> {
-  pending = { text, json };
+export async function writeClipboard(text: string, json?: string, html?: string): Promise<boolean> {
+  pending = { text, json, html };
   try {
     if (document.execCommand('copy')) return true;
   } catch {
@@ -57,26 +59,22 @@ export function useEntryActions() {
 
   const cardsFor = (ids: string[]) => ids.map((id) => index.byId.get(id)).filter(copyable);
 
+  /**
+   * Puts entries on the clipboard for other apps in the style the Copy setting picks, and exactly for this one, so
+   * pasted back into the journal they come back whole whatever the setting.
+   */
   const write = (cards: (NoteCard | TodoCard)[]) => {
     const tagName = (id: string) => index.tags.find((t) => t.id === id)?.title;
-    const text = entriesText(cards, tagName, (id, label) => linkTitle(index, id, label));
-    return writeClipboard(text, encodeEntries(toEntries(cards, tagName)));
+    const { text, html } = entriesClipboard(cards, tagName, (id, label) => linkTitle(index, id, label), clipboardPrefs().copy);
+    return writeClipboard(text, encodeEntries(toEntries(cards, tagName)), html);
   };
 
   const copy = (ids: string[]) => {
     const cards = cardsFor(ids);
     if (!cards.length) return;
-    void write(cards).then((ok) => toast(ok ? `Copied ${entries(cards.length)}` : "Couldn't copy here. Select the text instead."));
-  };
-
-  /** One entry's words alone, for pasting into another app; pasted back into the journal, it's the whole entry. */
-  const copyText = (id: string) => {
-    const card = index.byId.get(id);
-    if (!copyable(card)) return;
-    const tagName = (tag: string) => index.tags.find((t) => t.id === tag)?.title;
-    void writeClipboard(entryText(card, (cardId, label) => linkTitle(index, cardId, label)), encodeEntries(toEntries([card], tagName))).then((ok) =>
-      toast(ok ? 'Copied the text' : "Couldn't copy here. Select the text instead."),
-    );
+    const style = clipboardPrefs().copy;
+    const as = style === 'markdown' ? ' as Markdown' : style === 'plain' ? ' as plain text' : '';
+    void write(cards).then((ok) => toast(ok ? `Copied ${entries(cards.length)}${as}` : "Couldn't copy here. Select the text instead."));
   };
 
   /** Moves the entries this account may remove to the Trash. `verb` starts the toast ("Cut 3 entries"). */
@@ -143,5 +141,5 @@ export function useEntryActions() {
     if (await repo.retype(id, type)) toast(type === 'todo' ? 'Made it a todo' : 'Made it a note', { action: { label: 'Undo', run: () => void undoAction(action) } });
   };
 
-  return { copy, copyText, cut, trash, archive, paste, retype };
+  return { copy, cut, trash, archive, paste, retype };
 }

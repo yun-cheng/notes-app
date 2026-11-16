@@ -16,9 +16,8 @@ import { effectiveType, type StreamFilter } from '../domain/stream';
 import type { JSONNode } from '../domain/types';
 import { useCards, useToday } from '../state/CardsContext';
 import { linkTitle } from '../domain/cardIndex';
-import { clipboardProps, pasteStyled, titleResolver } from './editor/clipboardStyle';
+import { clipboardProps, titleResolver } from './editor/clipboardStyle';
 import { CodeHighlight } from './editor/codeHighlight';
-import { clipboardPrefs } from './clipboardPrefs';
 import { Photo } from './editor/photo';
 import { usePhotoInput } from './editor/photoInput';
 import { commonSlashItems, slashBlock, typeahead, useTypeaheadMenu, type MenuItem } from './editor/suggest';
@@ -104,7 +103,7 @@ export function JournalBox({ filter }: { filter: StreamFilter }) {
   const photoInput = usePhotoInput(editorRef, () => latest.current.photoVault);
   const linkTitleOf = () => (id: string, label: string) => linkTitle(latest.current.index, id, label);
   const resolveLink = () => titleResolver(latest.current.index.live);
-  const clipboard = useRef(clipboardProps(linkTitleOf, resolveLink)).current;
+  const clipboard = useRef(clipboardProps(linkTitleOf, (message, actions) => toast(message, { actions }), resolveLink)).current;
   const photoInputRef = useRef(photoInput);
   photoInputRef.current = photoInput;
 
@@ -244,9 +243,7 @@ export function JournalBox({ filter }: { filter: StreamFilter }) {
       const { text, html, files } = (e as CustomEvent<ForwardedPaste>).detail;
       editor.commands.focus('end');
       if (files.length) void photoInputRef.current.add(files);
-      else if (clipboardPrefs().paste !== 'rich' && pasteStyled(editor.view, text, resolveLink())) return;
-      else if (html) editor.view.pasteHTML(html);
-      else editor.view.pasteText(text);
+      else clipboard.paste(editor.view, { text, html });
     };
     window.addEventListener(BOX_PASTE, take);
     return () => window.removeEventListener(BOX_PASTE, take);

@@ -11,6 +11,7 @@ import type { CardIndex } from '../../domain/cardIndex';
 import type { JSONNode } from '../../domain/types';
 import { useCards } from '../../state/CardsContext';
 import { Icon, type IconName } from '../Icon';
+import { useToast } from '../Toast';
 import { linkTitle } from '../../domain/cardIndex';
 import { CardLink, insertCardLink, type LinkOption } from './cardLink';
 import { clipboardProps, titleResolver } from './clipboardStyle';
@@ -173,9 +174,11 @@ export function Editor({ content, onChange, placeholder, selfId, vaultId, editab
   const editorRef = useRef<TiptapEditor | null>(null);
 
   const photoInput = usePhotoInput(editorRef, () => latest.current.vaultId);
+  const toast = useToast();
   const clipboard = useRef(
     clipboardProps(
       () => (id, label) => linkTitle(latest.current.index, id, label),
+      (message, actions) => toast(message, { actions }),
       () => titleResolver(latest.current.index.live),
     ),
   ).current;

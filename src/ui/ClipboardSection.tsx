@@ -14,11 +14,12 @@ const PASTE_NOTE: Record<PasteStyle, string> = {
   plain: 'Pasted text comes in as plain words, without its formatting.',
 };
 
-/** How text is copied out of the app and pasted into it, on this device. Copied entries always paste back whole. */
+/** The style text is copied out of the app and pasted into it by default, on this device. Copied entries always paste back whole. */
 export function ClipboardSection() {
   const prefs = useClipboardPrefs();
   return (
     <Section title="Copy & paste">
+      <p className="prose-note">The style each copy and paste starts in on this device. After each one, the message at the bottom of the screen offers the other styles for it.</p>
       <Choice label="Copy as" options={COPY_STYLES} value={prefs.copy} onPick={(copy: CopyStyle) => setClipboardPrefs({ copy })} />
       <p className="prose-note">{COPY_NOTE[prefs.copy]} Entries pasted back into the journal come back whole either way.</p>
       <Choice label="Paste as" options={PASTE_STYLES} value={prefs.paste} onPick={(paste: PasteStyle) => setClipboardPrefs({ paste })} />

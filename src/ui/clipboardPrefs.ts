@@ -12,11 +12,17 @@ export interface ClipboardPrefs {
 
 export const COPY_STYLES: Record<CopyStyle, string> = { rich: 'Rich text', markdown: 'Markdown', plain: 'Plain text' };
 export const PASTE_STYLES: Record<PasteStyle, string> = { rich: 'Keep formatting', markdown: 'Markdown', plain: 'Plain text' };
+/** For the toast: "Copied as Markdown", "Pasted with formatting". */
+export const COPY_WORDS: Record<CopyStyle, string> = { rich: 'rich text', markdown: 'Markdown', plain: 'plain text' };
+export const PASTE_WORDS: Record<PasteStyle, string> = { rich: 'with formatting', markdown: 'as Markdown', plain: 'as plain text' };
 
 const KEY = 'notes-app:clipboard';
 const DEFAULTS: ClipboardPrefs = { copy: 'rich', paste: 'rich' };
 
-/** Kept on this device only, like the display settings: each computer may paste into different apps. */
+/**
+ * The style each copy and paste starts in, kept on this device only, like the display settings: each computer may
+ * paste into different apps. The toast after a copy or paste offers the other styles for that one.
+ */
 function read(): ClipboardPrefs {
   try {
     const raw = JSON.parse(localStorage.getItem(KEY) ?? '{}') as Partial<Record<keyof ClipboardPrefs, unknown>>;

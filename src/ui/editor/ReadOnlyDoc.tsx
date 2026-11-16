@@ -1,16 +1,18 @@
+import { useRef } from 'react';
 import { EditorContent, useEditor } from '@tiptap/react';
 import { StarterKit } from '@tiptap/starter-kit';
 import type { JSONNode } from '../../domain/types';
 import { CardLink } from './cardLink';
+import { useToast } from '../Toast';
 import { clipboardProps } from './clipboardStyle';
 import { CodeHighlight } from './codeHighlight';
 import { Photo } from './photo';
 
 /** A card body shown with its formatting but not editable. Give it a `key` to show a different body. */
-/** Words copied from it come out the way the Copy setting says, with a linked card named by the link's own label. */
-const clipboard = clipboardProps(() => (_id, label) => label);
-
 export function ReadOnlyDoc({ content }: { content: JSONNode }) {
+  const toast = useToast();
+  // Words copied from it go the way the Copy setting says, with a linked card named by the link's own label.
+  const clipboard = useRef(clipboardProps(() => (_id, label) => label, (message, actions) => toast(message, { actions }))).current;
   const editor = useEditor({
     editable: false,
     extensions: [StarterKit.configure({ heading: { levels: [1, 2, 3] } }), CardLink.configure({ suggestion: { char: '[[', items: () => [] } }), Photo, CodeHighlight],

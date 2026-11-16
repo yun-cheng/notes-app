@@ -6,9 +6,10 @@ interface ToastAction {
 }
 interface ToastState {
   message: string;
-  action?: ToastAction;
+  actions: ToastAction[];
 }
-type ShowToast = (message: string, options?: { action?: ToastAction; sticky?: boolean }) => void;
+/** `actions` puts several buttons after the message, `action` one. */
+type ShowToast = (message: string, options?: { action?: ToastAction; actions?: ToastAction[]; sticky?: boolean }) => void;
 
 const ToastContext = createContext<ShowToast>(() => undefined);
 export const useToast = () => useContext(ToastContext);
@@ -19,8 +20,9 @@ export function ToastProvider({ children }: { children: ReactNode }) {
 
   const show = useCallback<ShowToast>((message, options) => {
     if (timer.current) clearTimeout(timer.current);
-    setToast({ message, action: options?.action });
-    if (!options?.sticky) timer.current = setTimeout(() => setToast(null), 7000);
+    setToast({ message, actions: [...(options?.action ? [options.action] : []), ...(options?.actions ?? [])] });
+    // Longer when there are choices to read.
+    if (!options?.sticky) timer.current = setTimeout(() => setToast(null), (options?.actions?.length ?? 0) > 1 ? 10_000 : 7000);
   }, []);
 
   return (
@@ -30,17 +32,19 @@ export function ToastProvider({ children }: { children: ReactNode }) {
         {toast && (
           <div className="toast">
             <span>{toast.message}</span>
-            {toast.action && (
+            {toast.actions.map((action) => (
               <button
+                key={action.label}
                 type="button"
                 onClick={() => {
-                  toast.action?.run();
+                  // Closed first, so an action that says something new shows its own toast.
                   setToast(null);
+                  action.run();
                 }}
               >
-                {toast.action.label}
+                {action.label}
               </button>
-            )}
+            ))}
           </div>
         )}
       </div>

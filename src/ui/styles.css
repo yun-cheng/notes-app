@@ -424,7 +424,7 @@ body:has(.composer:focus-within) .tabbar { display: none; }
 .count { font-size: 11px; line-height: 1; color: var(--muted); }
 
 .toast-slot { position: fixed; inset: auto 12px calc(var(--tabbar) + 14px + env(safe-area-inset-bottom)) 12px; z-index: 40; display: flex; justify-content: center; pointer-events: none; }
-.toast { display: flex; align-items: center; gap: 14px; min-height: 46px; padding: 8px 16px; border-radius: 10px; background: var(--text); color: var(--bg); box-shadow: var(--shadow); font-size: 14px; pointer-events: auto; }
+.toast { display: flex; flex-wrap: wrap; align-items: center; gap: 4px 14px; min-height: 46px; padding: 8px 16px; border-radius: 10px; background: var(--text); color: var(--bg); box-shadow: var(--shadow); font-size: 14px; pointer-events: auto; }
 .toast button { font-weight: 700; color: inherit; text-decoration: underline; min-height: 30px; }
 @media (min-width: 860px) { .toast-slot { bottom: 24px; } }
 

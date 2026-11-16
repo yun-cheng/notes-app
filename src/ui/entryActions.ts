@@ -4,7 +4,7 @@ import type { Entry } from '../domain/entry';
 import type { EntryType } from '../domain/retype';
 import type { Card, NoteCard, TodoCard } from '../domain/types';
 import { useCards } from '../state/CardsContext';
-import { clipboardPrefs } from './clipboardPrefs';
+import { clipboardPrefs, COPY_STYLES, COPY_WORDS, type CopyStyle } from './clipboardPrefs';
 import { usePermissions } from './viewOnly';
 import { useToast } from './Toast';
 import { useUndo } from './useUndo';
@@ -19,6 +19,8 @@ if (typeof document !== 'undefined') {
   document.addEventListener('copy', (e) => {
     if (!pending || !e.clipboardData) return;
     e.preventDefault();
+    // Whatever an editor put there first goes, so no stale HTML rides along.
+    e.clipboardData.clearData();
     e.clipboardData.setData('text/plain', pending.text);
     if (pending.html) e.clipboardData.setData('text/html', pending.html);
     if (pending.json) e.clipboardData.setData(ENTRIES_TYPE, pending.json);
@@ -63,18 +65,21 @@ export function useEntryActions() {
    * Puts entries on the clipboard for other apps in the style the Copy setting picks, and exactly for this one, so
    * pasted back into the journal they come back whole whatever the setting.
    */
-  const write = (cards: (NoteCard | TodoCard)[]) => {
+  const write = (cards: (NoteCard | TodoCard)[], style = clipboardPrefs().copy) => {
     const tagName = (id: string) => index.tags.find((t) => t.id === id)?.title;
-    const { text, html } = entriesClipboard(cards, tagName, (id, label) => linkTitle(index, id, label), clipboardPrefs().copy);
+    const { text, html } = entriesClipboard(cards, tagName, (id, label) => linkTitle(index, id, label), style);
     return writeClipboard(text, encodeEntries(toEntries(cards, tagName)), html);
   };
 
-  const copy = (ids: string[]) => {
+  /** Copies in the setting's style, with the toast offering the others: pressing one copies the entries again that way. */
+  const copy = (ids: string[], style: CopyStyle = clipboardPrefs().copy) => {
     const cards = cardsFor(ids);
     if (!cards.length) return;
-    const style = clipboardPrefs().copy;
-    const as = style === 'markdown' ? ' as Markdown' : style === 'plain' ? ' as plain text' : '';
-    void write(cards).then((ok) => toast(ok ? `Copied ${entries(cards.length)}${as}` : "Couldn't copy here. Select the text instead."));
+    void write(cards, style).then((ok) => {
+      if (!ok) return toast("Couldn't copy here. Select the text instead.");
+      const others = (Object.keys(COPY_STYLES) as CopyStyle[]).filter((s) => s !== style);
+      toast(`Copied ${entries(cards.length)} as ${COPY_WORDS[style]}`, { actions: others.map((s) => ({ label: COPY_STYLES[s], run: () => copy(ids, s) })) });
+    });
   };
 
   /** Moves the entries this account may remove to the Trash. `verb` starts the toast ("Cut 3 entries"). */

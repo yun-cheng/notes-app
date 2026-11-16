@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { checklistProgress, CODE_CLOSE, CODE_OPEN, displayTitle, hasPhoto, isBlank, isImageUrl, linkedCardIds, linkUrls, photoIds, plainText, previewLines, previewParts, siteName, splitLinks, textToDoc } from './content';
+import { checklistProgress, CODE_CLOSE, CODE_OPEN, displayTitle, hasPhoto, HIDE_CLOSE, HIDE_OPEN, isBlank, isImageUrl, linkedCardIds, linkUrls, photoIds, plainText, previewLines, previewParts, siteName, splitLinks, textToDoc } from './content';
 import { doc, link, note, p, tag, text } from './testFixtures';
 import type { JSONNode } from './types';
 
@@ -130,5 +130,27 @@ describe('checklistProgress', () => {
 
   it('is null without a checklist', () => {
     expect(checklistProgress(doc(p(text('plain'))))).toBeNull();
+  });
+});
+
+describe('hidden text', () => {
+  const body = {
+    type: 'doc',
+    content: [
+      {
+        type: 'paragraph',
+        content: [
+          { type: 'text', text: 'Answer: ' },
+          { type: 'text', text: 'forty', marks: [{ type: 'hidden' }] },
+          { type: 'text', text: '-two', marks: [{ type: 'bold' }, { type: 'hidden' }] },
+        ],
+      },
+    ],
+  };
+
+  it('shows as typed by default, marked for a bubble, and masked in a title', () => {
+    expect(previewLines(body)).toEqual(['Answer: forty-two']);
+    expect(previewParts(body, undefined, { hidden: 'mark' })).toEqual([{ kind: 'text', lines: [`Answer: ${HIDE_OPEN}forty-two${HIDE_CLOSE}`] }]);
+    expect(displayTitle({ ...note('n', ''), content: body })).toBe('Answer: •••');
   });
 });

@@ -276,8 +276,8 @@ export async function seed() {
     [travel],
     'Kyoto trip',
   );
-  // The wifi password is kept from being changed by mistake.
-  note('demo-note-wifi', at(7, 9, 2), lines('Guest wifi: Lemon-Tree / password on the fridge'), [home], '', personal, { viewOnly: true });
+  // The wifi password is kept from being changed by mistake, and hidden until pressed.
+  note('demo-note-wifi', at(7, 9, 2), doc(p('Guest wifi: Lemon-Tree, password ', text('sunflower-42', ['hidden']))), [home], '', personal, { viewOnly: true });
   // Edited later from the phone: its history has two versions.
   note('demo-note-standup', at(7, 10, 15), doc(h('Standup'), bullets('Shipped the search fix', 'Reviewing the export PR', 'Blocked on design for onboarding')), [work]);
   note('demo-note-book', at(6, 22, 40), doc(p(text('Thinking, Fast and Slow', ['italic'])), quote('Nothing in life is as important as you think it is, while you are thinking about it.'), p('Chapter 3 next.')), [reading]);

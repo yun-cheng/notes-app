@@ -6,7 +6,7 @@ export type LinkResolver = (title: string) => { id: string; label: string } | nu
 type Mark = NonNullable<JSONNode['marks']>[number];
 
 const INLINE =
-  /\\([\\`*_~[\]()#>!-])|`([^`]+)`|\[\[([^\]\n]+?)\]\]|\[([^\]\n]+)\]\((https?:\/\/[^\s)]+|mailto:[^\s)]+)\)|\*\*(.+?)\*\*|__(.+?)__|~~(.+?)~~|\*(?!\s)(.+?)\*|(?<![\p{L}\p{N}])_(?!\s)(.+?)_(?![\p{L}\p{N}])/gu;
+  /\\([\\`*_~[\]()#>!|-])|`([^`]+)`|\[\[([^\]\n]+?)\]\]|\[([^\]\n]+)\]\((https?:\/\/[^\s)]+|mailto:[^\s)]+)\)|\*\*(.+?)\*\*|__(.+?)__|~~(.+?)~~|\|\|(?!\s)(.+?)\|\||\*(?!\s)(.+?)\*|(?<![\p{L}\p{N}])_(?!\s)(.+?)_(?![\p{L}\p{N}])/gu;
 
 function withMark(nodes: JSONNode[], mark: Mark): JSONNode[] {
   return nodes.map((n) => (n.type === 'text' ? { ...n, marks: [...(n.marks ?? []), mark] } : n));
@@ -24,7 +24,7 @@ function inline(text: string, resolve: LinkResolver): JSONNode[] {
   for (const m of text.matchAll(INLINE)) {
     push(text.slice(at, m.index));
     at = m.index + m[0].length;
-    const [, escaped, code, link, label, href, bold, bold2, strike, em, em2] = m;
+    const [, escaped, code, link, label, href, bold, bold2, strike, hidden, em, em2] = m;
     if (escaped !== undefined) push(escaped);
     else if (code !== undefined) out.push({ type: 'text', text: code, marks: [{ type: 'code' }] });
     else if (link !== undefined) {
@@ -34,6 +34,7 @@ function inline(text: string, resolve: LinkResolver): JSONNode[] {
     } else if (label !== undefined) out.push(...withMark(inline(label, resolve), { type: 'link', attrs: { href } }));
     else if ((bold ?? bold2) !== undefined) out.push(...withMark(inline(bold ?? bold2, resolve), { type: 'bold' }));
     else if (strike !== undefined) out.push(...withMark(inline(strike, resolve), { type: 'strike' }));
+    else if (hidden !== undefined) out.push(...withMark(inline(hidden, resolve), { type: 'hidden' }));
     else out.push(...withMark(inline(em ?? em2, resolve), { type: 'italic' }));
   }
   push(text.slice(at));

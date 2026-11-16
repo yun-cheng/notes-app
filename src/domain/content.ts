@@ -40,7 +40,8 @@ const FIRST_LINE_MAX = 80;
 
 /** The first line of text in the body, shortened to fit a title. */
 export function firstLine(content: JSONNode): string {
-  const line = previewLines(content).find((l) => l.trim())?.replace(/^(• |\d+\. )/, '').trim() ?? '';
+  // Hidden words stay hidden in a title made from them.
+  const line = previewLines(content, undefined, false, 'mask').find((l) => l.trim())?.replace(/^(• |\d+\. )/, '').trim() ?? '';
   return line.length > FIRST_LINE_MAX ? `${line.slice(0, FIRST_LINE_MAX - 1).trimEnd()}…` : line;
 }
 
@@ -48,18 +49,35 @@ export function firstLine(content: JSONNode): string {
 export const CODE_OPEN = '\uE000';
 export const CODE_CLOSE = '\uE001';
 
+/** Wrap hidden text in a bubble's lines (`previewParts` with `hidden: 'mark'`), so it can be shown blurred. */
+export const HIDE_OPEN = '\uE002';
+export const HIDE_CLOSE = '\uE003';
+/** What hidden text stands as where it can't be blurred, like a title made from a note's first line. */
+export const HIDDEN_MASK = '•••';
+
+/**
+ * Hidden text (`||words||`) in a preview: shown like any other, wrapped in `HIDE_OPEN`/`HIDE_CLOSE` for a bubble to
+ * blur, or masked as `HIDDEN_MASK` where it can't be.
+ */
+export type HiddenText = 'show' | 'mark' | 'mask';
+
 /** A block's text on one line, with card links as their titles; `markCode` wraps inline code in `CODE_OPEN`/`CODE_CLOSE`. */
-export function inlineText(node: JSONNode, titleOf?: (id: string, label: string) => string, markCode = false): string {
+export function inlineText(node: JSONNode, titleOf?: (id: string, label: string) => string, markCode = false, hidden: HiddenText = 'show'): string {
   if (node.type === 'text') {
     const text = node.text ?? '';
-    return markCode && text && node.marks?.some((m) => m.type === 'code') ? `${CODE_OPEN}${text}${CODE_CLOSE}` : text;
+    const isHidden = hidden !== 'show' && !!text && !!node.marks?.some((m) => m.type === 'hidden');
+    if (isHidden && hidden === 'mask') return HIDDEN_MASK;
+    const shown = markCode && text && node.marks?.some((m) => m.type === 'code') ? `${CODE_OPEN}${text}${CODE_CLOSE}` : text;
+    return isHidden ? `${HIDE_OPEN}${shown}${HIDE_CLOSE}` : shown;
   }
   if (node.type === 'hardBreak') return '\n';
   if (node.type === 'cardLink') {
     const label = String(node.attrs?.label ?? '');
     return titleOf ? titleOf(String(node.attrs?.id), label) : label;
   }
-  return (node.content ?? []).map((n) => inlineText(n, titleOf, markCode)).join('');
+  const text = (node.content ?? []).map((n) => inlineText(n, titleOf, markCode, hidden)).join('');
+  // Hidden runs side by side (bold and not) are one, and so are masks.
+  return hidden === 'mark' ? text.replaceAll(`${HIDE_CLOSE}${HIDE_OPEN}`, '') : hidden === 'mask' ? text.replaceAll(`${HIDDEN_MASK}${HIDDEN_MASK}`, HIDDEN_MASK) : text;
 }
 
 /** A run of a document's text: lines of plain text, or a code block, kept as typed. */
@@ -70,13 +88,15 @@ interface PreviewOptions {
   full?: boolean;
   /** Wraps inline code in `CODE_OPEN`/`CODE_CLOSE`. */
   markCode?: boolean;
+  /** How hidden text shows: as it is (the default), marked for a bubble to blur, or masked. */
+  hidden?: HiddenText;
 }
 
 /**
  * A document as runs of text lines, with list markers, and code blocks between them, for a bubble to show code as
  * code. Trailing empty lines are dropped.
  */
-export function previewParts(content: JSONNode, titleOf?: (id: string, label: string) => string, { full = false, markCode = false }: PreviewOptions = {}): PreviewPart[] {
+export function previewParts(content: JSONNode, titleOf?: (id: string, label: string) => string, { full = false, markCode = false, hidden = 'show' }: PreviewOptions = {}): PreviewPart[] {
   const parts: PreviewPart[] = [];
   const line = (text: string) => {
     const last = parts[parts.length - 1];
@@ -118,7 +138,7 @@ export function previewParts(content: JSONNode, titleOf?: (id: string, label: st
         return;
       }
       default:
-        `${prefix}${inlineText(node, titleOf, markCode)}`.split('\n').forEach(line);
+        `${prefix}${inlineText(node, titleOf, markCode, hidden)}`.split('\n').forEach(line);
     }
   };
   block(content);
@@ -141,8 +161,8 @@ export function previewParts(content: JSONNode, titleOf?: (id: string, label: st
  * A document as lines of text, with list markers; a code block's lines are lines too. A preview leaves out photos
  * and rules; `full` (for comparing versions) keeps them as lines of their own and marks quotes with "> ".
  */
-export function previewLines(content: JSONNode, titleOf?: (id: string, label: string) => string, full = false): string[] {
-  return previewParts(content, titleOf, { full }).flatMap((p) => (p.kind === 'text' ? p.lines : p.text.split('\n').map((l, i) => (i === 0 ? p.prefix : p.prefix.replace(/\S/g, ' ')) + l)));
+export function previewLines(content: JSONNode, titleOf?: (id: string, label: string) => string, full = false, hidden: HiddenText = 'show'): string[] {
+  return previewParts(content, titleOf, { full, hidden }).flatMap((p) => (p.kind === 'text' ? p.lines : p.text.split('\n').map((l, i) => (i === 0 ? p.prefix : p.prefix.replace(/\S/g, ' ')) + l)));
 }
 
 /** A web address in text. It stops before trailing punctuation, so "see https://a.com." links just the address. */

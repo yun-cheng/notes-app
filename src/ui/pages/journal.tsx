@@ -2,7 +2,7 @@ import { useEffect, useLayoutEffect, useMemo, useRef, useState, type ReactNode }
 import { Link, Outlet, useLocation, useNavigate, useParams } from 'react-router';
 import { diaryVault } from '../../domain/access';
 import { linkTitle } from '../../domain/cardIndex';
-import { checklistProgress, CODE_CLOSE, CODE_OPEN, displayTitle, previewParts, splitLinks, type PreviewPart } from '../../domain/content';
+import { checklistProgress, CODE_CLOSE, CODE_OPEN, displayTitle, HIDE_CLOSE, HIDE_OPEN, previewParts, splitLinks, type PreviewPart } from '../../domain/content';
 import { isDateKey, relativeDay, relativeDayInSentence, toDateKey } from '../../domain/dates';
 import { STATE_BOARD } from '../../domain/board';
 import { isFiltered, sortGroup, streamItems, type StreamFilter, type StreamItem, type StreamSort } from '../../domain/stream';
@@ -667,10 +667,45 @@ function CodeSnippet({ code, language }: { code: string; language: string | null
 }
 
 /**
- * Text with its web addresses as links that open in a new tab, and inline code (between `CODE_OPEN` and
- * `CODE_CLOSE`) as code. Clicking a link doesn't open or pick the entry.
+ * Text with its web addresses as links that open in a new tab, inline code (between `CODE_OPEN` and `CODE_CLOSE`) as
+ * code, and hidden text (between `HIDE_OPEN` and `HIDE_CLOSE`) blurred until pressed. Clicking a link doesn't open
+ * or pick the entry.
  */
 function LinkedText({ text }: { text: string }) {
+  if (!text.includes(HIDE_OPEN)) return <ShownText text={text} />;
+  // Split on hidden text: the odd pieces are hidden.
+  const pieces = text.split(new RegExp(`${HIDE_OPEN}([^${HIDE_CLOSE}]*)${HIDE_CLOSE}`));
+  return <>{pieces.map((piece, n) => (n % 2 ? <HiddenText key={n} text={piece} /> : <ShownText key={n} text={piece} />))}</>;
+}
+
+/**
+ * Hidden words, blurred: a press shows them, and another hides them again, without opening or picking the entry.
+ * Shown again each time the app opens.
+ */
+function HiddenText({ text }: { text: string }) {
+  const [shown, setShown] = useState(false);
+  const toggle = (e: { stopPropagation: () => void; preventDefault: () => void }) => {
+    e.stopPropagation();
+    e.preventDefault();
+    setShown(!shown);
+  };
+  return (
+    <span
+      className={`hidden-text${shown ? ' is-shown' : ''}`}
+      role="button"
+      tabIndex={0}
+      aria-pressed={shown}
+      aria-label={shown ? undefined : 'Hidden text. Press to show'}
+      title={shown ? 'Press to hide' : 'Press to show'}
+      onClick={toggle}
+      onKeyDown={(e) => (e.key === 'Enter' || e.key === ' ') && toggle(e)}
+    >
+      <ShownText text={text} />
+    </span>
+  );
+}
+
+function ShownText({ text }: { text: string }) {
   // Split on inline code: the odd pieces are code.
   const pieces = text.split(new RegExp(`${CODE_OPEN}([^${CODE_CLOSE}]*)${CODE_CLOSE}`));
   return (
@@ -706,7 +741,7 @@ function useOpen(card: NoteCard | TodoCard) {
 /** What every bubble does: its text, folded when long; opening it; its menu; and picking it. */
 function useBubble(card: NoteCard | TodoCard) {
   const { index } = useCards();
-  const text = useFold(card.id, previewParts(card.content, (id, label) => linkTitle(index, id, label), { markCode: true }));
+  const text = useFold(card.id, previewParts(card.content, (id, label) => linkTitle(index, id, label), { markCode: true, hidden: 'mark' }));
   const open = useOpen(card);
   const menu = useEntryMenu(card, open);
   return { text, open, menu, ...useSelectable(card.id, open, menu.onContextMenu) };

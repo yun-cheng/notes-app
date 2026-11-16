@@ -102,3 +102,23 @@ describe('checklists', () => {
     expect(fromMarkdown(toMarkdown(mixed, plain))).toEqual(mixed);
   });
 });
+
+describe('hidden text', () => {
+  const doc = fromMarkdown('Capital of Peru: ||Lima, **really**||. a || b');
+
+  it('reads ||words|| as hidden, marks inside too, and leaves lone bars as text', () => {
+    expect(doc.content![0].content).toEqual([
+      { type: 'text', text: 'Capital of Peru: ' },
+      { type: 'text', text: 'Lima, ', marks: [{ type: 'hidden' }] },
+      { type: 'text', text: 'really', marks: [{ type: 'bold' }, { type: 'hidden' }] },
+      { type: 'text', text: '. a || b' },
+    ]);
+  });
+
+  it('writes it back the same, with bars that are only text escaped', () => {
+    const out = toMarkdown(doc, plain);
+    expect(out).toBe('Capital of Peru: ||Lima, **really**||. a \\|| b');
+    expect(fromMarkdown(out)).toEqual(doc);
+    expect(toPlainText(doc, plain)).toBe('Capital of Peru: Lima, really. a || b');
+  });
+});

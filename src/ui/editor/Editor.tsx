@@ -17,6 +17,7 @@ import { linkTitle } from '../../domain/cardIndex';
 import { CardLink, insertCardLink, type LinkOption } from './cardLink';
 import { clipboardProps, titleResolver } from './clipboardStyle';
 import { CodeHighlight } from './codeHighlight';
+import { Hidden } from './hidden';
 import { Photo } from './photo';
 import { usePhotoInput } from './photoInput';
 import { commonSlashItems, slashBlock, typeahead, useTypeaheadMenu, type MenuItem } from './suggest';
@@ -138,6 +139,7 @@ function Toolbar({ editor, onPhoto, history }: { editor: TiptapEditor; onPhoto: 
     { label: '•', title: 'Bullet list', run: () => editor.chain().focus().toggleBulletList().run(), active: editor.isActive('bulletList') },
     { label: '1.', title: 'Numbered list', run: () => editor.chain().focus().toggleOrderedList().run(), active: editor.isActive('orderedList') },
     { label: '☐', title: 'Checklist', run: () => editor.chain().focus().toggleTaskList().run(), active: editor.isActive('taskList') },
+    { label: 'Hide', title: `Hide: blurred until pressed (${MOD}Shift+H, or ||words||)`, icon: 'hide', run: () => editor.chain().focus().toggleHidden().run(), active: editor.isActive('hidden') },
     { label: '“', title: 'Quote', run: () => editor.chain().focus().toggleBlockquote().run(), active: editor.isActive('blockquote') },
     { label: 'Code', title: `Code: words picked in a line, or a code block (${MOD}E for words)`, icon: 'code', run: () => toggleCode(editor), active: editor.isActive('code') || editor.isActive('codeBlock') },
     { label: '[[', title: 'Link to a card', run: () => editor.chain().focus().insertContent('[[').run() },
@@ -240,6 +242,7 @@ export function Editor({ content, onChange, placeholder, selfId, vaultId, editab
       Placeholder.configure({ placeholder: () => latest.current.placeholder }),
       Photo,
       CodeHighlight,
+      Hidden,
       typeahead('slashMenu', '/', slashItems, slash.render('Add')),
       CardLink.configure({
         suggestion: {

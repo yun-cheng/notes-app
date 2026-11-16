@@ -5,6 +5,8 @@ export type TitleResolver = (id: string, fallback: string) => string;
 function escapeText(text: string): string {
   return text
     .replace(/[\\*`[]/g, '\\$&')
+    // Two bars in a row would read as hidden text.
+    .replace(/\|(?=\|)/g, '\\|')
     .replace(/(^|[^\p{L}\p{N}])_|_(?=$|[^\p{L}\p{N}])/gu, (m) => m.replace('_', '\\_'));
 }
 
@@ -16,6 +18,8 @@ function renderText(node: JSONNode): string {
     if (mark.type === 'bold') out = `**${out}**`;
     else if (mark.type === 'italic') out = `*${out}*`;
     else if (mark.type === 'strike') out = `~~${out}~~`;
+    // Hidden as chat apps write a spoiler.
+    else if (mark.type === 'hidden') out = `||${out}||`;
     else if (mark.type === 'link') out = `[${out}](${String(mark.attrs?.href ?? '')})`;
   }
   return out;
@@ -38,7 +42,9 @@ function renderInline(nodes: JSONNode[] | undefined, title: TitleResolver, plain
       if (n.type === 'cardLink') return `[[${title(String(n.attrs?.id ?? ''), String(n.attrs?.label ?? ''))}]]`;
       return '';
     })
-    .join('');
+    .join('')
+    // Hidden runs side by side (bold and not) are one. Bars typed as text are escaped, so these are only marks'.
+    .replaceAll('||||', '');
 }
 
 const indent = (text: string, by: string) => text.split('\n').map((l, i) => (i && l ? by + l : l)).join('\n');

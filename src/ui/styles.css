@@ -1002,3 +1002,12 @@ body.is-dragging-card, body.is-dragging-card * { cursor: grabbing !important; us
 /* What an entry holds, at a glance: checklist progress and open comments. */
 .bubble__badge { display: inline-flex; align-items: center; gap: 3px; color: var(--muted); font-variant-numeric: tabular-nums; }
 .bubble__badge.is-complete { padding: 0 5px; border-radius: 6px; background: color-mix(in srgb, #5a9e5f 22%, transparent); color: var(--text); }
+
+/* Hidden text: blurred over a soft patch until pressed (in the journal or anywhere only read), or while the cursor is in it. */
+.hidden-text { border-radius: 4px; background: var(--sunken); color: transparent; text-shadow: 0 0 7px var(--text); cursor: pointer; transition: color 0.15s, text-shadow 0.15s; -webkit-user-select: none; user-select: none; }
+.hidden-text.is-shown { color: inherit; text-shadow: none; -webkit-user-select: text; user-select: text; }
+.hidden-text:not(.is-shown, .is-open) :is(code, a) { color: transparent; }
+.ProseMirror[contenteditable="true"] .hidden-text { cursor: text; -webkit-user-select: text; user-select: text; }
+/* While writing in it, it shows, marked with a dashed line so it's clear it's hidden elsewhere. */
+.hidden-text .is-open, .hidden-text.is-open { color: var(--text); text-shadow: none; text-decoration: underline dashed var(--muted); text-underline-offset: 3px; }
+@media (prefers-reduced-motion: reduce) { .hidden-text { transition: none; } }

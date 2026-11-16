@@ -25,6 +25,12 @@ describe('batch edits', () => {
     expect(planBatch([a, t, done], { kind: 'due', due: null })).toEqual([{ id: 't', patch: { due: null }, undo: { due: '2026-11-12' } }]);
   });
 
+  it('marks open todos waiting, or takes it off, leaving notes, done todos and those already so', () => {
+    const held = todo('w', null, { waiting: true });
+    expect(planBatch([a, t, done, held], { kind: 'waiting', waiting: true })).toEqual([{ id: 't', patch: { waiting: true }, undo: { waiting: false } }]);
+    expect(planBatch([a, t, done, held], { kind: 'waiting', waiting: false })).toEqual([{ id: 'w', patch: { waiting: false }, undo: { waiting: true } }]);
+  });
+
   it('switches notes to todos and back, leaving those already switched', () => {
     const steps = planBatch([a, b, t], { kind: 'type', type: 'todo' });
     expect(steps.map((s) => [s.id, s.patch.type, s.undo.type])).toEqual([

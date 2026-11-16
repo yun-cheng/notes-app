@@ -364,6 +364,8 @@ export class CardRepository {
     tags?: string[];
     vaultId?: string;
     done?: boolean;
+    /** Open, but waiting on someone or something. */
+    waiting?: boolean;
     createdAt?: number;
   }): Promise<Card> {
     const action = this.acting();
@@ -380,6 +382,7 @@ export class CardRepository {
         // Left off when unset, so todos without them look as they always have to the other apps.
         ...(init.due && init.dueTime ? { dueTime: init.dueTime } : {}),
         ...(init.due && init.repeat ? { repeat: init.repeat } : {}),
+        ...(init.waiting && !init.done ? { waiting: true } : {}),
         completedAt: init.done ? envelope.updatedAt : null,
       }, action);
     });

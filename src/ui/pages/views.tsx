@@ -22,7 +22,7 @@ export function CalendarPage() {
   const written = new Set(index.live.filter((c) => c.vaultId === diary && c.type !== 'tag').map((c) => toDateKey(new Date(c.createdAt))));
   const due = new Map<string, number>();
   index.todos.forEach((t) => {
-    if (t.status === 'open' && t.due) due.set(t.due, (due.get(t.due) ?? 0) + 1);
+    if (t.status === 'open' && !t.waiting && t.due) due.set(t.due, (due.get(t.due) ?? 0) + 1);
   });
 
   return (

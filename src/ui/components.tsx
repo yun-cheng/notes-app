@@ -183,7 +183,7 @@ export function TodoRow({ todo, showDue = true }: { todo: TodoCard; showDue?: bo
   const done = todo.status === 'done';
   return (
     <div className={`row row--todo${done ? ' is-done' : ''}`}>
-      <label className="check">
+      <label className={`check${!done && todo.waiting ? ' check--waiting' : ''}`}>
         <input
           type="checkbox"
           checked={done}

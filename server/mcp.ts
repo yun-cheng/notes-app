@@ -106,6 +106,7 @@ function summary(scope: Scope, card: Card): string {
   const vault = scope.vaults.get(card.vaultId)?.name ?? '';
   const parts = [card.type, `id: ${card.id}`, vault && `vault: ${vault}`, `updated ${when(card.updatedAt)}`];
   if (card.type === 'todo') parts.splice(1, 0, card.status === 'done' ? 'done' : card.due ? `due ${dueText(card)}` : 'no due date');
+  if (card.type === 'todo' && card.status === 'open' && card.waiting) parts.splice(1, 0, 'waiting');
   return `- ${displayTitle(card)} (${parts.filter(Boolean).join(', ')})`;
 }
 
@@ -119,7 +120,7 @@ function renderCard(scope: Scope, card: Card): string {
   const lines = [`# ${displayTitle(card)}`, ''];
   const vault = scope.vaults.get(card.vaultId);
   lines.push(`Type: ${card.type} · ID: ${card.id} · Vault: ${vault?.name} (${vault?.write ? 'you can edit' : 'read only'})`);
-  if (card.type === 'todo') lines.push(`Status: ${card.status}${card.due ? ` · Due: ${dueText(card)}` : ''}`);
+  if (card.type === 'todo') lines.push(`Status: ${card.status}${card.status === 'open' && card.waiting ? ', waiting' : ''}${card.due ? ` · Due: ${dueText(card)}` : ''}`);
   if (card.tags.length) lines.push(`Tags: ${tagNames(scope, card).join(', ')}`);
   lines.push(`Created: ${when(card.createdAt)} · Updated: ${when(card.updatedAt)}`);
   if (card.deleted) lines.push('This card is in the Trash.');

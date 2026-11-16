@@ -7,22 +7,26 @@ export function todosDueOn(todos: TodoCard[], date: string): TodoCard[] {
   return todos.filter((t) => t.due === date).sort((a, b) => a.createdAt - b.createdAt);
 }
 
-/** Open and past its due date, or due today at a time already gone. */
+/** Open and past its due date, or due today at a time already gone. A waiting todo never is. */
 export function isOverdue(todo: TodoCard, today: string, now = toTimeKey(new Date())): boolean {
-  if (todo.status !== 'open' || !todo.due) return false;
+  if (todo.status !== 'open' || todo.waiting || !todo.due) return false;
   return todo.due < today || (todo.due === today && !!todo.dueTime && todo.dueTime <= now);
 }
 
 export interface Completion {
-  patch: { status?: 'done'; due?: string };
-  undo: { status?: 'open'; due?: string | null };
+  patch: { status?: 'done'; due?: string; waiting?: false };
+  undo: { status?: 'open'; due?: string | null; waiting?: true };
   /** For a repeating todo, when it's due next. */
   next?: string;
 }
 
-/** What ticking an open todo changes. A repeating one stays open and moves on to its next due date. */
+/**
+ * What ticking an open todo changes. A repeating one stays open and moves on to its next due date. Either way it's
+ * no longer waiting: what it waited for has come.
+ */
 export function completeTodo(todo: TodoCard, today: string): Completion {
-  if (!todo.repeat) return { patch: { status: 'done' }, undo: { status: 'open' } };
+  const wait = todo.waiting ? ({ patch: { waiting: false }, undo: { waiting: true } } as const) : { patch: {}, undo: {} };
+  if (!todo.repeat) return { patch: { status: 'done', ...wait.patch }, undo: { status: 'open', ...wait.undo } };
   const next = nextDue(todo.due, todo.repeat, today);
-  return { patch: { due: next }, undo: { due: todo.due }, next };
+  return { patch: { due: next, ...wait.patch }, undo: { due: todo.due, ...wait.undo }, next };
 }

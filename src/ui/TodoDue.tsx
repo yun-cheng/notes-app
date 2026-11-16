@@ -30,6 +30,32 @@ export function useTickTodo() {
   };
 }
 
+/**
+ * Marking an open todo waiting, on someone or something, or taking that off, with a toast and Undo: it leaves the
+ * lists of what's due, so the change says where it went.
+ */
+export function useToggleWaiting() {
+  const { repo } = useCards();
+  const toast = useToast();
+  const { undoAction } = useUndo();
+  return (todo: TodoCard) => {
+    const waiting = !todo.waiting;
+    const action = repo.action();
+    void repo.update(todo.id, { waiting });
+    toast(waiting ? `Waiting: ${displayTitle(todo)}` : `No longer waiting: ${displayTitle(todo)}`, { action: { label: 'Undo', run: () => void undoAction(action) } });
+  };
+}
+
+/** A small mark in a waiting todo's bubble or row. */
+export function WaitingMark() {
+  return (
+    <span className="waiting-mark" title="Waiting on someone or something: not due until this is taken off">
+      <Icon name="hourglass" size={12} />
+      Waiting
+    </span>
+  );
+}
+
 /** "Due today at 3:00 PM", or in a list's narrow column, "Today, 3:00 PM". */
 export function dueText(todo: TodoCard, today: string, short = false): string {
   if (!todo.due) return '';
@@ -105,6 +131,7 @@ function useDueEdits(card: TodoCard) {
 export function DueMenu({ card, look = 'bar' }: { card: TodoCard; look?: 'bar' | 'add' | 'label' }) {
   const { open, root, toggle, fixedStyle, close } = usePopover();
   const edits = useDueEdits(card);
+  const toggleWaiting = useToggleWaiting();
   const { today } = edits;
   const quick = [
     ['Today', today],
@@ -122,7 +149,7 @@ export function DueMenu({ card, look = 'bar' }: { card: TodoCard; look?: 'bar' |
         aria-haspopup="dialog"
         aria-expanded={!!open}
         aria-label={card.due ? `${dueText(card, today)}${card.repeat ? `, ${repeatLabel(card.repeat).toLowerCase()}` : ''}` : 'Set a due date'}
-        title="Due date, time and repeat"
+        title="Due date, time, repeat and waiting"
         onClick={toggle}
       >
         {look === 'label' ? (
@@ -164,6 +191,15 @@ export function DueMenu({ card, look = 'bar' }: { card: TodoCard; look?: 'bar' |
             <span>Repeat</span>
             {edits.repeatSelect(true)}
           </label>
+          {card.status === 'open' && (
+            <label className="due-menu__waiting">
+              <input type="checkbox" checked={!!card.waiting} onChange={() => toggleWaiting(card)} />
+              <span>
+                Waiting
+                <small>On someone or something: not due, never overdue</small>
+              </span>
+            </label>
+          )}
           {card.due && (
             <button
               type="button"

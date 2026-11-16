@@ -100,6 +100,7 @@ function isCard(value: unknown): value is Card {
       (c.due === null || isDateKey(c.due)) &&
       optional(c.dueTime, (t) => t === null || isTimeKey(t)) &&
       optional(c.repeat, (r) => r === null || isRepeat(r)) &&
+      optional(c.waiting, (w) => typeof w === 'boolean') &&
       (c.completedAt === null || isTime(c.completedAt))
     );
   }

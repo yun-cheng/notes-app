@@ -88,6 +88,7 @@ export function describeChange({ before, after, fields }: Pick<Change, 'before' 
   if (has('type')) return after.type === 'todo' ? 'Turned into a todo' : 'Turned into a note';
   if (has('vaultId')) return 'Moved to another vault';
   if (has('status') && after.type === 'todo') return after.status === 'done' ? 'Marked done' : 'Reopened';
+  if (has('waiting') && after.type === 'todo') return after.waiting ? 'Marked waiting' : 'No longer waiting';
   if (has('content')) return 'Edited';
   if (has('title')) return after.type === 'todo' ? 'Edited' : 'Renamed';
   if (has('tags')) return 'Changed tags';

@@ -21,6 +21,11 @@ describe('ticking a todo', () => {
       next: '2026-11-19',
     });
   });
+  it('takes waiting off as it finishes or moves on, and puts it back on undo', () => {
+    expect(completeTodo(todo('t', TODAY, { waiting: true }), TODAY)).toEqual({ patch: { status: 'done', waiting: false }, undo: { status: 'open', waiting: true } });
+    const weekly = completeTodo(todo('t', TODAY, { waiting: true, repeat: { unit: 'week', every: 1 } }), TODAY);
+    expect([weekly.patch, weekly.undo]).toEqual([{ due: '2026-11-19', waiting: false }, { due: TODAY, waiting: true }]);
+  });
 });
 
 describe('overdue', () => {
@@ -31,5 +36,6 @@ describe('overdue', () => {
     expect(isOverdue(todo('c', TODAY, { dueTime: '09:00' }), TODAY, '09:00')).toBe(true);
     expect(isOverdue(todo('d', TODAY, { dueTime: '09:00' }), TODAY, '08:59')).toBe(false);
     expect(isOverdue(todo('e', '2026-11-11', { status: 'done' }), TODAY, '08:00')).toBe(false);
+    expect(isOverdue(todo('f', '2026-11-11', { waiting: true }), TODAY, '08:00')).toBe(false);
   });
 });

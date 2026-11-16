@@ -27,7 +27,7 @@ import { entries, useEntryActions, writeClipboard } from '../entryActions';
 import { useEntryShortcuts } from '../useEntryShortcuts';
 import { AddTag, BubbleTools, TypeSwitch, useEntryViewOnly, ViewOnlyButton } from '../BubbleTools';
 import { useEntryMenu } from '../EntryMenu';
-import { DueLabel, DueMenu, useTickTodo } from '../TodoDue';
+import { DueLabel, DueMenu, useTickTodo, WaitingMark } from '../TodoDue';
 import { SyncMark } from '../SyncStatus';
 import { languageLabel } from '../codeLanguages';
 import { HighlightedCode } from '../highlight';
@@ -314,6 +314,7 @@ function BubbleMeta({ card, at, fold }: { card: NoteCard | TodoCard; at: number;
             {fold.folded ? 'More' : 'Less'}
           </button>
         )}
+        {card.type === 'todo' && card.waiting && card.status === 'open' && <WaitingMark />}
         {card.type === 'todo' && (retag ? <DueMenu card={card} look={card.due ? 'label' : 'add'} /> : <DueLabel todo={card} className="bubble__due" />)}
         <SyncMark id={card.id} />
         <time dateTime={new Date(at).toISOString()}>{time(at)}</time>
@@ -650,9 +651,10 @@ function TodoBubble({ todo, at }: { todo: TodoCard; at: number }) {
   const tick = useTickTodo();
   const { text, open, menu, selected, handlers } = useBubble(todo);
   const done = todo.status === 'done';
+  const waiting = !done && !!todo.waiting;
   return (
     <div className={`bubble bubble--todo${colorClass(todo)}${done ? ' is-done' : ''}${selected ? ' is-selected' : ''}`} role="article" aria-current={selected || undefined} {...handlers}>
-      <label className="check">
+      <label className={`check${waiting ? ' check--waiting' : ''}`}>
         <input
           type="checkbox"
           checked={done}
@@ -750,7 +752,7 @@ function EntryDetail({ card, fresh, edit, onClose }: { card: NoteCard | TodoCard
       {showTitle && (
         <div className={`title-row${isTodo ? ' title-row--todo' : ''}`}>
           {isTodo && (
-            <label className="check check--large">
+            <label className={`check check--large${card.status === 'open' && card.waiting ? ' check--waiting' : ''}`}>
               <input
                 type="checkbox"
                 checked={card.status === 'done'}

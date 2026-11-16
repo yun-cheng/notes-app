@@ -8,7 +8,7 @@ import { ColorSwatches } from './EntryStyle';
 import { Icon, type IconName } from './Icon';
 import { useSelection } from './selection';
 import { ShareDialog } from './ShareDialog';
-import { useTickTodo } from './TodoDue';
+import { useTickTodo, useToggleWaiting } from './TodoDue';
 import { usePermissions } from './viewOnly';
 
 type Entry = NoteCard | TodoCard;
@@ -88,6 +88,7 @@ function EntryMenu({ card, at, open, onShare, onClose }: MenuProps) {
   const may = usePermissions();
   const actions = useEntryActions();
   const tick = useTickTodo();
+  const toggleWaiting = useToggleWaiting();
   const selection = useSelection();
   const toggleViewOnly = useEntryViewOnly(card);
   const can = may(card);
@@ -155,6 +156,11 @@ function EntryMenu({ card, at, open, onShare, onClose }: MenuProps) {
           {card.type === 'todo' && (
             <Item icon="check" onClick={run(() => tick(card))}>
               {done ? 'Mark not done' : 'Mark done'}
+            </Item>
+          )}
+          {card.type === 'todo' && !done && (
+            <Item icon="hourglass" checked={!!card.waiting} onClick={run(() => toggleWaiting(card))}>
+              Waiting
             </Item>
           )}
           <Item icon={to} onClick={run(() => actions.retype(card.id, to))}>

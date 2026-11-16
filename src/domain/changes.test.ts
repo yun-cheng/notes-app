@@ -52,6 +52,8 @@ describe('describing a change', () => {
     expect(says(open, { ...open, tags: ['x'] })).toBe('Changed tags');
     expect(says(open, { ...open, color: 'red' })).toBe('Changed color');
     expect(says(open, { ...open, archived: true })).toBe('Archived');
+    expect(says(open, { ...open, waiting: true })).toBe('Marked waiting');
+    expect(says({ ...open, waiting: true }, { ...open, waiting: false })).toBe('No longer waiting');
     expect(says({ ...open, archived: true }, { ...open, archived: false })).toBe('Unarchived');
   });
 

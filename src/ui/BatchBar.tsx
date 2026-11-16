@@ -13,7 +13,7 @@ import { useToast } from './Toast';
 import { useUndo } from './useUndo';
 
 /**
- * Takes the writing box's place while entries are picked: tag, finish, date, switch between note and todo, copy,
+ * Takes the writing box's place while entries are picked: tag, finish, mark waiting, date, switch between note and todo, copy,
  * move, archive or trash them all at once.
  * Every change can be undone from its toast. Entries this account can't change are left alone and counted.
  */
@@ -29,6 +29,9 @@ export function BatchBar({ selection }: { selection: Selection }) {
   const editable = cards.filter((c) => may(c).edit);
   const manageable = cards.filter((c) => may(c).manage);
   const todos = editable.filter((c) => c.type === 'todo');
+  // Waiting is for open todos: mark them while any isn't, and take it off when all are.
+  const openTodos = todos.filter((c) => c.type === 'todo' && c.status === 'open');
+  const waiting = openTodos.length > 0 && openTodos.every((c) => c.type === 'todo' && c.waiting);
   const skipped = (n: number) => (n ? `; ${entries(n)} couldn't be changed` : '');
 
   const apply = async (edit: BatchEdit, done: (n: number) => string) => {
@@ -88,6 +91,18 @@ export function BatchBar({ selection }: { selection: Selection }) {
             <button type="button" className="btn btn--quiet" onClick={() => void apply({ kind: 'status', status: 'open' }, (n) => `Reopened ${n}`)}>
               Not done
             </button>
+            {openTodos.length > 0 && (
+              <button
+                type="button"
+                className={`icon-btn${waiting ? ' is-active' : ''}`}
+                aria-pressed={waiting}
+                aria-label="Waiting"
+                title={waiting ? 'No longer waiting' : 'Waiting on someone or something'}
+                onClick={() => void apply({ kind: 'waiting', waiting: !waiting }, (n) => (waiting ? `${n} no longer waiting` : `Marked ${n} waiting`))}
+              >
+                <Icon name="hourglass" />
+              </button>
+            )}
             <button type="button" className={`icon-btn${panel === 'due' ? ' is-active' : ''}`} aria-label="Due date" title="Set a due date" onClick={() => toggle('due')}>
               <Icon name="calendar" />
             </button>

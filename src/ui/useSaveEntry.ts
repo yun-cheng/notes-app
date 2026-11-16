@@ -18,9 +18,11 @@ export interface SaveResult {
   action?: string;
 }
 
-/** Where entries go: the journal filter's tag and vault, its todo default, "due today", and the day it shows. */
+/** Where entries go: the journal filter's tag and vault, its todo default, "due today" or waiting, and the day it shows. */
 export interface SaveOptions {
   due?: string;
+  /** Todos start out waiting. */
+  waiting?: boolean;
   tagId?: string;
   vaultId?: string;
   /** A day other than today: entries are written on it, at this time of day, so they show on that day. */
@@ -30,7 +32,7 @@ export interface SaveOptions {
 /** What the journal is narrowed to, as defaults for what is written or pasted into it. */
 export function journalDefaults(filter: StreamFilter, today: string): SaveOptions {
   const date = filter.when && isDateKey(filter.when) && filter.when !== today ? filter.when : undefined;
-  return { due: filter.status === 'today' ? today : undefined, tagId: filter.tagId, vaultId: filter.vaultId, date };
+  return { due: filter.status === 'today' ? today : undefined, waiting: filter.status === 'waiting' || undefined, tagId: filter.tagId, vaultId: filter.vaultId, date };
 }
 
 /** The moment `date` shows the clock's time, so entries written for another day keep the order they're written in. */
@@ -88,7 +90,7 @@ export function useSaveEntries() {
       const common = { title: entry.title, content: entry.content, tags: tagIdsFor(entry.tags), vaultId: vaultOf(entry), createdAt: at === undefined ? undefined : at + i };
       if (entry.kind === 'note') return repo.createNote(common);
       const due = entry.due ?? opts.due ?? null;
-      return repo.createTodo({ ...common, due, dueTime: entry.dueTime, repeat: entry.repeat, done: entry.done });
+      return repo.createTodo({ ...common, due, dueTime: entry.dueTime, repeat: entry.repeat, done: entry.done, waiting: opts.waiting });
     });
     const [ids] = await Promise.all([Promise.all(making).then((cards) => cards.map((card) => card.id)), Promise.all(tagging)]);
     return { saved: entries.length, ids, action };

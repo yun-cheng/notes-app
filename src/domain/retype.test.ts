@@ -45,6 +45,8 @@ describe('switching between note and todo', () => {
   it('drops the todo fields from a note, and starts a new todo open with no date', () => {
     const n = changeType(todo('t', '2026-11-12', { status: 'done', completedAt: 5, dueTime: '09:00' }), 'note');
     expect(n.type).toBe('note');
+    expect(['status', 'due', 'dueTime', 'repeat', 'waiting', 'completedAt'].some((k) => k in changeType({ ...todo('w', null), waiting: true }, 'note'))).toBe(false);
+    expect(retypePatch(todo('w', null, { title: 'call', waiting: true }), 'note')?.undo).toMatchObject({ type: 'todo', waiting: true });
     expect(['status', 'due', 'dueTime', 'repeat', 'completedAt'].some((k) => k in n)).toBe(false);
     expect(changeType(note('n', 'x'), 'todo')).toMatchObject({ type: 'todo', status: 'open', due: null, completedAt: null });
     expect(changeType(tag('g', 'work'), 'todo').type).toBe('tag');

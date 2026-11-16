@@ -8,6 +8,7 @@ export type BatchEdit =
   | { kind: 'add-tag'; tagId: string }
   | { kind: 'remove-tag'; tagId: string }
   | { kind: 'status'; status: 'open' | 'done' }
+  | { kind: 'waiting'; waiting: boolean }
   | { kind: 'due'; due: string | null }
   | { kind: 'type'; type: EntryType };
 
@@ -21,6 +22,7 @@ export interface BatchPatch {
   due?: string | null;
   dueTime?: string | null;
   repeat?: Repeat | null;
+  waiting?: boolean;
 }
 
 /** One card's change, with the patch that puts it back. */
@@ -48,6 +50,8 @@ export function planBatch(cards: Card[], edit: BatchEdit, groupOf: Map<string, T
     } else if (edit.kind === 'status' && card.type === 'todo' && card.status !== edit.status) {
       const { patch, undo } = edit.status === 'done' ? completeTodo(card, today) : { patch: { status: edit.status }, undo: { status: card.status } };
       steps.push({ id: card.id, patch, undo });
+    } else if (edit.kind === 'waiting' && card.type === 'todo' && card.status === 'open' && !!card.waiting !== edit.waiting) {
+      steps.push({ id: card.id, patch: { waiting: edit.waiting }, undo: { waiting: !!card.waiting } });
     } else if (edit.kind === 'due' && card.type === 'todo' && card.due !== edit.due) {
       const clears = edit.due === null && (card.dueTime || card.repeat);
       steps.push({

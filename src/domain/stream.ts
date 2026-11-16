@@ -15,8 +15,11 @@ export interface StreamItem {
 }
 
 export type EntryType = 'note' | 'todo';
-/** For todos: open or done, or open and due by today, after today, or with no date. */
-export type TodoStatus = 'open' | 'done' | 'today' | 'upcoming' | 'undated';
+/**
+ * For todos: open or done, or open and due by today, after today, or with no date, or waiting. A waiting todo is
+ * open, but left out of the three by date: it's not up to you yet.
+ */
+export type TodoStatus = 'open' | 'done' | 'today' | 'upcoming' | 'undated' | 'waiting';
 /** When it was written: today, the past 7 or 30 days, or one day (a date key). */
 /** A preset, one day (a date key), or a range of days written `from..to` (`2026-11-03..2026-11-09`). */
 export type When = 'today' | 'week' | 'month' | string;
@@ -45,7 +48,7 @@ export interface StreamFilter {
 }
 
 const TYPES: EntryType[] = ['note', 'todo'];
-const STATUSES: TodoStatus[] = ['open', 'done', 'today', 'upcoming', 'undated'];
+const STATUSES: TodoStatus[] = ['open', 'done', 'today', 'upcoming', 'undated', 'waiting'];
 const WHENS = ['today', 'week', 'month'];
 const SORTS: BaseSort[] = ['written', 'newest', 'edited', 'due'];
 const CONTAINS: Contains[] = ['link', 'photo'];
@@ -169,7 +172,7 @@ function rangeLabel([from, to]: [string, string], today: string, locale?: string
 
 export const CONTAINS_LABEL: Record<Contains, string> = { link: 'With links', photo: 'With photos' };
 export const SORT_LABEL: Record<BaseSort, string> = { written: 'Oldest first', newest: 'Newest first', edited: 'Recently edited', due: 'Due date' };
-export const STATUS_LABEL: Record<TodoStatus, string> = { open: 'Open', done: 'Done', today: 'Due today', upcoming: 'Upcoming', undated: 'No date' };
+export const STATUS_LABEL: Record<TodoStatus, string> = { open: 'Open', done: 'Done', today: 'Due today', upcoming: 'Upcoming', undated: 'No date', waiting: 'Waiting' };
 export const TYPE_LABEL: Record<EntryType, string> = { note: 'Notes', todo: 'Todos' };
 export const WHEN_LABEL: Record<string, string> = { today: 'Written today', week: 'Past 7 days', month: 'Past 30 days' };
 
@@ -193,6 +196,9 @@ export function whenLabel(when: When, today: string, locale?: string): string {
 function matchesStatus(todo: TodoCard, status: TodoStatus, today: string): boolean {
   if (status === 'done') return todo.status === 'done';
   if (todo.status !== 'open') return false;
+  if (status === 'open') return true;
+  if (status === 'waiting') return !!todo.waiting;
+  if (todo.waiting) return false;
   if (status === 'today') return todo.due !== null && todo.due <= today;
   if (status === 'upcoming') return todo.due !== null && todo.due > today;
   if (status === 'undated') return todo.due === null;

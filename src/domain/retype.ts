@@ -11,7 +11,7 @@ export type EntryType = 'note' | 'todo';
 export function changeType(card: Card, type: EntryType): Card {
   if (card.type === type) return card;
   if (card.type === 'todo') {
-    const { status: _status, due: _due, dueTime: _dueTime, repeat: _repeat, completedAt: _completedAt, ...rest } = card;
+    const { status: _status, due: _due, dueTime: _dueTime, repeat: _repeat, waiting: _waiting, completedAt: _completedAt, ...rest } = card;
     return { ...rest, type: 'note' } satisfies NoteCard;
   }
   if (card.type === 'note') return { ...card, type: 'todo', status: 'open', due: null, completedAt: null } satisfies TodoCard;
@@ -21,7 +21,7 @@ export function changeType(card: Card, type: EntryType): Card {
 /** The fields switching an entry's type sets, and the ones that put it back. */
 export interface Retype {
   patch: { type: EntryType; title: string; content: JSONNode };
-  undo: { type: EntryType; title: string; content: JSONNode; status?: 'open' | 'done'; due?: string | null; dueTime?: string | null; repeat?: TodoCard['repeat'] };
+  undo: { type: EntryType; title: string; content: JSONNode; status?: 'open' | 'done'; due?: string | null; dueTime?: string | null; repeat?: TodoCard['repeat']; waiting?: boolean };
 }
 
 /**
@@ -33,7 +33,7 @@ export function retypePatch(card: NoteCard | TodoCard, type: EntryType): Retype 
   if (card.type === type) return null;
   const undo: Retype['undo'] =
     card.type === 'todo'
-      ? { type: 'todo', title: card.title, content: card.content, status: card.status, due: card.due, dueTime: card.dueTime ?? null, repeat: card.repeat ?? null }
+      ? { type: 'todo', title: card.title, content: card.content, status: card.status, due: card.due, dueTime: card.dueTime ?? null, repeat: card.repeat ?? null, ...(card.waiting ? { waiting: true } : {}) }
       : { type: 'note', title: card.title, content: card.content };
   let { title, content } = card;
   if (type === 'todo' && !title.trim()) {

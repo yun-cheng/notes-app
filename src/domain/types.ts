@@ -71,6 +71,11 @@ export interface TodoCard extends CardCommon {
   dueTime?: string | null;
   /** Set on a repeating todo: ticking it moves `due` to the next time instead of finishing it. See `repeat.ts`. */
   repeat?: Repeat | null;
+  /**
+   * Open but on hold, waiting on someone or something: left out of what's due, and never overdue. Ticking it done
+   * takes this off. Missing on most todos.
+   */
+  waiting?: boolean;
   completedAt: number | null;
 }
 export interface TagCard extends CardCommon {

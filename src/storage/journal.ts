@@ -12,6 +12,7 @@ export interface CardPatch {
   dueTime?: string | null;
   /** null to stop repeating. */
   repeat?: Repeat | null;
+  waiting?: boolean;
   pinned?: boolean;
   /** Replaces the whole style; `{}` goes back to the device's setting. */
   preview?: PreviewStyle;

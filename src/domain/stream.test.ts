@@ -62,9 +62,13 @@ describe('stream', () => {
       todo('undated', null, { createdAt: 4 }),
       todo('done', TODAY, { createdAt: 5, status: 'done' }),
       note('n', 'N', { createdAt: 6 }),
+      todo('held', TODAY, { createdAt: 7, waiting: true }),
+      todo('held-undated', null, { createdAt: 8, waiting: true }),
     ];
     const run = (status: TodoStatus) => ids(streamItems(buildIndex(todos), { status }, TODAY));
-    expect(run('open')).toEqual(['overdue', 'due-today', 'later', 'undated']);
+    // Waiting todos are open, but not among those due or undated: only under Waiting.
+    expect(run('open')).toEqual(['overdue', 'due-today', 'later', 'undated', 'held', 'held-undated']);
+    expect(run('waiting')).toEqual(['held', 'held-undated']);
     expect(run('today')).toEqual(['overdue', 'due-today']);
     expect(run('upcoming')).toEqual(['later']);
     expect(run('undated')).toEqual(['undated']);

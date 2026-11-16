@@ -40,7 +40,7 @@ export function useFilterPath(): (filter: StreamFilter) => string {
   return pathname === '/history' ? historyPath : journalPath;
 }
 
-const STATUSES: TodoStatus[] = ['open', 'today', 'upcoming', 'undated', 'done'];
+const STATUSES: TodoStatus[] = ['open', 'today', 'upcoming', 'undated', 'waiting', 'done'];
 
 /** One choice in a filter chip's menu: picking the one in use takes it off. */
 interface FilterOption {

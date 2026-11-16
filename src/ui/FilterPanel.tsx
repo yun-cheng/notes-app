@@ -264,12 +264,12 @@ export function SortMenu({ filter }: { filter: StreamFilter }) {
             </option>
           ))}
         <optgroup label="Board">
+          <option value="board:state">Board by todo state</option>
           {boards.map((g) => (
             <option key={g.id} value={`board:${g.id}`}>
               Board by {g.title.toLowerCase()}
             </option>
           ))}
-          {!boards.length && <option value="board:pick">Board…</option>}
         </optgroup>
       </select>
     </label>

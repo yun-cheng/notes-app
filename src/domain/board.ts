@@ -1,5 +1,6 @@
 import type { StreamItem } from './stream';
 import { pickInGroup, rankIn, type TagGroup } from './tagGroups';
+import { completeTodo } from './todos';
 import type { NoteCard, TagCard, TodoCard } from './types';
 
 /**
@@ -115,4 +116,74 @@ export function tagsForStatus(tags: string[], groups: TagGroup[], status: 'open'
     }
   }
   return next;
+}
+
+/** What a move between columns changes on the card, besides its place. */
+export interface MovePatch {
+  tags?: string[];
+  status?: 'open' | 'done';
+  due?: string;
+  waiting?: boolean;
+}
+
+/**
+ * What moving a card to another column does, besides its place. `next` is set when a repeating todo was ticked:
+ * it moves on to that date instead of being done, and stays in the column it was in. `became` names what it
+ * became, for the toast: done, reopened, waiting, no longer waiting, or just moved.
+ */
+export interface BoardMove {
+  patch: MovePatch;
+  next?: string;
+  became: 'done' | 'open' | 'waiting' | 'resumed' | 'moved';
+}
+
+/** Moving a card between a tag group's columns: its tag swapped, and in a Done column ticked or reopened. */
+export function groupMove(card: Entry, group: TagGroup, from: string, to: string, today: string): BoardMove {
+  const status = statusForMove(card, group, from, to);
+  if (status === 'done' && card.type === 'todo' && card.repeat) {
+    const { patch, next } = completeTodo(card, today);
+    return { patch, next, became: 'done' };
+  }
+  const tags = boardTags(card.tags, group, from, to);
+  const done = card.type === 'todo' && status === 'done' ? completeTodo(card, today).patch : status === 'open' ? { status: 'open' as const } : {};
+  return { patch: { ...(tags !== card.tags ? { tags } : {}), ...done }, became: status ?? 'moved' };
+}
+
+/**
+ * The board by todo state, which needs no tags: its columns are Open, Waiting and Done, from each todo's own box and
+ * Waiting mark, so dragging a card ticks it, reopens it or marks it waiting. Notes, which have neither, aren't on it.
+ */
+export const STATE_BOARD = 'state';
+export type TodoState = 'open' | 'waiting' | 'done';
+export const TODO_STATES: TodoState[] = ['open', 'waiting', 'done'];
+export const TODO_STATE_LABEL: Record<TodoState, string> = { open: 'Open', waiting: 'Waiting', done: 'Done' };
+
+export const stateOf = (todo: TodoCard): TodoState => (todo.status === 'done' ? 'done' : todo.waiting ? 'waiting' : 'open');
+
+/** The todos among the items, in a column for each state, in board order. */
+export function stateColumns(items: StreamItem[]): BoardColumn[] {
+  const columns = TODO_STATES.map((key) => ({ key, items: [] as StreamItem[] }));
+  for (const item of items) if (item.card.type === 'todo') columns[TODO_STATES.indexOf(stateOf(item.card))].items.push(item);
+  for (const column of columns) column.items.sort(byPosition);
+  return columns;
+}
+
+/**
+ * Moving a todo between the state columns. Into Done it's ticked (a repeating one moves on to its next date and
+ * stays); into Open or Waiting it's reopened, waiting or not. On a board by a group with a Done tag it moves into
+ * Done or out of it too, as ticking it does.
+ */
+export function stateMove(todo: TodoCard, to: TodoState, today: string, groups: TagGroup[]): BoardMove {
+  const from = stateOf(todo);
+  if (from === to) return { patch: {}, became: 'moved' };
+  const retag = (status: 'open' | 'done') => {
+    const tags = tagsForStatus(todo.tags, groups, status);
+    return tags === todo.tags ? {} : { tags };
+  };
+  if (to === 'done') {
+    const { patch, next } = completeTodo(todo, today);
+    return next ? { patch, next, became: 'done' } : { patch: { ...patch, ...retag('done') }, became: 'done' };
+  }
+  const reopen = from === 'done' ? { status: 'open' as const, ...retag('open') } : {};
+  return { patch: { ...reopen, waiting: to === 'waiting' }, became: to === 'waiting' ? 'waiting' : from === 'done' ? 'open' : 'resumed' };
 }

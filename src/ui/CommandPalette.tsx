@@ -119,11 +119,11 @@ export function CommandPalette({ onClose, onShortcuts }: { onClose: () => void; 
       all.push({ id: `sort-group-${g.id}`, group: 'Sort', label: `Sort: by ${g.title.toLowerCase()}`, icon: 'upcoming', keywords: 'order group rank', run: order(`group:${g.id}`) });
     }
     if (current.board) all.push({ id: 'view-list', group: 'View', label: 'Show as a list', icon: 'list', keywords: 'stream journal chat board off', run: board(undefined) });
+    all.push({ id: 'view-board-state', group: 'View', label: 'Show as a board by todo state', icon: 'board', keywords: 'board kanban columns trello open waiting done', run: board('state') });
     const boardGroups = index.tagGroups.groups.filter((g) => g.members.length);
     for (const g of boardGroups) {
       all.push({ id: `view-board-${g.id}`, group: 'View', label: `Show as a board by ${g.title.toLowerCase()}`, icon: 'board', keywords: 'board kanban columns trello', run: board(g.id) });
     }
-    if (!boardGroups.length) all.push({ id: 'view-board', group: 'View', label: 'Show as a board', icon: 'board', keywords: 'board kanban columns trello', run: board('pick') });
     const unlocked = vaults.filter((v) => v.lock === 'pin' && !locked.has(v.id));
     if (unlocked.length) {
       all.push({ id: 'lock-all', group: 'Vaults', label: 'Lock private vaults', icon: 'lock', keywords: 'close hide pin', run: () => locks.lockAll() });

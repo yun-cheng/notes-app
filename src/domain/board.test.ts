@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { boardColumns, boardTags, columnOf, doneTagOf, placeAt, positionOf, statusForMove, tagsForStatus } from './board';
+import { boardColumns, boardTags, columnOf, doneTagOf, groupMove, placeAt, positionOf, stateColumns, stateMove, statusForMove, tagsForStatus } from './board';
 import type { StreamItem } from './stream';
 import { buildTagGroups, type TagGroup } from './tagGroups';
 import { note, tag, todo } from './testFixtures';
@@ -115,4 +115,45 @@ describe('board', () => {
       expect(tagsForStatus(there, [status], 'done')).toBe(there);
     });
   });
+
+  describe('the board by todo state', () => {
+    const TODAY = '2026-11-17';
+    const open = todo('o', null, { createdAt: 3 });
+    const waiting = todo('w', null, { createdAt: 2, waiting: true });
+    const done = todo('d', null, { createdAt: 1, status: 'done', completedAt: 1, tags: ['done'] });
+
+    it('puts todos in Open, Waiting and Done, and leaves notes off', () => {
+      const columns = stateColumns([open, waiting, done, note('n', 'N')].map(item));
+      expect(columns.map((c) => [c.key, ids(c)])).toEqual([
+        ['open', ['o']],
+        ['waiting', ['w']],
+        ['done', ['d']],
+      ]);
+    });
+
+    it('ticks a todo dragged into Done, moving it to a Done tag too', () => {
+      expect(stateMove({ ...open, tags: ['doing'] }, 'done', TODAY, [status])).toEqual({ patch: { status: 'done', tags: ['done'] }, became: 'done' });
+      expect(stateMove({ ...waiting }, 'done', TODAY, [status])).toEqual({ patch: { status: 'done', waiting: false }, became: 'done' });
+    });
+
+    it('moves a repeating todo on instead, leaving it where it was', () => {
+      const weekly = todo('r', '2026-11-17', { repeat: { unit: 'week', every: 1 } });
+      expect(stateMove(weekly, 'done', TODAY, [status])).toEqual({ patch: { due: '2026-11-24' }, next: '2026-11-24', became: 'done' });
+    });
+
+    it('reopens a done todo, waiting or not, back out of a Done tag', () => {
+      expect(stateMove(done, 'open', TODAY, [status])).toEqual({ patch: { status: 'open', tags: ['todo'], waiting: false }, became: 'open' });
+      expect(stateMove(done, 'waiting', TODAY, [status])).toEqual({ patch: { status: 'open', tags: ['todo'], waiting: true }, became: 'waiting' });
+      expect(stateMove(open, 'waiting', TODAY, [])).toEqual({ patch: { waiting: true }, became: 'waiting' });
+      expect(stateMove(waiting, 'open', TODAY, [])).toEqual({ patch: { waiting: false }, became: 'resumed' });
+      expect(stateMove(open, 'open', TODAY, [])).toEqual({ patch: {}, became: 'moved' });
+    });
+  });
+
+  it('moves a card between a group’s columns, ticking it into Done', () => {
+    const card = todo('t', null, { tags: ['doing'] });
+    expect(groupMove(card, status, 'doing', 'todo', '2026-11-17')).toEqual({ patch: { tags: ['todo'] }, became: 'moved' });
+    expect(groupMove(card, status, 'doing', 'done', '2026-11-17')).toEqual({ patch: { tags: ['done'], status: 'done' }, became: 'done' });
+  });
 });
+

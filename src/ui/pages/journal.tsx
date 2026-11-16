@@ -4,7 +4,7 @@ import { diaryVault } from '../../domain/access';
 import { linkTitle } from '../../domain/cardIndex';
 import { checklistProgress, CODE_CLOSE, CODE_OPEN, displayTitle, previewParts, splitLinks, type PreviewPart } from '../../domain/content';
 import { isDateKey, relativeDay, relativeDayInSentence, toDateKey } from '../../domain/dates';
-import { boardColumns } from '../../domain/board';
+import { STATE_BOARD } from '../../domain/board';
 import { isFiltered, sortGroup, streamItems, type StreamFilter, type StreamItem, type StreamSort } from '../../domain/stream';
 import type { NoteCard, TodoCard, Vault } from '../../domain/types';
 import { useCards, useToday } from '../../state/CardsContext';
@@ -38,7 +38,7 @@ import { DatesDialog } from '../DatesDialog';
 import { shareCard, unshareCard } from '../../sync/http';
 import { SyncOffline } from '../../sync/engine';
 import { usePopover } from '../usePopover';
-import { Board, BoardSetup, lastBoard } from './board';
+import { Board, BoardSetup, lastBoard, useBoardKind } from './board';
 
 const time = (at: number) => new Date(at).toLocaleTimeString(undefined, { hour: 'numeric', minute: '2-digit' });
 
@@ -57,9 +57,9 @@ export function JournalPage() {
   const vault = vaults.find((v) => v.id === filter.vaultId);
   const filtered = isFiltered(filter);
   const items = streamItems(index, filter, today, sharedInto);
-  // Shown as a board, when the group it's by still has tags; otherwise the board asks which group.
-  const board = filter.board ? index.tagGroups.groups.find((g) => g.id === filter.board && g.members.length) : undefined;
-  const order = board ? boardColumns(items, board).flatMap((c) => c.items.map((i) => i.card.id)) : items.map((i) => i.card.id);
+  // Shown as a board, by todo state or by a group that still has tags; otherwise the board asks which.
+  const board = useBoardKind(filter, items);
+  const order = board ? board.columns.flatMap((c) => c.items.map((i) => i.card.id)) : items.map((i) => i.card.id);
   const selection = useSelectionState(order);
   const vaultLocked = !!vault && locked.has(vault.id);
   useEntryShortcuts(selection, filter, !vaultLocked);
@@ -128,7 +128,7 @@ export function JournalPage() {
           </div>
         ) : filter.board ? (
           <>
-            {board ? <Board items={items} group={board} filter={filter} /> : <BoardSetup filter={filter} />}
+            {board ? <Board kind={board} filter={filter} /> : <BoardSetup filter={filter} />}
             {selecting && <BatchBar selection={selection} />}
           </>
         ) : (
@@ -181,18 +181,19 @@ function ViewSwitch({ filter }: { filter: StreamFilter }) {
   );
 }
 
-/** On the board, in the sort's place: which tag group's tags are the columns. */
+/** On the board, in the sort's place: what the columns are, todo state or a tag group's tags. */
 function BoardMenu({ filter }: { filter: StreamFilter }) {
   const { index } = useCards();
   const navigate = useNavigate();
   const groups = index.tagGroups.groups.filter((g) => g.members.length);
-  const current = groups.find((g) => g.id === filter.board);
+  const current = filter.board === STATE_BOARD ? { id: STATE_BOARD, title: 'Todo state' } : groups.find((g) => g.id === filter.board);
   if (!current) return null;
   return (
     <label className="sort-menu btn btn--quiet" title={`Columns: ${current.title}`}>
       <Icon name="board" size={16} />
       <span className="sort-menu__label">By {current.title.toLowerCase()}</span>
       <select aria-label="Columns" value={current.id} onChange={(e) => void navigate(journalPath({ ...filter, board: e.target.value === 'list' ? undefined : e.target.value }))}>
+        <option value={STATE_BOARD}>By todo state</option>
         {groups.map((g) => (
           <option key={g.id} value={g.id}>
             By {g.title.toLowerCase()}

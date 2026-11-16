@@ -1,8 +1,20 @@
 import { useEffect, useRef, useState, type KeyboardEvent as ReactKeyboardEvent, type PointerEvent as ReactPointerEvent } from 'react';
 import { useLocation, useNavigate } from 'react-router';
-import { boardColumns, boardTags, columnOf, placeAt, statusForMove, type BoardColumn } from '../../domain/board';
+import {
+  boardColumns,
+  columnOf,
+  groupMove,
+  placeAt,
+  STATE_BOARD,
+  stateColumns,
+  stateMove,
+  stateOf,
+  TODO_STATE_LABEL,
+  type BoardColumn,
+  type BoardMove,
+  type TodoState,
+} from '../../domain/board';
 import { relativeDayInSentence } from '../../domain/dates';
-import { completeTodo } from '../../domain/todos';
 import { displayTitle } from '../../domain/content';
 import { effectiveType, type StreamFilter, type StreamItem } from '../../domain/stream';
 import type { TagGroup } from '../../domain/tagGroups';
@@ -33,7 +45,10 @@ function readFolded(): Set<string> {
   }
 }
 
-/** The group the board last showed on this device, so the board button opens it again. */
+/**
+ * The board the board button opens: the one this device showed last, or the board by todo state, which needs no
+ * tags.
+ */
 export function lastBoard(groups: TagGroup[]): string {
   let last: string | null = null;
   try {
@@ -41,8 +56,7 @@ export function lastBoard(groups: TagGroup[]): string {
   } catch {
     // Not kept here.
   }
-  const usable = groups.filter((g) => g.members.length);
-  return (usable.find((g) => g.id === last) ?? usable.find((g) => g.choice === 'one') ?? usable[0])?.id ?? 'pick';
+  return last && groups.some((g) => g.id === last && g.members.length) ? last : STATE_BOARD;
 }
 
 function rememberBoard(id: string) {
@@ -68,23 +82,88 @@ interface Dragging {
   to: Target | null;
 }
 
+/** What a card written straight into a column gets: its tags, whether it's a todo, and whether it waits. */
+interface AddInto {
+  tags?: string[];
+  todo?: boolean;
+  waiting?: boolean;
+}
+
 /**
- * The journal as a board: the tag group's tags as columns, with the entries that carry each, in the order they're
- * dragged into. Dragging a card to another column swaps its tag for that column's; within a column it just moves.
- * A mouse drags from anywhere on a card, a finger from its grip, and the keyboard with arrow keys on the grip.
- * Entries with none of the group's tags wait in the first column, folded until opened.
+ * One kind of board: what its columns are, what each is called, and what moving a card into one does. The board by
+ * a tag group swaps the card's tag; the board by todo state ticks, reopens or marks it waiting.
  */
-export function Board({ items, group, filter }: { items: StreamItem[]; group: TagGroup; filter: StreamFilter }) {
+export interface BoardKind {
+  /** The group's ID, or `state`: in the address, and for what's folded. */
+  id: string;
+  /** "status", "todo state": the board is "by" it. */
+  name: string;
+  columns: BoardColumn[];
+  title: (key: string) => string;
+  tint: (key: string) => string;
+  columnOf: (card: Entry) => string;
+  /** Folded until opened: a group's "No status", which can hold most of the journal. */
+  foldedAtFirst: (key: string) => boolean;
+  move: (card: Entry, from: string, to: string) => BoardMove | null;
+  /** Null where cards can't be written straight in (Done). */
+  addInto: (key: string) => AddInto | null;
+}
+
+/** The kind of board the journal's filter asks for, or undefined when it names a group that's gone or has no tags. */
+export function useBoardKind(filter: StreamFilter, items: StreamItem[]): BoardKind | undefined {
+  const { index } = useCards();
+  const today = useToday();
+  const { groups } = index.tagGroups;
+  if (filter.board === STATE_BOARD) {
+    return {
+      id: STATE_BOARD,
+      name: 'todo state',
+      columns: stateColumns(items),
+      title: (key) => TODO_STATE_LABEL[key as TodoState] ?? '',
+      tint: (key) => (key === 'done' ? ' tint tint--green' : key === 'waiting' ? ' tint tint--yellow' : ' tint tint--blue'),
+      columnOf: (card) => (card.type === 'todo' ? stateOf(card) : ''),
+      foldedAtFirst: () => false,
+      move: (card, _from, to) => (card.type === 'todo' ? stateMove(card, to as TodoState, today, groups) : null),
+      addInto: (key) => (key === 'done' ? null : { todo: true, waiting: key === 'waiting' }),
+    };
+  }
+  const group = groups.find((g) => g.id === filter.board && g.members.length);
+  if (!group) return undefined;
+  return {
+    id: group.id,
+    name: group.title.toLowerCase(),
+    columns: boardColumns(items, group),
+    title: (key) => (key ? (index.byId.get(key)?.title ?? '') : `No ${group.title.toLowerCase()}`),
+    tint: (key) => {
+      const tag = group.members.find((m) => m.id === key);
+      return tag ? colorClass(tag) : '';
+    },
+    columnOf: (card) => columnOf(card, group),
+    foldedAtFirst: (key) => !key,
+    move: (card, from, to) => groupMove(card, group, from, to, today),
+    addInto: (key) => ({ tags: key ? [key] : [], todo: effectiveType(filter) === 'todo' }),
+  };
+}
+
+const BECAME: Record<Exclude<BoardMove['became'], 'moved'>, string> = { done: 'Done', open: 'Reopened', waiting: 'Waiting', resumed: 'No longer waiting' };
+
+/**
+ * The journal as a board: columns from a tag group's tags, or from todos' own state, with the entries in each in the
+ * order they're dragged into. Dragging a card to another column changes it the way that board says (`BoardKind`);
+ * within a column it just moves. A mouse drags from anywhere on a card, a finger from its grip, and the keyboard
+ * with arrow keys on the grip.
+ */
+export function Board({ kind, filter }: { kind: BoardKind; filter: StreamFilter }) {
   const { index, repo } = useCards();
   const may = usePermissions();
   const toast = useToast();
   const today = useToday();
   const { undoAction } = useUndo();
-  const columns = boardColumns(items, group);
+  const { columns } = kind;
   const [folded, setFolded] = useState(readFolded);
-  const foldKey = (key: string) => `${group.id}:${key || 'none'}`;
-  // "No status" starts folded: it holds every entry without one, which can be most of the journal.
-  const isFolded = (key: string) => folded.has(foldKey(key)) !== !key;
+  const foldKey = (key: string) => `${kind.id}:${key || 'none'}`;
+  // Stored as the columns whose fold was changed from how they start.
+  const isFolded = (key: string) => folded.has(foldKey(key)) !== kind.foldedAtFirst(key);
   const toggleFold = (key: string) => {
     const next = new Set(folded);
     if (next.has(foldKey(key))) next.delete(foldKey(key));
@@ -97,11 +176,9 @@ export function Board({ items, group, filter }: { items: StreamItem[]; group: Ta
     }
   };
 
-  useEffect(() => rememberBoard(group.id), [group.id]);
+  useEffect(() => rememberBoard(kind.id), [kind.id]);
 
-  const title = (key: string) => (key ? (index.byId.get(key)?.title ?? '') : `No ${group.title.toLowerCase()}`);
-
-  /** Puts a card at a place in a column: its tags for the column, and its position among the column's cards. */
+  /** Puts a card at a place in a column: changed for the column as the board says, and placed among its cards. */
   const drop = (id: string, to: Target) => {
     const card = index.byId.get(id);
     const column = columns.find((c) => c.key === to.key);
@@ -110,36 +187,32 @@ export function Board({ items, group, filter }: { items: StreamItem[]; group: Ta
       toast("This entry can't be changed here.");
       return;
     }
-    const from = columnOf(card, group);
+    const move = kind.move(card, kind.columnOf(card), to.key);
+    if (!move) return;
     // Whichever change is made below, its toast's Undo takes back all of it.
     let action = '';
     const undo = { label: 'Undo', run: () => void undoAction(action) };
-    // Dropped in Done, a todo is ticked; dragged out of it, reopened.
-    const status = statusForMove(card, group, from, to.key);
-    if (status === 'done' && card.type === 'todo' && card.repeat) {
+    if (move.next) {
       // A repeating todo is never done: like its box, Done moves it on to its next date, and it stays where it was.
-      const { patch, next } = completeTodo(card, today);
       action = repo.action();
-      void repo.update(id, patch);
-      if (next) toast(`Done for now. “${displayTitle(card)}” is due again ${relativeDayInSentence(next, today)}`, { action: undo });
+      void repo.update(id, move.patch);
+      toast(`Done for now. “${displayTitle(card)}” is due again ${relativeDayInSentence(move.next, today)}`, { action: undo });
       return;
     }
     const others = column.items.map((i) => i.card).filter((c) => c.id !== id);
     const positions = placeAt(others, to.index, card);
-    const tags = boardTags(card.tags, group, from, to.key);
-    const retag = tags !== card.tags;
-    if (!positions.size && !retag) return;
-    const done = card.type === 'todo' && status === 'done' ? completeTodo(card, today).patch : status === 'open' ? { status: 'open' as const } : {};
+    const changed = Object.keys(move.patch).length > 0;
+    if (!positions.size && !changed) return;
     // Asked for together, with no waiting in between, so it's one change to undo.
     action = repo.action();
-    if (retag) void repo.update(id, { tags, ...done, ...(positions.has(id) ? { position: positions.get(id) } : {}) });
+    if (changed) void repo.update(id, { ...move.patch, ...(positions.has(id) ? { position: positions.get(id) } : {}) });
     for (const [other, position] of positions) {
-      if (other === id && retag) continue;
+      if (other === id && changed) continue;
       const entry = index.byId.get(other);
       // Spacing out a column skips what this account can't change; those keep their place by when they were written.
       if (entry && (entry.type === 'note' || entry.type === 'todo') && may(entry).edit) void repo.update(other, { position });
     }
-    if (retag) toast(status === 'done' ? `Done: ${displayTitle(card)}` : status === 'open' ? `Reopened: ${displayTitle(card)}` : `Moved to ${title(to.key)}`, { action: undo });
+    if (changed) toast(move.became === 'moved' ? `Moved to ${kind.title(to.key)}` : `${BECAME[move.became]}: ${displayTitle(card)}`, { action: undo });
   };
 
   const drag = useCardDrag(drop);
@@ -160,12 +233,14 @@ export function Board({ items, group, filter }: { items: StreamItem[]; group: Ta
   };
 
   return (
-    <div ref={drag.board} className={`board${drag.dragging ? ' is-dragging' : ''}`} aria-label={`Board by ${group.title.toLowerCase()}`}>
+    <div ref={drag.board} className={`board${drag.dragging ? ' is-dragging' : ''}`} aria-label={`Board by ${kind.name}`}>
       {columns.map((column, i) => (
         <Column
           key={column.key || 'none'}
           column={column}
-          title={title(column.key)}
+          title={kind.title(column.key)}
+          tint={kind.tint(column.key)}
+          addInto={kind.addInto(column.key)}
           folded={isFolded(column.key)}
           onFold={() => toggleFold(column.key)}
           dragging={drag.dragging}
@@ -181,6 +256,8 @@ export function Board({ items, group, filter }: { items: StreamItem[]; group: Ta
 interface ColumnProps {
   column: BoardColumn;
   title: string;
+  tint: string;
+  addInto: AddInto | null;
   folded: boolean;
   onFold: () => void;
   dragging: Dragging | null;
@@ -189,12 +266,11 @@ interface ColumnProps {
   filter: StreamFilter;
 }
 
-function Column({ column, title, folded, onFold, dragging, onPointerDown, onMoveKey, filter }: ColumnProps) {
+function Column({ column, title, tint, addInto, folded, onFold, dragging, onPointerDown, onMoveKey, filter }: ColumnProps) {
   const [count, setCount] = useState(COLUMN_PAGE);
   const viewOnly = useViewOnly();
   const target = dragging?.to?.key === column.key ? dragging.to.index : null;
   const shown = column.items.slice(0, count);
-  const tint = column.tag ? colorClass(column.tag) : '';
 
   if (folded) {
     return (
@@ -237,7 +313,7 @@ function Column({ column, title, folded, onFold, dragging, onPointerDown, onMove
           </button>
         )}
       </div>
-      {!viewOnly && !filter.archived && <AddCard column={column} title={title} filter={filter} />}
+      {!viewOnly && !filter.archived && addInto && <AddCard into={addInto} title={title} filter={filter} />}
     </section>
   );
 }
@@ -406,7 +482,7 @@ function useCardDrag(onDrop: (id: string, to: Target) => void) {
  * `#tag` a tag; while the journal shows only todos, every line is one. Enter saves and leaves the box open for the
  * next, Shift+Enter starts a new line, and Escape closes it.
  */
-function AddCard({ column, title, filter }: { column: BoardColumn; title: string; filter: StreamFilter }) {
+function AddCard({ into, title, filter }: { into: AddInto; title: string; filter: StreamFilter }) {
   const [open, setOpen] = useState(false);
   const [text, setText] = useState('');
   const { saveText } = useSaveEntries();
@@ -415,7 +491,8 @@ function AddCard({ column, title, filter }: { column: BoardColumn; title: string
 
   const save = async () => {
     if (!text.trim()) return;
-    const result = await saveText(text, { ...journalDefaults(filter, today), tags: column.key ? [column.key] : [], todo: effectiveType(filter) === 'todo' });
+    const defaults = journalDefaults(filter, today);
+    const result = await saveText(text, { ...defaults, tags: into.tags, todo: into.todo, waiting: into.waiting || defaults.waiting });
     if (result.unlock) toast('Unlock the vault first.');
     else if (result.saved) setText('');
   };
@@ -468,8 +545,8 @@ function AddCard({ column, title, filter }: { column: BoardColumn; title: string
 }
 
 /**
- * What the board shows when it has no columns yet: a tag group with tags picks them, and with none there's a
- * Status group (To do, Doing, Done) to make in one click.
+ * Choosing what a board's columns are: todos' own state, which needs nothing made, or a tag group's tags, with a
+ * Status group (To do, Doing, Done) to make in one click when there's none.
  */
 export function BoardSetup({ filter }: { filter: StreamFilter }) {
   const { index, repo } = useCards();
@@ -496,17 +573,22 @@ export function BoardSetup({ filter }: { filter: StreamFilter }) {
     <div className="board-setup">
       <Icon name="board" size={32} />
       <h2>Show the journal as a board</h2>
-      <p>A board's columns are the tags of a tag group, like Status: To do, Doing, Done. Drag a card to another column to change its tag.</p>
-      {groups.length > 0 && (
-        <div className="board-setup__groups">
-          {groups.map((g) => (
-            <button key={g.id} type="button" className="btn" onClick={() => void navigate(journalPath({ ...filter, board: g.id }), { replace: true })}>
-              By {g.title.toLowerCase()}
-              <span className="board-setup__tags">{g.members.map((m) => m.title).join(', ')}</span>
-            </button>
-          ))}
-        </div>
-      )}
+      <p>
+        By todo state, the columns are Open, Waiting and Done: drag a todo to tick it, reopen it or mark it waiting. By a tag group, like Status (To do,
+        Doing, Done), they're its tags, for stages of your own: drag a card to change its tag.
+      </p>
+      <div className="board-setup__groups">
+        <button type="button" className="btn" onClick={() => void navigate(journalPath({ ...filter, board: STATE_BOARD }), { replace: true })}>
+          By todo state
+          <span className="board-setup__tags">Open, Waiting, Done</span>
+        </button>
+        {groups.map((g) => (
+          <button key={g.id} type="button" className="btn" onClick={() => void navigate(journalPath({ ...filter, board: g.id }), { replace: true })}>
+            By {g.title.toLowerCase()}
+            <span className="board-setup__tags">{g.members.map((m) => m.title).join(', ')}</span>
+          </button>
+        ))}
+      </div>
       {!hasStatus && !viewOnly && (
         <button type="button" className="btn btn--primary" onClick={makeStatus}>
           Make a Status group: To do, Doing, Done

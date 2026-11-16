@@ -14,7 +14,7 @@ import { useUndo } from './useUndo';
 
 /**
  * Takes the writing box's place while entries are picked: tag, finish, date, switch between note and todo, copy,
- * move or trash them all at once.
+ * move, archive or trash them all at once.
  * Every change can be undone from its toast. Entries this account can't change are left alone and counted.
  */
 export function BatchBar({ selection }: { selection: Selection }) {
@@ -40,6 +40,14 @@ export function BatchBar({ selection }: { selection: Selection }) {
     toast(`${done(steps.length)}${skipped(cards.length - editable.length)}`, {
       action: { label: 'Undo', run: () => void undoAction(action) },
     });
+  };
+
+  // Archive while any is still out in the journal; all archived already, bring them back.
+  const archiving = manageable.some((c) => !c.archived);
+  const archive = () => {
+    const ids = selection.ids;
+    selection.clear();
+    void actions.archive(ids, archiving);
   };
 
   const trash = () => {
@@ -114,6 +122,9 @@ export function BatchBar({ selection }: { selection: Selection }) {
         )}
         <button type="button" className="icon-btn" disabled={none} aria-label="Copy" title={`Copy (${MOD}C)`} onClick={() => actions.copy(selection.ids)}>
           <Icon name="copy" />
+        </button>
+        <button type="button" className="icon-btn" disabled={!manageable.length} aria-label={archiving ? 'Archive' : 'Unarchive'} title={archiving ? 'Archive: out of the journal, still in search' : 'Unarchive: back to the journal'} onClick={archive}>
+          <Icon name="archive" />
         </button>
         <button type="button" className="icon-btn" disabled={!manageable.length} aria-label="Move to Trash" title="Move to Trash (Delete)" onClick={trash}>
           <Icon name="trash" />

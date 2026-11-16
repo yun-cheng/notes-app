@@ -53,7 +53,7 @@ interface FilterOption {
 /**
  * The filters, in the title bar's second row on the journal and the history: Type, Todos, Written and Contains,
  * each a chip that opens its choices. A chip in use names its choice, like "Due today", with an × that takes it
- * off. A tag or vault picked in the sidebar shows here too, with its ×, and Clear all takes every filter off when
+ * off. Archived swaps the entries for the archived ones. A tag or vault picked in the sidebar shows here too, with its ×, and Clear all takes every filter off when
  * there are several. The order is kept throughout.
  */
 export function FilterBar({ filter }: { filter: StreamFilter }) {
@@ -111,6 +111,18 @@ export function FilterBar({ filter }: { filter: StreamFilter }) {
         clear={filter.has ? path(without('has')) : undefined}
         options={(Object.keys(CONTAINS_LABEL) as Contains[]).map((h) => option('has', h, h === 'link' ? 'Links' : 'Photos'))}
       />
+      {filter.archived ? (
+        <span className="chip filter-chip is-set">
+          <span className="filter-chip__value">Archived</span>
+          <Link className="filter-chip__clear" to={path(without('archived'))} aria-label="Remove filter: Archived" title="Back to entries not archived">
+            ×
+          </Link>
+        </span>
+      ) : (
+        <Link className="chip filter-chip filter-chip--toggle" to={path({ ...filter, archived: true })} title="Show archived entries instead">
+          Archived
+        </Link>
+      )}
       {filter.tagId && (
         <span className={`chip filter-chip is-set${tag ? colorClass(tag) : ''}`}>
           <span className="filter-chip__value">{tagTitle}</span>

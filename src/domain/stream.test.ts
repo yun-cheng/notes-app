@@ -70,6 +70,25 @@ describe('stream', () => {
     expect(run('undated')).toEqual(['undated']);
     expect(run('done')).toEqual(['done']);
   });
+
+  it('puts archived entries away, done or not, until the Archived filter shows them alone', () => {
+    const cards = [
+      todo('open', TODAY, { createdAt: 1, archived: true }),
+      todo('done', TODAY, { createdAt: 2, status: 'done', archived: true }),
+      note('kept', 'Kept', { createdAt: 3, archived: true, tags: ['work'] }),
+      note('n', 'N', { createdAt: 4, tags: ['work'] }),
+      todo('t', TODAY, { createdAt: 5 }),
+    ];
+    const index = buildIndex(cards);
+    expect(ids(streamItems(index, {}, TODAY))).toEqual(['n', 't']);
+    expect(ids(streamItems(index, { status: 'today' }, TODAY))).toEqual(['t']);
+    expect(ids(streamItems(index, { archived: true }, TODAY))).toEqual(['open', 'done', 'kept']);
+    expect(ids(streamItems(index, { archived: true, tagId: 'work' }, TODAY))).toEqual(['kept']);
+    expect(ids(streamItems(index, { archived: true, status: 'done' }, TODAY))).toEqual(['done']);
+    // Still there for search and links, but not counted among the todos.
+    expect(index.live.map((c) => c.id)).toContain('kept');
+    expect(index.todos.map((c) => c.id)).toEqual(['t']);
+  });
 });
 
 describe('entries with links or photos', () => {
@@ -115,9 +134,9 @@ describe('sorting', () => {
 
 describe('filter in the address', () => {
   it('round-trips, and drops values it does not know', () => {
-    const filter = { sort: 'due', type: 'todo', status: 'today', when: '2026-11-11', tagId: 'work', vaultId: 'v', has: 'photo' } as const;
+    const filter = { sort: 'due', type: 'todo', status: 'today', when: '2026-11-11', tagId: 'work', vaultId: 'v', has: 'photo', archived: true } as const;
     expect(parseFilter(filterParams(filter))).toEqual(filter);
-    expect(parseFilter(new URLSearchParams('type=card&status=x&when=soon'))).toEqual({});
+    expect(parseFilter(new URLSearchParams('type=card&status=x&when=soon&archived=yes'))).toEqual({});
     expect(parseFilter(new URLSearchParams('sort=group:p'))).toEqual({ sort: 'group:p' });
   });
 
@@ -135,6 +154,10 @@ describe('filter in the address', () => {
       { part: 'status', without: { status: undefined, type: 'todo' } },
     ]);
     expect(filterParts({ type: 'note', vaultId: 'v' }).map((p) => p.part)).toEqual(['type', 'vaultId']);
+    expect(filterParts({ archived: true, has: 'link' })).toEqual([
+      { part: 'has', without: { archived: true, has: undefined } },
+      { part: 'archived', without: { archived: undefined, has: 'link' } },
+    ]);
     expect(filterParts({ sort: 'newest' })).toEqual([]);
   });
 });

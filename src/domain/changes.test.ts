@@ -51,6 +51,8 @@ describe('describing a change', () => {
     expect(says(open, { ...open, due: '2026-11-14' })).toBe('Changed due date');
     expect(says(open, { ...open, tags: ['x'] })).toBe('Changed tags');
     expect(says(open, { ...open, color: 'red' })).toBe('Changed color');
+    expect(says(open, { ...open, archived: true })).toBe('Archived');
+    expect(says({ ...open, archived: true }, { ...open, archived: false })).toBe('Unarchived');
   });
 
   it('calls new words an edit, and a new title on a note or tag a rename', () => {
@@ -122,6 +124,13 @@ describe('filtered history', () => {
     expect(matchesChange(ticked, { when: '2026-11-12' }, TODAY)).toBe(false);
     expect(matchesChange(change(open, { ...open, vaultId: 'w' }), { vaultId: 'w' }, TODAY)).toBe(true);
     expect(matchesChange(ticked, { vaultId: 'w' }, TODAY)).toBe(false);
+  });
+
+  it('keeps every change to an archived entry, and under Archived only those, archiving among them', () => {
+    const archived = { ...open, archived: true };
+    expect(matchesChange(change(archived, { ...archived, title: 'x' }), {}, TODAY)).toBe(true);
+    expect(matchesChange(change(open, archived), { archived: true }, TODAY)).toBe(true);
+    expect(matchesChange(change(open, done), { archived: true }, TODAY)).toBe(false);
   });
 
   it('shows changes to tags when nothing narrows the entries, or under the tag itself', () => {

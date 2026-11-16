@@ -84,6 +84,7 @@ export function describeChange({ before, after, fields }: Pick<Change, 'before' 
   if (!before) return 'Created';
   const has = (key: string) => fields.includes(key);
   if (has('deleted')) return after.deleted ? 'Moved to Trash' : 'Restored from Trash';
+  if (has('archived')) return after.archived ? 'Archived' : 'Unarchived';
   if (has('type')) return after.type === 'todo' ? 'Turned into a todo' : 'Turned into a note';
   if (has('vaultId')) return 'Moved to another vault';
   if (has('status') && after.type === 'todo') return after.status === 'done' ? 'Marked done' : 'Reopened';
@@ -156,7 +157,7 @@ export function revertCard(current: Card, change: Change, direction: 'undo' | 'r
  */
 export function matchesChange(change: Change, filter: StreamFilter, today: string): boolean {
   const inVault = (card: Card) => !filter.vaultId || card.vaultId === filter.vaultId;
-  const narrowed = !!(effectiveType(filter) || filter.has || filter.when);
+  const narrowed = !!(effectiveType(filter) || filter.has || filter.when || filter.archived);
   // Nothing but its vault is known about a card that can't be read.
   if (change.sealed) return !narrowed && !filter.tagId && inVault(change.after);
   const match = entryMatcher(filter, today);

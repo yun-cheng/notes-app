@@ -19,6 +19,7 @@ export interface CardIndex {
   tags: TagCard[];
   tagGroups: TagGroups;
   pinnedTags: TagCard[];
+  /** Live todos, archived ones left out. */
   todos: TodoCard[];
   trash: Card[];
   backlinks: Map<string, Backlink[]>;
@@ -60,7 +61,7 @@ export function buildIndex(allCards: Card[], locked: ReadonlySet<string> = new S
     tags,
     pinnedTags: tags.filter((t) => t.pinned),
     tagGroups,
-    todos: live.filter((c): c is TodoCard => c.type === 'todo'),
+    todos: live.filter((c): c is TodoCard => c.type === 'todo' && !c.archived),
     trash: cards.filter((c) => c.deleted && !isBlank(c)).sort((a, b) => b.updatedAt - a.updatedAt),
     backlinks,
   };

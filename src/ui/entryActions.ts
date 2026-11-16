@@ -47,7 +47,7 @@ export async function writeClipboard(text: string, json?: string): Promise<boole
 
 const copyable = (c: Card | undefined): c is NoteCard | TodoCard => !!c && !c.deleted && c.type !== 'tag';
 
-/** Copy, cut, trash and paste for journal entries, each with a toast and, where it changes something, an undo. */
+/** Copy, cut, trash, archive and paste for journal entries, each with a toast and, where it changes something, an undo. */
 export function useEntryActions() {
   const { index, repo, vaults } = useCards();
   const may = usePermissions();
@@ -96,6 +96,27 @@ export function useEntryActions() {
     });
   };
 
+  /**
+   * Archives the entries (`on`), or brings them back, where this account may: like the Trash, only members of an
+   * entry's vault can. Entries already that way are left out of the count.
+   */
+  const archive = async (ids: string[], on = true) => {
+    const cards = cardsFor(ids);
+    const allowed = cards.filter((c) => may(c).manage);
+    const changing = allowed.filter((c) => !!c.archived !== on);
+    const skipped = cards.length - allowed.length;
+    const note = skipped ? `; ${entries(skipped)} couldn't be changed` : '';
+    if (!changing.length) {
+      if (skipped) toast(`${entries(skipped)} couldn't be changed`);
+      return;
+    }
+    const action = repo.action();
+    await Promise.all(changing.map((c) => repo.update(c.id, { archived: on })));
+    toast(`${on ? 'Archived' : 'Unarchived'} ${entries(changing.length)}${note}`, {
+      action: { label: 'Undo', run: () => void undoAction(action) },
+    });
+  };
+
   const cut = async (ids: string[]) => {
     const cards = cardsFor(ids);
     if (!cards.length) return;
@@ -122,5 +143,5 @@ export function useEntryActions() {
     if (await repo.retype(id, type)) toast(type === 'todo' ? 'Made it a todo' : 'Made it a note', { action: { label: 'Undo', run: () => void undoAction(action) } });
   };
 
-  return { copy, copyText, cut, trash, paste, retype };
+  return { copy, copyText, cut, trash, archive, paste, retype };
 }

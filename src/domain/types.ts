@@ -48,6 +48,8 @@ interface CardCommon extends CardEnvelope {
   color?: CardColor | null;
   /** Kept from being changed by mistake: it opens to read until this is turned off. Missing on most cards. */
   viewOnly?: boolean;
+  /** Put away: kept, searchable and linkable, but out of the journal and the todo counts until unarchived. Missing on most cards. */
+  archived?: boolean;
 }
 
 export interface NoteCard extends CardCommon {

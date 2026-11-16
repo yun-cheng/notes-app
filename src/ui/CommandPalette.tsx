@@ -93,6 +93,7 @@ export function CommandPalette({ onClose, onShortcuts }: { onClose: () => void; 
     for (const has of Object.keys(CONTAINS_LABEL) as Contains[]) {
       all.push({ id: `has-${has}`, group: 'Filter', label: `Show entries ${CONTAINS_LABEL[has].toLowerCase()}`, icon: has === 'link' ? 'link' : 'image', keywords: 'contains url web pictures images', run: narrow({ has }) });
     }
+    all.push({ id: 'archived', group: 'Filter', label: 'Show archived entries', icon: 'archive', keywords: 'archive put away hidden old', run: narrow({ archived: true }) });
     for (const when of Object.keys(WHEN_LABEL)) {
       all.push({ id: `when-${when}`, group: 'Filter', label: WHEN_LABEL[when], icon: 'calendar', keywords: 'written date when', run: narrow({ when }) });
     }

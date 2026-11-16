@@ -89,6 +89,7 @@ function isCard(value: unknown): value is Card {
     c.content.type !== 'doc' ||
     !isStrings(c.tags) ||
     !optional(c.color, (color) => color === null || isCardColor(color)) ||
+    !optional(c.archived, (a) => typeof a === 'boolean') ||
     !CARD_TYPES.includes(c.type as Card['type'])
   ) {
     return false;

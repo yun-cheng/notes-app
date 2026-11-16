@@ -127,14 +127,22 @@ export function JournalPage() {
               key={`stream:${journalPath(filter)}`}
               items={items}
               sort={filter.sort ?? 'written'}
-              empty={filtered ? 'Nothing here yet. Write below and it lands here.' : 'Nothing written yet. Write a note below, or start with [] for a todo.'}
+              empty={
+                filter.archived
+                  ? 'Nothing archived here. Archive an entry from its menu to put it away without trashing it.'
+                  : filtered
+                    ? 'Nothing here yet. Write below and it lands here.'
+                    : 'Nothing written yet. Write a note below, or start with [] for a todo.'
+              }
             />
             {selecting && <BatchBar selection={selection} />}
             {viewOnly && !selecting && <ViewOnlyBar to={(filter.sort ?? 'written') === 'written' ? 'bottom' : 'top'} />}
-            {/* Hidden, not removed, while picking or viewing only, so a half-written entry survives. */}
-            <div style={{ display: selecting || viewOnly ? 'none' : 'contents' }}>
-              <JournalBox key={`composer:${journalPath({ ...filter, sort: undefined })}`} filter={filter} />
-            </div>
+            {/* Hidden, not removed, while picking or viewing only, so a half-written entry survives. Archived entries are only put away, not written. */}
+            {!filter.archived && (
+              <div style={{ display: selecting || viewOnly ? 'none' : 'contents' }}>
+                <JournalBox key={`composer:${journalPath({ ...filter, sort: undefined })}`} filter={filter} />
+              </div>
+            )}
           </>
         )}
         {filtering && <FilterSheet onClose={() => setFiltering(false)} />}
@@ -721,7 +729,7 @@ function EntryDetail({ card, fresh, edit, onClose }: { card: NoteCard | TodoCard
   const tick = useTickTodo();
   const can = may(card);
   const remove = useDeleteCard();
-  const { copyText } = useEntryActions();
+  const { copyText, archive } = useEntryActions();
   const [tools, setTools] = useState(false);
   const [tagging, setTagging] = useState(false);
   const [titled, setTitled] = useState(false);
@@ -819,6 +827,17 @@ function EntryDetail({ card, fresh, edit, onClose }: { card: NoteCard | TodoCard
         {can.share && (
           <button type="button" className="icon-btn" aria-label="Share" title="Share" onClick={() => setSharing(true)}>
             <Icon name="share" />
+          </button>
+        )}
+        {can.manage && (
+          <button
+            type="button"
+            className="icon-btn"
+            aria-label={card.archived ? 'Unarchive' : 'Archive'}
+            title={card.archived ? 'Unarchive: back to the journal' : 'Archive: out of the journal, still in search'}
+            onClick={() => (void archive([card.id], !card.archived), onClose())}
+          >
+            <Icon name="archive" />
           </button>
         )}
         {can.manage && (

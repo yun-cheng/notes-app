@@ -98,10 +98,10 @@ function EntryMenu({ card, at, open, onShare, onClose }: MenuProps) {
 
   if (selection && selection.has(card.id) && selection.ids.length > 1) {
     const ids = selection.ids;
-    const removable = ids.filter((id) => {
-      const c = index.byId.get(id);
-      return !!c && may(c).manage;
-    }).length;
+    const manageable = ids.map((id) => index.byId.get(id)).filter((c) => !!c && may(c).manage);
+    const removable = manageable.length;
+    // Archive while any of them is out in the journal; all archived already, bring them back.
+    const archiving = manageable.some((c) => !c!.archived);
     const n = entries(ids.length);
     return (
       <ContextMenu at={at} label={`${n} selected`} onClose={onClose}>
@@ -121,6 +121,9 @@ function EntryMenu({ card, at, open, onShare, onClose }: MenuProps) {
         </div>
         {removable > 0 && (
           <div className="style-menu__group">
+            <Item icon="archive" onClick={run(() => (selection.clear(), actions.archive(ids, archiving)))}>
+              {archiving ? 'Archive' : 'Unarchive'}
+            </Item>
             <Item icon="trash" danger onClick={run(() => (selection.clear(), actions.trash(ids)))}>
               Move to Trash
             </Item>
@@ -181,6 +184,9 @@ function EntryMenu({ card, at, open, onShare, onClose }: MenuProps) {
       )}
       {can.manage && (
         <div className="style-menu__group">
+          <Item icon="archive" onClick={run(() => actions.archive([card.id], !card.archived))}>
+            {card.archived ? 'Unarchive' : 'Archive'}
+          </Item>
           <Item icon="trash" danger onClick={run(() => actions.trash([card.id]))}>
             Move to Trash
           </Item>

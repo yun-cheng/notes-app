@@ -100,6 +100,8 @@ h1, h2, p { margin: 0; }
 .chip > .filter-chip__value + .filter-chip__clear { margin-left: 2px; }
 .chip .filter-chip__clear:hover { background: color-mix(in srgb, var(--text) 10%, transparent); color: var(--text); }
 .filter-chip--clear-all { padding: 0 10px; border: 1px dashed var(--line); background: none; text-decoration: none; }
+.filter-chip--toggle { padding: 0 10px; text-decoration: none; }
+.filter-chip--toggle:hover { color: var(--text); }
 .filter-chip--clear-all:hover { color: var(--text); }
 .style-menu.filter-chip__menu { width: 200px; font-weight: 400; }
 .filter-chip__menu svg { position: absolute; left: 8px; color: var(--muted); }

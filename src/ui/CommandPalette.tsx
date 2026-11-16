@@ -115,7 +115,7 @@ export function CommandPalette({ onClose, onShortcuts }: { onClose: () => void; 
     for (const sort of Object.keys(SORT_LABEL) as BaseSort[]) {
       all.push({ id: `sort-${sort}`, group: 'Sort', label: `Sort: ${SORT_LABEL[sort].toLowerCase()}`, icon: 'upcoming', keywords: 'order', run: order(sort) });
     }
-    for (const g of index.tagGroups.groups.filter((x) => x.ordered)) {
+    for (const g of index.tagGroups.groups.filter((x) => x.ordered && x.members.length)) {
       all.push({ id: `sort-group-${g.id}`, group: 'Sort', label: `Sort: by ${g.title.toLowerCase()}`, icon: 'upcoming', keywords: 'order group rank', run: order(`group:${g.id}`) });
     }
     if (current.board) all.push({ id: 'view-list', group: 'View', label: 'Show as a list', icon: 'list', keywords: 'stream journal chat board off', run: board(undefined) });

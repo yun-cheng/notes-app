@@ -256,7 +256,8 @@ export function SortMenu({ filter }: { filter: StreamFilter }) {
           </option>
         ))}
         {index.tagGroups.groups
-          .filter((g) => g.ordered)
+          // A group with no tags would sort everything under "No priority": it isn't offered until it has some.
+          .filter((g) => g.ordered && g.members.length)
           .map((g) => (
             <option key={g.id} value={`group:${g.id}`}>
               {sortLabel(`group:${g.id}`, index.tagGroups.groups)}

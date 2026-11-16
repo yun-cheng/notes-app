@@ -12,7 +12,7 @@ import { useCards, useToday } from '../../state/CardsContext';
 import type { ChangeRow } from '../../storage/repository';
 import { Empty, Page } from '../components';
 import { Diff } from '../Diff';
-import { FilterSheet, useFilterTitle, useJournalFilter } from '../FilterPanel';
+import { FilterChips, FilterSheet, useJournalFilter } from '../FilterPanel';
 import { Icon, type IconName } from '../Icon';
 import { cardPath, historyPath, sheetState, versionsPath } from '../paths';
 import { MOD, REDO_KEYS } from '../Shortcuts';
@@ -75,7 +75,6 @@ export function ChangesPage() {
   const today = useToday();
   const filter = useJournalFilter();
   const filtered = isFiltered(filter);
-  const scope = useFilterTitle(filter);
   const rows = useChanges();
   const synced = useSyncedChanges();
   const canRevert = useCanRevert();
@@ -164,31 +163,16 @@ export function ChangesPage() {
 
   return (
     <Page
-      title={
-        <>
-          History
-          {filtered && <span className="page__count">{scope}</span>}
-        </>
-      }
+      title="History"
       actions={actions}
+      below={filtered && <FilterChips filter={filter} />}
     >
-      <p className="history__subject">
-        What was changed, newest first: on this device, on your other devices, by AI apps and by people you share with.
-        {filtered && (
-          <>
-            {' '}
-            {/* Not in the top bar, where a phone has no room for it beside the title. */}
-            <Link className="change__toggle" to={historyPath({ sort: filter.sort })}>
-              Show all changes
-            </Link>
-          </>
-        )}
-      </p>
+      <p className="history__subject">What was changed, newest first: on this device, on your other devices, by AI apps and by people you share with.</p>
       {ready && problem && <p className="changes__problem">{problem}</p>}
       {!ready ? (
         <Empty>Loading history…</Empty>
       ) : !days.length && !older ? (
-        <Empty>{filtered && any ? 'No changes here match. Pick another filter, or show all changes.' : 'Nothing has been changed yet.'}</Empty>
+        <Empty>{filtered && any ? 'No changes here match. Take a filter off above, or pick another.' : 'Nothing has been changed yet.'}</Empty>
       ) : (
         <div className="changes">
           {days.map(({ day, groups }) => (

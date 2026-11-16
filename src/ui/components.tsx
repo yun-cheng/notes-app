@@ -16,7 +16,8 @@ import { DueLabel, useTickTodo } from './TodoDue';
 import { SyncBadge } from './SyncStatus';
 import { AccountButton, DemoTag } from './AccountBadge';
 
-export function Page({ title, actions, children }: { title: ReactNode; actions?: ReactNode; children: ReactNode }) {
+/** A page under its title bar. `below` is a second row of the bar, like the journal's filter chips, and stays in it as the page scrolls. */
+export function Page({ title, actions, below, children }: { title: ReactNode; actions?: ReactNode; below?: ReactNode; children: ReactNode }) {
   const page = useRef<HTMLDivElement>(null);
   const head = useRef<HTMLElement>(null);
   // What sticks under the title bar (a day's badge in the journal) needs its height, which changes with the phone's notch.
@@ -29,7 +30,7 @@ export function Page({ title, actions, children }: { title: ReactNode; actions?:
   }, []);
   return (
     <div className="page" ref={page}>
-      <header className="page__head" ref={head}>
+      <header className={`page__head${below ? ' page__head--below' : ''}`} ref={head}>
         <h1>{title}</h1>
         <DemoTag />
         <SyncBadge />
@@ -37,6 +38,7 @@ export function Page({ title, actions, children }: { title: ReactNode; actions?:
         {actions && <div className="page__actions">{actions}</div>}
         {/* Phones have no sidebar, so the account shows on every page here. */}
         <AccountButton className="only-mobile" />
+        {below && <div className="page__below">{below}</div>}
       </header>
       {children}
     </div>

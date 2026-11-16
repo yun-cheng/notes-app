@@ -81,6 +81,21 @@ export function filterParams(filter: StreamFilter): URLSearchParams {
 
 export const isFiltered = (f: StreamFilter) => !!(f.type || f.status || f.when || f.tagId || f.vaultId || f.has);
 
+/** One part of a filter, as a chip names it. A status stands in for the type, which it implies. */
+export type FilterPart = 'status' | 'type' | 'when' | 'tagId' | 'vaultId' | 'has';
+
+/** The parts a filter is made of, in the order they're named, each with the filter that's left without it (same order). */
+export function filterParts(f: StreamFilter): { part: FilterPart; without: StreamFilter }[] {
+  const parts: FilterPart[] = [];
+  if (f.status) parts.push('status');
+  else if (f.type) parts.push('type');
+  if (f.when) parts.push('when');
+  if (f.tagId) parts.push('tagId');
+  if (f.vaultId) parts.push('vaultId');
+  if (f.has) parts.push('has');
+  return parts.map((part) => ({ part, without: { ...f, [part]: undefined, ...(part === 'status' && { type: undefined }) } }));
+}
+
 /** A todo status only makes sense for todos, so it narrows to them. */
 export const effectiveType = (f: StreamFilter): EntryType | undefined => (f.status ? 'todo' : f.type);
 

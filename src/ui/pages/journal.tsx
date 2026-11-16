@@ -12,7 +12,7 @@ import { ScrollJump } from '../ScrollJump';
 import { Comments } from '../Comments';
 import { Backlinks, Empty, Page, TagChips, TagPicker, TitleField, useDeleteCard, useVaultMove, VaultField } from '../components';
 import { Editor } from '../editor/Editor';
-import { FilterSheet, SortMenu, useFilterTitle, useJournalFilter } from '../FilterPanel';
+import { FilterChips, FilterSheet, SortMenu, useJournalFilter } from '../FilterPanel';
 import { Icon } from '../Icon';
 import { MOD } from '../Shortcuts';
 import { LockPanel } from '../LockPanel';
@@ -50,7 +50,6 @@ export function JournalPage() {
   const today = useToday();
   const filter = useJournalFilter();
   const diary = diaryVault(vaults, accountId);
-  const title = useFilterTitle(filter);
   const [filtering, setFiltering] = useState(false);
   const tag = index.tags.find((t) => t.id === filter.tagId);
   const vault = vaults.find((v) => v.id === filter.vaultId);
@@ -94,11 +93,6 @@ export function JournalPage() {
           Diary for this day
         </Link>
       )}
-      {filtered && (
-        <Link className="btn btn--quiet" to={journalPath({ sort: filter.sort })}>
-          Show all
-        </Link>
-      )}
       <button
         type="button"
         className={`icon-btn only-mobile${filtered ? ' is-active' : ''}`}
@@ -116,11 +110,12 @@ export function JournalPage() {
       <Page
         title={
           <>
-            {selecting ? `${selection.ids.length} selected` : title}
+            {selecting ? `${selection.ids.length} selected` : 'Journal'}
             {count}
           </>
         }
         actions={selecting ? pickingActions : actions}
+        below={filtered && <FilterChips filter={filter} />}
       >
         {vault && vaultLocked ? (
           <div className="stream">

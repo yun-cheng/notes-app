@@ -83,6 +83,15 @@ h1, h2, p { margin: 0; }
 }
 .page__head h1 { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font: 600 28px/1.2 var(--serif); letter-spacing: -0.01em; }
 .page__actions { display: flex; align-items: center; gap: 6px; flex: none; }
+/* A second row of the title bar: the filter chips, in one line that scrolls sideways, out to the screen's edges. */
+.page__head--below { flex-wrap: wrap; row-gap: 8px; }
+.page__below { flex: 0 0 100%; min-width: 0; margin: 0 -16px; }
+.filter-chips { display: flex; align-items: center; gap: 6px; overflow-x: auto; padding: 0 16px; scrollbar-width: none; }
+.filter-chips::-webkit-scrollbar { display: none; }
+.filter-chips .chip { flex: none; padding-right: 4px; font-weight: 500; }
+.filter-chips .chip--unset { padding-right: 10px; font-weight: 400; }
+.filter-chips .chip a:not(.chip--unset) { display: inline-flex; align-items: center; justify-content: center; width: 20px; height: 20px; border-radius: 50%; color: var(--muted); font-size: 16px; line-height: 1; text-decoration: none; }
+.filter-chips .chip a:hover { background: color-mix(in srgb, var(--text) 10%, transparent); color: var(--text); }
 .avatar { object-fit: cover; display: inline-flex; align-items: center; justify-content: center; flex: none; width: 28px; height: 28px; border-radius: 50%; background: var(--accent-soft); color: var(--accent); font: 600 13px/1 var(--sans); }
 .avatar.is-demo { background: var(--alert); color: var(--on-accent); }
 /* The demo account is marked wherever it shows, so it isn't taken for your own. */

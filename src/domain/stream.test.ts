@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import { buildIndex } from './cardIndex';
 import { parseDateKey } from './dates';
-import { daysWhen, entryMatcher, filterParams, parseFilter, spanRange, spanSide, streamItems, whenLabel, type TodoStatus } from './stream';
+import { daysWhen, entryMatcher, filterParams, filterParts, isFiltered, parseFilter, spanRange, spanSide, streamItems, whenLabel, type TodoStatus } from './stream';
 import { doc, note, p, tag, text, todo } from './testFixtures';
 
 const TODAY = '2026-11-12';
@@ -119,6 +119,17 @@ describe('filter in the address', () => {
     expect(parseFilter(filterParams(filter))).toEqual(filter);
     expect(parseFilter(new URLSearchParams('type=card&status=x&when=soon'))).toEqual({});
     expect(parseFilter(new URLSearchParams('sort=group:p'))).toEqual({ sort: 'group:p' });
+  });
+
+  it('comes apart into chips, each removable on its own, keeping the order', () => {
+    const parts = filterParts({ sort: 'due', type: 'todo', status: 'today', when: 'week', tagId: 'work', has: 'link' });
+    expect(parts.map((p) => p.part)).toEqual(['status', 'when', 'tagId', 'has']);
+    // A status takes its type with it.
+    expect(parts[0].without).toEqual({ sort: 'due', type: undefined, status: undefined, when: 'week', tagId: 'work', has: 'link' });
+    expect(isFiltered(parts[2].without)).toBe(true);
+    expect(parts[2].without.tagId).toBeUndefined();
+    expect(filterParts({ type: 'note', vaultId: 'v' }).map((p) => p.part)).toEqual(['type', 'vaultId']);
+    expect(filterParts({ sort: 'newest' })).toEqual([]);
   });
 });
 

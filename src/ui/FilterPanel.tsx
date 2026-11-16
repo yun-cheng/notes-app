@@ -3,6 +3,7 @@ import { Link, useLocation, useNavigate, useSearchParams } from 'react-router';
 import { sortVaults } from '../domain/locks';
 import {
   CONTAINS_LABEL,
+  filterParts,
   isFiltered,
   parseFilter,
   SORT_LABEL,
@@ -14,6 +15,7 @@ import {
   type BaseSort,
   type Contains,
   type EntryType,
+  type FilterPart,
   type StreamFilter,
   type StreamSort,
   type TodoStatus,
@@ -39,24 +41,46 @@ export function useFilterPath(): (filter: StreamFilter) => string {
 
 const STATUS_TITLE: Record<TodoStatus, string> = { open: 'Open todos', done: 'Done todos', today: 'Due today', upcoming: 'Upcoming', undated: 'Todos with no date' };
 
-/** A short name for what the journal shows, like "Todos, Due today, #Work". */
-export function useFilterTitle(filter: StreamFilter): string {
+/**
+ * What the journal or the history is narrowed to, as chips under the title, like "Due today ×" "#Work ×": each ×
+ * takes that one off, and Clear all, when there are several, takes them all off. The order stays as it is.
+ */
+export function FilterChips({ filter }: { filter: StreamFilter }) {
   const { index, vaults } = useCards();
   const today = useToday();
-  const tagTitle = (id: string) => {
-    const name = index.tags.find((t) => t.id === id)?.title ?? 'tag';
-    const group = index.tagGroups.groupOf.get(id);
-    return group ? `${group.title}: ${name}` : `#${name}`;
+  const path = useFilterPath();
+  const tag = index.tags.find((t) => t.id === filter.tagId);
+  const tagTitle = () => {
+    const group = index.tagGroups.groupOf.get(filter.tagId ?? '');
+    return group ? `${group.title}: ${tag?.title ?? 'tag'}` : `#${tag?.title ?? 'tag'}`;
   };
-  const parts = [
-    filter.status ? STATUS_TITLE[filter.status] : filter.type && TYPE_LABEL[filter.type],
-    filter.when && whenLabel(filter.when, today),
-    filter.tagId && tagTitle(filter.tagId),
-    filter.vaultId && vaults.find((v) => v.id === filter.vaultId)?.name,
-    filter.has && CONTAINS_LABEL[filter.has].toLowerCase(),
-  ].filter(Boolean);
-  const title = parts.join(', ');
-  return title ? title[0].toUpperCase() + title.slice(1) : 'Journal';
+  const label = (part: FilterPart): string => {
+    if (part === 'status') return STATUS_TITLE[filter.status!];
+    if (part === 'type') return TYPE_LABEL[filter.type!];
+    if (part === 'when') return whenLabel(filter.when!, today);
+    if (part === 'tagId') return tagTitle();
+    if (part === 'vaultId') return vaults.find((v) => v.id === filter.vaultId)?.name ?? 'Vault';
+    return CONTAINS_LABEL[filter.has!];
+  };
+  const parts = filterParts(filter);
+  if (!parts.length) return null;
+  return (
+    <div className="filter-chips" role="group" aria-label="Filters">
+      {parts.map(({ part, without }) => (
+        <span key={part} className={`chip${part === 'tagId' && tag ? colorClass(tag) : ''}`}>
+          {label(part)}
+          <Link to={path(without)} aria-label={`Remove filter: ${label(part)}`} title="Remove this filter">
+            ×
+          </Link>
+        </span>
+      ))}
+      {parts.length > 1 && (
+        <Link className="chip chip--unset" to={path({ sort: filter.sort })}>
+          Clear all
+        </Link>
+      )}
+    </div>
+  );
 }
 
 /**

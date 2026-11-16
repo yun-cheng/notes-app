@@ -545,37 +545,21 @@ function AddCard({ into, title, filter }: { into: AddInto; title: string; filter
 }
 
 /**
- * Choosing what a board's columns are: todos' own state, which needs nothing made, or a tag group's tags, with a
- * Status group (To do, Doing, Done) to make in one click when there's none.
+ * Choosing what a board's columns are: todos' own state, which needs nothing made, or a tag group's tags, for stages
+ * of your own. Groups are made on the Tags page.
  */
 export function BoardSetup({ filter }: { filter: StreamFilter }) {
-  const { index, repo } = useCards();
+  const { index } = useCards();
   const navigate = useNavigate();
-  const viewOnly = useViewOnly();
   const groups = index.tagGroups.groups.filter((g) => g.members.length);
-  const hasStatus = index.tagGroups.groups.some((g) => g.title.trim().toLowerCase() === 'status');
-
-  const makeStatus = () => {
-    // One action, so a single undo takes the group and its tags away again.
-    repo.action();
-    const ids = ['To do', 'Doing', 'Done'].map((name) => {
-      const found = index.tags.find((t) => t.title.toLowerCase() === name.toLowerCase() && !index.tagGroups.groupOf.has(t.id));
-      if (found) return found.id;
-      const id = repo.newId();
-      void repo.createTag({ id, title: name });
-      return id;
-    });
-    const id = repo.newId();
-    void repo.createTag({ id, title: 'Status', members: ids, choice: 'one', ordered: true }).then(() => navigate(journalPath({ ...filter, board: id }), { replace: true }));
-  };
 
   return (
     <div className="board-setup">
       <Icon name="board" size={32} />
       <h2>Show the journal as a board</h2>
       <p>
-        By todo state, the columns are Open, Waiting and Done: drag a todo to tick it, reopen it or mark it waiting. By a tag group, like Status (To do,
-        Doing, Done), they're its tags, for stages of your own: drag a card to change its tag.
+        By todo state, the columns are Open, Waiting and Done: drag a todo to tick it, reopen it or mark it waiting. By a tag group, like Priority,
+        they're its tags, for stages of your own: drag a card to change its tag.
       </p>
       <div className="board-setup__groups">
         <button type="button" className="btn" onClick={() => void navigate(journalPath({ ...filter, board: STATE_BOARD }), { replace: true })}>
@@ -589,12 +573,7 @@ export function BoardSetup({ filter }: { filter: StreamFilter }) {
           </button>
         ))}
       </div>
-      {!hasStatus && !viewOnly && (
-        <button type="button" className="btn btn--primary" onClick={makeStatus}>
-          Make a Status group: To do, Doing, Done
-        </button>
-      )}
-      <p className="board-setup__note">Groups are made and changed on the Tags page.</p>
+      <p className="board-setup__note">A group's tags make a board's columns once it has some. Groups are made and changed on the Tags page.</p>
     </div>
   );
 }

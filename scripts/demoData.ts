@@ -1,7 +1,7 @@
 /**
  * Fills the local server with a demo account that shows what the app does, so it can be tried without a Google
- * sign-in: folders and tags, tag groups with colors (a Priority to sort by, a Status the board shows as columns, a
- * many-choice Topics), notes with headings, lists, checklists, quotes, code, web links and links to each other, todos
+ * sign-in: folders and tags, tag groups with colors (a Priority to sort by and show as a board, and a many-choice
+ * Topics), todos for the board by todo state, notes with headings, lists, checklists, quotes, code, web links and links to each other, todos
  * overdue, due today at a time, upcoming, undated, repeating, waiting, done and archived, entries tinted, set to view
  * only or with their own preview style, a private and encrypted Diary vault, a vault shared with Sam and one Sam
  * shares to view, a card also in another vault, a note Sam shares, a public link, comments open and resolved, and
@@ -163,6 +163,14 @@ async function push(who: Person, drafts: Draft[], keys: Map<string, CryptoKey>, 
   }
 }
 
+/** IDs earlier demos used that this one doesn't: the Status group (the board by todo state does its job) and its tags. */
+const RETIRED: [string, string][] = [
+  ['demo-group-status', 'Status'],
+  ['demo-tag-todo', 'To do'],
+  ['demo-tag-doing', 'Doing'],
+  ['demo-tag-done', 'Done'],
+];
+
 // ---- The demo ----
 
 export async function seed() {
@@ -240,16 +248,12 @@ export async function seed() {
   const reading = tag('demo-tag-reading', 'Reading', false);
   const recipes = tag('demo-tag-recipes', 'Recipes', false, '', 'orange');
 
-  // Groups: Priority sorts the journal (one choice, ordered), Status makes the board's columns, and Topics just
+  // Groups: Priority sorts the journal (one choice, ordered) and makes a board's columns, and Topics just
   // gathers tags (many at once).
   const high = tag('demo-tag-high', 'High', false, '', 'red');
   const medium = tag('demo-tag-medium', 'Medium', false, '', 'yellow');
   const low = tag('demo-tag-low', 'Low', false, '', 'gray');
   group('demo-group-priority', 'Priority', [high, medium, low], 'one', true);
-  const todoCol = tag('demo-tag-todo', 'To do', false, '', 'blue');
-  const doing = tag('demo-tag-doing', 'Doing', false, '', 'orange');
-  const doneCol = tag('demo-tag-done', 'Done', false, '', 'green');
-  group('demo-group-status', 'Status', [todoCol, doing, doneCol], 'one', true);
   group('demo-group-topics', 'Topics', [travel, reading, recipes], 'many', false);
 
   // A week of notes, oldest first.
@@ -257,7 +261,7 @@ export async function seed() {
     'demo-note-packing',
     at(8, 21, 10),
     doc(checklist(['Passport', true], ['Phone charger and adapter', true], ['Rain jacket', false], ['Comfortable shoes', false], ['Snacks for the flight', false])),
-    [travel, doing],
+    [travel],
     'Packing list',
   );
   const kyoto = note(
@@ -269,7 +273,7 @@ export async function seed() {
       p('Pack using the ', link(packing, 'Packing list'), '.'),
       p('Shrine guide: ', web('Fushimi Inari-taisha', 'https://en.wikipedia.org/wiki/Fushimi_Inari-taisha')),
     ),
-    [travel, todoCol],
+    [travel],
     'Kyoto trip',
   );
   // The wifi password is kept from being changed by mistake.
@@ -336,23 +340,23 @@ export async function seed() {
   note('demo-note-old-flat', at(9, 20, 0), doc(p('Old flat'), bullets('Meter reading: 4821', 'Deposit back in 30 days')), [home], 'Old flat', personal, { archived: true });
 
   // Todos: overdue, due today (one at a time), upcoming, no date, repeating, waiting, done and archived. Those
-  // with a Status show on the board, where Done ticks them.
-  todo('demo-todo-taxes', 'File the tax return', addDays(today, -2), { tags: [home, high, todoCol] });
+  // are what the board by todo state shows: Open, Waiting and Done.
+  todo('demo-todo-taxes', 'File the tax return', addDays(today, -2), { tags: [home, high] });
   todo('demo-todo-plants', 'Water the plants', today, { tags: [home], repeat: { unit: 'day', every: 3 } });
-  todo('demo-todo-review', 'Review the export PR', today, { tags: [work, high, doing], dueTime: '15:00' });
-  todo('demo-todo-flights', 'Book flights to Kyoto', addDays(today, 3), { tags: [travel, medium, todoCol] });
+  todo('demo-todo-review', 'Review the export PR', today, { tags: [work, high], dueTime: '15:00' });
+  todo('demo-todo-flights', 'Book flights to Kyoto', addDays(today, 3), { tags: [travel, medium] });
   todo('demo-todo-dentist', 'Dentist appointment', addDays(today, 7), { dueTime: '10:30', waiting: true, color: 'pink' });
   todo('demo-todo-read', 'Finish chapter 3', null, { tags: [reading, low] });
-  todo('demo-todo-groceries', 'Groceries', addDays(today, -1), { done: at(1, 18, 0), tags: [home, doneCol] });
+  todo('demo-todo-groceries', 'Groceries', addDays(today, -1), { done: at(1, 18, 0), tags: [home] });
   todo('demo-todo-sync', 'Weekly team sync', addDays(today, 1), { tags: [work], dueTime: '09:30', repeat: { unit: 'week', every: 1 } });
   todo('demo-todo-rent', 'Pay the rent', addDays(today, 12), { tags: [home], repeat: { unit: 'month', every: 1 }, color: 'green' });
   todo('demo-todo-onboarding', 'Onboarding design', addDays(today, 5), {
-    tags: [work, medium, doing],
+    tags: [work, medium],
     waiting: true,
     content: doc(p('Waiting on the designs from Lee.'), checklist(['Wireframes', true], ['Copy review', true], ['Handoff to engineering', false])),
   });
-  todo('demo-todo-migration', 'Plan the API migration', addDays(today, 10), { tags: [work, medium, todoCol], when: at(2, 9, 30) });
-  todo('demo-todo-slides', 'Send the conference slides', addDays(today, -3), { done: at(3, 17, 0), tags: [work, doneCol] });
+  todo('demo-todo-migration', 'Plan the API migration', addDays(today, 10), { tags: [work, medium], when: at(2, 9, 30) });
+  todo('demo-todo-slides', 'Send the conference slides', addDays(today, -3), { done: at(3, 17, 0), tags: [work] });
   todo('demo-todo-passport', 'Renew passport', addDays(today, -20), { done: at(8, 12, 0), tags: [travel], archived: true });
 
   // Diary entries are notes in the Diary vault, which needs the PIN.
@@ -365,6 +369,12 @@ export async function seed() {
   note('demo-family-trip', at(1, 9, 30), lines('Summer trip: beach or mountains? Vote below.'), [], 'Summer trip', family.id);
 
   const pushed = diaryKey ? mine : mine.filter((d) => d.vaultId !== diaryVault);
+  // Cards an earlier demo had and this one doesn't: sent as deleted, so a browser that synced them lets them go.
+  const retired = RETIRED.map(([id, title]): CardRecord => {
+    const payload: CardPayload = { type: 'tag', title, pinned: false, tags: [], content: doc(p()), createdAt: at(9, 9) };
+    return { id, vault_id: personal, updated_at: Date.now(), deleted: true, seq: 0, payload: JSON.stringify(payload) };
+  });
+  await call(DEMO, '/sync/push', { records: retired });
   const seqs = new Map<string, number>();
   // The standup note as it was first written, then as edited on the phone, so its history has both.
   const standup = pushed.find((d) => d.id === 'demo-note-standup')!;

@@ -3,6 +3,7 @@ import type { Entry } from './entry';
 import { escapeHTML, toHTML } from './html';
 import { toMarkdown, toPlainText, type TitleResolver } from './markdown';
 import { isRepeat, repeatWord } from './repeat';
+import { cardBack } from './content';
 import type { JSONNode, NoteCard, TodoCard } from './types';
 
 /**
@@ -24,11 +25,14 @@ const MAX_ENTRIES = 1000;
 export function toEntries(cards: Copyable[], tagName: TagName): Entry[] {
   return cards.map((card) => {
     const tags = card.tags.map(tagName).filter((t): t is string => !!t);
+    const back = cardBack(card);
+    const flip = back ? { back } : {};
     if (card.type === 'todo') {
       return {
         kind: 'todo',
         title: card.title,
         content: card.content,
+        ...flip,
         tags,
         due: card.due,
         ...(card.due && isTimeKey(card.dueTime) ? { dueTime: card.dueTime } : {}),
@@ -36,7 +40,7 @@ export function toEntries(cards: Copyable[], tagName: TagName): Entry[] {
         ...(card.status === 'done' ? { done: true } : {}),
       };
     }
-    return { kind: 'note', title: card.title, content: card.content, tags, due: null };
+    return { kind: 'note', title: card.title, content: card.content, ...flip, tags, due: null };
   });
 }
 
@@ -49,7 +53,7 @@ const tagWords = (tags: string[]) => tags.map((t) => `#${t.replace(/\s+/g, '-')}
  */
 export function entriesText(cards: Copyable[], tagName: TagName, linkTitle: TitleResolver): string {
   const parts = toEntries(cards, tagName).map((entry) => {
-    const body = toMarkdown(entry.content, linkTitle);
+    const body = toMarkdown(entry.content, linkTitle) + (entry.back ? `\n\n## Back\n\n${toMarkdown(entry.back, linkTitle)}` : '');
     const tags = tagWords(entry.tags);
     if (entry.kind === 'todo') {
       const when = [entry.due, entry.dueTime, entry.repeat && repeatWord(entry.repeat)].filter(Boolean).map((w) => `@${w}`);
@@ -67,7 +71,8 @@ export function entriesText(cards: Copyable[], tagName: TagName, linkTitle: Titl
  * and list markers kept and links as their addresses. No checkbox, tags, due date, formatting or photos.
  */
 export function entryText(card: Copyable, linkTitle: TitleResolver): string {
-  return [card.title.trim(), toPlainText(card.content, linkTitle)].filter(Boolean).join('\n\n');
+  const back = cardBack(card);
+  return [card.title.trim(), toPlainText(card.content, linkTitle), back && `Back:\n${toPlainText(back, linkTitle)}`].filter(Boolean).join('\n\n');
 }
 
 /**
@@ -89,7 +94,12 @@ export function entriesClipboard(cards: Copyable[], tagName: TagName, linkTitle:
     .map((card) => {
       const head = card.type === 'todo' ? `${card.status === 'done' ? '☑' : '☐'} ${escapeHTML(card.title.trim())}` : card.title.trim() && `<strong>${escapeHTML(card.title.trim())}</strong>`;
       // A body of no words (an empty line, or only photos) adds nothing.
-      return (head ? `<p>${head}</p>` : '') + (toPlainText(card.content, linkTitle) ? toHTML(card.content, linkTitle) : '');
+      const back = cardBack(card);
+      return (
+        (head ? `<p>${head}</p>` : '') +
+        (toPlainText(card.content, linkTitle) ? toHTML(card.content, linkTitle) : '') +
+        (back ? `<p><strong>Back</strong></p>${toHTML(back, linkTitle)}` : '')
+      );
     })
     .join('');
   return { text, html };
@@ -115,7 +125,7 @@ export function decodeEntries(raw: string): Entry[] | null {
   const entries: Entry[] = [];
   for (const item of list.entries as Record<string, unknown>[]) {
     if (typeof item !== 'object' || item === null) return null;
-    const { kind, title, content, tags, due, dueTime, repeat, done } = item;
+    const { kind, title, content, back, tags, due, dueTime, repeat, done } = item;
     if ((kind !== 'note' && kind !== 'todo') || typeof title !== 'string' || !isDoc(content)) return null;
     if (!Array.isArray(tags) || !tags.every((t) => typeof t === 'string')) return null;
     if (due !== null && due !== undefined && !(typeof due === 'string' && isDateKey(due))) return null;
@@ -124,6 +134,7 @@ export function decodeEntries(raw: string): Entry[] | null {
       kind,
       title,
       content,
+      ...(isDoc(back) ? { back } : {}),
       tags: tags as string[],
       due: dated,
       // A time or repeat that doesn't make sense is dropped rather than refusing the paste.

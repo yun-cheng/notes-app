@@ -1,6 +1,6 @@
 import { isGroupName, settleTags } from '../src/domain/tagGroups';
 import { buildIndex, type CardIndex } from '../src/domain/cardIndex';
-import { displayTitle, plainText } from '../src/domain/content';
+import { cardBack, displayTitle, plainText } from '../src/domain/content';
 import { isDateKey, isTimeKey, toDateKey } from '../src/domain/dates';
 import { toMarkdown } from '../src/domain/markdown';
 import { parsePayload } from '../src/domain/payload';
@@ -125,6 +125,8 @@ function renderCard(scope: Scope, card: Card): string {
   lines.push(`Created: ${when(card.createdAt)} · Updated: ${when(card.updatedAt)}`);
   if (card.deleted) lines.push('This card is in the Trash.');
   lines.push('', body(scope, card.content));
+  const back = cardBack(card);
+  if (back) lines.push('', '## Back', '', body(scope, back));
   const links = scope.index.backlinks.get(card.id) ?? [];
   if (links.length) {
     lines.push('', card.type === 'tag' ? '## Tagged and linked cards' : '## Linked from');

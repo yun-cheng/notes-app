@@ -16,6 +16,8 @@ export interface Entry {
   /** A todo's first line. Typed notes have none and are named by their first line; a copied note keeps its title. */
   title: string;
   content: JSONNode;
+  /** A copied card's back, so pasting it keeps it. */
+  back?: JSONNode;
   /** Tag names as typed, without `#`, each once. Never `todo` or `diary`. */
   tags: string[];
   /** A todo's due date, or null. */

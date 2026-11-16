@@ -2,11 +2,11 @@ import { useEffect, useLayoutEffect, useMemo, useRef, useState, type ReactNode }
 import { Link, Outlet, useLocation, useNavigate, useParams } from 'react-router';
 import { diaryVault } from '../../domain/access';
 import { linkTitle } from '../../domain/cardIndex';
-import { checklistProgress, CODE_CLOSE, CODE_OPEN, displayTitle, HIDE_CLOSE, HIDE_OPEN, previewParts, splitLinks, type PreviewPart } from '../../domain/content';
+import { cardBack, checklistProgress, CODE_CLOSE, CODE_OPEN, displayTitle, HIDE_CLOSE, HIDE_OPEN, isEmptyDoc, previewParts, splitLinks, type PreviewPart } from '../../domain/content';
 import { isDateKey, relativeDay, relativeDayInSentence, toDateKey } from '../../domain/dates';
 import { STATE_BOARD } from '../../domain/board';
 import { isFiltered, sortGroup, streamItems, type StreamFilter, type StreamItem, type StreamSort } from '../../domain/stream';
-import type { NoteCard, TodoCard, Vault } from '../../domain/types';
+import { EMPTY_DOC, type JSONNode, type NoteCard, type TodoCard, type Vault } from '../../domain/types';
 import { useCards, useToday } from '../../state/CardsContext';
 import { setViewOnly, usePermissions, useViewOnly } from '../viewOnly';
 import { ScrollJump } from '../ScrollJump';
@@ -349,7 +349,7 @@ export function EntryBubble({ card, at }: { card: NoteCard | TodoCard; at: numbe
   return <NoteBubble note={card} at={at} />;
 }
 
-function BubbleMeta({ card, at, fold }: { card: NoteCard | TodoCard; at: number; fold: Fold }) {
+function BubbleMeta({ card, at, fold, flip }: { card: NoteCard | TodoCard; at: number; fold: Fold; flip: Flip }) {
   const { repo } = useCards();
   const may = usePermissions();
   // A grouped tag (Priority: High) can be switched right here.
@@ -363,6 +363,18 @@ function BubbleMeta({ card, at, fold }: { card: NoteCard | TodoCard; at: number;
       {card.viewOnly && <ViewOnlyMark card={card} />}
       <span className="bubble__end">
         <CardBadges card={card} />
+        {flip.back && (
+          <button
+            type="button"
+            className={`bubble__flip${flip.on ? ' is-on' : ''}`}
+            aria-pressed={flip.on}
+            title={flip.on ? 'Show the front' : 'Show the back'}
+            onClick={flip.toggle}
+          >
+            <Icon name="flip" size={13} />
+            {flip.on ? 'Front' : 'Back'}
+          </button>
+        )}
         {(fold.long || fold.folded) && (
           <button type="button" className="bubble__fold" aria-expanded={!fold.folded} onClick={fold.toggle}>
             <Icon name={fold.folded ? 'down' : 'up'} size={14} />
@@ -731,6 +743,48 @@ function ShownText({ text }: { text: string }) {
   );
 }
 
+/** Entries showing their back in the stream, kept while the app is open so a filter change doesn't turn them over. */
+const flippedEntries = new Set<string>();
+
+interface Flip {
+  /** The back, or null for a card without one. */
+  back: JSONNode | null;
+  /** Showing the back. */
+  on: boolean;
+  /** Turned over since it showed, so it turns with a flip rather than as it first draws. */
+  turned: boolean;
+  toggle: () => void;
+}
+
+/** A card with a back turns over in its bubble, to show the back and then the front again. */
+function useFlip(card: NoteCard | TodoCard): Flip {
+  const back = useMemo(() => cardBack(card), [card]);
+  const [flipped, setFlipped] = useState(() => flippedEntries.has(card.id));
+  const [turned, setTurned] = useState(false);
+  return {
+    back,
+    on: flipped && !!back,
+    turned,
+    toggle: () => {
+      if (flipped) flippedEntries.delete(card.id);
+      else flippedEntries.add(card.id);
+      setFlipped(!flipped);
+      setTurned(true);
+    },
+  };
+}
+
+/** A bubble's classes for its side, and the turn that shows it. */
+const flipClass = (flip: Flip) => (flip.on ? ' is-back' : '') + (flip.turned ? (flip.on ? ' flip-to-back' : ' flip-to-front') : '');
+
+/** Over a bubble's text while it shows its back. */
+const BackLabel = () => (
+  <span className="bubble__side">
+    <Icon name="flip" size={11} />
+    Back
+  </span>
+);
+
 /** Opens an entry in a sheet over this page: to edit, with its text focused, or (a tap on a phone) just to read. */
 function useOpen(card: NoteCard | TodoCard) {
   const navigate = useNavigate();
@@ -741,23 +795,25 @@ function useOpen(card: NoteCard | TodoCard) {
 /** What every bubble does: its text, folded when long; opening it; its menu; and picking it. */
 function useBubble(card: NoteCard | TodoCard) {
   const { index } = useCards();
-  const text = useFold(card.id, previewParts(card.content, (id, label) => linkTitle(index, id, label), { markCode: true, hidden: 'mark' }));
+  const flip = useFlip(card);
+  const text = useFold(card.id, previewParts(flip.on ? flip.back! : card.content, (id, label) => linkTitle(index, id, label), { markCode: true, hidden: 'mark' }));
   const open = useOpen(card);
   const menu = useEntryMenu(card, open);
-  return { text, open, menu, ...useSelectable(card.id, open, menu.onContextMenu) };
+  return { text, flip, open, menu, ...useSelectable(card.id, open, menu.onContextMenu) };
 }
 
 function NoteBubble({ note, at }: { note: NoteCard; at: number }) {
-  const { text, open, menu, selected, handlers } = useBubble(note);
+  const { text, flip, open, menu, selected, handlers } = useBubble(note);
   return (
-    <div className={`bubble${colorClass(note)}${selected ? ' is-selected' : ''}`} role="article" aria-current={selected || undefined} {...handlers}>
+    <div className={`bubble${colorClass(note)}${flipClass(flip)}${selected ? ' is-selected' : ''}`} role="article" aria-current={selected || undefined} {...handlers}>
+      {flip.on && <BackLabel />}
       {note.title.trim() && (
         <strong className="bubble__title">
           <LinkedText text={note.title} />
         </strong>
       )}
       {text.view}
-      <BubbleMeta card={note} at={at} fold={text.fold} />
+      <BubbleMeta card={note} at={at} fold={text.fold} flip={flip} />
       <BubbleTools card={note} open={open} menu={menu} />
       {menu.view}
     </div>
@@ -767,11 +823,16 @@ function NoteBubble({ note, at }: { note: NoteCard; at: number }) {
 function TodoBubble({ todo, at }: { todo: TodoCard; at: number }) {
   const may = usePermissions();
   const tick = useTickTodo();
-  const { text, open, menu, selected, handlers } = useBubble(todo);
+  const { text, flip, open, menu, selected, handlers } = useBubble(todo);
   const done = todo.status === 'done';
   const waiting = !done && !!todo.waiting;
   return (
-    <div className={`bubble bubble--todo${colorClass(todo)}${done ? ' is-done' : ''}${selected ? ' is-selected' : ''}`} role="article" aria-current={selected || undefined} {...handlers}>
+    <div
+      className={`bubble bubble--todo${colorClass(todo)}${flipClass(flip)}${done ? ' is-done' : ''}${selected ? ' is-selected' : ''}`}
+      role="article"
+      aria-current={selected || undefined}
+      {...handlers}
+    >
       <label className={`check${waiting ? ' check--waiting' : ''}`}>
         <input
           type="checkbox"
@@ -782,11 +843,12 @@ function TodoBubble({ todo, at }: { todo: TodoCard; at: number }) {
         />
       </label>
       <div className="bubble__body">
+        {flip.on && <BackLabel />}
         <span className="bubble__title">
           <LinkedText text={displayTitle(todo)} />
         </span>
         {text.view}
-        <BubbleMeta card={todo} at={at} fold={text.fold} />
+        <BubbleMeta card={todo} at={at} fold={text.fold} flip={flip} />
       </div>
       <BubbleTools card={todo} open={open} menu={menu} />
       {menu.view}
@@ -858,6 +920,10 @@ function EntryDetail({ card, fresh, edit, onClose }: { card: NoteCard | TodoCard
   const [toolbarHost, setToolbarHost] = useState<HTMLDivElement | null>(null);
   const [historyHost, setHistoryHost] = useState<HTMLSpanElement | null>(null);
   const discard = useDiscard(card, fresh);
+  // Which side of the card the text below is: the front, or the back shown when it's flipped.
+  const [side, setSide] = useState<'front' | 'back'>('front');
+  const onBack = side === 'back';
+  const hasBack = !!cardBack(card);
   const isTodo = card.type === 'todo';
   const showTitle = isTodo || !!card.title.trim() || titled;
   // Opened to edit, the cursor waits at the end of the text: a todo's title, a note's body.
@@ -883,17 +949,26 @@ function EntryDetail({ card, fresh, edit, onClose }: { card: NoteCard | TodoCard
           <TitleField value={card.title} autoFocus={focusTitle} readOnly={!can.edit} onSave={(title) => void repo.update(card.id, { title })} />
         </div>
       )}
+      {onBack && (
+        <p className="note-sheet__side">
+          <Icon name="flip" size={14} />
+          Back of the card
+        </p>
+      )}
+      {/* One editor for each side, so each has its own undo. */}
       <Editor
-        content={card.content}
+        key={side}
+        content={onBack ? (card.back ?? EMPTY_DOC) : card.content}
         selfId={card.id}
         vaultId={card.vaultId}
         editable={can.edit}
         toolbar={tools}
         toolbarHost={toolbarHost}
         historyHost={historyHost}
-        autofocus={focusBody}
-        placeholder={isTodo ? 'Details' : 'Note'}
-        onChange={(content) => void repo.update(card.id, { content })}
+        autofocus={onBack ? can.edit : focusBody}
+        placeholder={onBack ? 'What shows when the card is flipped, like an answer' : isTodo ? 'Details' : 'Note'}
+        // An emptied back is taken off, so the bubble has nothing to flip to.
+        onChange={(content) => void repo.update(card.id, onBack ? { back: isEmptyDoc(content) ? null : content } : { content })}
       />
       {tagging && can.edit ? (
         <TagPicker tagIds={card.tags} onChange={(tags) => void repo.update(card.id, { tags })} />
@@ -932,6 +1007,18 @@ function EntryDetail({ card, fresh, edit, onClose }: { card: NoteCard | TodoCard
             onClick={() => setTagging(!tagging)}
           >
             <Icon name="tag" />
+          </button>
+        )}
+        {(can.edit || hasBack) && (
+          <button
+            type="button"
+            className={`icon-btn${onBack ? ' is-active' : ''}${hasBack && !onBack ? ' has-dot' : ''}`}
+            aria-pressed={onBack}
+            aria-label="Back of the card"
+            title={onBack ? 'Show the front' : hasBack ? 'Show the back' : 'Add a back, shown when the card is flipped'}
+            onClick={() => setSide(onBack ? 'front' : 'back')}
+          >
+            <Icon name="flip" />
           </button>
         )}
         {can.edit && !showTitle && (
@@ -993,7 +1080,7 @@ function EntryDetail({ card, fresh, edit, onClose }: { card: NoteCard | TodoCard
 }
 
 /** What Discard puts back: everything about an entry its sheet can change. */
-const DISCARDED: (keyof TodoCard)[] = ['type', 'title', 'content', 'tags', 'color', 'preview', 'vaultId', 'status', 'due', 'dueTime', 'repeat'];
+const DISCARDED: (keyof TodoCard)[] = ['type', 'title', 'content', 'back', 'tags', 'color', 'preview', 'vaultId', 'status', 'due', 'dueTime', 'repeat'];
 const sameAs = (a: NoteCard | TodoCard, b: NoteCard | TodoCard) =>
   DISCARDED.every((k) => JSON.stringify((a as TodoCard)[k] ?? null) === JSON.stringify((b as TodoCard)[k] ?? null));
 
@@ -1018,6 +1105,7 @@ function useDiscard(card: NoteCard | TodoCard, fresh: boolean) {
         type: was.type,
         title: was.title,
         content: was.content,
+        back: was.back ?? null,
         tags: was.tags,
         color: was.color ?? null,
         preview: was.preview ?? {},

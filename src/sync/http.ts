@@ -193,6 +193,8 @@ export interface PublicCard {
   type: 'note' | 'todo' | 'tag';
   title: string;
   content: JSONNode;
+  /** The card's back, or null; missing from a server older than card backs. */
+  back?: JSONNode | null;
   status: string | null;
   due: string | null;
   /** Missing from a server older than due times. */

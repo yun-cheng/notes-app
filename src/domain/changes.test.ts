@@ -48,6 +48,7 @@ describe('describing a change', () => {
     expect(says({ ...open, status: 'done', completedAt: 5 }, open)).toBe('Reopened');
     expect(says(open, note('t', 't'))).toBe('Turned into a note');
     expect(says(open, { ...open, vaultId: 'w' })).toBe('Moved to another vault');
+    expect(says(open, { ...open, back: doc(p(text('Lima'))) })).toBe('Edited the back');
     expect(says(open, { ...open, due: '2026-11-14' })).toBe('Changed due date');
     expect(says(open, { ...open, tags: ['x'] })).toBe('Changed tags');
     expect(says(open, { ...open, color: 'red' })).toBe('Changed color');

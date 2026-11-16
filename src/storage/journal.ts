@@ -22,6 +22,8 @@ export interface CardPatch {
   archived?: boolean;
   /** Its place in a board column. */
   position?: number;
+  /** The card's other side; null takes it off. */
+  back?: JSONNode | null;
   members?: string[];
   choice?: 'one' | 'many';
   ordered?: boolean;

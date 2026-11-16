@@ -105,3 +105,19 @@ describe('copying entries', () => {
     expect(tamper((d) => (d.entries[0].kind = 'note'))?.[0].due).toBeNull();
   });
 });
+
+describe('a card with a back', () => {
+  const card = note('f', 'Peru', { content: doc(p(text('Capital?'))), back: doc(p(text('Lima'))) });
+
+  it('copies its back after its front, in every style', () => {
+    expect(entriesText([card], tagName, linkTitle)).toBe('Peru\nCapital?\n\n## Back\n\nLima');
+    expect(entriesClipboard([card], tagName, linkTitle, 'plain')).toEqual({ text: 'Peru\n\nCapital?\n\nBack:\nLima' });
+    expect(entriesClipboard([card], tagName, linkTitle, 'rich').html).toBe('<p><strong>Peru</strong></p><p>Capital?</p><p><strong>Back</strong></p><p>Lima</p>');
+  });
+
+  it('keeps it when pasted back, and leaves out an empty one', () => {
+    expect(decodeEntries(encodeEntries(toEntries([card], tagName)))![0].back).toEqual(doc(p(text('Lima'))));
+    const blank = note('b', '', { back: doc(p()) });
+    expect(toEntries([blank], tagName)[0].back).toBeUndefined();
+  });
+});

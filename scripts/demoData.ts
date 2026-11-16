@@ -207,8 +207,8 @@ export async function seed() {
     mine.push({ id, vaultId, at: when, payload: { createdAt: when, ...payload } as CardPayload });
     return id;
   };
-  /** Fields only some entries have: a tint, a preview style, view only, archived. */
-  type Extras = Partial<Pick<NoteCard, 'color' | 'preview' | 'viewOnly' | 'archived'>>;
+  /** Fields only some entries have: a tint, a preview style, view only, archived, a back. */
+  type Extras = Partial<Pick<NoteCard, 'color' | 'preview' | 'viewOnly' | 'archived' | 'back'>>;
   const tag = (id: string, title: string, pinned: boolean, description = '', color?: CardColor) =>
     add(id, personal, at(9, 9), { type: 'tag', title, pinned, tags: [], content: description ? lines(description) : doc(p()), ...(color ? { color } : {}) });
   /** A tag group: one choice (an entry takes at most one of its tags) or many, ordered to sort by or not. */
@@ -276,6 +276,10 @@ export async function seed() {
     [travel],
     'Kyoto trip',
   );
+  // Flashcards for the trip: each has a back, shown when it's flipped.
+  note('demo-card-thanks', at(8, 21, 40), lines('ありがとうございます'), [travel], '', personal, { back: doc(p(text('Thank you very much', ['bold'])), p('arigatō gozaimasu')) });
+  note('demo-card-excuse', at(8, 21, 41), lines('すみません'), [travel], '', personal, { back: doc(p(text('Excuse me / sorry', ['bold'])), p('sumimasen: to get attention, or to apologise')) });
+  note('demo-card-where', at(8, 21, 42), lines('駅はどこですか？'), [travel], '', personal, { back: doc(p(text('Where is the station?', ['bold'])), p('eki wa doko desu ka')) });
   // The wifi password is kept from being changed by mistake, and hidden until pressed.
   note('demo-note-wifi', at(7, 9, 2), doc(p('Guest wifi: Lemon-Tree, password ', text('sunflower-42', ['hidden']))), [home], '', personal, { viewOnly: true });
   // Edited later from the phone: its history has two versions.

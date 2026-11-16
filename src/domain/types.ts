@@ -55,6 +55,11 @@ interface CardCommon extends CardEnvelope {
    * sits by `createdAt` instead. See `board.ts`.
    */
   position?: number;
+  /**
+   * The other side of the card, shown when it's flipped, like a flashcard's answer. Missing or null on most cards;
+   * an empty one counts as none. See `cardBack` in `content.ts`.
+   */
+  back?: JSONNode | null;
 }
 
 export interface NoteCard extends CardCommon {

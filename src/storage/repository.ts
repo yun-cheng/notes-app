@@ -347,11 +347,14 @@ export class CardRepository {
   }
 
   /** `createdAt` writes it on another day than today. */
-  createNote(init: { id?: string; title?: string; content?: JSONNode; tags?: string[]; vaultId?: string; createdAt?: number } = {}): Promise<Card> {
+  createNote(init: { id?: string; title?: string; content?: JSONNode; back?: JSONNode; tags?: string[]; vaultId?: string; createdAt?: number } = {}): Promise<Card> {
     const id = init.id ?? this.newId();
     const action = this.acting();
     return this.enqueue(async () =>
-      this.write({ ...(await this.newEnvelope(id, init.vaultId, init.createdAt)), type: 'note', title: init.title ?? '', content: init.content ?? EMPTY_DOC, tags: init.tags ?? [] }, action),
+      this.write(
+        { ...(await this.newEnvelope(id, init.vaultId, init.createdAt)), type: 'note', title: init.title ?? '', content: init.content ?? EMPTY_DOC, tags: init.tags ?? [], ...(init.back ? { back: init.back } : {}) },
+        action,
+      ),
     );
   }
 
@@ -361,6 +364,8 @@ export class CardRepository {
     dueTime?: string | null;
     repeat?: Repeat | null;
     content?: JSONNode;
+    /** A pasted card's back. */
+    back?: JSONNode;
     tags?: string[];
     vaultId?: string;
     done?: boolean;
@@ -376,6 +381,7 @@ export class CardRepository {
         type: 'todo',
         title: init.title,
         content: init.content ?? EMPTY_DOC,
+        ...(init.back ? { back: init.back } : {}),
         tags: init.tags ?? [],
         status: init.done ? 'done' : 'open',
         due: init.due ?? null,

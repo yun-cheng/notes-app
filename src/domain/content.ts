@@ -267,6 +267,12 @@ export function photoIds(content: JSONNode): string[] {
 /** A document with no words and no photos. */
 export const isEmptyDoc = (doc: JSONNode) => plainText(doc) === '' && photoIds(doc).length === 0;
 
+/** A card's back, shown when it's flipped: null when it has none, or only an empty one. */
+export function cardBack(card: Pick<Card, 'type' | 'back'>): JSONNode | null {
+  if (card.type === 'tag' || !card.back || card.back.type !== 'doc') return null;
+  return isEmptyDoc(card.back) ? null : card.back;
+}
+
 /** A note or todo the user opened but never wrote anything in. A photo counts as something. */
 export function isBlank(card: Card): boolean {
   if (card.type === 'tag') return false;

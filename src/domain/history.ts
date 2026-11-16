@@ -1,4 +1,4 @@
-import { previewLines } from './content';
+import { cardBack, previewLines } from './content';
 import { repeatLabel } from './repeat';
 import type { Card, JSONNode, Repeat } from './types';
 
@@ -22,6 +22,8 @@ export function cardLines(card: Card, titleOf?: TitleOf, tagName: (id: string) =
   }
   if (card.tags.length) lines.push(`Tags: ${card.tags.map(tagName).join(', ')}`);
   lines.push(...previewLines(card.content, titleOf, true));
+  const back = cardBack(card);
+  if (back) lines.push('Back:', ...previewLines(back, titleOf, true));
   return lines;
 }
 

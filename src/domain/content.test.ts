@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { checklistProgress, CODE_CLOSE, CODE_OPEN, displayTitle, hasPhoto, HIDE_CLOSE, HIDE_OPEN, isBlank, isImageUrl, linkedCardIds, linkUrls, photoIds, plainText, previewLines, previewParts, siteName, splitLinks, textToDoc } from './content';
+import { cardBack, checklistProgress, CODE_CLOSE, CODE_OPEN, displayTitle, hasPhoto, HIDE_CLOSE, HIDE_OPEN, isBlank, isImageUrl, linkedCardIds, linkUrls, photoIds, plainText, previewLines, previewParts, siteName, splitLinks, textToDoc } from './content';
 import { doc, link, note, p, tag, text } from './testFixtures';
 import type { JSONNode } from './types';
 
@@ -152,5 +152,15 @@ describe('hidden text', () => {
     expect(previewLines(body)).toEqual(['Answer: forty-two']);
     expect(previewParts(body, undefined, { hidden: 'mark' })).toEqual([{ kind: 'text', lines: [`Answer: ${HIDE_OPEN}forty-two${HIDE_CLOSE}`] }]);
     expect(displayTitle({ ...note('n', ''), content: body })).toBe('Answer: •••');
+  });
+});
+
+describe('a card’s back', () => {
+  it('is its back doc, or null when it has none or only an empty one', () => {
+    const back = { type: 'doc', content: [{ type: 'paragraph', content: [{ type: 'text', text: 'Lima' }] }] };
+    expect(cardBack(note('n', '', { back }))).toBe(back);
+    expect(cardBack(note('n', ''))).toBeNull();
+    expect(cardBack(note('n', '', { back: null }))).toBeNull();
+    expect(cardBack(note('n', '', { back: { type: 'doc', content: [{ type: 'paragraph' }] } }))).toBeNull();
   });
 });

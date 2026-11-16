@@ -80,6 +80,12 @@ export function PublicPage() {
               </p>
             )}
             <Body content={card.content} token={token} />
+            {card.back && (
+              <section className="public__back" aria-label="Back">
+                <h2>Back</h2>
+                <Body content={card.back} token={token} />
+              </section>
+            )}
             <p className="public__foot">Shared read only. Updated {new Date(card.updated_at).toLocaleDateString()}.</p>
           </>
         )}

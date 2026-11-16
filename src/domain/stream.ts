@@ -45,6 +45,11 @@ export interface StreamFilter {
   has?: Contains;
   /** Archived entries instead of the rest. The journal leaves them out otherwise. */
   archived?: boolean;
+  /**
+   * Shown as a board, with a tag group's tags as columns (`board.ts`): the group's ID, or `pick` to choose one.
+   * Like the sort, it's how the entries show, not which.
+   */
+  board?: string;
 }
 
 const TYPES: EntryType[] = ['note', 'todo'];
@@ -70,6 +75,7 @@ export function parseFilter(params: URLSearchParams): StreamFilter {
     vaultId: params.get('vault') || undefined,
     has: pick<Contains>('has', CONTAINS),
     archived: params.get('archived') === '1' || undefined,
+    board: params.get('board') || undefined,
   };
 }
 
@@ -83,6 +89,7 @@ export function filterParams(filter: StreamFilter): URLSearchParams {
   if (filter.vaultId) params.set('vault', filter.vaultId);
   if (filter.has) params.set('has', filter.has);
   if (filter.archived) params.set('archived', '1');
+  if (filter.board) params.set('board', filter.board);
   return params;
 }
 

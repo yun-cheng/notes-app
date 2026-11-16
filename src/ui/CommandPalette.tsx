@@ -66,7 +66,9 @@ export function CommandPalette({ onClose, onShortcuts }: { onClose: () => void; 
   const go = (to: string) => () => void navigate(to);
   // A filter narrows the page it's picked on: the history from there, the journal from anywhere else.
   const narrow = (next: StreamFilter) => go(filterPath({ ...current, ...next }));
-  const order = (sort: StreamFilter['sort']) => go(journalPath({ ...current, sort }));
+  // A sort shows in the list, so picking one leaves the board.
+  const order = (sort: StreamFilter['sort']) => go(journalPath({ ...current, sort, board: undefined }));
+  const board = (board: string | undefined) => go(journalPath({ ...current, board }));
 
   const commands = (() => {
     const all: Command[] = [
@@ -116,6 +118,12 @@ export function CommandPalette({ onClose, onShortcuts }: { onClose: () => void; 
     for (const g of index.tagGroups.groups.filter((x) => x.ordered)) {
       all.push({ id: `sort-group-${g.id}`, group: 'Sort', label: `Sort: by ${g.title.toLowerCase()}`, icon: 'upcoming', keywords: 'order group rank', run: order(`group:${g.id}`) });
     }
+    if (current.board) all.push({ id: 'view-list', group: 'View', label: 'Show as a list', icon: 'list', keywords: 'stream journal chat board off', run: board(undefined) });
+    const boardGroups = index.tagGroups.groups.filter((g) => g.members.length);
+    for (const g of boardGroups) {
+      all.push({ id: `view-board-${g.id}`, group: 'View', label: `Show as a board by ${g.title.toLowerCase()}`, icon: 'board', keywords: 'board kanban columns trello', run: board(g.id) });
+    }
+    if (!boardGroups.length) all.push({ id: 'view-board', group: 'View', label: 'Show as a board', icon: 'board', keywords: 'board kanban columns trello', run: board('pick') });
     const unlocked = vaults.filter((v) => v.lock === 'pin' && !locked.has(v.id));
     if (unlocked.length) {
       all.push({ id: 'lock-all', group: 'Vaults', label: 'Lock private vaults', icon: 'lock', keywords: 'close hide pin', run: () => locks.lockAll() });

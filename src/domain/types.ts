@@ -50,6 +50,11 @@ interface CardCommon extends CardEnvelope {
   viewOnly?: boolean;
   /** Put away: kept, searchable and linkable, but out of the journal and the todo counts until unarchived. Missing on most cards. */
   archived?: boolean;
+  /**
+   * Its place in a board column, set by dragging it there: lower comes first. Missing until it's dragged, when it
+   * sits by `createdAt` instead. See `board.ts`.
+   */
+  position?: number;
 }
 
 export interface NoteCard extends CardCommon {

@@ -91,7 +91,7 @@ export function describeChange({ before, after, fields }: Pick<Change, 'before' 
   if (has('waiting') && after.type === 'todo') return after.waiting ? 'Marked waiting' : 'No longer waiting';
   if (has('content')) return 'Edited';
   if (has('title')) return after.type === 'todo' ? 'Edited' : 'Renamed';
-  if (has('tags')) return 'Changed tags';
+  if (has('tags')) return has('position') ? 'Moved on the board' : 'Changed tags';
   if (has('due') || has('dueTime')) return 'Changed due date';
   if (has('repeat')) return 'Changed repeat';
   if (has('pinned') && after.type === 'tag') return after.pinned ? 'Pinned' : 'Unpinned';
@@ -99,6 +99,7 @@ export function describeChange({ before, after, fields }: Pick<Change, 'before' 
   if (has('preview')) return 'Changed style';
   if (has('viewOnly')) return after.viewOnly ? 'Made view only' : 'Made editable';
   if (has('members') || has('choice') || has('ordered')) return 'Changed tag group';
+  if (has('position')) return 'Moved on the board';
   return 'Changed';
 }
 

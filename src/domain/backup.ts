@@ -90,6 +90,7 @@ function isCard(value: unknown): value is Card {
     !isStrings(c.tags) ||
     !optional(c.color, (color) => color === null || isCardColor(color)) ||
     !optional(c.archived, (a) => typeof a === 'boolean') ||
+    !optional(c.position, (n) => typeof n === 'number' && Number.isFinite(n)) ||
     !CARD_TYPES.includes(c.type as Card['type'])
   ) {
     return false;

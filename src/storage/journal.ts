@@ -20,6 +20,8 @@ export interface CardPatch {
   color?: CardColor | null;
   viewOnly?: boolean;
   archived?: boolean;
+  /** Its place in a board column. */
+  position?: number;
   members?: string[];
   choice?: 'one' | 'many';
   ordered?: boolean;

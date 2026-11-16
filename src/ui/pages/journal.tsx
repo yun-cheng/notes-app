@@ -4,7 +4,8 @@ import { diaryVault } from '../../domain/access';
 import { linkTitle } from '../../domain/cardIndex';
 import { CODE_CLOSE, CODE_OPEN, displayTitle, previewParts, splitLinks, type PreviewPart } from '../../domain/content';
 import { isDateKey, relativeDay, relativeDayInSentence, toDateKey } from '../../domain/dates';
-import { isFiltered, sortGroup, streamItems, type StreamItem, type StreamSort } from '../../domain/stream';
+import { boardColumns } from '../../domain/board';
+import { isFiltered, sortGroup, streamItems, type StreamFilter, type StreamItem, type StreamSort } from '../../domain/stream';
 import type { NoteCard, TodoCard, Vault } from '../../domain/types';
 import { useCards, useToday } from '../../state/CardsContext';
 import { setViewOnly, usePermissions, useViewOnly } from '../viewOnly';
@@ -37,6 +38,7 @@ import { DatesDialog } from '../DatesDialog';
 import { shareCard, unshareCard } from '../../sync/http';
 import { SyncOffline } from '../../sync/engine';
 import { usePopover } from '../usePopover';
+import { Board, BoardSetup, lastBoard } from './board';
 
 const time = (at: number) => new Date(at).toLocaleTimeString(undefined, { hour: 'numeric', minute: '2-digit' });
 
@@ -55,7 +57,9 @@ export function JournalPage() {
   const vault = vaults.find((v) => v.id === filter.vaultId);
   const filtered = isFiltered(filter);
   const items = streamItems(index, filter, today, sharedInto);
-  const order = items.map((i) => i.card.id);
+  // Shown as a board, when the group it's by still has tags; otherwise the board asks which group.
+  const board = filter.board ? index.tagGroups.groups.find((g) => g.id === filter.board && g.members.length) : undefined;
+  const order = board ? boardColumns(items, board).flatMap((c) => c.items.map((i) => i.card.id)) : items.map((i) => i.card.id);
   const selection = useSelectionState(order);
   const vaultLocked = !!vault && locked.has(vault.id);
   useEntryShortcuts(selection, filter, !vaultLocked);
@@ -82,7 +86,8 @@ export function JournalPage() {
   );
   const actions = (
     <>
-      {!vaultLocked && <SortMenu filter={filter} />}
+      {!vaultLocked && (filter.board ? <BoardMenu filter={filter} /> : <SortMenu filter={filter} />)}
+      <ViewSwitch filter={filter} />
       {tag && (
         <Link className="icon-btn" to={`/card/${tag.id}`} aria-label={`About the ${tag.title} tag`} title="Rename, describe or pin this tag">
           <Icon name="tag" />
@@ -121,6 +126,11 @@ export function JournalPage() {
           <div className="stream">
             <LockPanel vaultId={vault.id} />
           </div>
+        ) : filter.board ? (
+          <>
+            {board ? <Board items={items} group={board} filter={filter} /> : <BoardSetup filter={filter} />}
+            {selecting && <BatchBar selection={selection} />}
+          </>
         ) : (
           <>
             <Stream
@@ -149,6 +159,49 @@ export function JournalPage() {
         <Outlet />
       </Page>
     </SelectionProvider>
+  );
+}
+
+/**
+ * Switches the journal between the list and the board, opening the board this device showed last. A phone has no
+ * room for it in the title bar: the sort menu, and the board's column menu, switch there.
+ */
+function ViewSwitch({ filter }: { filter: StreamFilter }) {
+  const { index } = useCards();
+  const on = !!filter.board;
+  return (
+    <Link
+      className={`icon-btn view-switch${on ? ' is-active' : ''}`}
+      to={journalPath({ ...filter, board: on ? undefined : lastBoard(index.tagGroups.groups) })}
+      aria-label={on ? 'Show as a list' : 'Show as a board'}
+      title={on ? 'Show as a list' : 'Show as a board'}
+    >
+      <Icon name={on ? 'list' : 'board'} />
+    </Link>
+  );
+}
+
+/** On the board, in the sort's place: which tag group's tags are the columns. */
+function BoardMenu({ filter }: { filter: StreamFilter }) {
+  const { index } = useCards();
+  const navigate = useNavigate();
+  const groups = index.tagGroups.groups.filter((g) => g.members.length);
+  const current = groups.find((g) => g.id === filter.board);
+  if (!current) return null;
+  return (
+    <label className="sort-menu btn btn--quiet" title={`Columns: ${current.title}`}>
+      <Icon name="board" size={16} />
+      <span className="sort-menu__label">By {current.title.toLowerCase()}</span>
+      <select aria-label="Columns" value={current.id} onChange={(e) => void navigate(journalPath({ ...filter, board: e.target.value === 'list' ? undefined : e.target.value }))}>
+        {groups.map((g) => (
+          <option key={g.id} value={g.id}>
+            By {g.title.toLowerCase()}
+          </option>
+        ))}
+        <option value="pick">Other…</option>
+        <option value="list">List</option>
+      </select>
+    </label>
   );
 }
 
@@ -290,7 +343,7 @@ function PickCircle({ id }: { id: string }) {
   );
 }
 
-function EntryBubble({ card, at }: { card: NoteCard | TodoCard; at: number }) {
+export function EntryBubble({ card, at }: { card: NoteCard | TodoCard; at: number }) {
   if (card.type === 'todo') return <TodoBubble todo={card} at={at} />;
   return <NoteBubble note={card} at={at} />;
 }

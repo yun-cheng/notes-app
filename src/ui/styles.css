@@ -925,3 +925,76 @@ body:has(.batch) .toast-slot { bottom: calc(var(--tabbar) + env(safe-area-inset-
 .stream__entry { border-radius: 12px; }
 @media (pointer: fine) { .stream__entry:hover { background: color-mix(in srgb, var(--sunken) 55%, transparent); } }
 .stream__entry:has(.bubble.is-selected) { background: color-mix(in srgb, var(--accent) 8%, transparent); }
+/* The journal as a board: a tag group's tags as columns, side by side, scrolling sideways; each column's cards scroll on their own. */
+.page:has(> .board), .page:has(> .board-setup) { max-width: none; }
+.board {
+  display: flex; align-items: flex-start; gap: 12px; overflow-x: auto; overscroll-behavior-x: contain; padding: 4px 2px 12px;
+  height: calc(100dvh - var(--head-height, 110px) - var(--tabbar) - env(safe-area-inset-bottom) - 24px);
+  scroll-snap-type: x proximity;
+}
+@media (min-width: 720px) { .board { height: calc(100dvh - var(--head-height, 110px) - 40px); } }
+.board__column {
+  flex: 0 0 min(300px, 84vw); display: flex; flex-direction: column; max-height: 100%; min-height: 0; min-width: 0;
+  background: var(--sunken); border: 1px solid transparent; border-radius: 14px; scroll-snap-align: start;
+}
+.board__column.is-target { border-color: color-mix(in srgb, var(--accent) 45%, transparent); }
+.board__column--folded { flex: 0 0 44px; }
+.board__head { padding: 6px 6px 2px; }
+.board__fold, .board__unfold {
+  display: flex; align-items: center; gap: 8px; width: 100%; min-height: 34px; padding: 4px 8px; border: 0; border-radius: 9px;
+  background: none; color: var(--text); font: inherit; font-weight: 600; font-size: 14px; text-align: left; cursor: pointer;
+}
+.board__fold:hover, .board__unfold:hover { background: color-mix(in srgb, var(--text) 6%, transparent); }
+.board__unfold { flex-direction: column; justify-content: flex-start; height: 100%; padding: 10px 0; }
+.board__unfold .board__name { writing-mode: vertical-rl; }
+.board__name { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.board__count { margin-left: auto; color: var(--muted); font-weight: 400; font-size: 13px; }
+.board__unfold .board__count { margin: 0; }
+.board__dot { flex: none; width: 10px; height: 10px; border: 1.5px solid var(--muted); border-radius: 50%; }
+.board__dot.tint { border-color: color-mix(in srgb, var(--tint) 70%, var(--text)); background: var(--tint); }
+.board__cards { flex: 1 1 auto; min-height: 8px; overflow-x: hidden; overflow-y: auto; display: flex; flex-direction: column; gap: 6px; padding: 4px 6px 6px; }
+.board__card { position: relative; align-items: stretch; min-width: 0; padding: 0; }
+.board__card .bubble { max-width: none; width: 100%; min-width: 0; border-radius: 12px; cursor: pointer; }
+@media (pointer: fine) { .board__card .bubble { user-select: none; -webkit-user-select: none; } }
+.board__card .attachments { max-width: 100%; }
+.board__card:hover { background: none; }
+/* The edit and menu buttons sit inside the card, by its copy button, rather than beside it. */
+.board__card .bubble__tools { left: auto; right: 30px; top: 3px; grid-template-columns: repeat(2, 26px); }
+.board__card .bubble__tools .icon-btn, .board__card .bubble__tools button { background: var(--surface); }
+.board__grip {
+  position: absolute; z-index: 2; top: 50%; left: -4px; transform: translateY(-50%); display: grid; place-items: center; width: 18px; height: 30px;
+  padding: 0; border: 0; border-radius: 6px; background: var(--surface); color: var(--muted); cursor: grab; opacity: 0; touch-action: none;
+  box-shadow: 0 0 0 1px var(--line);
+}
+.board__card:hover .board__grip, .board__grip:focus-visible { opacity: 1; }
+@media (pointer: coarse) {
+  .board__grip { opacity: 1; left: auto; right: 4px; top: auto; bottom: 4px; transform: none; width: 28px; height: 28px; }
+  .board__card .bubble__meta { padding-right: 28px; }
+}
+.board__card.is-moving { height: 0; overflow: hidden; opacity: 0; margin: -3px 0; }
+.board__drop { flex: none; border: 2px dashed color-mix(in srgb, var(--accent) 55%, var(--line)); border-radius: 12px; background: color-mix(in srgb, var(--accent) 8%, transparent); }
+.board__ghost { position: fixed; z-index: 60; margin: 0; pointer-events: none; opacity: 0.92; box-shadow: var(--shadow); border-radius: 12px; }
+.board__ghost .board__grip, .board__ghost .bubble__tools { display: none; }
+body.is-dragging-card, body.is-dragging-card * { cursor: grabbing !important; user-select: none !important; -webkit-user-select: none !important; }
+.board__more { align-self: center; }
+.board__add {
+  display: flex; align-items: center; gap: 6px; margin: 0 6px 6px; padding: 8px 10px; border: 0; border-radius: 9px;
+  background: none; color: var(--muted); font: inherit; font-size: 14px; cursor: pointer;
+}
+.board__add:hover { background: color-mix(in srgb, var(--text) 6%, transparent); color: var(--text); }
+.board__add-form { display: flex; flex-direction: column; gap: 6px; padding: 0 6px 8px; }
+.board__add-form textarea {
+  width: 100%; resize: vertical; padding: 8px 10px; border: 1px solid var(--line); border-radius: 10px;
+  background: var(--surface); color: var(--text); font: inherit; font-size: 15px;
+}
+.board__add-form textarea:focus { outline: 2px solid var(--accent); outline-offset: -1px; }
+.board__add-actions { display: flex; gap: 6px; }
+.board-setup { display: flex; flex-direction: column; align-items: flex-start; gap: 12px; max-width: 520px; margin: 24px auto; padding: 0 4px; color: var(--text); }
+.board-setup > svg { color: var(--muted); }
+.board-setup h2 { margin: 0; font-size: 20px; }
+.board-setup p { margin: 0; color: var(--muted); }
+.board-setup__groups { display: flex; flex-direction: column; align-items: stretch; gap: 6px; width: 100%; }
+.board-setup__groups .btn { display: flex; justify-content: space-between; gap: 12px; text-align: left; }
+.board-setup__tags { color: var(--muted); font-size: 13px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.board-setup__note { font-size: 13px; }
+@media (max-width: 419px) { .view-switch { display: none; } }

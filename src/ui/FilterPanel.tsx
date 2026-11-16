@@ -140,7 +140,7 @@ export function FilterBar({ filter }: { filter: StreamFilter }) {
         </span>
       )}
       {parts.length > 1 && (
-        <Link className="chip filter-chip filter-chip--clear-all" to={path({ sort: filter.sort })}>
+        <Link className="chip filter-chip filter-chip--clear-all" to={path({ sort: filter.sort, board: filter.board })}>
           Clear all
         </Link>
       )}
@@ -235,11 +235,21 @@ export function SortMenu({ filter }: { filter: StreamFilter }) {
   const navigate = useNavigate();
   const sort = filter.sort ?? 'written';
   const label = sortLabel(sort, index.tagGroups.groups);
+  const boards = index.tagGroups.groups.filter((g) => g.members.length);
   return (
     <label className="sort-menu btn btn--quiet" title={`Sort: ${label}`}>
       <Icon name="sort" size={16} />
       <span className="sort-menu__label">{label}</span>
-      <select aria-label="Sort" value={sort} onChange={(e) => void navigate(journalPath({ ...filter, sort: e.target.value as StreamSort }))}>
+      <select
+        aria-label="Sort"
+        value={sort}
+        onChange={(e) => {
+          const value = e.target.value;
+          // The board is picked here too, where a phone has no room for its own button.
+          if (value.startsWith('board:')) void navigate(journalPath({ ...filter, board: value.slice(6) }));
+          else void navigate(journalPath({ ...filter, sort: value as StreamSort }));
+        }}
+      >
         {(Object.keys(SORT_LABEL) as BaseSort[]).map((s) => (
           <option key={s} value={s}>
             {SORT_LABEL[s]}
@@ -252,6 +262,14 @@ export function SortMenu({ filter }: { filter: StreamFilter }) {
               {sortLabel(`group:${g.id}`, index.tagGroups.groups)}
             </option>
           ))}
+        <optgroup label="Board">
+          {boards.map((g) => (
+            <option key={g.id} value={`board:${g.id}`}>
+              Board by {g.title.toLowerCase()}
+            </option>
+          ))}
+          {!boards.length && <option value="board:pick">Board…</option>}
+        </optgroup>
       </select>
     </label>
   );
@@ -304,7 +322,7 @@ export function FilterPanel({ onPick }: { onPick?: () => void }) {
     <div className="filters">
       <nav aria-label="Journal">
         {/* Journal is the one in use unless a tag or vault here is: the title bar shows the other filters. */}
-        {link('all', 'Journal', journalPath(onHistory ? filter : { sort: filter.sort }), onJournal && !filter.tagId && !filter.vaultId, 'notes')}
+        {link('all', 'Journal', journalPath(onHistory ? filter : { sort: filter.sort, board: filter.board }), onJournal && !filter.tagId && !filter.vaultId, 'notes')}
         {link('history', 'History', historyPath(onJournal ? filter : { sort: filter.sort }), onHistory, 'history')}
       </nav>
 

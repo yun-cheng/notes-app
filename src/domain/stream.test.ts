@@ -138,7 +138,7 @@ describe('sorting', () => {
 
 describe('filter in the address', () => {
   it('round-trips, and drops values it does not know', () => {
-    const filter = { sort: 'due', type: 'todo', status: 'today', when: '2026-11-11', tagId: 'work', vaultId: 'v', has: 'photo', archived: true } as const;
+    const filter = { sort: 'due', type: 'todo', status: 'today', when: '2026-11-11', tagId: 'work', vaultId: 'v', has: 'photo', archived: true, board: 'status' } as const;
     expect(parseFilter(filterParams(filter))).toEqual(filter);
     expect(parseFilter(new URLSearchParams('type=card&status=x&when=soon&archived=yes'))).toEqual({});
     expect(parseFilter(new URLSearchParams('sort=group:p'))).toEqual({ sort: 'group:p' });
@@ -147,6 +147,9 @@ describe('filter in the address', () => {
   it('comes apart into chips, each removable on its own, keeping the order', () => {
     const parts = filterParts({ sort: 'due', type: 'todo', status: 'today', when: 'week', tagId: 'work', has: 'link' });
     expect(parts.map((p) => p.part)).toEqual(['type', 'status', 'when', 'tagId', 'has']);
+    // The board is how the entries show, like the sort, so it's no chip and doesn't count as a filter.
+    expect(filterParts({ board: 'status' })).toEqual([]);
+    expect(isFiltered({ board: 'status' })).toBe(false);
     // Taking the type off takes the status with it; taking the status off leaves todos.
     expect(parts[0].without).toEqual({ sort: 'due', type: undefined, status: undefined, when: 'week', tagId: 'work', has: 'link' });
     expect(parts[1].without).toEqual({ sort: 'due', type: 'todo', status: undefined, when: 'week', tagId: 'work', has: 'link' });

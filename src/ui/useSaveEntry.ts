@@ -24,6 +24,8 @@ export interface SaveOptions {
   /** Todos start out waiting. */
   waiting?: boolean;
   tagId?: string;
+  /** More tags every entry gets, after `tagId`: a board column's. */
+  tags?: string[];
   vaultId?: string;
   /** A day other than today: entries are written on it, at this time of day, so they show on that day. */
   date?: string;
@@ -67,7 +69,7 @@ export function useSaveEntries() {
     const tagging: Promise<Card>[] = [];
     const { groups, groupOf } = index.tagGroups;
     const tagIdsFor = (names: string[]) => {
-      const ids = opts.tagId ? [opts.tagId] : [];
+      const ids = [...new Set([...(opts.tagId ? [opts.tagId] : []), ...(opts.tags ?? [])])];
       for (const name of names) {
         if (isGroupName(name, groups)) continue;
         const key = name.toLowerCase();

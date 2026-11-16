@@ -347,12 +347,13 @@ export class CardRepository {
   }
 
   /** `createdAt` writes it on another day than today. */
-  createNote(init: { id?: string; title?: string; content?: JSONNode; back?: JSONNode; tags?: string[]; vaultId?: string; createdAt?: number } = {}): Promise<Card> {
+  /** With `stack`, a stack of those entries. */
+  createNote(init: { id?: string; title?: string; content?: JSONNode; back?: JSONNode; stack?: string[]; tags?: string[]; vaultId?: string; createdAt?: number } = {}): Promise<Card> {
     const id = init.id ?? this.newId();
     const action = this.acting();
     return this.enqueue(async () =>
       this.write(
-        { ...(await this.newEnvelope(id, init.vaultId, init.createdAt)), type: 'note', title: init.title ?? '', content: init.content ?? EMPTY_DOC, tags: init.tags ?? [], ...(init.back ? { back: init.back } : {}) },
+        { ...(await this.newEnvelope(id, init.vaultId, init.createdAt)), type: 'note', title: init.title ?? '', content: init.content ?? EMPTY_DOC, tags: init.tags ?? [], ...(init.back ? { back: init.back } : {}), ...(init.stack ? { stack: init.stack } : {}) },
         action,
       ),
     );

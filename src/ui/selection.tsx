@@ -188,7 +188,7 @@ const KEEPS_PICKING = '.stream__entry, .batch, .page__head, .sidebar, .tabbar, .
 const INTERACTIVE = '.bubble, .attachments, .pick, a, button, input, textarea, select, label, [contenteditable="true"]';
 
 /** Parts of the page a drag can't start in, though they sit in the main area. */
-const NO_BOX = '.page__head, .composer, .composer__unlock, .batch, .dialog-backdrop, .toast-slot, .link-menu';
+const NO_BOX = '.page__head, .composer, .composer__unlock, .batch, .dialog-backdrop, .toast-slot, .link-menu, .stack__cards';
 
 /**
  * Picking from empty space. A click (or tap) on a row beside its bubble picks or unpicks that entry, Shift-click a

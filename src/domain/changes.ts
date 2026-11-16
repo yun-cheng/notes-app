@@ -100,6 +100,7 @@ export function describeChange({ before, after, fields }: Pick<Change, 'before' 
   if (has('preview')) return 'Changed style';
   if (has('viewOnly')) return after.viewOnly ? 'Made view only' : 'Made editable';
   if (has('members') || has('choice') || has('ordered')) return 'Changed tag group';
+  if (has('stack')) return 'Changed the stack';
   if (has('position')) return 'Moved on the board';
   return 'Changed';
 }

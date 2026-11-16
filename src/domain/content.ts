@@ -31,9 +31,9 @@ export function plainText(content: JSONNode, titleOf?: (id: string, label: strin
   return parts.join('').replace(/\s+/g, ' ').trim();
 }
 
-/** The title, or for a card without one, its first line of text. */
+/** The title, or for a card without one, its first line of text; a stack with neither is a Stack. */
 export function displayTitle(card: Card): string {
-  return card.title.trim() || firstLine(card.content) || 'Untitled';
+  return card.title.trim() || firstLine(card.content) || (card.type === 'note' && Array.isArray(card.stack) ? 'Stack' : 'Untitled');
 }
 
 const FIRST_LINE_MAX = 80;
@@ -276,5 +276,7 @@ export function cardBack(card: Pick<Card, 'type' | 'back'>): JSONNode | null {
 /** A note or todo the user opened but never wrote anything in. A photo counts as something. */
 export function isBlank(card: Card): boolean {
   if (card.type === 'tag') return false;
+  // A stack is something, even before it's named.
+  if (card.type === 'note' && Array.isArray(card.stack)) return false;
   return card.title.trim() === '' && card.tags.length === 0 && isEmptyDoc(card.content);
 }

@@ -24,6 +24,8 @@ export interface CardPatch {
   position?: number;
   /** The card's other side; null takes it off. */
   back?: JSONNode | null;
+  /** A stack's entries, in order. */
+  stack?: string[];
   members?: string[];
   choice?: 'one' | 'many';
   ordered?: boolean;

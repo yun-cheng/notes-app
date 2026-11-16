@@ -11,6 +11,8 @@ import type { Selection } from './selection';
 import { MOD } from './Shortcuts';
 import { useToast } from './Toast';
 import { useUndo } from './useUndo';
+import { useStacking } from './useStacking';
+import { isStack } from '../domain/stacks';
 
 /**
  * Takes the writing box's place while entries are picked: tag, finish, mark waiting, date, switch between note and todo, copy,
@@ -32,6 +34,15 @@ export function BatchBar({ selection }: { selection: Selection }) {
   // Waiting is for open todos: mark them while any isn't, and take it off when all are.
   const openTodos = todos.filter((c) => c.type === 'todo' && c.status === 'open');
   const waiting = openTodos.length > 0 && openTodos.every((c) => c.type === 'todo' && c.waiting);
+  const stackIt = useStacking();
+  // Two entries or more make a stack; with a stack among them, the rest go into it.
+  const stackable = cards.filter((c) => c.type !== 'tag');
+  const canStack = stackable.some(isStack) ? stackable.some((c) => !isStack(c)) : stackable.length > 1;
+  const stack = () => {
+    const ids = selection.ids;
+    selection.clear();
+    void stackIt(ids);
+  };
   const skipped = (n: number) => (n ? `; ${entries(n)} couldn't be changed` : '');
 
   const apply = async (edit: BatchEdit, done: (n: number) => string) => {
@@ -134,6 +145,17 @@ export function BatchBar({ selection }: { selection: Selection }) {
               </option>
             ))}
           </select>
+        )}
+        {canStack && (
+          <button
+            type="button"
+            className="icon-btn"
+            aria-label="Stack"
+            title={stackable.some(isStack) ? 'Put them in the stack picked with them' : 'Stack them: one entry holding them, in an order of their own'}
+            onClick={stack}
+          >
+            <Icon name="stack" />
+          </button>
         )}
         <button type="button" className="icon-btn" disabled={none} aria-label="Copy" title={`Copy (${MOD}C)`} onClick={() => actions.copy(selection.ids)}>
           <Icon name="copy" />

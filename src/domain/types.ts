@@ -64,6 +64,11 @@ interface CardCommon extends CardEnvelope {
 
 export interface NoteCard extends CardCommon {
   type: 'note';
+  /**
+   * Set on a stack, and only there: the entries grouped in it, in their order. Its own title and text describe it.
+   * See `stacks.ts`.
+   */
+  stack?: string[];
 }
 /** How a todo comes back: every N days, weeks, months or years, or every weekday (Monday to Friday, `every` 1). */
 export type RepeatUnit = 'day' | 'week' | 'month' | 'year' | 'weekday';

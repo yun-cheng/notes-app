@@ -1028,3 +1028,37 @@ body.is-dragging-card, body.is-dragging-card * { cursor: grabbing !important; us
 .icon-btn.has-dot::after { content: ""; position: absolute; top: 6px; right: 6px; width: 6px; height: 6px; border-radius: 50%; background: var(--accent); }
 .public__back { margin-top: 28px; padding-top: 18px; border-top: 1px dashed var(--line); }
 .public__back h2 { margin-bottom: 8px; color: var(--muted); font: 600 13px/1.2 var(--sans); letter-spacing: 0.05em; text-transform: uppercase; }
+
+/* A stack: its cards fan out behind it. Opened, its entries sit under it along a line, each dragged to its place by
+   the grip in the gutter, with × under the grip to take it out. */
+.bubble--stack { margin: 0 8px 8px 0; box-shadow: 4px 4px 0 -1px var(--bg), 4px 4px 0 0 var(--line), 8px 8px 0 -1px var(--bg), 8px 8px 0 0 var(--line); }
+.stack__head { display: flex; align-items: center; gap: 6px; color: var(--accent); }
+.stack__head .bubble__title { color: var(--text); }
+.stack__peek { margin: 3px 0 0; padding: 3px 0 0; border-top: 1px dashed var(--line); list-style: none; color: var(--muted); font-size: 14px; }
+.stack__peek li { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.stack__peek li::before { content: "▤ "; opacity: 0.6; }
+.stack__peek .stack__more::before { content: none; }
+.stack__more { font-size: 13px; }
+.stack__cards { display: flex; flex-direction: column; gap: 6px; width: min(85%, 560px); margin: 0 0 8px 10px; padding: 2px 0 2px 26px; border-left: 2px solid var(--line); }
+.stack__card { position: relative; display: flex; flex-direction: column; align-items: flex-start; }
+.stack__card .bubble { max-width: 100%; }
+/* A mouse drags a card from anywhere on it, so its words aren't picked as text on the way. */
+@media (pointer: fine) { .stack__card .bubble { user-select: none; -webkit-user-select: none; } }
+.stack__card .board__grip { left: -24px; top: 2px; transform: none; height: 26px; }
+.stack__card:hover .board__grip, .stack__card:hover .stack__out, .stack__out:focus-visible { opacity: 1; }
+.stack__out { position: absolute; top: 31px; left: -24px; display: grid; place-items: center; width: 18px; height: 18px; padding: 0; border: 0; border-radius: 50%; background: none; color: var(--muted); font-size: 15px; line-height: 1; cursor: pointer; opacity: 0; }
+.stack__out:hover { background: var(--sunken); color: var(--text); }
+@media (pointer: coarse) {
+  .stack__card .board__grip { left: -26px; right: auto; top: 0; bottom: auto; width: 22px; height: 28px; }
+  .stack__out { opacity: 1; width: 22px; height: 22px; left: -26px; }
+}
+.stack__card.is-moving { height: 0; overflow: hidden; opacity: 0; margin: -3px 0; }
+.stack__empty { margin: 4px 0; color: var(--muted); font-size: 14px; }
+.stack-list { margin-top: 10px; }
+.stack-list h3 { margin-bottom: 4px; color: var(--muted); font: 600 12px/1.2 var(--sans); letter-spacing: 0.05em; text-transform: uppercase; }
+.stack-list ol { margin: 0; padding-left: 22px; }
+.stack-list a { color: var(--text); }
+/* In an open stack, a card's own buttons show when it's hovered, not with the whole stack. */
+.stream__entry:hover .stack__card .bubble__copy, .stream__entry:hover .stack__card .bubble__open, .stream__entry:hover .stack__card .bubble__add { opacity: 0; }
+.stream__entry .stack__card:hover .bubble__copy, .stream__entry .stack__card:hover .bubble__open, .stream__entry .stack__card:hover .bubble__add,
+.stream__entry .stack__card .bubble:focus-within .bubble__copy, .stream__entry .stack__card .bubble:focus-within .bubble__open { opacity: 1; }

@@ -1,6 +1,7 @@
 import { isGroupName, settleTags } from '../src/domain/tagGroups';
 import { buildIndex, type CardIndex } from '../src/domain/cardIndex';
 import { cardBack, displayTitle, plainText } from '../src/domain/content';
+import { isStack, stackEntries, stacksOf } from '../src/domain/stacks';
 import { isDateKey, isTimeKey, toDateKey } from '../src/domain/dates';
 import { toMarkdown } from '../src/domain/markdown';
 import { parsePayload } from '../src/domain/payload';
@@ -127,6 +128,11 @@ function renderCard(scope: Scope, card: Card): string {
   lines.push('', body(scope, card.content));
   const back = cardBack(card);
   if (back) lines.push('', '## Back', '', body(scope, back));
+  if (isStack(card)) {
+    const entries = stackEntries(card, scope.index.byId, stacksOf(scope.index));
+    lines.push('', '## In this stack, in order');
+    lines.push(...(entries.length ? entries.map((entry) => summary(scope, entry)) : ['(empty)']));
+  }
   const links = scope.index.backlinks.get(card.id) ?? [];
   if (links.length) {
     lines.push('', card.type === 'tag' ? '## Tagged and linked cards' : '## Linked from');

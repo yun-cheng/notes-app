@@ -1,4 +1,4 @@
-import { useEffect, useLayoutEffect, useMemo, useRef, useState, type ReactNode } from 'react';
+import { useEffect, useLayoutEffect, useMemo, useRef, useState, type KeyboardEvent as ReactKeyboardEvent, type ReactNode } from 'react';
 import { Link, Outlet, useLocation, useNavigate, useParams } from 'react-router';
 import { diaryVault } from '../../domain/access';
 import { linkTitle } from '../../domain/cardIndex';
@@ -38,7 +38,9 @@ import { DatesDialog } from '../DatesDialog';
 import { shareCard, unshareCard } from '../../sync/http';
 import { SyncOffline } from '../../sync/engine';
 import { usePopover } from '../usePopover';
-import { Board, BoardSetup, lastBoard, useBoardKind } from './board';
+import { Board, BoardSetup, lastBoard, useBoardKind, useCardDrag, type DragParts } from './board';
+import { foldStacks, isStack, moveInStack, stackEntries, stacksOf } from '../../domain/stacks';
+import { openStacks } from '../useStacking';
 
 const time = (at: number) => new Date(at).toLocaleTimeString(undefined, { hour: 'numeric', minute: '2-digit' });
 
@@ -56,9 +58,11 @@ export function JournalPage() {
   const tag = index.tags.find((t) => t.id === filter.tagId);
   const vault = vaults.find((v) => v.id === filter.vaultId);
   const filtered = isFiltered(filter);
-  const items = streamItems(index, filter, today, sharedInto);
+  const all = streamItems(index, filter, today, sharedInto);
   // Shown as a board, by todo state or by a group that still has tags; otherwise the board asks which.
-  const board = useBoardKind(filter, items);
+  const board = useBoardKind(filter, all);
+  // In the list, a stack's entries are in it; the board shows each on its own.
+  const items = filter.board ? all : foldStacks(all, stacksOf(index));
   const order = board ? board.columns.flatMap((c) => c.items.map((i) => i.card.id)) : items.map((i) => i.card.id);
   const selection = useSelectionState(order);
   const vaultLocked = !!vault && locked.has(vault.id);
@@ -346,10 +350,11 @@ function PickCircle({ id }: { id: string }) {
 
 export function EntryBubble({ card, at }: { card: NoteCard | TodoCard; at: number }) {
   if (card.type === 'todo') return <TodoBubble todo={card} at={at} />;
+  if (isStack(card)) return <StackEntry stack={card} at={at} />;
   return <NoteBubble note={card} at={at} />;
 }
 
-function BubbleMeta({ card, at, fold, flip }: { card: NoteCard | TodoCard; at: number; fold: Fold; flip: Flip }) {
+function BubbleMeta({ card, at, fold, flip, lead }: { card: NoteCard | TodoCard; at: number; fold: Fold; flip: Flip; lead?: ReactNode }) {
   const { repo } = useCards();
   const may = usePermissions();
   // A grouped tag (Priority: High) can be switched right here.
@@ -362,6 +367,7 @@ function BubbleMeta({ card, at, fold, flip }: { card: NoteCard | TodoCard; at: n
       <VaultLabel card={card} />
       {card.viewOnly && <ViewOnlyMark card={card} />}
       <span className="bubble__end">
+        {lead}
         <CardBadges card={card} />
         {flip.back && (
           <button
@@ -820,6 +826,150 @@ function NoteBubble({ note, at }: { note: NoteCard; at: number }) {
   );
 }
 
+type Entry = NoteCard | TodoCard;
+
+/** A stack's list is one column to drag its entries up and down in. */
+const STACK_PARTS: DragParts = { column: '.stack__cards', card: '.stack__card', grip: '.stack__grip', cards: '.stack__cards' };
+
+/** How many of its entries a closed stack names. */
+const PEEK = 3;
+
+/**
+ * A stack in the stream: its name and text, the first few of its entries, and a button that opens it to show them
+ * all, in its order, under it. Its cards fan out behind it.
+ */
+function StackEntry({ stack, at }: { stack: NoteCard; at: number }) {
+  const { index } = useCards();
+  const members = stackEntries(stack, index.byId, stacksOf(index));
+  const { text, flip, open, menu, selected, handlers } = useBubble(stack);
+  const [expanded, setExpanded] = useState(() => openStacks.has(stack.id));
+  const toggle = () => {
+    if (expanded) openStacks.delete(stack.id);
+    else openStacks.add(stack.id);
+    setExpanded(!expanded);
+  };
+  const count = `${members.length} ${members.length === 1 ? 'card' : 'cards'}`;
+  return (
+    <>
+      <div className={`bubble bubble--stack${colorClass(stack)}${flipClass(flip)}${selected ? ' is-selected' : ''}`} role="article" aria-current={selected || undefined} {...handlers}>
+        {flip.on && <BackLabel />}
+        <span className="stack__head">
+          <Icon name="stack" size={15} />
+          <strong className="bubble__title">
+            <LinkedText text={stack.title.trim() || 'Stack'} />
+          </strong>
+        </span>
+        {text.view}
+        {!expanded && members.length > 0 && (
+          <ul className="stack__peek">
+            {members.slice(0, PEEK).map((m) => (
+              <li key={m.id}>
+                {m.type === 'todo' ? (m.status === 'done' ? '☑ ' : '☐ ') : ''}
+                {displayTitle(m)}
+              </li>
+            ))}
+            {members.length > PEEK && <li className="stack__more">and {members.length - PEEK} more</li>}
+          </ul>
+        )}
+        <BubbleMeta
+          card={stack}
+          at={at}
+          fold={text.fold}
+          flip={flip}
+          lead={
+            <button type="button" className="bubble__fold" aria-expanded={expanded} title={expanded ? 'Close the stack' : 'Open the stack'} onClick={toggle}>
+              <Icon name={expanded ? 'up' : 'down'} size={14} />
+              {count}
+            </button>
+          }
+        />
+        <BubbleTools card={stack} open={open} menu={menu} />
+        {menu.view}
+      </div>
+      {expanded && <StackCards stack={stack} members={members} />}
+    </>
+  );
+}
+
+/**
+ * An open stack's entries, in its order, each as in the stream. They're dragged up and down to change the order (a
+ * mouse from anywhere on one, a finger from its grip), or moved with the arrow keys on the grip, and × takes one
+ * out, back into the stream. Each change can be undone.
+ */
+function StackCards({ stack, members }: { stack: NoteCard; members: Entry[] }) {
+  const { repo } = useCards();
+  const may = usePermissions();
+  const toast = useToast();
+  const { undoAction } = useUndo();
+  const can = may(stack).edit;
+  const list = stack.stack ?? [];
+  const shown = members.map((m) => m.id);
+
+  const move = (id: string, index: number) => {
+    const next = moveInStack(list, shown, id, index);
+    if (next.join('\n') !== list.join('\n')) void repo.update(stack.id, { stack: next });
+  };
+  const takeOut = (card: Entry) => {
+    const action = repo.action();
+    void repo.update(stack.id, { stack: list.filter((id) => id !== card.id) });
+    toast(`Took “${displayTitle(card)}” out of the stack`, { action: { label: 'Undo', run: () => void undoAction(action) } });
+  };
+  const drag = useCardDrag((id, to) => move(id, to.index), STACK_PARTS);
+  const moveByKey = (e: ReactKeyboardEvent, id: string, at: number) => {
+    const to = e.key === 'ArrowUp' ? at - 1 : e.key === 'ArrowDown' ? at + 1 : null;
+    if (to === null || to < 0 || to >= members.length) return;
+    e.preventDefault();
+    move(id, to);
+    // The card moves to another place: its grip keeps the focus there.
+    requestAnimationFrame(() => document.querySelector<HTMLElement>(`[data-stack-entry="${CSS.escape(id)}"] .stack__grip`)?.focus());
+  };
+
+  const target = drag.dragging?.to ? drag.dragging.to.index : null;
+  let place = 0;
+  const marker = <div key="drop" className="board__drop" style={{ height: drag.dragging?.height }} />;
+  const cards = members.flatMap((card, at) => {
+    const moving = drag.dragging?.id === card.id;
+    const before = !moving && target === place ? [marker] : [];
+    if (!moving) place++;
+    return [
+      ...before,
+      <div
+        key={card.id}
+        className={`stack__card${moving ? ' is-moving' : ''}`}
+        data-stack-entry={card.id}
+        onPointerDown={can ? (e) => drag.start(e, card.id) : undefined}
+      >
+        {can && (
+          <button
+            type="button"
+            className="board__grip stack__grip"
+            aria-label={`Move "${displayTitle(card)}"`}
+            title="Drag to move, or use the arrow keys"
+            onKeyDown={(e) => moveByKey(e, card.id, at)}
+            onClick={(e) => e.preventDefault()}
+          >
+            <Icon name="grip" size={14} />
+          </button>
+        )}
+        <EntryBubble card={card} at={card.createdAt} />
+        {can && (
+          <button type="button" className="stack__out" aria-label={`Take "${displayTitle(card)}" out of the stack`} title="Take out of the stack" onClick={() => takeOut(card)}>
+            ×
+          </button>
+        )}
+      </div>,
+    ];
+  });
+  if (target !== null && target >= place) cards.push(marker);
+
+  return (
+    <div ref={drag.board} className={`stack__cards${drag.dragging ? ' is-dragging' : ''}`} data-column={stack.id} aria-label={`In ${stack.title.trim() || 'the stack'}`}>
+      {cards}
+      {members.length === 0 && <p className="stack__empty">Nothing in this stack yet. Pick it with entries, then Stack, to put them in.</p>}
+    </div>
+  );
+}
+
 function TodoBubble({ todo, at }: { todo: TodoCard; at: number }) {
   const may = usePermissions();
   const tick = useTickTodo();
@@ -979,11 +1129,12 @@ function EntryDetail({ card, fresh, edit, onClose }: { card: NoteCard | TodoCard
           </div>
         )
       )}
+      {isStack(card) && !onBack && <StackList stack={card} />}
       <Comments card={card} />
       <Backlinks cardId={card.id} />
       <div className="note-sheet__bar">
         <div ref={setToolbarHost} className="note-sheet__format" />
-        {can.edit && <TypeSwitch card={card} className="icon-btn" />}
+        {can.edit && !isStack(card) && <TypeSwitch card={card} className="icon-btn" />}
         {isTodo && can.edit && <DueMenu card={card} />}
         {can.edit && (
           <button
@@ -1076,6 +1227,31 @@ function EntryDetail({ card, fresh, edit, onClose }: { card: NoteCard | TodoCard
       </div>
       {sharing && <ShareDialog card={card} onClose={() => setSharing(false)} />}
     </>
+  );
+}
+
+/** In a stack's sheet: its entries, in order, each opening in its own sheet. They're ordered in the journal. */
+function StackList({ stack }: { stack: NoteCard }) {
+  const { index } = useCards();
+  const location = useLocation();
+  const members = stackEntries(stack, index.byId, stacksOf(index));
+  return (
+    <section className="stack-list" aria-label="In this stack">
+      <h3>In this stack</h3>
+      {members.length ? (
+        <ol>
+          {members.map((m) => (
+            <li key={m.id}>
+              <Link to={cardPath(m)} state={sheetState(location, m, {})}>
+                {displayTitle(m)}
+              </Link>
+            </li>
+          ))}
+        </ol>
+      ) : (
+        <p className="prose-note">Nothing yet. Pick this stack with entries in the journal, then Stack, to put them in.</p>
+      )}
+    </section>
   );
 }
 

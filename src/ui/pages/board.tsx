@@ -71,7 +71,7 @@ function rememberBoard(id: string) {
 const COLUMN_PAGE = 100;
 
 /** Where a dragged card would land: a column, and its place among that column's other cards. */
-interface Target {
+export interface Target {
   key: string;
   index: number;
 }
@@ -355,12 +355,24 @@ function BoardCard({ card, at, moving, onPointerDown, onMoveKey }: { card: Entry
   );
 }
 
+/** The parts of what cards are dragged in, by class: the board's, or a stack's list, which is one column. */
+export interface DragParts {
+  /** A place cards are dropped in, named by its `data-column`. */
+  column: string;
+  card: string;
+  grip: string;
+  /** The scrolling list of a column's cards. */
+  cards: string;
+}
+
+const BOARD_PARTS: DragParts = { column: '.board__column', card: '.board__card', grip: '.board__grip', cards: '.board__cards' };
+
 /**
  * Dragging a card, with the pointer: from anywhere on it with a mouse (after it moves a little, so a click still
  * opens it), and from its grip with a finger, so a swipe elsewhere still scrolls. A copy of the card follows the
  * pointer while a gap shows where it would land, and near the board's edges it scrolls.
  */
-function useCardDrag(onDrop: (id: string, to: Target) => void) {
+export function useCardDrag(onDrop: (id: string, to: Target) => void, parts: DragParts = BOARD_PARTS) {
   const board = useRef<HTMLDivElement>(null);
   const [dragging, setDragging] = useState<Dragging | null>(null);
   const live = useRef<{ dragging: Dragging | null; onDrop: typeof onDrop }>({ dragging, onDrop });
@@ -370,7 +382,7 @@ function useCardDrag(onDrop: (id: string, to: Target) => void) {
 
   const start = (e: ReactPointerEvent<HTMLElement>, id: string) => {
     if (e.button !== 0 || !(e.target instanceof Element)) return;
-    const grip = e.target.closest('.board__grip');
+    const grip = e.target.closest(parts.grip);
     if (!grip && e.target.closest('a, button, input, select, textarea, label, [contenteditable="true"], .attachments')) return;
     if (e.pointerType !== 'mouse' && !grip) return;
     const card = e.currentTarget;
@@ -383,11 +395,11 @@ function useCardDrag(onDrop: (id: string, to: Target) => void) {
     if (grip) e.preventDefault();
 
     const targetAt = (x: number, y: number): Target | null => {
-      const column = document.elementFromPoint(x, y)?.closest<HTMLElement>('.board__column');
+      const column = document.elementFromPoint(x, y)?.closest<HTMLElement>(parts.column);
       if (!column || !board.current?.contains(column)) return null;
       const key = column.dataset.column ?? '';
       if (column.hasAttribute('data-folded')) return { key, index: Infinity };
-      const others = [...column.querySelectorAll<HTMLElement>('.board__card:not(.is-moving)')];
+      const others = [...column.querySelectorAll<HTMLElement>(`${parts.card}:not(.is-moving)`)];
       const index = others.filter((el) => {
         const r = el.getBoundingClientRect();
         return r.top + r.height / 2 < y;
@@ -404,7 +416,7 @@ function useCardDrag(onDrop: (id: string, to: Target) => void) {
       const r = el.getBoundingClientRect();
       if (point.x < r.left + edge) el.scrollLeft -= 12;
       else if (point.x > r.right - edge) el.scrollLeft += 12;
-      const list = document.elementFromPoint(point.x, point.y)?.closest<HTMLElement>('.board__column')?.querySelector<HTMLElement>('.board__cards');
+      const list = document.elementFromPoint(point.x, point.y)?.closest<HTMLElement>(parts.column)?.querySelector<HTMLElement>(parts.cards);
       if (list) {
         const l = list.getBoundingClientRect();
         if (point.y < l.top + edge) list.scrollTop -= 10;

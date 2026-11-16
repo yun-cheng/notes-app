@@ -1,11 +1,12 @@
 import { strToU8, zipSync } from 'fflate';
 import { linkTitle, resolveTags, type CardIndex } from './cardIndex';
-import { cardBack } from './content';
+import { cardBack, displayTitle } from './content';
+import { isStack, stackEntries, stacksOf } from './stacks';
 import { toMarkdown } from './markdown';
 import { modernCard } from './payload';
 import { isRepeat, repeatWord } from './repeat';
 import { isDateKey, isTimeKey } from './dates';
-import { CARD_TYPES, isCardColor, type Card, type JSONNode, type Vault } from './types';
+import { CARD_TYPES, isCardColor, type Card, type JSONNode, type NoteCard, type Vault } from './types';
 
 export interface MarkdownFile {
   path: string;
@@ -46,7 +47,10 @@ export function markdownFiles(index: CardIndex): MarkdownFile[] {
 
     const back = cardBack(card);
     // A card's back follows its front, under a heading of its own.
-    const body = toMarkdown(card.content, titleOf) + (back ? `\n\n## Back\n\n${toMarkdown(back, titleOf)}` : '');
+    // A stack lists its entries, in order, as links.
+    const entries = isStack(card) ? stackEntries(card, index.byId, stacksOf(index)) : [];
+    const stacked = entries.length ? `\n\n## In this stack\n\n${entries.map((e, i) => `${i + 1}. [[${titleOf(e.id, displayTitle(e))}]]`).join('\n')}` : '';
+    const body = toMarkdown(card.content, titleOf) + (back ? `\n\n## Back\n\n${toMarkdown(back, titleOf)}` : '') + stacked;
     const heading = `# ${card.title}\n\n`;
     return { path, text: `---\n${front.join('\n')}\n---\n\n${heading}${body}\n` };
   });
@@ -94,6 +98,7 @@ function isCard(value: unknown): value is Card {
     !optional(c.color, (color) => color === null || isCardColor(color)) ||
     !optional(c.archived, (a) => typeof a === 'boolean') ||
     !optional(c.position, (n) => typeof n === 'number' && Number.isFinite(n)) ||
+    !optional((c as Partial<NoteCard>).stack, (s) => c.type === 'note' && isStrings(s)) ||
     !optional(c.back, (b) => b === null || (typeof b === 'object' && (b as JSONNode).type === 'doc')) ||
     !CARD_TYPES.includes(c.type as Card['type'])
   ) {

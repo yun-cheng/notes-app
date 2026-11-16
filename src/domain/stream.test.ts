@@ -123,11 +123,17 @@ describe('filter in the address', () => {
 
   it('comes apart into chips, each removable on its own, keeping the order', () => {
     const parts = filterParts({ sort: 'due', type: 'todo', status: 'today', when: 'week', tagId: 'work', has: 'link' });
-    expect(parts.map((p) => p.part)).toEqual(['status', 'when', 'tagId', 'has']);
-    // A status takes its type with it.
+    expect(parts.map((p) => p.part)).toEqual(['type', 'status', 'when', 'tagId', 'has']);
+    // Taking the type off takes the status with it; taking the status off leaves todos.
     expect(parts[0].without).toEqual({ sort: 'due', type: undefined, status: undefined, when: 'week', tagId: 'work', has: 'link' });
-    expect(isFiltered(parts[2].without)).toBe(true);
-    expect(parts[2].without.tagId).toBeUndefined();
+    expect(parts[1].without).toEqual({ sort: 'due', type: 'todo', status: undefined, when: 'week', tagId: 'work', has: 'link' });
+    expect(isFiltered(parts[3].without)).toBe(true);
+    expect(parts[3].without.tagId).toBeUndefined();
+    // A status on its own, as from an older link, still means todos.
+    expect(filterParts({ status: 'today' })).toEqual([
+      { part: 'type', without: { status: undefined, type: undefined } },
+      { part: 'status', without: { status: undefined, type: 'todo' } },
+    ]);
     expect(filterParts({ type: 'note', vaultId: 'v' }).map((p) => p.part)).toEqual(['type', 'vaultId']);
     expect(filterParts({ sort: 'newest' })).toEqual([]);
   });

@@ -3,6 +3,7 @@ import { Link, useLocation, useNavigate, useSearchParams } from 'react-router';
 import { sortVaults } from '../domain/locks';
 import {
   CONTAINS_LABEL,
+  effectiveType,
   filterParts,
   parseFilter,
   SORT_LABEL,
@@ -39,8 +40,6 @@ export function useFilterPath(): (filter: StreamFilter) => string {
   return pathname === '/history' ? historyPath : journalPath;
 }
 
-const STATUS_TITLE: Record<TodoStatus, string> = { open: 'Open todos', done: 'Done todos', today: 'Due today', upcoming: 'Upcoming', undated: 'Todos with no date' };
-
 const STATUSES: TodoStatus[] = ['open', 'today', 'upcoming', 'undated', 'done'];
 
 /** One choice in a filter chip's menu: picking the one in use takes it off. */
@@ -70,8 +69,8 @@ export function FilterBar({ filter }: { filter: StreamFilter }) {
     return { key: String(value), label, checked, next: { ...filter, ...also, [key]: checked ? undefined : value } };
   };
 
-  // A type and a todo status rule each other out: a status means todos.
-  const type = filter.status ? undefined : filter.type;
+  // A todo status means todos, so Type says Todos with it, and taking Todos off (or picking Notes) takes the status off too.
+  const type = effectiveType(filter);
   const pickedDay = filter.when && !WHEN_LABEL[filter.when] ? filter.when : undefined;
   const tag = index.tags.find((t) => t.id === filter.tagId);
   const group = index.tagGroups.groupOf.get(filter.tagId ?? '');
@@ -83,13 +82,18 @@ export function FilterBar({ filter }: { filter: StreamFilter }) {
         name="Type"
         value={type && TYPE_LABEL[type]}
         clear={type ? path(without('type')) : undefined}
-        options={(Object.keys(TYPE_LABEL) as EntryType[]).map((t) => ({ ...option('type', t, TYPE_LABEL[t], { status: undefined }), checked: type === t }))}
+        options={(Object.keys(TYPE_LABEL) as EntryType[]).map((t) => ({
+          key: t,
+          label: TYPE_LABEL[t],
+          checked: type === t,
+          next: type === t ? { ...filter, type: undefined, status: undefined } : { ...filter, type: t, status: t === 'todo' ? filter.status : undefined },
+        }))}
       />
       <FilterMenu
         name="Todos"
-        value={filter.status && STATUS_TITLE[filter.status]}
+        value={filter.status && STATUS_LABEL[filter.status]}
         clear={filter.status ? path(without('status')) : undefined}
-        options={STATUSES.map((s) => option('status', s, STATUS_LABEL[s], { type: undefined }))}
+        options={STATUSES.map((s) => option('status', s, STATUS_LABEL[s], { type: 'todo' }))}
       />
       <FilterMenu
         name="Written"

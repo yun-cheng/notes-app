@@ -50,6 +50,14 @@ export interface VaultShare {
 export interface SharedResponse {
   cards: SharedCard[];
   vaults?: VaultShare[];
+  /** Cards this account can see that have comments not yet resolved, and how many. Missing from older servers. */
+  comments?: CommentCount[];
+}
+
+/** How many comments on a card are still open (not resolved). */
+export interface CommentCount {
+  card_id: string;
+  open: number;
 }
 
 /** A card shared with this account from outside its vaults, and the strongest role it has. */

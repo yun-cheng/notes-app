@@ -7,7 +7,7 @@ import { DexieStore } from '../storage/dexieStore';
 import { localStorageJournal } from '../storage/journal';
 import { CardRepository } from '../storage/repository';
 import { SyncEngine, type SyncStatus } from '../sync/engine';
-import type { SharedCard, VaultShare } from '../sync/protocol';
+import type { CommentCount, SharedCard, VaultShare } from '../sync/protocol';
 import { httpTransport, photoTransport } from '../sync/http';
 import { preparePhoto } from '../photos/prepare';
 import { PhotoService, type PhotoState } from '../photos/service';
@@ -71,6 +71,8 @@ interface CardsValue {
   shared: ReadonlyMap<string, SharedCard>;
   /** The vaults each card is shared into, by card ID, besides its own: it shows in those vaults too. */
   sharedInto: ReadonlyMap<string, readonly string[]>;
+  /** How many comments on each card are still open, by card ID, as of the last sync. Cards with none are missing. */
+  commentCounts: ReadonlyMap<string, number>;
   /** Vaults with a PIN that aren't open on this device. */
   locked: ReadonlySet<string>;
 }
@@ -88,10 +90,11 @@ export function CardsProvider({ accountId, children }: { accountId: string; chil
   const [error, setError] = useState<string | null>(null);
   const [shared, setShared] = useState<ReadonlyMap<string, SharedCard>>(new Map());
   const [sharedInto, setSharedInto] = useState<ReadonlyMap<string, readonly string[]>>(new Map());
+  const [commentCounts, setCommentCounts] = useState<ReadonlyMap<string, number>>(new Map());
   // The same object until something in it changes, since every entry on screen reads it.
   const value = useMemo<CardsValue | null>(
-    () => (index && vaults ? { index, repo, engine, vaults, locks, locked, photos, keyring, unsynced, accountId, shared, sharedInto } : null),
-    [index, repo, engine, vaults, locks, locked, photos, keyring, unsynced, accountId, shared, sharedInto],
+    () => (index && vaults ? { index, repo, engine, vaults, locks, locked, photos, keyring, unsynced, accountId, shared, sharedInto, commentCounts } : null),
+    [index, repo, engine, vaults, locks, locked, photos, keyring, unsynced, accountId, shared, sharedInto, commentCounts],
   );
 
   // A vault whose encryption was turned on but not finished (the tab closed, a sync failed) is finished when opened.
@@ -106,15 +109,16 @@ export function CardsProvider({ accountId, children }: { accountId: string; chil
     let live = true;
     let last = '';
     const read = () =>
-      void Promise.all([repo.getMeta('shared'), repo.getMeta('vaultShares')]).then(([list, into]) => {
+      void Promise.all([repo.getMeta('shared'), repo.getMeta('vaultShares'), repo.getMeta('commentCounts')]).then(([list, into, counts]) => {
         // Every sync ends here; lists the same as before must not redraw everything that reads them.
-        const json = JSON.stringify([list ?? [], into ?? []]);
+        const json = JSON.stringify([list ?? [], into ?? [], counts ?? []]);
         if (!live || json === last) return;
         last = json;
         setShared(new Map(((list as SharedCard[] | undefined) ?? []).map((s) => [s.card_id, s])));
         const byCard = new Map<string, string[]>();
         for (const s of (into as VaultShare[] | undefined) ?? []) byCard.set(s.card_id, [...(byCard.get(s.card_id) ?? []), s.vault_id]);
         setSharedInto(byCard);
+        setCommentCounts(new Map(((counts as CommentCount[] | undefined) ?? []).map((k) => [k.card_id, k.open])));
       });
     read();
     const stop = engine.subscribe(() => engine.getStatus().state !== 'syncing' && read());

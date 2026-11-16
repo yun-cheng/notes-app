@@ -1,5 +1,6 @@
 import type { Hono } from 'hono';
-import { allows, cardAccess } from './access';
+import type { CommentCount } from '../src/sync/protocol';
+import { allows, cardAccess, SHARED_WITH } from './access';
 import type { AppEnv, Database } from './db';
 
 export interface Comment {
@@ -21,6 +22,25 @@ async function listComments(db: Database, cardId: string): Promise<Comment[]> {
     )
     .bind(cardId)
     .all<Comment>();
+  return results;
+}
+
+/**
+ * How many open comments each card the user can see has, through its vault or a share, for the count on its card.
+ * Cards with none are left out.
+ */
+export async function openCommentCounts(db: Database, userId: string): Promise<CommentCount[]> {
+  const { results } = await db
+    .prepare(
+      `SELECT k.card_id, COUNT(*) AS open FROM comments k
+       WHERE k.resolved_at IS NULL AND (
+         k.card_id IN (SELECT c.id FROM cards c JOIN vault_members m ON m.vault_id = c.vault_id WHERE m.user_id = ? AND c.deleted = 0)
+         OR k.card_id IN (SELECT s.card_id FROM card_shares s WHERE ${SHARED_WITH})
+       )
+       GROUP BY k.card_id ORDER BY k.card_id`,
+    )
+    .bind(userId, userId, userId)
+    .all<CommentCount>();
   return results;
 }
 

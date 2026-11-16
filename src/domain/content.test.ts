@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'vitest';
-import { CODE_CLOSE, CODE_OPEN, displayTitle, hasPhoto, isBlank, isImageUrl, linkedCardIds, linkUrls, photoIds, plainText, previewLines, previewParts, siteName, splitLinks, textToDoc } from './content';
+import { checklistProgress, CODE_CLOSE, CODE_OPEN, displayTitle, hasPhoto, isBlank, isImageUrl, linkedCardIds, linkUrls, photoIds, plainText, previewLines, previewParts, siteName, splitLinks, textToDoc } from './content';
 import { doc, link, note, p, tag, text } from './testFixtures';
+import type { JSONNode } from './types';
 
 describe('content', () => {
   const body = doc(p(text('see '), link('a', 'A'), text(' and '), link('a', 'A'), link('b', 'B')));
@@ -116,5 +117,18 @@ describe('pictures by address', () => {
     expect(hasPhoto(linked('https://img.example/cat.webp'))).toBe(true);
     expect(hasPhoto(linked('https://developer.mozilla.org/en-US/docs/Web/HTML'))).toBe(false);
     expect(hasPhoto({ type: 'doc', content: [{ type: 'photo', attrs: { id: 'p' } }] })).toBe(true);
+  });
+});
+
+describe('checklistProgress', () => {
+  const item = (checked: boolean, ...content: JSONNode[]): JSONNode => ({ type: 'taskItem', attrs: { checked }, content: [p(text('x')), ...content] });
+  const list = (...items: JSONNode[]): JSONNode => ({ type: 'taskList', content: items });
+
+  it('counts ticked items of all checklists, nested ones too', () => {
+    expect(checklistProgress(doc(list(item(true), item(false, list(item(true)))), p(text('and')), list(item(false))))).toEqual({ done: 2, total: 4 });
+  });
+
+  it('is null without a checklist', () => {
+    expect(checklistProgress(doc(p(text('plain'))))).toBeNull();
   });
 });

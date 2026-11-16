@@ -81,6 +81,7 @@ export class SyncEngine {
       const [vaults, shared] = await Promise.all([this.transport.vaults(), this.transport.shared()]);
       // Newly shared cards can be older than the cursor, so pull everything again when access grows.
       if (await this.repo.applyAccess(vaults, shared.cards, shared.vaults ?? [])) await this.repo.setCursor(0);
+      await this.repo.putCommentCounts(shared.comments ?? []);
       await this.pull();
       if (failed) state = 'error';
       else this.publish({ lastSyncedAt: this.now() });

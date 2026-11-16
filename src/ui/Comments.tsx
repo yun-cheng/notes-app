@@ -12,7 +12,7 @@ function when(at: number) {
 
 /** Comments live on the server only, so they need a connection. A card never synced has none yet. */
 export function Comments({ card }: { card: Card }) {
-  const { vaults, accountId } = useCards();
+  const { vaults, accountId, engine } = useCards();
   const may = usePermissions();
   const toast = useToast();
   const can = may(card);
@@ -30,6 +30,8 @@ export function Comments({ card }: { card: Card }) {
   const run = async (work: () => Promise<CardComment[]>) => {
     try {
       setComments(await work());
+      // The count on the entry's card comes with the next sync: ask for it now.
+      void engine.sync();
       return true;
     } catch (err) {
       toast(err instanceof SyncOffline ? 'Comments need a connection.' : "That comment couldn't be saved.");

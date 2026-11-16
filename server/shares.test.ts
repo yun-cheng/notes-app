@@ -12,7 +12,7 @@ describe('sharing one card', () => {
     const [first] = await push(ann.cookie, [rec(ann.vault, 'a1', { payload: note('Recipe') }), rec(ann.vault, 'a2', { payload: note('Private') })]);
     await send(ann.cookie, 'POST', '/api/cards/a1/shares', { email: 'ben@example.com', role: 'view' });
     expect(await ids(ben.cookie)).toEqual(['a1']);
-    expect(await json(send(ben.cookie, 'GET', '/api/shared'))).toEqual({ cards: [{ card_id: 'a1', role: 'view', shared_by: 'ann' }], vaults: [] });
+    expect(await json(send(ben.cookie, 'GET', '/api/shared'))).toEqual({ cards: [{ card_id: 'a1', role: 'view', shared_by: 'ann' }], vaults: [], comments: [] });
     const edit = rec(ann.vault, 'a1', { seq: seqOf(first), updated_at: 200, payload: note('Recipe v2') });
     expect((await push(ben.cookie, [edit]))[0].status).toBe('forbidden');
 
@@ -23,7 +23,7 @@ describe('sharing one card', () => {
     expect((await push(ben.cookie, [rec(ben.vault, 'a1', { updated_at: 400 })]))[0].status).toBe('forbidden');
 
     await send(ann.cookie, 'DELETE', `/api/cards/a1/shares/user/${ben.user.id}`);
-    expect(await json(send(ben.cookie, 'GET', '/api/shared'))).toEqual({ cards: [], vaults: [] });
+    expect(await json(send(ben.cookie, 'GET', '/api/shared'))).toEqual({ cards: [], vaults: [], comments: [] });
     expect(await ids(ben.cookie)).toEqual([]);
   });
   it('shares with everyone in another vault', async () => {

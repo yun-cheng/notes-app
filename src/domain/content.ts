@@ -218,6 +218,18 @@ export function isImageUrl(url: string): boolean {
   }
 }
 
+/** How many items of the body's checklists are ticked, of how many, nested ones too; null when it has none. */
+export function checklistProgress(content: JSONNode): { done: number; total: number } | null {
+  let done = 0;
+  let total = 0;
+  walk(content, (n) => {
+    if (n.type !== 'taskItem') return;
+    total++;
+    if (n.attrs?.checked === true) done++;
+  });
+  return total ? { done, total } : null;
+}
+
 /** Whether the body holds a photo: one of its own, or a link straight to a picture. A page's preview image isn't one. */
 export function hasPhoto(content: JSONNode): boolean {
   return photoIds(content).length > 0 || linkUrls(content).some(isImageUrl);

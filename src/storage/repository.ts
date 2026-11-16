@@ -6,7 +6,7 @@ import { isEncryptedPayload } from '../crypto/vaultKeys';
 import { rehomeCards } from '../domain/rehome';
 import { changeType, retypePatch, type EntryType } from '../domain/retype';
 import { noJournal, type CardPatch, type Journal, type JournalOp } from './journal';
-import type { SharedCard, VaultShare } from '../sync/protocol';
+import type { CommentCount, SharedCard, VaultShare } from '../sync/protocol';
 import type { CardStore, PayloadCodec } from './types';
 
 /** Marks a stand-in for a card that couldn't be decrypted. It must never be written back. */
@@ -481,6 +481,11 @@ export class CardRepository {
 
   setMeta(key: string, value: unknown): Promise<void> {
     return this.store.setMeta(key, value);
+  }
+
+  /** Open comments on each card, from the last sync, written only when they change so nothing redraws for nothing. */
+  async putCommentCounts(counts: CommentCount[]): Promise<void> {
+    if (JSON.stringify((await this.store.getMeta('commentCounts')) ?? []) !== JSON.stringify(counts)) await this.store.setMeta('commentCounts', counts);
   }
 
   /** Everything outside `locked`, so a backup can't be used to read a vault that is still locked. */

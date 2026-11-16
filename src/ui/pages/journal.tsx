@@ -1,8 +1,8 @@
-import { useEffect, useLayoutEffect, useRef, useState, type ReactNode } from 'react';
+import { useEffect, useLayoutEffect, useMemo, useRef, useState, type ReactNode } from 'react';
 import { Link, Outlet, useLocation, useNavigate, useParams } from 'react-router';
 import { diaryVault } from '../../domain/access';
 import { linkTitle } from '../../domain/cardIndex';
-import { CODE_CLOSE, CODE_OPEN, displayTitle, previewParts, splitLinks, type PreviewPart } from '../../domain/content';
+import { checklistProgress, CODE_CLOSE, CODE_OPEN, displayTitle, previewParts, splitLinks, type PreviewPart } from '../../domain/content';
 import { isDateKey, relativeDay, relativeDayInSentence, toDateKey } from '../../domain/dates';
 import { boardColumns } from '../../domain/board';
 import { isFiltered, sortGroup, streamItems, type StreamFilter, type StreamItem, type StreamSort } from '../../domain/stream';
@@ -361,6 +361,7 @@ function BubbleMeta({ card, at, fold }: { card: NoteCard | TodoCard; at: number;
       <VaultLabel card={card} />
       {card.viewOnly && <ViewOnlyMark card={card} />}
       <span className="bubble__end">
+        <CardBadges card={card} />
         {(fold.long || fold.folded) && (
           <button type="button" className="bubble__fold" aria-expanded={!fold.folded} onClick={fold.toggle}>
             <Icon name={fold.folded ? 'down' : 'up'} size={14} />
@@ -373,6 +374,34 @@ function BubbleMeta({ card, at, fold }: { card: NoteCard | TodoCard; at: number;
         <time dateTime={new Date(at).toISOString()}>{time(at)}</time>
       </span>
     </span>
+  );
+}
+
+/**
+ * What an entry holds, at a glance, as on a Trello card: how much of its checklists is ticked (marked when all of
+ * it is), and how many of its comments are still open.
+ */
+function CardBadges({ card }: { card: NoteCard | TodoCard }) {
+  const { commentCounts } = useCards();
+  const checks = useMemo(() => checklistProgress(card.content), [card.content]);
+  const comments = commentCounts.get(card.id) ?? 0;
+  if (!checks && !comments) return null;
+  const all = !!checks && checks.done === checks.total;
+  return (
+    <>
+      {checks && (
+        <span className={`bubble__badge${all ? ' is-complete' : ''}`} title={`${checks.done} of ${checks.total} checklist items done`}>
+          <Icon name="checklist" size={13} />
+          {checks.done}/{checks.total}
+        </span>
+      )}
+      {comments > 0 && (
+        <span className="bubble__badge" title={comments === 1 ? '1 open comment' : `${comments} open comments`}>
+          <Icon name="comment" size={13} />
+          {comments}
+        </span>
+      )}
+    </>
   );
 }
 

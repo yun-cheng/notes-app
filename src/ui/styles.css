@@ -999,3 +999,6 @@ body.is-dragging-card, body.is-dragging-card * { cursor: grabbing !important; us
 .board-setup__tags { color: var(--muted); font-size: 13px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .board-setup__note { font-size: 13px; }
 @media (max-width: 419px) { .view-switch { display: none; } }
+/* What an entry holds, at a glance: checklist progress and open comments. */
+.bubble__badge { display: inline-flex; align-items: center; gap: 3px; color: var(--muted); font-variant-numeric: tabular-nums; }
+.bubble__badge.is-complete { padding: 0 5px; border-radius: 6px; background: color-mix(in srgb, #5a9e5f 22%, transparent); color: var(--text); }

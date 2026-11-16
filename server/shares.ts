@@ -1,4 +1,5 @@
 import type { Context, Hono } from 'hono';
+import { openCommentCounts } from './comments';
 import { photoIds, walk } from '../src/domain/content';
 import { DAY, isTimeKey } from '../src/domain/dates';
 import { parsePayload } from '../src/domain/payload';
@@ -130,8 +131,9 @@ export function publicRoutes(app: Hono<AppEnv>, googleFetch: GoogleFetch, now: (
 /** Sharing one card with people, with everyone in a vault, or with anyone who has a link. */
 export function shareRoutes(app: Hono<AppEnv>, now: () => number) {
   app.get('/shared', async (c) => {
-    const [cards, vaults] = await Promise.all([sharedWith(c.env.DB, c.get('user').id), sharedIntoVaults(c.env.DB, c.get('user').id)]);
-    return c.json({ cards, vaults } satisfies SharedResponse);
+    const me = c.get('user').id;
+    const [cards, vaults, comments] = await Promise.all([sharedWith(c.env.DB, me), sharedIntoVaults(c.env.DB, me), openCommentCounts(c.env.DB, me)]);
+    return c.json({ cards, vaults, comments } satisfies SharedResponse);
   });
 
   app.get('/cards/:id/shares', async (c) => {

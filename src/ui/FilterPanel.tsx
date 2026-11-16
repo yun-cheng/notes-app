@@ -4,7 +4,6 @@ import { sortVaults } from '../domain/locks';
 import {
   CONTAINS_LABEL,
   filterParts,
-  isFiltered,
   parseFilter,
   SORT_LABEL,
   sortLabel,
@@ -25,6 +24,7 @@ import { DatesDialog } from './DatesDialog';
 import { colorClass } from './EntryStyle';
 import { Icon, type IconName } from './Icon';
 import { historyPath, journalPath } from './paths';
+import { usePopover } from './usePopover';
 
 /** The filter in the address, on the pages it narrows: the journal, and the history of changes. Empty on any other page. */
 export function useJournalFilter(): StreamFilter {
@@ -41,45 +41,172 @@ export function useFilterPath(): (filter: StreamFilter) => string {
 
 const STATUS_TITLE: Record<TodoStatus, string> = { open: 'Open todos', done: 'Done todos', today: 'Due today', upcoming: 'Upcoming', undated: 'Todos with no date' };
 
+const STATUSES: TodoStatus[] = ['open', 'today', 'upcoming', 'undated', 'done'];
+
+/** One choice in a filter chip's menu: picking the one in use takes it off. */
+interface FilterOption {
+  key: string;
+  label: string;
+  next: StreamFilter;
+  checked: boolean;
+}
+
 /**
- * What the journal or the history is narrowed to, as chips under the title, like "Due today ×" "#Work ×": each ×
- * takes that one off, and Clear all, when there are several, takes them all off. The order stays as it is.
+ * The filters, in the title bar's second row on the journal and the history: Type, Todos, Written and Contains,
+ * each a chip that opens its choices. A chip in use names its choice, like "Due today", with an × that takes it
+ * off. A tag or vault picked in the sidebar shows here too, with its ×, and Clear all takes every filter off when
+ * there are several. The order is kept throughout.
  */
-export function FilterChips({ filter }: { filter: StreamFilter }) {
+export function FilterBar({ filter }: { filter: StreamFilter }) {
   const { index, vaults } = useCards();
   const today = useToday();
   const path = useFilterPath();
-  const tag = index.tags.find((t) => t.id === filter.tagId);
-  const tagTitle = () => {
-    const group = index.tagGroups.groupOf.get(filter.tagId ?? '');
-    return group ? `${group.title}: ${tag?.title ?? 'tag'}` : `#${tag?.title ?? 'tag'}`;
-  };
-  const label = (part: FilterPart): string => {
-    if (part === 'status') return STATUS_TITLE[filter.status!];
-    if (part === 'type') return TYPE_LABEL[filter.type!];
-    if (part === 'when') return whenLabel(filter.when!, today);
-    if (part === 'tagId') return tagTitle();
-    if (part === 'vaultId') return vaults.find((v) => v.id === filter.vaultId)?.name ?? 'Vault';
-    return CONTAINS_LABEL[filter.has!];
-  };
+  const navigate = useNavigate();
+  const [picking, setPicking] = useState(false);
   const parts = filterParts(filter);
-  if (!parts.length) return null;
+  const without = (part: FilterPart) => parts.find((p) => p.part === part)!.without;
+  const option = <K extends keyof StreamFilter>(key: K, value: NonNullable<StreamFilter[K]>, label: string, also: StreamFilter = {}): FilterOption => {
+    const checked = filter[key] === value;
+    return { key: String(value), label, checked, next: { ...filter, ...also, [key]: checked ? undefined : value } };
+  };
+
+  // A type and a todo status rule each other out: a status means todos.
+  const type = filter.status ? undefined : filter.type;
+  const pickedDay = filter.when && !WHEN_LABEL[filter.when] ? filter.when : undefined;
+  const tag = index.tags.find((t) => t.id === filter.tagId);
+  const group = index.tagGroups.groupOf.get(filter.tagId ?? '');
+  const tagTitle = group ? `${group.title}: ${tag?.title ?? 'tag'}` : `#${tag?.title ?? 'tag'}`;
+
   return (
-    <div className="filter-chips" role="group" aria-label="Filters">
-      {parts.map(({ part, without }) => (
-        <span key={part} className={`chip${part === 'tagId' && tag ? colorClass(tag) : ''}`}>
-          {label(part)}
-          <Link to={path(without)} aria-label={`Remove filter: ${label(part)}`} title="Remove this filter">
+    <div className="filter-bar" role="group" aria-label="Filters">
+      <FilterMenu
+        name="Type"
+        value={type && TYPE_LABEL[type]}
+        clear={type ? path(without('type')) : undefined}
+        options={(Object.keys(TYPE_LABEL) as EntryType[]).map((t) => ({ ...option('type', t, TYPE_LABEL[t], { status: undefined }), checked: type === t }))}
+      />
+      <FilterMenu
+        name="Todos"
+        value={filter.status && STATUS_TITLE[filter.status]}
+        clear={filter.status ? path(without('status')) : undefined}
+        options={STATUSES.map((s) => option('status', s, STATUS_LABEL[s], { type: undefined }))}
+      />
+      <FilterMenu
+        name="Written"
+        value={filter.when && whenLabel(filter.when, today)}
+        clear={filter.when ? path(without('when')) : undefined}
+        options={[
+          ...['today', 'week', 'month'].map((w) => option('when', w, WHEN_LABEL[w])),
+          ...(pickedDay ? [option('when', pickedDay, whenLabel(pickedDay, today))] : []),
+        ]}
+        more={{ label: 'Pick dates…', run: () => setPicking(true) }}
+      />
+      <FilterMenu
+        name="Contains"
+        value={filter.has && CONTAINS_LABEL[filter.has]}
+        clear={filter.has ? path(without('has')) : undefined}
+        options={(Object.keys(CONTAINS_LABEL) as Contains[]).map((h) => option('has', h, h === 'link' ? 'Links' : 'Photos'))}
+      />
+      {filter.tagId && (
+        <span className={`chip filter-chip is-set${tag ? colorClass(tag) : ''}`}>
+          <span className="filter-chip__value">{tagTitle}</span>
+          <Link className="filter-chip__clear" to={path(without('tagId'))} aria-label={`Remove filter: ${tagTitle}`} title="Remove this filter">
             ×
           </Link>
         </span>
-      ))}
+      )}
+      {filter.vaultId && (
+        <span className="chip filter-chip is-set">
+          <span className="filter-chip__value">{vaults.find((v) => v.id === filter.vaultId)?.name ?? 'Vault'}</span>
+          <Link className="filter-chip__clear" to={path(without('vaultId'))} aria-label="Remove the vault filter" title="Remove this filter">
+            ×
+          </Link>
+        </span>
+      )}
       {parts.length > 1 && (
-        <Link className="chip chip--unset" to={path({ sort: filter.sort })}>
+        <Link className="chip filter-chip filter-chip--clear-all" to={path({ sort: filter.sort })}>
           Clear all
         </Link>
       )}
+      {picking && (
+        <DatesDialog
+          when={filter.when}
+          onClose={() => setPicking(false)}
+          onPick={(when) => {
+            setPicking(false);
+            void navigate(path({ ...filter, when }));
+          }}
+        />
+      )}
     </div>
+  );
+}
+
+/**
+ * A filter chip: its name (or the choice in use) over a menu of its choices, and, in use, an × that takes it off.
+ * The menu sits fixed, so the row's sideways scroll doesn't clip it.
+ */
+function FilterMenu({
+  name,
+  value,
+  clear,
+  options,
+  more,
+}: {
+  name: string;
+  value: string | undefined;
+  clear: string | undefined;
+  options: FilterOption[];
+  more?: { label: string; run: () => void };
+}) {
+  const { open, root, toggle, close, fixedStyle } = usePopover<HTMLSpanElement>();
+  const navigate = useNavigate();
+  const path = useFilterPath();
+  return (
+    <span ref={root} className={`chip filter-chip${value ? ' is-set' : ''}`}>
+      <button type="button" className="filter-chip__open" aria-haspopup="menu" aria-expanded={!!open} onClick={toggle} title={value ? `${name}: ${value}` : `Filter by ${name.toLowerCase()}`}>
+        <span className="filter-chip__value">{value ?? name}</span>
+        <Icon name="down" size={12} />
+      </button>
+      {clear && (
+        <Link className="filter-chip__clear" to={clear} aria-label={`Remove filter: ${value}`} title="Remove this filter">
+          ×
+        </Link>
+      )}
+      {open && (
+        <span className="style-menu filter-chip__menu" style={fixedStyle(200)} role="menu" aria-label={name}>
+          <span className="style-menu__group">
+            {options.map((o) => (
+              <button
+                key={o.key}
+                type="button"
+                role="menuitemradio"
+                aria-checked={o.checked}
+                onClick={() => {
+                  close();
+                  void navigate(path(o.next));
+                }}
+              >
+                {o.label}
+              </button>
+            ))}
+            {more && (
+              <button
+                type="button"
+                role="menuitem"
+                onClick={() => {
+                  close();
+                  more.run();
+                }}
+              >
+                <Icon name="calendar" size={14} />
+                {more.label}
+              </button>
+            )}
+          </span>
+        </span>
+      )}
+    </span>
   );
 }
 
@@ -114,24 +241,20 @@ export function SortMenu({ filter }: { filter: StreamFilter }) {
   );
 }
 
-const TYPE_ICON: Record<EntryType, IconName> = { note: 'note', todo: 'todo' };
-const STATUSES: TodoStatus[] = ['open', 'today', 'upcoming', 'undated', 'done'];
-
 /**
- * Every way to narrow the journal, in the sidebar on a computer and in a sheet on a phone. Its order is `SortMenu`, in the top bar.
- * Each choice toggles: picking the chosen one again turns it off. Choices in different groups combine.
- * On the history page the same choices narrow the history, and Journal and History switch between the two.
+ * The places to narrow the journal to, in the sidebar on a computer and in a sheet on a phone: its tags, by group,
+ * and its vaults. The other filters (type, todos, when written, what an entry holds) are `FilterBar`, in the title
+ * bar, and the order is `SortMenu`. Each choice toggles: picking the chosen one again turns it off, and choices
+ * combine with each other and with the title bar's. On the history page the same choices narrow the history, and
+ * Journal and History switch between the two.
  */
 export function FilterPanel({ onPick }: { onPick?: () => void }) {
   const { index, vaults, locked } = useCards();
-  const today = useToday();
   const filter = useJournalFilter();
   const { pathname } = useLocation();
   const onJournal = pathname === '/journal';
   const onHistory = pathname === '/history';
   const path = useFilterPath();
-  const navigate = useNavigate();
-  const [picking, setPicking] = useState(false);
 
   const link = (key: string, label: ReactNode, to: string, active: boolean, icon?: IconName, count?: number, tint = '') => (
     <Link key={key} to={to} className={`nav-item${active ? ' active' : ''}`} aria-current={active ? 'page' : undefined} onClick={onPick}>
@@ -160,51 +283,14 @@ export function FilterPanel({ onPick }: { onPick?: () => void }) {
   const pinned = index.pinnedTags.filter((t) => !groupOf.has(t.id));
   const tags = pinned.some((t) => t.id === filter.tagId) || groupOf.has(filter.tagId ?? '') ? pinned : [...pinned, ...index.tags.filter((t) => t.id === filter.tagId)];
   const tagCount = (id: string) => (index.backlinks.get(id) ?? []).filter((l) => l.kind === 'tag').length;
-  // A day or range picked in the dialog shows as its own choice, which turns it off when pressed.
-  const pickedDay = filter.when && !WHEN_LABEL[filter.when] ? filter.when : undefined;
 
   return (
     <div className="filters">
       <nav aria-label="Journal">
-        {link('all', 'Journal', journalPath(onHistory ? filter : { sort: filter.sort }), onJournal && !isFiltered(filter), 'notes')}
+        {/* Journal is the one in use unless a tag or vault here is: the title bar shows the other filters. */}
+        {link('all', 'Journal', journalPath(onHistory ? filter : { sort: filter.sort }), onJournal && !filter.tagId && !filter.vaultId, 'notes')}
         {link('history', 'History', historyPath(onJournal ? filter : { sort: filter.sort }), onHistory, 'history')}
       </nav>
-
-      <FilterSection id="type" title="Type">
-        {(Object.keys(TYPE_LABEL) as EntryType[]).map((t) =>
-          item(t, TYPE_LABEL[t], { ...toggle('type', t), status: t === 'todo' ? filter.status : undefined }, filter.type === t && !filter.status, TYPE_ICON[t]),
-        )}
-      </FilterSection>
-
-      <FilterSection id="todos" title="Todos">
-        {STATUSES.map((s) =>
-          item(s, STATUS_LABEL[s], { ...toggle('status', s), type: undefined }, filter.status === s, s === 'today' ? 'today' : s === 'upcoming' ? 'upcoming' : undefined),
-        )}
-      </FilterSection>
-
-      <FilterSection id="contains" title="Contains">
-        {(Object.keys(CONTAINS_LABEL) as Contains[]).map((h) => item(h, h === 'link' ? 'Links' : 'Photos', toggle('has', h), filter.has === h, h === 'link' ? 'link' : 'image'))}
-      </FilterSection>
-
-      <FilterSection id="written" title="Written">
-        {['today', 'week', 'month'].map((w) => item(w, WHEN_LABEL[w], toggle('when', w), filter.when === w))}
-        {pickedDay && item('day', whenLabel(pickedDay, today), toggle('when', pickedDay), true)}
-        <button type="button" className="nav-item" onClick={() => setPicking(true)}>
-          <Icon name="calendar" />
-          <span>Pick dates</span>
-        </button>
-        {picking && (
-          <DatesDialog
-            when={filter.when}
-            onClose={() => setPicking(false)}
-            onPick={(when) => {
-              setPicking(false);
-              navigate(path({ ...filter, when }));
-              onPick?.();
-            }}
-          />
-        )}
-      </FilterSection>
 
       {index.tagGroups.groups
         .filter((g) => g.members.length)
@@ -282,11 +368,11 @@ function FilterSection({ id, title, children }: { id: string; title: string; chi
   );
 }
 
-/** The filters in a sheet, for a phone, where there's no sidebar. Picking one closes it. */
+/** The sidebar's tags and vaults in a sheet, for a phone, where there's no sidebar. Picking one closes it. */
 export function FilterSheet({ onClose }: { onClose: () => void }) {
   return (
     <div className="dialog-backdrop" onClick={(e) => e.target === e.currentTarget && onClose()}>
-      <div className="dialog filter-sheet" role="dialog" aria-label="Filter">
+      <div className="dialog filter-sheet" role="dialog" aria-label="Tags and vaults">
         <FilterPanel onPick={onClose} />
         <div className="note-sheet__bar">
           <span className="note-sheet__spacer" />

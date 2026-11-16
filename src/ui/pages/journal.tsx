@@ -12,7 +12,7 @@ import { ScrollJump } from '../ScrollJump';
 import { Comments } from '../Comments';
 import { Backlinks, Empty, Page, TagChips, TagPicker, TitleField, useDeleteCard, useVaultMove, VaultField } from '../components';
 import { Editor } from '../editor/Editor';
-import { FilterChips, FilterSheet, SortMenu, useJournalFilter } from '../FilterPanel';
+import { FilterBar, FilterSheet, SortMenu, useJournalFilter } from '../FilterPanel';
 import { Icon } from '../Icon';
 import { MOD } from '../Shortcuts';
 import { LockPanel } from '../LockPanel';
@@ -95,9 +95,9 @@ export function JournalPage() {
       )}
       <button
         type="button"
-        className={`icon-btn only-mobile${filtered ? ' is-active' : ''}`}
-        aria-label="Filter"
-        title="Filter"
+        className={`icon-btn only-mobile${filter.tagId || filter.vaultId ? ' is-active' : ''}`}
+        aria-label="Tags and vaults"
+        title="Tags and vaults"
         onClick={() => setFiltering(true)}
       >
         <Icon name="filter" />
@@ -115,7 +115,7 @@ export function JournalPage() {
           </>
         }
         actions={selecting ? pickingActions : actions}
-        below={filtered && <FilterChips filter={filter} />}
+        below={<FilterBar filter={filter} />}
       >
         {vault && vaultLocked ? (
           <div className="stream">

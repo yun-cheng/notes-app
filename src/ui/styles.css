@@ -83,15 +83,26 @@ h1, h2, p { margin: 0; }
 }
 .page__head h1 { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font: 600 28px/1.2 var(--serif); letter-spacing: -0.01em; }
 .page__actions { display: flex; align-items: center; gap: 6px; flex: none; }
-/* A second row of the title bar: the filter chips, in one line that scrolls sideways, out to the screen's edges. */
+/* A second row of the title bar: the filters, in one line that scrolls sideways, out to the screen's edges. */
 .page__head--below { flex-wrap: wrap; row-gap: 8px; }
 .page__below { flex: 0 0 100%; min-width: 0; margin: 0 -16px; }
-.filter-chips { display: flex; align-items: center; gap: 6px; overflow-x: auto; padding: 0 16px; scrollbar-width: none; }
-.filter-chips::-webkit-scrollbar { display: none; }
-.filter-chips .chip { flex: none; padding-right: 4px; font-weight: 500; }
-.filter-chips .chip--unset { padding-right: 10px; font-weight: 400; }
-.filter-chips .chip a:not(.chip--unset) { display: inline-flex; align-items: center; justify-content: center; width: 20px; height: 20px; border-radius: 50%; color: var(--muted); font-size: 16px; line-height: 1; text-decoration: none; }
-.filter-chips .chip a:hover { background: color-mix(in srgb, var(--text) 10%, transparent); color: var(--text); }
+.filter-bar { display: flex; align-items: center; gap: 6px; overflow-x: auto; padding: 0 16px; scrollbar-width: none; }
+.filter-bar::-webkit-scrollbar { display: none; }
+/* A filter not in use is quiet; one in use is tinted and names its choice. */
+.filter-chip { flex: none; gap: 0; padding: 0; color: var(--muted); }
+.filter-chip.is-set { background: var(--accent-soft); color: var(--text); font-weight: 500; }
+.filter-chip.is-set.tint { background: color-mix(in srgb, var(--tint) 24%, var(--surface)); }
+.filter-chip__open { display: inline-flex; align-items: center; gap: 4px; min-height: 28px; padding: 0 8px 0 10px; border: 0; border-radius: 999px; background: none; color: inherit; font: inherit; cursor: pointer; }
+.filter-chip:not(.is-set):hover { color: var(--text); }
+.filter-chip__open svg { opacity: 0.7; }
+.filter-chip > .filter-chip__value { padding: 0 2px 0 10px; }
+.chip .filter-chip__clear { display: inline-flex; align-items: center; justify-content: center; width: 20px; height: 20px; margin: 0 4px 0 -4px; border-radius: 50%; color: var(--muted); font-size: 16px; line-height: 1; text-decoration: none; }
+.chip > .filter-chip__value + .filter-chip__clear { margin-left: 2px; }
+.chip .filter-chip__clear:hover { background: color-mix(in srgb, var(--text) 10%, transparent); color: var(--text); }
+.filter-chip--clear-all { padding: 0 10px; border: 1px dashed var(--line); background: none; text-decoration: none; }
+.filter-chip--clear-all:hover { color: var(--text); }
+.style-menu.filter-chip__menu { width: 200px; font-weight: 400; }
+.filter-chip__menu svg { position: absolute; left: 8px; color: var(--muted); }
 .avatar { object-fit: cover; display: inline-flex; align-items: center; justify-content: center; flex: none; width: 28px; height: 28px; border-radius: 50%; background: var(--accent-soft); color: var(--accent); font: 600 13px/1 var(--sans); }
 .avatar.is-demo { background: var(--alert); color: var(--on-accent); }
 /* The demo account is marked wherever it shows, so it isn't taken for your own. */

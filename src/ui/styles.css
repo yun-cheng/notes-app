@@ -309,6 +309,18 @@ body:has(.composer:focus-within) .tabbar { display: none; }
 .prose pre, .composer__prose pre { background: var(--sunken); padding: 10px 12px; border-radius: 8px; overflow-x: auto; overflow-wrap: normal; font: 13px/1.45 var(--mono); tab-size: 2; }
 .composer__prose pre { margin: 4px 0; }
 .prose pre code, .composer__prose pre code { background: none; padding: 0; font: inherit; }
+/* A code block's language picker sits on its top edge, with room left for it in the block. */
+.code-block { position: relative; }
+.code-block pre { padding-top: 26px; }
+.code-block__picker { position: absolute; top: 4px; left: 6px; display: inline-flex; align-items: center; }
+.code-block__picker::after { content: "▾"; margin-left: -14px; font-size: 9px; color: var(--muted); pointer-events: none; }
+.code-block__lang { appearance: none; field-sizing: content; margin: 0; padding: 2px 16px 2px 6px; border: 0; border-radius: 5px; background: transparent; color: var(--muted); font: 11px/1.4 var(--sans); cursor: pointer; }
+.code-block__lang:hover, .code-block__lang:focus-visible { background: var(--line); color: var(--text); }
+.code-block__lang option { color: var(--text); background: var(--surface); }
+.ProseMirror[contenteditable="false"] .code-block__lang { padding-right: 6px; pointer-events: none; }
+.ProseMirror[contenteditable="false"] .code-block__picker::after { content: none; }
+.ProseMirror[contenteditable="false"] .code-block[data-auto] .code-block__picker { display: none; }
+.ProseMirror[contenteditable="false"] .code-block[data-auto] pre { padding-top: 10px; }
 .prose a { color: var(--accent); text-decoration: underline; }
 .prose hr { border: 0; border-top: 1px solid var(--line); margin: 1.2em 0; }
 .prose p.is-editor-empty:first-child::before { content: attr(data-placeholder); float: left; height: 0; color: var(--muted); opacity: 0.75; pointer-events: none; }
@@ -573,6 +585,10 @@ a.change__title:hover { color: var(--accent); }
 .bubble__snippet-copy:hover { color: var(--text); }
 .bubble__snippet:hover .bubble__snippet-copy, .bubble__snippet-copy:focus-visible { opacity: 1; }
 @media (pointer: coarse) { .bubble__snippet-copy { opacity: 1; } }
+/* The snippet's language, faint in the corner, giving way to the copy button on hover. */
+.bubble__snippet-lang { position: absolute; top: 6px; right: 8px; padding: 1px 5px; border-radius: 4px; background: var(--sunken); color: var(--muted); font: 11px/1.4 var(--sans); pointer-events: none; transition: opacity 0.12s; }
+.bubble__snippet:hover .bubble__snippet-lang, .bubble__snippet:focus-within .bubble__snippet-lang { opacity: 0; }
+@media (pointer: coarse) { .bubble__snippet-lang { right: 32px; } .bubble__snippet:hover .bubble__snippet-lang { opacity: 1; } }
 .bubble__link { color: var(--accent); text-decoration: underline; text-decoration-color: color-mix(in srgb, var(--accent) 45%, transparent); text-underline-offset: 2px; overflow-wrap: anywhere; }
 .bubble__link:hover { text-decoration-color: currentColor; }
 /* Syntax colors, from highlight.js's token classes, in the bubbles and the editors. */

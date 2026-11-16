@@ -29,6 +29,7 @@ import { AddTag, BubbleTools, TypeSwitch, useEntryViewOnly, ViewOnlyButton } fro
 import { useEntryMenu } from '../EntryMenu';
 import { DueLabel, DueMenu, useTickTodo } from '../TodoDue';
 import { SyncMark } from '../SyncStatus';
+import { languageLabel } from '../codeLanguages';
 import { HighlightedCode } from '../highlight';
 import { useToast } from '../Toast';
 import { useUndo } from '../useUndo';
@@ -564,11 +565,13 @@ function useFold(id: string, parts: PreviewPart[]) {
 function CodeSnippet({ code, language }: { code: string; language: string | null }) {
   const toast = useToast();
   const copy = async () => toast((await writeClipboard(code)) ? 'Copied the code' : "Couldn't copy here. Select the code instead.");
+  const label = languageLabel(language);
   return (
     <div className="bubble__snippet">
       <pre>
         <HighlightedCode code={code} language={language} />
       </pre>
+      {label && <span className="bubble__snippet-lang">{label}</span>}
       <button type="button" className="bubble__snippet-copy" aria-label="Copy code" title="Copy code" onClick={() => void copy()}>
         <Icon name="copy" size={13} />
       </button>

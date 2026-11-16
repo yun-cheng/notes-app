@@ -42,6 +42,7 @@ import { Board, BoardSetup, lastBoard, useBoardKind, useCardDrag, type DragParts
 import { foldStacks, isStack, moveInStack, stackEntries, stacksOf } from '../../domain/stacks';
 import { openStacks } from '../useStacking';
 import { useStartFromTemplate } from '../useTemplates';
+import { clearTranslation, googleTranslateUrl, languageName, openOutside, translateEntry, translatesOnDevice, useTranslation } from '../translate';
 
 const time = (at: number) => new Date(at).toLocaleTimeString(undefined, { hour: 'numeric', minute: '2-digit' });
 
@@ -800,23 +801,62 @@ function useOpen(card: NoteCard | TodoCard) {
 }
 
 /** What every bubble does: its text, folded when long; opening it; its menu; and picking it. */
-function useBubble(card: NoteCard | TodoCard) {
+/** Runs of text put back with their translations; code stays as it was. `pieces[0]` is the title's. */
+function translatedParts(parts: PreviewPart[], pieces: string[]): PreviewPart[] {
+  let next = 1;
+  return parts.map((p) => (p.kind === 'text' ? { kind: 'text', lines: (pieces[next++] ?? p.lines.join('\n')).split('\n') } : p));
+}
+
+/**
+ * What every bubble does: its text, folded when long; opening it; its menu; picking it; and translating what it
+ * shows (`title` and the side it's on), into the bubble, with Show original to go back.
+ */
+function useBubble(card: NoteCard | TodoCard, title: string) {
   const { index } = useCards();
+  const toast = useToast();
   const flip = useFlip(card);
-  const text = useFold(card.id, previewParts(flip.on ? flip.back! : card.content, (id, label) => linkTitle(index, id, label), { markCode: true, hidden: 'mark' }));
+  const doc = flip.on ? flip.back! : card.content;
+  const titleOf = (id: string, label: string) => linkTitle(index, id, label);
+  // What a translation covers: hidden words go as •••, and code isn't sent.
+  const plain = previewParts(doc, titleOf, { hidden: 'mask' });
+  const pieces = [title, ...plain.flatMap((p) => (p.kind === 'text' ? [p.lines.join('\n')] : []))];
+  const translation = useTranslation(card.id);
+  const done = translation && translation !== 'working' && translation.source === pieces.join('\n') ? translation : null;
+  const text = useFold(card.id, done ? translatedParts(plain, done.pieces) : previewParts(doc, titleOf, { markCode: true, hidden: 'mark' }));
   const open = useOpen(card);
-  const menu = useEntryMenu(card, open);
-  return { text, flip, open, menu, ...useSelectable(card.id, open, menu.onContextMenu) };
+  const withGoogle = () => openOutside(googleTranslateUrl(pieces.filter((p) => p.trim()).join('\n\n')));
+  const translate = async () => {
+    if (done) return clearTranslation(card.id);
+    if (!translatesOnDevice()) return withGoogle();
+    const result = await translateEntry(card.id, pieces);
+    if (result.kind === 'same') toast(`It's in ${languageName(result.language)} already`);
+    else if (result.kind !== 'done') toast("This browser couldn't translate it on the device.", { action: { label: 'Translate with Google', run: withGoogle } });
+  };
+  const menu = useEntryMenu(card, open, { translate: () => void translate(), translated: !!done });
+  const translated =
+    translation === 'working' ? (
+      <span className="bubble__translated">Translating…</span>
+    ) : done ? (
+      <span className="bubble__translated">
+        <Icon name="translate" size={12} />
+        From {languageName(done.from)}
+        <button type="button" onClick={(e) => (e.stopPropagation(), clearTranslation(card.id))}>
+          Show original
+        </button>
+      </span>
+    ) : null;
+  return { text, flip, open, menu, title: done ? done.pieces[0] : title, translated, ...useSelectable(card.id, open, menu.onContextMenu) };
 }
 
 function NoteBubble({ note, at }: { note: NoteCard; at: number }) {
-  const { text, flip, open, menu, selected, handlers } = useBubble(note);
+  const { text, flip, open, menu, title, translated, selected, handlers } = useBubble(note, note.title.trim());
   return (
     <div className={`bubble${colorClass(note)}${flipClass(flip)}${selected ? ' is-selected' : ''}`} role="article" aria-current={selected || undefined} {...handlers}>
       {flip.on && <BackLabel />}
-      {note.title.trim() && (
+      {translated}
+      {title && (
         <strong className="bubble__title">
-          <LinkedText text={note.title} />
+          <LinkedText text={title} />
         </strong>
       )}
       {text.view}
@@ -842,7 +882,7 @@ const PEEK = 3;
 function StackEntry({ stack, at }: { stack: NoteCard; at: number }) {
   const { index } = useCards();
   const members = stackEntries(stack, index.byId, stacksOf(index));
-  const { text, flip, open, menu, selected, handlers } = useBubble(stack);
+  const { text, flip, open, menu, title, translated, selected, handlers } = useBubble(stack, stack.title.trim() || 'Stack');
   const [expanded, setExpanded] = useState(() => openStacks.has(stack.id));
   const toggle = () => {
     if (expanded) openStacks.delete(stack.id);
@@ -854,10 +894,11 @@ function StackEntry({ stack, at }: { stack: NoteCard; at: number }) {
     <>
       <div className={`bubble bubble--stack${colorClass(stack)}${flipClass(flip)}${selected ? ' is-selected' : ''}`} role="article" aria-current={selected || undefined} {...handlers}>
         {flip.on && <BackLabel />}
+        {translated}
         <span className="stack__head">
           <Icon name="stack" size={15} />
           <strong className="bubble__title">
-            <LinkedText text={stack.title.trim() || 'Stack'} />
+            <LinkedText text={title} />
           </strong>
         </span>
         {text.view}
@@ -974,7 +1015,7 @@ function StackCards({ stack, members }: { stack: NoteCard; members: Entry[] }) {
 function TodoBubble({ todo, at }: { todo: TodoCard; at: number }) {
   const may = usePermissions();
   const tick = useTickTodo();
-  const { text, flip, open, menu, selected, handlers } = useBubble(todo);
+  const { text, flip, open, menu, title, translated, selected, handlers } = useBubble(todo, displayTitle(todo));
   const done = todo.status === 'done';
   const waiting = !done && !!todo.waiting;
   return (
@@ -995,8 +1036,9 @@ function TodoBubble({ todo, at }: { todo: TodoCard; at: number }) {
       </label>
       <div className="bubble__body">
         {flip.on && <BackLabel />}
+        {translated}
         <span className="bubble__title">
-          <LinkedText text={displayTitle(todo)} />
+          <LinkedText text={title} />
         </span>
         {text.view}
         <BubbleMeta card={todo} at={at} fold={text.fold} flip={flip} />

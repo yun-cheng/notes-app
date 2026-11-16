@@ -3,7 +3,7 @@ import { createPortal } from 'react-dom';
 import type { NoteCard, TodoCard } from '../domain/types';
 import { useCards } from '../state/CardsContext';
 import { useEntryViewOnly } from './BubbleTools';
-import { entries, useEntryActions } from './entryActions';
+import { entries, useEntryActions, writeClipboard } from './entryActions';
 import { ColorSwatches } from './EntryStyle';
 import { Icon, type IconName } from './Icon';
 import { useSelection } from './selection';
@@ -11,6 +11,12 @@ import { ShareDialog } from './ShareDialog';
 import { useTickTodo, useToggleWaiting } from './TodoDue';
 import { usePermissions, useViewOnly } from './viewOnly';
 import { useSaveAsTemplate, useStartFromTemplate } from './useTemplates';
+import { useLocation, useNavigate } from 'react-router';
+import { textToDoc } from '../domain/content';
+import { cardPath, sheetState } from './paths';
+import { useToast } from './Toast';
+import { googleSearchUrl, googleTranslateUrl, openOutside, translatesOnDevice } from './translate';
+import { useUndo } from './useUndo';
 
 type Entry = NoteCard | TodoCard;
 
@@ -27,19 +33,29 @@ const Shield = ({ children }: { children: ReactNode }) => (
   </div>
 );
 
+/** What a bubble adds to its menu: translating what it shows. */
+export interface MenuExtras {
+  translate?: () => void;
+  /** Showing a translation: the item takes it away instead. */
+  translated?: boolean;
+}
+
 /**
- * An entry's menu: from a right-click on its bubble, or the ⋯ button beside it. A right-click on a link, on text
- * selected in the bubble, or with Shift gets the browser's own menu instead, so links and selected text can still be
- * copied. On a touch screen a long press keeps picking the entry; its sheet has every action.
+ * An entry's menu: from a right-click on its bubble, or the ⋯ button beside it. A right-click on text selected in
+ * the bubble gets a menu for those words instead (`TextMenu`). A right-click on a link, or with Shift, gets the
+ * browser's own menu. On a touch screen a long press keeps picking the entry; its sheet has every action.
  */
-export function useEntryMenu(card: Entry, open: (edit?: boolean) => void) {
+export function useEntryMenu(card: Entry, open: (edit?: boolean) => void, extras: MenuExtras = {}) {
   const [at, setAt] = useState<Point | null>(null);
+  const [words, setWords] = useState<string | null>(null);
   const [sharing, setSharing] = useState(false);
 
   const onContextMenu = (e: ReactMouseEvent<HTMLElement>) => {
     if (e.shiftKey || (e.target instanceof Element && e.target.closest('a, input, textarea, select'))) return;
     const picked = window.getSelection();
-    if (picked && !picked.isCollapsed && e.currentTarget.contains(picked.anchorNode)) return;
+    // Taken now: the menu takes the focus, and with it the selection.
+    const selected = picked && !picked.isCollapsed && e.currentTarget.contains(picked.anchorNode) ? picked.toString().trim() : '';
+    setWords(selected || null);
     e.preventDefault();
     // The menu key, or Shift+F10, gives no point: the menu opens at the bubble's corner instead.
     if (!e.clientX && !e.clientY) {
@@ -51,6 +67,7 @@ export function useEntryMenu(card: Entry, open: (edit?: boolean) => void) {
 
   const openFrom = (el: HTMLElement) => {
     const r = el.getBoundingClientRect();
+    setWords(null);
     setAt(at ? null : { x: r.left, y: r.bottom + 4 });
   };
 
@@ -59,7 +76,11 @@ export function useEntryMenu(card: Entry, open: (edit?: boolean) => void) {
       {at &&
         createPortal(
           <Shield>
-            <EntryMenu card={card} at={at} open={open} onShare={() => setSharing(true)} onClose={() => setAt(null)} />
+            {words ? (
+              <TextMenu card={card} words={words} at={at} onClose={() => setAt(null)} />
+            ) : (
+              <EntryMenu card={card} at={at} open={open} extras={extras} onShare={() => setSharing(true)} onClose={() => setAt(null)} />
+            )}
           </Shield>,
           document.body,
         )}
@@ -79,12 +100,72 @@ interface MenuProps {
   card: Entry;
   at: Point;
   open: (edit?: boolean) => void;
+  extras: MenuExtras;
   onShare: () => void;
   onClose: () => void;
 }
 
+/** Words shown in a menu item: the start of them, in quotes. */
+const quoted = (words: string) => {
+  const line = words.replace(/\s+/g, ' ');
+  return `“${line.length > 24 ? `${line.slice(0, 23).trimEnd()}…` : line}”`;
+};
+
+/**
+ * Words selected in a bubble, right-clicked: copy them, look them up on Google, translate them with Google (both
+ * open a new tab, and send the words there), or start a new note with them, in the same vault as the entry where
+ * this account may write there. Shift with the right-click still gives the browser's own menu.
+ */
+function TextMenu({ card, words, at, onClose }: { card: Entry; words: string; at: Point; onClose: () => void }) {
+  const { repo } = useCards();
+  const may = usePermissions();
+  const viewOnly = useViewOnly();
+  const toast = useToast();
+  const { undoAction } = useUndo();
+  const navigate = useNavigate();
+  const location = useLocation();
+  const run = (work: () => unknown) => () => {
+    onClose();
+    void work();
+  };
+  const copy = async () => toast((await writeClipboard(words)) ? 'Copied' : "Couldn't copy here.");
+  const newNote = async () => {
+    const action = repo.action();
+    const note = await repo.createNote({ content: textToDoc(words), vaultId: may(card).edit ? card.vaultId : undefined });
+    toast('Made a new note from the selection', {
+      actions: [
+        { label: 'Open', run: () => void navigate(cardPath(note), { state: sheetState(location, note, { edit: true }) }) },
+        { label: 'Undo', run: () => void undoAction(action) },
+      ],
+    });
+  };
+  return (
+    <ContextMenu at={at} label="Selected text" onClose={onClose}>
+      <div className="style-menu__group">
+        <Item icon="copy" onClick={run(copy)}>
+          Copy
+        </Item>
+        {!viewOnly && (
+          <Item icon="plus" onClick={run(newNote)}>
+            New note from selection
+          </Item>
+        )}
+      </div>
+      <div className="style-menu__group">
+        <Item icon="search" onClick={run(() => openOutside(googleSearchUrl(words)))}>
+          Search Google for {quoted(words)}
+        </Item>
+        <Item icon="translate" onClick={run(() => openOutside(googleTranslateUrl(words)))}>
+          Translate with Google
+        </Item>
+      </div>
+      <span className="context-menu__note">Shift-right-click for the browser's menu</span>
+    </ContextMenu>
+  );
+}
+
 /** What one entry can do, or, right-clicked among several picked ones, what all of them can. */
-function EntryMenu({ card, at, open, onShare, onClose }: MenuProps) {
+function EntryMenu({ card, at, open, extras, onShare, onClose }: MenuProps) {
   const { repo, index } = useCards();
   const may = usePermissions();
   const actions = useEntryActions();
@@ -149,6 +230,11 @@ function EntryMenu({ card, at, open, onShare, onClose }: MenuProps) {
         <Item icon="copy" onClick={run(() => actions.copy([card.id]))}>
           Copy
         </Item>
+        {extras.translate && (
+          <Item icon="translate" onClick={run(extras.translate)}>
+            {extras.translated ? 'Show original' : translatesOnDevice() ? 'Translate' : 'Translate with Google'}
+          </Item>
+        )}
         {!viewOnly && (
           <Item icon="template" onClick={run(() => (card.template ? startFrom(card) : saveAsTemplate(card)))}>
             {card.template ? 'Use this template' : 'Save as template'}

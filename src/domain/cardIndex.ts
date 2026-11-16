@@ -63,7 +63,7 @@ export function buildIndex(allCards: Card[], locked: ReadonlySet<string> = new S
     tags,
     pinnedTags: tags.filter((t) => t.pinned),
     tagGroups,
-    todos: live.filter((c): c is TodoCard => c.type === 'todo' && !c.archived),
+    todos: live.filter((c): c is TodoCard => c.type === 'todo' && !c.archived && !c.template),
     trash: cards.filter((c) => c.deleted && !isBlank(c)).sort((a, b) => b.updatedAt - a.updatedAt),
     backlinks,
   };

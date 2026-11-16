@@ -41,6 +41,7 @@ import { usePopover } from '../usePopover';
 import { Board, BoardSetup, lastBoard, useBoardKind, useCardDrag, type DragParts } from './board';
 import { foldStacks, isStack, moveInStack, stackEntries, stacksOf } from '../../domain/stacks';
 import { openStacks } from '../useStacking';
+import { useStartFromTemplate } from '../useTemplates';
 
 const time = (at: number) => new Date(at).toLocaleTimeString(undefined, { hour: 'numeric', minute: '2-digit' });
 
@@ -1083,6 +1084,7 @@ function EntryDetail({ card, fresh, edit, onClose }: { card: NoteCard | TodoCard
   return (
     <>
       {can.note && <p className="access-note">{can.note}</p>}
+      {card.template && <TemplateNote card={card} />}
       {showTitle && (
         <div className={`title-row${isTodo ? ' title-row--todo' : ''}`}>
           {isTodo && (
@@ -1214,7 +1216,8 @@ function EntryDetail({ card, fresh, edit, onClose }: { card: NoteCard | TodoCard
           <button
             type="button"
             className="btn btn--quiet"
-            disabled={!discard.changed}
+            // An entry made in the sheet, like one started from a template, can always go again.
+            disabled={!fresh && !discard.changed}
             title={fresh ? 'Move this new entry to the Trash' : 'Put back how it was when opened, and close'}
             onClick={() => {
               discard.run();
@@ -1227,6 +1230,23 @@ function EntryDetail({ card, fresh, edit, onClose }: { card: NoteCard | TodoCard
       </div>
       {sharing && <ShareDialog card={card} onClose={() => setSharing(false)} />}
     </>
+  );
+}
+
+/** Over a template's text: that it is one, and a button that starts an entry from it. */
+function TemplateNote({ card }: { card: NoteCard | TodoCard }) {
+  const use = useStartFromTemplate();
+  const viewOnly = useViewOnly();
+  return (
+    <p className="template-note">
+      <Icon name="template" size={16} />
+      <span>Template: entries started from it get a copy, its checklists unticked and {'{date}'} filled in.</span>
+      {!viewOnly && (
+        <button type="button" className="btn btn--primary" onClick={() => void use(card)}>
+          Use it
+        </button>
+      )}
+    </p>
   );
 }
 

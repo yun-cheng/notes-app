@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
-import { useLocation, useNavigate } from 'react-router';
 import { displayTitle } from '../domain/content';
+import { useLocation, useNavigate } from 'react-router';
 import { formatTime, relativeDayInSentence } from '../domain/dates';
 import { repeatLabel } from '../domain/repeat';
 import { parseEntry } from '../domain/entry';
@@ -19,6 +19,8 @@ import { useToast } from './Toast';
 import { useSaveEntries } from './useSaveEntry';
 import { setViewOnly, useViewOnly } from './viewOnly';
 import { useUndo } from './useUndo';
+import { useStartFromTemplate } from './useTemplates';
+import { isTemplate } from '../domain/templates';
 
 interface Command {
   id: string;
@@ -63,6 +65,7 @@ export function CommandPalette({ onClose, onShortcuts }: { onClose: () => void; 
   const engine = useMemo(() => (searching ? buildSearch(index) : null), [index, searching]);
 
   const viewOnly = useViewOnly();
+  const startFrom = useStartFromTemplate();
   const go = (to: string) => () => void navigate(to);
   // A filter narrows the page it's picked on: the history from there, the journal from anywhere else.
   const narrow = (next: StreamFilter) => go(filterPath({ ...current, ...next }));
@@ -76,6 +79,8 @@ export function CommandPalette({ onClose, onShortcuts }: { onClose: () => void; 
       { id: 'go-journal', group: 'Go to', label: 'Journal', icon: 'notes', keywords: 'home all everything', run: go('/journal') },
       { id: 'go-history', group: 'Go to', label: 'History', icon: 'history', keywords: 'changes recent activity log undo redo', run: go(historyPath(current)) },
       { id: 'go-calendar', group: 'Go to', label: 'Calendar', icon: 'calendar', keywords: 'month day date', run: go('/calendar') },
+      { id: 'go-timeline', group: 'Go to', label: 'Timeline', icon: 'timeline', keywords: 'gantt start due span weeks plan', run: go('/timeline') },
+      { id: 'go-templates', group: 'Go to', label: 'Templates', icon: 'template', keywords: 'template copy reuse checklist', run: go('/templates') },
       { id: 'go-search', group: 'Go to', label: 'Search', icon: 'search', keywords: 'find', run: go('/search') },
       { id: 'go-tags', group: 'Go to', label: 'All tags', icon: 'tag', keywords: 'labels folders', run: go('/tags') },
       { id: 'go-vaults', group: 'Go to', label: 'Vaults', icon: 'lock', keywords: 'private pin members', run: go('/vaults') },
@@ -94,6 +99,9 @@ export function CommandPalette({ onClose, onShortcuts }: { onClose: () => void; 
     }
     for (const has of Object.keys(CONTAINS_LABEL) as Contains[]) {
       all.push({ id: `has-${has}`, group: 'Filter', label: `Show entries ${CONTAINS_LABEL[has].toLowerCase()}`, icon: has === 'link' ? 'link' : 'image', keywords: 'contains url web pictures images', run: narrow({ has }) });
+    }
+    for (const t of index.live.filter(isTemplate)) {
+      all.push({ id: `template-${t.id}`, group: 'Write', label: `New from template: ${displayTitle(t)}`, icon: 'template', keywords: 'template copy start reuse', run: () => void startFrom(t) });
     }
     all.push({ id: 'archived', group: 'Filter', label: 'Show archived entries', icon: 'archive', keywords: 'archive put away hidden old', run: narrow({ archived: true }) });
     for (const when of Object.keys(WHEN_LABEL)) {

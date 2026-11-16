@@ -207,8 +207,8 @@ export async function seed() {
     mine.push({ id, vaultId, at: when, payload: { createdAt: when, ...payload } as CardPayload });
     return id;
   };
-  /** Fields only some entries have: a tint, a preview style, view only, archived, a back, a stack's entries. */
-  type Extras = Partial<Pick<NoteCard, 'color' | 'preview' | 'viewOnly' | 'archived' | 'back' | 'stack'>>;
+  /** Fields only some entries have: a tint, a preview style, view only, archived, a back, a stack's entries, a template. */
+  type Extras = Partial<Pick<NoteCard, 'color' | 'preview' | 'viewOnly' | 'archived' | 'back' | 'stack' | 'template'>>;
   const tag = (id: string, title: string, pinned: boolean, description = '', color?: CardColor) =>
     add(id, personal, at(9, 9), { type: 'tag', title, pinned, tags: [], content: description ? lines(description) : doc(p()), ...(color ? { color } : {}) });
   /** A tag group: one choice (an entry takes at most one of its tags) or many, ordered to sort by or not. */
@@ -345,6 +345,17 @@ export async function seed() {
   note('demo-note-today-1', ago(95), lines('Call the dentist about Thursday'));
   note('demo-note-today-2', ago(40), lines('Buy oat milk, bananas and coffee beans'), [home]);
   note('demo-note-secret', at(2, 23, 0), lines('Gift budget this year: 300. Don\'t tell anyone.'), [], '', diaryVault);
+  // Templates, on their own page, to start new entries from: their checklists come unticked, and {date} is the day.
+  note('demo-template-packing', at(9, 9, 30), doc(checklist(['Passport', false], ['Chargers', false], ['Toothbrush', false], ['Rain jacket', false], ['Snacks', false])), [travel], 'Packing list', personal, { template: true });
+  note(
+    'demo-template-review',
+    at(9, 9, 31),
+    doc(h('Done this week'), { type: 'bulletList', content: [{ type: 'listItem', content: [{ type: 'paragraph' }] }] }, h('Next week'), checklist(['Inbox to zero', false], ['Plan the top three', false], ['Tidy the journal', false])),
+    [work],
+    'Weekly review, {date}',
+    personal,
+    { template: true, color: 'blue' },
+  );
   // Put away: out of the journal, still in search and under the Archived chip.
   note('demo-note-old-flat', at(9, 20, 0), doc(p('Old flat'), bullets('Meter reading: 4821', 'Deposit back in 30 days')), [home], 'Old flat', personal, { archived: true });
 

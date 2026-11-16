@@ -1,4 +1,4 @@
-import { EMPTY_DOC, type Card, type CardPayload, type CardRecord, type JSONNode, type Repeat, type Vault } from '../domain/types';
+import { EMPTY_DOC, type Card, type CardColor, type CardPayload, type CardRecord, type JSONNode, type PreviewStyle, type Repeat, type Vault } from '../domain/types';
 import type { Backup } from '../domain/backup';
 import { canRedo, canUndo, changedFields, isTextChange, revertCard, type Change, type ChangeEntry } from '../domain/changes';
 import { isBlank } from '../domain/content';
@@ -50,6 +50,16 @@ export interface ImportResult {
 }
 
 /** All card writes go through here, one at a time, so overlapping saves can't overwrite each other. */
+/** What a new entry can start with besides its words: a tint, previews, being a template. */
+interface EntryExtras {
+  color?: CardColor;
+  preview?: PreviewStyle;
+  template?: boolean;
+}
+
+/** Only those set, so an entry without them looks as entries always have. */
+const extras = ({ color, preview, template }: EntryExtras) => ({ ...(color ? { color } : {}), ...(preview ? { preview } : {}), ...(template ? { template: true } : {}) });
+
 export class CardRepository {
   private queue: Promise<unknown> = Promise.resolve();
   private vault: Vault | null = null;
@@ -347,13 +357,22 @@ export class CardRepository {
   }
 
   /** `createdAt` writes it on another day than today. */
-  /** With `stack`, a stack of those entries. */
-  createNote(init: { id?: string; title?: string; content?: JSONNode; back?: JSONNode; stack?: string[]; tags?: string[]; vaultId?: string; createdAt?: number } = {}): Promise<Card> {
+  /** With `stack`, a stack of those entries; with `template`, a template. */
+  createNote(init: { id?: string; title?: string; content?: JSONNode; back?: JSONNode; stack?: string[]; tags?: string[]; vaultId?: string; createdAt?: number } & EntryExtras = {}): Promise<Card> {
     const id = init.id ?? this.newId();
     const action = this.acting();
     return this.enqueue(async () =>
       this.write(
-        { ...(await this.newEnvelope(id, init.vaultId, init.createdAt)), type: 'note', title: init.title ?? '', content: init.content ?? EMPTY_DOC, tags: init.tags ?? [], ...(init.back ? { back: init.back } : {}), ...(init.stack ? { stack: init.stack } : {}) },
+        {
+          ...(await this.newEnvelope(id, init.vaultId, init.createdAt)),
+          type: 'note',
+          title: init.title ?? '',
+          content: init.content ?? EMPTY_DOC,
+          tags: init.tags ?? [],
+          ...(init.back ? { back: init.back } : {}),
+          ...(init.stack ? { stack: init.stack } : {}),
+          ...extras(init),
+        },
         action,
       ),
     );
@@ -374,7 +393,7 @@ export class CardRepository {
     /** Open, but waiting on someone or something. */
     waiting?: boolean;
     createdAt?: number;
-  }): Promise<Card> {
+  } & EntryExtras): Promise<Card> {
     const action = this.acting();
     return this.enqueue(async () => {
       const envelope = await this.newEnvelope(this.newId(), init.vaultId, init.createdAt);
@@ -392,6 +411,7 @@ export class CardRepository {
         ...(init.start ? { start: init.start } : {}),
         ...(init.due && init.repeat ? { repeat: init.repeat } : {}),
         ...(init.waiting && !init.done ? { waiting: true } : {}),
+        ...extras(init),
         completedAt: init.done ? envelope.updatedAt : null,
       }, action);
     });

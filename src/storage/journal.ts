@@ -28,6 +28,7 @@ export interface CardPatch {
   back?: JSONNode | null;
   /** A stack's entries, in order. */
   stack?: string[];
+  template?: boolean;
   members?: string[];
   choice?: 'one' | 'many';
   ordered?: boolean;

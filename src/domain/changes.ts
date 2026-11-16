@@ -85,6 +85,7 @@ export function describeChange({ before, after, fields }: Pick<Change, 'before' 
   const has = (key: string) => fields.includes(key);
   if (has('deleted')) return after.deleted ? 'Moved to Trash' : 'Restored from Trash';
   if (has('archived')) return after.archived ? 'Archived' : 'Unarchived';
+  if (has('template')) return after.template ? 'Made a template' : 'No longer a template';
   if (has('type')) return after.type === 'todo' ? 'Turned into a todo' : 'Turned into a note';
   if (has('vaultId')) return 'Moved to another vault';
   if (has('status') && after.type === 'todo') return after.status === 'done' ? 'Marked done' : 'Reopened';

@@ -35,6 +35,7 @@ export function markdownFiles(index: CardIndex): MarkdownFile[] {
 
     const front = [`id: ${card.id}`, `type: ${card.type}`];
     front.push(`title: ${yamlString(card.title)}`);
+    if (card.template) front.push('template: true');
     if (card.type === 'todo') {
       front.push(`status: ${card.status}`);
       if (card.start) front.push(`start: ${card.start}`);
@@ -98,6 +99,7 @@ function isCard(value: unknown): value is Card {
     !isStrings(c.tags) ||
     !optional(c.color, (color) => color === null || isCardColor(color)) ||
     !optional(c.archived, (a) => typeof a === 'boolean') ||
+    !optional(c.template, (t) => typeof t === 'boolean') ||
     !optional(c.position, (n) => typeof n === 'number' && Number.isFinite(n)) ||
     !optional((c as Partial<NoteCard>).stack, (s) => c.type === 'note' && isStrings(s)) ||
     !optional(c.back, (b) => b === null || (typeof b === 'object' && (b as JSONNode).type === 'doc')) ||

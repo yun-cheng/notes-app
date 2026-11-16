@@ -108,6 +108,7 @@ function summary(scope: Scope, card: Card): string {
   const parts = [card.type, `id: ${card.id}`, vault && `vault: ${vault}`, `updated ${when(card.updatedAt)}`];
   if (card.type === 'todo') parts.splice(1, 0, card.status === 'done' ? 'done' : card.due ? `due ${dueText(card)}` : 'no due date');
   if (card.type === 'todo' && card.status === 'open' && card.start) parts.splice(1, 0, `starts ${card.start}`);
+  if (card.template) parts.splice(1, 0, 'template');
   if (card.type === 'todo' && card.status === 'open' && card.waiting) parts.splice(1, 0, 'waiting');
   return `- ${displayTitle(card)} (${parts.filter(Boolean).join(', ')})`;
 }
@@ -126,6 +127,7 @@ function renderCard(scope: Scope, card: Card): string {
   if (card.tags.length) lines.push(`Tags: ${tagNames(scope, card).join(', ')}`);
   lines.push(`Created: ${when(card.createdAt)} · Updated: ${when(card.updatedAt)}`);
   if (card.deleted) lines.push('This card is in the Trash.');
+  if (card.template) lines.push('This card is a template: the user starts new entries from copies of it.');
   lines.push('', body(scope, card.content));
   const back = cardBack(card);
   if (back) lines.push('', '## Back', '', body(scope, back));

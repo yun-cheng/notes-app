@@ -1142,3 +1142,13 @@ body.is-dragging-card, body.is-dragging-card * { cursor: grabbing !important; us
 .timeline__end--start { border-radius: 7px 0 0 7px; }
 .timeline__end--end { border-radius: 0 7px 7px 0; }
 .timeline__bar:hover .timeline__end { background: color-mix(in srgb, var(--accent) 35%, transparent); }
+
+/* Templates: a list to start from, and a note over a template's own text. */
+.templates__intro { margin-bottom: 14px; }
+.templates { margin: 0; padding: 0; list-style: none; }
+.templates__item { display: flex; align-items: center; gap: 12px; padding: 10px 12px; border-bottom: 1px solid var(--line); color: var(--muted); }
+.templates__item.tint { border-left: 3px solid var(--tint); }
+.templates__name { display: flex; flex: 1; flex-direction: column; min-width: 0; color: var(--text); }
+.templates__name span { overflow: hidden; color: var(--muted); font-size: 13px; text-overflow: ellipsis; white-space: nowrap; }
+.template-note { display: flex; align-items: center; gap: 10px; margin: -4px 0 10px; padding: 8px 12px; border-radius: 9px; background: var(--accent-soft); font-size: 14px; }
+.template-note span { flex: 1; }

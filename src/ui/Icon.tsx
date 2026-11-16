@@ -49,6 +49,7 @@ const PATHS = {
   list: 'M8 6h12M8 12h12M8 18h12M4 6h.01M4 12h.01M4 18h.01',
   checklist: 'M5 4h14a1 1 0 0 1 1 1v14a1 1 0 0 1-1 1H5a1 1 0 0 1-1-1V5a1 1 0 0 1 1-1ZM8 12l3 3 5-6',
   comment: 'M5 5h14a1 1 0 0 1 1 1v10a1 1 0 0 1-1 1h-8l-5 4v-4H5a1 1 0 0 1-1-1V6a1 1 0 0 1 1-1Z',
+  template: 'M5 4h10l4 4v12H5ZM15 4v4h4M8 12h8M8 16h5',
   timeline: 'M4 5v14M8 7h7M10 12h10M7 17h6',
   stack: 'M4 9l8-4 8 4-8 4-8-4ZM4 13l8 4 8-4M4 17l8 4 8-4',
   flip: 'M4 12a8 8 0 0 1 13.7-5.6M20 12a8 8 0 0 1-13.7 5.6M18 3v4h-4M6 21v-4h4',

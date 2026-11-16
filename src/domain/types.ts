@@ -60,6 +60,11 @@ interface CardCommon extends CardEnvelope {
    * an empty one counts as none. See `cardBack` in `content.ts`.
    */
   back?: JSONNode | null;
+  /**
+   * Kept to start new entries from, on the Templates page, and out of the journal, the todo counts and the calendar.
+   * See `templates.ts`. Missing on most cards.
+   */
+  template?: boolean;
 }
 
 export interface NoteCard extends CardCommon {

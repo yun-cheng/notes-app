@@ -243,7 +243,8 @@ export function streamItems(index: CardIndex, filter: StreamFilter = {}, today =
   const keep = entryMatcher(filter, today, sharedInto);
   const items: StreamItem[] = [];
   for (const card of index.live) {
-    if ((card.type !== 'note' && card.type !== 'todo') || !!card.archived !== !!filter.archived) continue;
+    // Templates are only on their own page.
+    if ((card.type !== 'note' && card.type !== 'todo') || !!card.archived !== !!filter.archived || card.template) continue;
     const day = entryDay(card);
     if (keep(card, day)) items.push({ card, day, at: card.createdAt });
   }

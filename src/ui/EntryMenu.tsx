@@ -9,7 +9,8 @@ import { Icon, type IconName } from './Icon';
 import { useSelection } from './selection';
 import { ShareDialog } from './ShareDialog';
 import { useTickTodo, useToggleWaiting } from './TodoDue';
-import { usePermissions } from './viewOnly';
+import { usePermissions, useViewOnly } from './viewOnly';
+import { useSaveAsTemplate, useStartFromTemplate } from './useTemplates';
 
 type Entry = NoteCard | TodoCard;
 
@@ -91,6 +92,9 @@ function EntryMenu({ card, at, open, onShare, onClose }: MenuProps) {
   const toggleWaiting = useToggleWaiting();
   const selection = useSelection();
   const toggleViewOnly = useEntryViewOnly(card);
+  const saveAsTemplate = useSaveAsTemplate();
+  const startFrom = useStartFromTemplate();
+  const viewOnly = useViewOnly();
   const can = may(card);
   const run = (work: () => unknown) => () => {
     onClose();
@@ -145,6 +149,11 @@ function EntryMenu({ card, at, open, onShare, onClose }: MenuProps) {
         <Item icon="copy" onClick={run(() => actions.copy([card.id]))}>
           Copy
         </Item>
+        {!viewOnly && (
+          <Item icon="template" onClick={run(() => (card.template ? startFrom(card) : saveAsTemplate(card)))}>
+            {card.template ? 'Use this template' : 'Save as template'}
+          </Item>
+        )}
         {selection && (
           <Item icon="check" onClick={run(() => selection.toggle(card.id))}>
             {selection.has(card.id) ? 'Unselect' : 'Select'}

@@ -24,7 +24,7 @@ export function stackIndex(cards: Card[]): Map<string, string> {
 export function stackEntries(stack: NoteCard, byId: ReadonlyMap<string, Card>, of: ReadonlyMap<string, string>): Entry[] {
   return (stack.stack ?? []).flatMap((id) => {
     const card = byId.get(id);
-    if (!card || card.deleted || card.archived || (card.type !== 'note' && card.type !== 'todo') || isStack(card) || of.get(id) !== stack.id) return [];
+    if (!card || card.deleted || card.archived || card.template || (card.type !== 'note' && card.type !== 'todo') || isStack(card) || of.get(id) !== stack.id) return [];
     return [card];
   });
 }

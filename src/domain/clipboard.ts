@@ -3,7 +3,7 @@ import type { Entry } from './entry';
 import { escapeHTML, toHTML } from './html';
 import { toMarkdown, toPlainText, type TitleResolver } from './markdown';
 import { isRepeat, repeatWord } from './repeat';
-import { cardBack } from './content';
+import { cardPages } from './content';
 import type { JSONNode, NoteCard, TodoCard } from './types';
 
 /**
@@ -25,8 +25,8 @@ const MAX_ENTRIES = 1000;
 export function toEntries(cards: Copyable[], tagName: TagName): Entry[] {
   return cards.map((card) => {
     const tags = card.tags.map(tagName).filter((t): t is string => !!t);
-    const back = cardBack(card);
-    const flip = back ? { back } : {};
+    const pages = cardPages(card);
+    const flip = pages.length ? { pages } : {};
     if (card.type === 'todo') {
       return {
         kind: 'todo',
@@ -54,7 +54,7 @@ const tagWords = (tags: string[]) => tags.map((t) => `#${t.replace(/\s+/g, '-')}
  */
 export function entriesText(cards: Copyable[], tagName: TagName, linkTitle: TitleResolver): string {
   const parts = toEntries(cards, tagName).map((entry) => {
-    const body = toMarkdown(entry.content, linkTitle) + (entry.back ? `\n\n## Back\n\n${toMarkdown(entry.back, linkTitle)}` : '');
+    const body = toMarkdown(entry.content, linkTitle) + (entry.pages ?? []).map((page, i) => `\n\n## Page ${i + 2}\n\n${toMarkdown(page, linkTitle)}`).join('');
     const tags = tagWords(entry.tags);
     if (entry.kind === 'todo') {
       const when = [entry.due, entry.dueTime, entry.repeat && repeatWord(entry.repeat)].filter(Boolean).map((w) => `@${w}`);
@@ -72,8 +72,8 @@ export function entriesText(cards: Copyable[], tagName: TagName, linkTitle: Titl
  * and list markers kept and links as their addresses. No checkbox, tags, due date, formatting or photos.
  */
 export function entryText(card: Copyable, linkTitle: TitleResolver): string {
-  const back = cardBack(card);
-  return [card.title.trim(), toPlainText(card.content, linkTitle), back && `Back:\n${toPlainText(back, linkTitle)}`].filter(Boolean).join('\n\n');
+  const pages = cardPages(card).map((page, i) => `Page ${i + 2}:\n${toPlainText(page, linkTitle)}`);
+  return [card.title.trim(), toPlainText(card.content, linkTitle), ...pages].filter(Boolean).join('\n\n');
 }
 
 /**
@@ -95,11 +95,12 @@ export function entriesClipboard(cards: Copyable[], tagName: TagName, linkTitle:
     .map((card) => {
       const head = card.type === 'todo' ? `${card.status === 'done' ? '☑' : '☐'} ${escapeHTML(card.title.trim())}` : card.title.trim() && `<strong>${escapeHTML(card.title.trim())}</strong>`;
       // A body of no words (an empty line, or only photos) adds nothing.
-      const back = cardBack(card);
       return (
         (head ? `<p>${head}</p>` : '') +
         (toPlainText(card.content, linkTitle) ? toHTML(card.content, linkTitle) : '') +
-        (back ? `<p><strong>Back</strong></p>${toHTML(back, linkTitle)}` : '')
+        cardPages(card)
+          .map((page, i) => `<p><strong>Page ${i + 2}</strong></p>${toHTML(page, linkTitle)}`)
+          .join('')
       );
     })
     .join('');
@@ -126,7 +127,7 @@ export function decodeEntries(raw: string): Entry[] | null {
   const entries: Entry[] = [];
   for (const item of list.entries as Record<string, unknown>[]) {
     if (typeof item !== 'object' || item === null) return null;
-    const { kind, title, content, back, tags, due, dueTime, start, repeat, done } = item;
+    const { kind, title, content, pages, back, tags, due, dueTime, start, repeat, done } = item;
     if ((kind !== 'note' && kind !== 'todo') || typeof title !== 'string' || !isDoc(content)) return null;
     if (!Array.isArray(tags) || !tags.every((t) => typeof t === 'string')) return null;
     if (due !== null && due !== undefined && !(typeof due === 'string' && isDateKey(due))) return null;
@@ -135,7 +136,8 @@ export function decodeEntries(raw: string): Entry[] | null {
       kind,
       title,
       content,
-      ...(isDoc(back) ? { back } : {}),
+      // Copied before a card could have more than one page behind it, it had a `back`.
+      ...(Array.isArray(pages) && pages.length && pages.every(isDoc) ? { pages } : isDoc(back) ? { pages: [back] } : {}),
       tags: tags as string[],
       due: dated,
       ...(kind === 'todo' && typeof start === 'string' && isDateKey(start) ? { start } : {}),

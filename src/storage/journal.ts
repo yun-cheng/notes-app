@@ -24,7 +24,9 @@ export interface CardPatch {
   archived?: boolean;
   /** Its place in a board column. */
   position?: number;
-  /** The card's other side; null takes it off. */
+  /** The pages behind its front, in order; null takes them all off. */
+  pages?: JSONNode[] | null;
+  /** Its one page behind the front, from before it could have more; written null once `pages` takes its place. */
   back?: JSONNode | null;
   /** A stack's entries, in order. */
   stack?: string[];

@@ -1,5 +1,5 @@
 import { buildTagGroups, isTagGroup, type TagGroups } from './tagGroups';
-import { cardBack, displayTitle, isBlank, linkedCardIds, plainText } from './content';
+import { cardPages, displayTitle, isBlank, linkedCardIds, plainText } from './content';
 import type { Card, TagCard, TodoCard } from './types';
 
 export interface Backlink {
@@ -48,9 +48,8 @@ export function buildIndex(allCards: Card[], locked: ReadonlySet<string> = new S
 
   for (const card of live) {
     card.tags.forEach((to) => add(to, { from: card, kind: 'tag' }));
-    // A link on a card's back counts as much as one on its front.
-    const back = cardBack(card);
-    new Set([...linkedCardIds(card.content), ...(back ? linkedCardIds(back) : [])]).forEach((to) => add(to, { from: card, kind: 'link' }));
+    // A link on a page behind a card's front counts as much as one on its front.
+    new Set([card.content, ...cardPages(card)].flatMap((doc) => linkedCardIds(doc))).forEach((to) => add(to, { from: card, kind: 'link' }));
   }
 
   const tagCards = live.filter((c): c is TagCard => c.type === 'tag').sort(byTitle);
@@ -92,8 +91,9 @@ export function cardText(index: CardIndex, card: Card): string {
   return plainText(card.content, (id, label) => linkTitle(index, id, label));
 }
 
-/** The text on a card's back, the same way, or '' when it has none. */
-export function backText(index: CardIndex, card: Card): string {
-  const back = cardBack(card);
-  return back ? plainText(back, (id, label) => linkTitle(index, id, label)) : '';
+/** The text on the pages behind a card's front, the same way, or '' when it has none. */
+export function pagesText(index: CardIndex, card: Card): string {
+  return cardPages(card)
+    .map((page) => plainText(page, (id, label) => linkTitle(index, id, label)))
+    .join(' ');
 }

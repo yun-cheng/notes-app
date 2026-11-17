@@ -358,7 +358,7 @@ export class CardRepository {
 
   /** `createdAt` writes it on another day than today. */
   /** With `stack`, a stack of those entries; with `template`, a template. */
-  createNote(init: { id?: string; title?: string; content?: JSONNode; back?: JSONNode; stack?: string[]; tags?: string[]; vaultId?: string; createdAt?: number } & EntryExtras = {}): Promise<Card> {
+  createNote(init: { id?: string; title?: string; content?: JSONNode; pages?: JSONNode[]; stack?: string[]; tags?: string[]; vaultId?: string; createdAt?: number } & EntryExtras = {}): Promise<Card> {
     const id = init.id ?? this.newId();
     const action = this.acting();
     return this.enqueue(async () =>
@@ -369,7 +369,7 @@ export class CardRepository {
           title: init.title ?? '',
           content: init.content ?? EMPTY_DOC,
           tags: init.tags ?? [],
-          ...(init.back ? { back: init.back } : {}),
+          ...(init.pages?.length ? { pages: init.pages } : {}),
           ...(init.stack ? { stack: init.stack } : {}),
           ...extras(init),
         },
@@ -385,8 +385,8 @@ export class CardRepository {
     start?: string | null;
     repeat?: Repeat | null;
     content?: JSONNode;
-    /** A pasted card's back. */
-    back?: JSONNode;
+    /** A pasted card's pages behind its front. */
+    pages?: JSONNode[];
     tags?: string[];
     vaultId?: string;
     done?: boolean;
@@ -402,7 +402,7 @@ export class CardRepository {
         type: 'todo',
         title: init.title,
         content: init.content ?? EMPTY_DOC,
-        ...(init.back ? { back: init.back } : {}),
+        ...(init.pages?.length ? { pages: init.pages } : {}),
         tags: init.tags ?? [],
         status: init.done ? 'done' : 'open',
         due: init.due ?? null,

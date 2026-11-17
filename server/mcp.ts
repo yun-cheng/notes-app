@@ -1,6 +1,6 @@
 import { isGroupName, settleTags } from '../src/domain/tagGroups';
 import { buildIndex, type CardIndex } from '../src/domain/cardIndex';
-import { cardBack, displayTitle, plainText } from '../src/domain/content';
+import { cardPages, displayTitle, plainText } from '../src/domain/content';
 import { isStack, stackEntries, stacksOf } from '../src/domain/stacks';
 import { isDateKey, isTimeKey, toDateKey } from '../src/domain/dates';
 import { toMarkdown } from '../src/domain/markdown';
@@ -129,8 +129,7 @@ function renderCard(scope: Scope, card: Card): string {
   if (card.deleted) lines.push('This card is in the Trash.');
   if (card.template) lines.push('This card is a template: the user starts new entries from copies of it.');
   lines.push('', body(scope, card.content));
-  const back = cardBack(card);
-  if (back) lines.push('', '## Back', '', body(scope, back));
+  cardPages(card).forEach((page, i) => lines.push('', `## Page ${i + 2}`, '', body(scope, page)));
   if (isStack(card)) {
     const entries = stackEntries(card, scope.index.byId, stacksOf(scope.index));
     lines.push('', '## In this stack, in order');

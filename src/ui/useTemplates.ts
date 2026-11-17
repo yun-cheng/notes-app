@@ -31,7 +31,7 @@ export function useStartFromTemplate() {
   return async (template: Entry) => {
     if (viewOnly) return toast(VIEW_ONLY_NOTE);
     const made = fromTemplate(template, today);
-    const common = { title: made.title, content: made.content, back: made.back, tags: made.tags, color: made.color, preview: made.preview, vaultId: vaultFor(template) };
+    const common = { title: made.title, content: made.content, pages: made.pages, tags: made.tags, color: made.color, preview: made.preview, vaultId: vaultFor(template) };
     const card = made.type === 'todo' ? await repo.createTodo(common) : await repo.createNote(common);
     void navigate(entryPath(card.id), { state: sheetState(location, card, { fresh: true }) });
   };

@@ -1073,24 +1073,30 @@ body.is-dragging-card, body.is-dragging-card * { cursor: grabbing !important; us
 .hidden-text .is-open, .hidden-text.is-open { color: var(--text); text-decoration: underline dashed var(--muted); text-underline-offset: 3px; }
 @media (prefers-reduced-motion: reduce) { .hidden-text { animation: none; } }
 
-/* A card's back: the bubble turns over to show it, marked Back, and turns again to the front. */
-.bubble__flip, .bubble__template { display: inline-flex; align-items: center; gap: 3px; padding: 0 6px 0 4px; border: 0; border-radius: 6px; background: none; color: var(--accent); font: inherit; font-size: 12px; font-weight: 600; cursor: pointer; }
+/* Pages behind a card's front: the bubble turns to each in turn, marked Page 2 and so on, and then to the front. */
+.bubble__flip, .bubble__template { display: inline-flex; align-items: center; gap: 3px; padding: 0 6px 0 4px; border: 0; border-radius: 6px; background: none; color: var(--accent); font: inherit; font-size: 12px; font-weight: 600; font-variant-numeric: tabular-nums; cursor: pointer; }
 .bubble__flip:hover, .bubble__flip.is-on { background: var(--accent-soft); }
 button.bubble__template:hover { background: var(--accent-soft); }
 span.bubble__template { color: var(--muted); cursor: default; }
 .bubble__side { display: flex; align-items: center; gap: 4px; margin-bottom: 2px; color: var(--accent); font-size: 11px; font-weight: 600; letter-spacing: 0.04em; text-transform: uppercase; }
 .bubble.is-back { border-style: dashed; }
+/* Two names for the same turn forward, one for odd pages and one for even, so each turn plays again. */
 .flip-to-back { animation: flip-to-back 0.32s ease-out; }
+.flip-to-next { animation: flip-to-next 0.32s ease-out; }
 .flip-to-front { animation: flip-to-front 0.32s ease-out; }
 @keyframes flip-to-back { from { transform: perspective(900px) rotateY(-90deg); } to { transform: none; } }
+@keyframes flip-to-next { from { transform: perspective(900px) rotateY(-90deg); } to { transform: none; } }
 @keyframes flip-to-front { from { transform: perspective(900px) rotateY(90deg); } to { transform: none; } }
-@media (prefers-reduced-motion: reduce) { .flip-to-back, .flip-to-front { animation: none; } }
-.note-sheet__side { display: flex; align-items: center; gap: 6px; margin: 0 0 4px; color: var(--accent); font-size: 12px; font-weight: 600; letter-spacing: 0.04em; text-transform: uppercase; }
-/* A button for something the entry has, like a back: marked with a dot. */
-.icon-btn.has-dot { position: relative; }
-.icon-btn.has-dot::after { content: ""; position: absolute; top: 6px; right: 6px; width: 6px; height: 6px; border-radius: 50%; background: var(--accent); }
-.public__back { margin-top: 28px; padding-top: 18px; border-top: 1px dashed var(--line); }
-.public__back h2 { margin-bottom: 8px; color: var(--muted); font: 600 13px/1.2 var(--sans); letter-spacing: 0.05em; text-transform: uppercase; }
+@media (prefers-reduced-motion: reduce) { .flip-to-back, .flip-to-next, .flip-to-front { animation: none; } }
+/* In an entry's sheet, a row for its pages: the front, each page behind it, + for another, and a way to take one out. */
+.page-tabs { display: flex; flex-wrap: wrap; align-items: center; gap: 4px; margin: 0 0 6px; color: var(--accent); }
+.page-tabs__tab { min-width: 30px; height: 26px; padding: 0 8px; border: 1px solid var(--line); border-radius: 13px; background: none; color: var(--muted); font: inherit; font-size: 12px; font-weight: 600; font-variant-numeric: tabular-nums; cursor: pointer; display: inline-flex; align-items: center; justify-content: center; }
+.page-tabs__tab:hover { color: var(--text); border-color: var(--muted); }
+.page-tabs__tab.is-on { border-color: var(--accent); background: var(--accent-soft); color: var(--accent); }
+.page-tabs__remove { margin-left: auto; padding: 0 6px; border: 0; background: none; color: var(--muted); font: inherit; font-size: 12px; cursor: pointer; }
+.page-tabs__remove:hover { color: var(--alert); }
+.public__page { margin-top: 28px; padding-top: 18px; border-top: 1px dashed var(--line); }
+.public__page h2 { margin-bottom: 8px; color: var(--muted); font: 600 13px/1.2 var(--sans); letter-spacing: 0.05em; text-transform: uppercase; }
 
 /* A stack: its cards fan out behind it. Opened, its entries sit under it along a line, each dragged to its place by
    the grip in the gutter, with × under the grip to take it out. */

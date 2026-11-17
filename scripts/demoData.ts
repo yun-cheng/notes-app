@@ -207,8 +207,8 @@ export async function seed() {
     mine.push({ id, vaultId, at: when, payload: { createdAt: when, ...payload } as CardPayload });
     return id;
   };
-  /** Fields only some entries have: a tint, a preview style, view only, archived, a back, a stack's entries, a template. */
-  type Extras = Partial<Pick<NoteCard, 'color' | 'preview' | 'viewOnly' | 'archived' | 'back' | 'stack' | 'template'>>;
+  /** Fields only some entries have: a tint, a preview style, view only, archived, pages behind the front, a stack's entries, a template. */
+  type Extras = Partial<Pick<NoteCard, 'color' | 'preview' | 'viewOnly' | 'archived' | 'pages' | 'stack' | 'template'>>;
   const tag = (id: string, title: string, pinned: boolean, description = '', color?: CardColor) =>
     add(id, personal, at(9, 9), { type: 'tag', title, pinned, tags: [], content: description ? lines(description) : doc(p()), ...(color ? { color } : {}) });
   /** A tag group: one choice (an entry takes at most one of its tags) or many, ordered to sort by or not. */
@@ -277,14 +277,16 @@ export async function seed() {
     [travel],
     'Kyoto trip',
   );
-  // Flashcards for the trip, stacked in an order of their own (not the order written): each has a back, shown
-  // when it's flipped.
-  note('demo-stack-phrases', at(8, 21, 39), lines('Phrases to learn before the trip. Flip each card for what it means.'), [travel], 'Kyoto phrases', personal, {
+  // Flashcards for the trip, stacked in an order of their own (not the order written): each has a page behind its
+  // front, shown when it's turned over, and the first has a second, for when to say it.
+  note('demo-stack-phrases', at(8, 21, 39), lines('Phrases to learn before the trip. Turn each card over for what it means.'), [travel], 'Kyoto phrases', personal, {
     stack: ['demo-card-where', 'demo-card-thanks', 'demo-card-excuse'],
   });
-  note('demo-card-thanks', at(8, 21, 40), lines('ありがとうございます'), [travel], '', personal, { back: doc(p(text('Thank you very much', ['bold'])), p('arigatō gozaimasu')) });
-  note('demo-card-excuse', at(8, 21, 41), lines('すみません'), [travel], '', personal, { back: doc(p(text('Excuse me / sorry', ['bold'])), p('sumimasen: to get attention, or to apologise')) });
-  note('demo-card-where', at(8, 21, 42), lines('駅はどこですか？'), [travel], '', personal, { back: doc(p(text('Where is the station?', ['bold'])), p('eki wa doko desu ka')) });
+  note('demo-card-thanks', at(8, 21, 40), lines('ありがとうございます'), [travel], '', personal, {
+    pages: [doc(p(text('Thank you very much', ['bold'])), p('arigatō gozaimasu')), doc(p(text('When to say it', ['bold'])), p('To shop staff, hosts and anyone who helps. Among friends, just arigatō.'))],
+  });
+  note('demo-card-excuse', at(8, 21, 41), lines('すみません'), [travel], '', personal, { pages: [doc(p(text('Excuse me / sorry', ['bold'])), p('sumimasen: to get attention, or to apologise'))] });
+  note('demo-card-where', at(8, 21, 42), lines('駅はどこですか？'), [travel], '', personal, { pages: [doc(p(text('Where is the station?', ['bold'])), p('eki wa doko desu ka'))] });
   // The wifi password is kept from being changed by mistake, and hidden until pressed.
   note('demo-note-wifi', at(7, 9, 2), doc(p('Guest wifi: Lemon-Tree, password ', text('sunflower-42', ['hidden']))), [home], '', personal, { viewOnly: true });
   // Edited later from the phone: its history has two versions.

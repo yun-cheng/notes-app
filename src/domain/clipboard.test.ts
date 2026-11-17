@@ -106,18 +106,25 @@ describe('copying entries', () => {
   });
 });
 
-describe('a card with a back', () => {
-  const card = note('f', 'Peru', { content: doc(p(text('Capital?'))), back: doc(p(text('Lima'))) });
+describe('a card with pages behind its front', () => {
+  const card = note('f', 'Peru', { content: doc(p(text('Capital?'))), pages: [doc(p(text('Lima'))), doc(p(text('Spanish')))] });
 
-  it('copies its back after its front, in every style', () => {
-    expect(entriesText([card], tagName, linkTitle)).toBe('Peru\nCapital?\n\n## Back\n\nLima');
-    expect(entriesClipboard([card], tagName, linkTitle, 'plain')).toEqual({ text: 'Peru\n\nCapital?\n\nBack:\nLima' });
-    expect(entriesClipboard([card], tagName, linkTitle, 'rich').html).toBe('<p><strong>Peru</strong></p><p>Capital?</p><p><strong>Back</strong></p><p>Lima</p>');
+  it('copies its pages after its front, in every style', () => {
+    expect(entriesText([card], tagName, linkTitle)).toBe('Peru\nCapital?\n\n## Page 2\n\nLima\n\n## Page 3\n\nSpanish');
+    expect(entriesClipboard([card], tagName, linkTitle, 'plain')).toEqual({ text: 'Peru\n\nCapital?\n\nPage 2:\nLima\n\nPage 3:\nSpanish' });
+    expect(entriesClipboard([card], tagName, linkTitle, 'rich').html).toBe(
+      '<p><strong>Peru</strong></p><p>Capital?</p><p><strong>Page 2</strong></p><p>Lima</p><p><strong>Page 3</strong></p><p>Spanish</p>',
+    );
   });
 
-  it('keeps it when pasted back, and leaves out an empty one', () => {
-    expect(decodeEntries(encodeEntries(toEntries([card], tagName)))![0].back).toEqual(doc(p(text('Lima'))));
-    const blank = note('b', '', { back: doc(p()) });
-    expect(toEntries([blank], tagName)[0].back).toBeUndefined();
+  it('keeps them when pasted back, and leaves out blank ones', () => {
+    expect(decodeEntries(encodeEntries(toEntries([card], tagName)))![0].pages).toEqual([doc(p(text('Lima'))), doc(p(text('Spanish')))]);
+    const blank = note('b', '', { pages: [doc(p())] });
+    expect(toEntries([blank], tagName)[0].pages).toBeUndefined();
+  });
+
+  it('pastes a back copied before there were pages as its one page', () => {
+    const raw = JSON.stringify({ app: 'notes', version: 1, entries: [{ kind: 'note', title: '', content: doc(p(text('Q'))), back: doc(p(text('A'))), tags: [], due: null }] });
+    expect(decodeEntries(raw)![0].pages).toEqual([doc(p(text('A')))]);
   });
 });

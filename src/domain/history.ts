@@ -1,4 +1,4 @@
-import { cardBack, previewLines } from './content';
+import { cardPages, previewLines } from './content';
 import { repeatLabel } from './repeat';
 import type { Card, JSONNode, Repeat } from './types';
 
@@ -23,8 +23,7 @@ export function cardLines(card: Card, titleOf?: TitleOf, tagName: (id: string) =
   }
   if (card.tags.length) lines.push(`Tags: ${card.tags.map(tagName).join(', ')}`);
   lines.push(...previewLines(card.content, titleOf, true));
-  const back = cardBack(card);
-  if (back) lines.push('Back:', ...previewLines(back, titleOf, true));
+  cardPages(card).forEach((page, i) => lines.push(`Page ${i + 2}:`, ...previewLines(page, titleOf, true)));
   return lines;
 }
 
@@ -185,6 +184,7 @@ export interface RestoreFields {
   repeat?: Repeat | null;
   pinned?: boolean;
   back?: JSONNode | null;
+  pages?: JSONNode[] | null;
   stack?: string[];
 }
 
@@ -193,13 +193,14 @@ export function restorePatch(version: Card): RestoreFields {
   switch (version.type) {
     case 'note':
       // A stack's order comes back with it; a version from before it was one leaves the stack as it is.
-      return { type: 'note', title: version.title, content: version.content, back: version.back ?? null, tags: version.tags, ...(version.stack ? { stack: version.stack } : {}) };
+      return { type: 'note', title: version.title, content: version.content, back: version.back ?? null, pages: version.pages ?? null, tags: version.tags, ...(version.stack ? { stack: version.stack } : {}) };
     case 'todo':
       return {
         type: 'todo',
         title: version.title,
         content: version.content,
         back: version.back ?? null,
+        pages: version.pages ?? null,
         tags: version.tags,
         status: version.status,
         due: version.due,

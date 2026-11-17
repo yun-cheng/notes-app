@@ -91,7 +91,7 @@ export function useSaveEntries() {
     const action = repo.action();
     const at = opts.date ? onDay(opts.date) : undefined;
     const making: Promise<Card>[] = entries.map((entry, i) => {
-      const common = { title: entry.title, content: entry.content, back: entry.back, tags: tagIdsFor(entry.tags), vaultId: vaultOf(entry), createdAt: at === undefined ? undefined : at + i, template: opts.template };
+      const common = { title: entry.title, content: entry.content, pages: entry.pages, tags: tagIdsFor(entry.tags), vaultId: vaultOf(entry), createdAt: at === undefined ? undefined : at + i, template: opts.template };
       if (entry.kind === 'note') return repo.createNote(common);
       const due = entry.due ?? opts.due ?? null;
       return repo.createTodo({ ...common, due, start: entry.start, dueTime: entry.dueTime, repeat: entry.repeat, done: entry.done, waiting: opts.waiting });

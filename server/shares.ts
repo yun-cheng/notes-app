@@ -1,6 +1,6 @@
 import type { Context, Hono } from 'hono';
 import { openCommentCounts } from './comments';
-import { cardBack, photoIds, walk } from '../src/domain/content';
+import { cardPages, photoIds, walk } from '../src/domain/content';
 import { DAY, isTimeKey } from '../src/domain/dates';
 import { parsePayload } from '../src/domain/payload';
 import type { CardPayload } from '../src/domain/types';
@@ -65,8 +65,8 @@ interface PublicCard {
   type: CardPayload['type'];
   title: string;
   content: unknown;
-  /** The card's back, or null. */
-  back: unknown;
+  /** The pages behind the card's front, in order. */
+  pages: unknown[];
   status: string | null;
   due: string | null;
   due_time: string | null;
@@ -93,9 +93,9 @@ export function publicRoutes(app: Hono<AppEnv>, googleFetch: GoogleFetch, now: (
     const card = await publicCard(c.env.DB, c.req.param('token'), now());
     if (!card) return c.json({ error: 'This link has expired or was turned off' }, 404);
     const p = card.payload;
-    const back = cardBack(p);
+    const pages = cardPages(p);
     // A link's stored label is the linked card's title, which isn't shared. Leave it out.
-    for (const doc of back ? [p.content, back] : [p.content]) {
+    for (const doc of [p.content, ...pages]) {
       walk(doc, (n) => {
         if (n.type === 'cardLink' && n.attrs) n.attrs = { ...n.attrs, label: '' };
       });
@@ -104,7 +104,7 @@ export function publicRoutes(app: Hono<AppEnv>, googleFetch: GoogleFetch, now: (
       type: p.type,
       title: p.title,
       content: p.content,
-      back,
+      pages,
       status: p.type === 'todo' ? p.status : null,
       due: p.type === 'todo' ? p.due : null,
       due_time: p.type === 'todo' && p.due && isTimeKey(p.dueTime) ? p.dueTime : null,
@@ -117,8 +117,7 @@ export function publicRoutes(app: Hono<AppEnv>, googleFetch: GoogleFetch, now: (
     const at = now();
     const card = await publicCard(c.env.DB, c.req.param('token'), at);
     const photo = c.req.param('photo');
-    const back = card && cardBack(card.payload);
-    if (!card || ![...photoIds(card.payload.content), ...(back ? photoIds(back) : [])].includes(photo)) return c.json({ error: 'Not found' }, 404);
+    if (!card || ![card.payload.content, ...cardPages(card.payload)].flatMap(photoIds).includes(photo)) return c.json({ error: 'Not found' }, 404);
     const row = await c.env.DB.prepare(`SELECT owner_id, drive_file_id, mime FROM attachments WHERE id = ?`)
       .bind(photo)
       .first<{ owner_id: string; drive_file_id: string; mime: string }>();

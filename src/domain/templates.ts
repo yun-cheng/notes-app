@@ -1,3 +1,4 @@
+import { cardPages } from './content';
 import { formatDay } from './dates';
 import type { Card, CardColor, JSONNode, NoteCard, PreviewStyle, TodoCard } from './types';
 
@@ -28,7 +29,7 @@ export interface FromTemplate {
   type: 'note' | 'todo';
   title: string;
   content: JSONNode;
-  back?: JSONNode;
+  pages?: JSONNode[];
   tags: string[];
   color?: CardColor;
   preview?: PreviewStyle;
@@ -39,7 +40,7 @@ export function fromTemplate(template: NoteCard | TodoCard, today: string): From
     type: template.type,
     title: fillText(template.title, today),
     content: fillDoc(template.content, today),
-    ...(template.back ? { back: fillDoc(template.back, today) } : {}),
+    ...(cardPages(template).length ? { pages: cardPages(template).map((page) => fillDoc(page, today)) } : {}),
     tags: [...template.tags],
     ...(template.color ? { color: template.color } : {}),
     ...(template.preview && Object.keys(template.preview).length ? { preview: template.preview } : {}),

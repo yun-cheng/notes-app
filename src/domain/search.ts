@@ -1,5 +1,5 @@
 import MiniSearch from 'minisearch';
-import { backText, cardText, resolveTags, type CardIndex } from './cardIndex';
+import { cardText, pagesText, resolveTags, type CardIndex } from './cardIndex';
 import type { Card } from './types';
 
 const CJK = /[\p{Script=Han}\p{Script=Hiragana}\p{Script=Katakana}\p{Script=Hangul}]/u;
@@ -41,8 +41,8 @@ export function buildSearch(index: CardIndex): CardSearch {
   const texts = new Map<string, string>();
   engine.addAll(
     index.live.map((card) => {
-      // Words on a card's back are found too.
-      const text = [cardText(index, card), backText(index, card)].filter(Boolean).join(' ');
+      // Words on the pages behind a card's front are found too.
+      const text = [cardText(index, card), pagesText(index, card)].filter(Boolean).join(' ');
       texts.set(card.id, text);
       return { id: card.id, title: card.title, text, tags: resolveTags(index, card.tags).map((t) => t.title).join(' ') };
     }),

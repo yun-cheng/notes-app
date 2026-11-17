@@ -65,7 +65,7 @@ export interface Change {
 
 /** Not part of what a card says: who it is, and bookkeeping every save touches. */
 const BOOKKEEPING = new Set(['id', 'updatedAt', 'seq']);
-const TEXT = new Set(['title', 'content', 'back']);
+const TEXT = new Set(['title', 'content', 'pages', 'back']);
 
 const value = (card: Card, key: string): unknown => (card as unknown as Record<string, unknown>)[key];
 const same = (a: unknown, b: unknown) => JSON.stringify(a) === JSON.stringify(b);
@@ -91,7 +91,7 @@ export function describeChange({ before, after, fields }: Pick<Change, 'before' 
   if (has('status') && after.type === 'todo') return after.status === 'done' ? 'Marked done' : 'Reopened';
   if (has('waiting') && after.type === 'todo') return after.waiting ? 'Marked waiting' : 'No longer waiting';
   if (has('content')) return 'Edited';
-  if (has('back')) return 'Edited the back';
+  if (has('pages') || has('back')) return 'Edited a page';
   if (has('title')) return after.type === 'todo' ? 'Edited' : 'Renamed';
   if (has('tags')) return has('position') ? 'Moved on the board' : 'Changed tags';
   if (has('due') || has('dueTime')) return 'Changed due date';

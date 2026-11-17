@@ -205,8 +205,8 @@ export interface PublicCard {
   type: 'note' | 'todo' | 'tag';
   title: string;
   content: JSONNode;
-  /** The card's back, or null; missing from a server older than card backs. */
-  back?: JSONNode | null;
+  /** The pages behind the card's front, in order; missing from a server older than them. */
+  pages?: JSONNode[];
   status: string | null;
   due: string | null;
   /** Missing from a server older than due times. */

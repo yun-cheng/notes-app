@@ -1,4 +1,4 @@
-import type { Card, JSONNode } from './types';
+import { EMPTY_DOC, type Card, type JSONNode } from './types';
 
 export function walk(node: JSONNode, visit: (n: JSONNode) => void): void {
   visit(node);
@@ -208,23 +208,17 @@ export function textToDoc(text: string): JSONNode {
 /** The words of a translation, one per line: its pieces (a title, then the lines of each part), blanks left out. */
 const translationText = (pieces: string[]) => pieces.filter((p) => p.trim()).join('\n');
 
-/**
- * A card's back with a translation of its front on it: the whole back when it had none, else after what it has,
- * one paragraph per line.
- */
-export function backWithTranslation(back: JSONNode | null | undefined, pieces: string[]): JSONNode {
-  const added = textToDoc(translationText(pieces));
-  if (!back || back.type !== 'doc' || isEmptyDoc(back)) return added;
-  return { ...back, content: [...(back.content ?? []), ...(added.content ?? [])] };
-}
+/** A translation as a page of its own, one paragraph per line. */
+export const translationPage = (pieces: string[]): JSONNode => textToDoc(translationText(pieces));
 
-/** Whether a card's back has a translation's words on it already, in any case, so it isn't added twice. */
-export function backHasTranslation(back: JSONNode | null | undefined, pieces: string[]): boolean {
-  if (!back) return false;
+/** Whether one of a card's pages has a translation's words on it already, in any case, so it isn't added twice. */
+export function pagesHaveTranslation(pages: JSONNode[], pieces: string[]): boolean {
   const norm = (s: string) => s.replace(/\s+/g, ' ').trim().toLowerCase();
-  const text = norm(plainText(back));
   const words = pieces.map(norm).filter(Boolean);
-  return words.length > 0 && words.every((w) => text.includes(w));
+  return words.length > 0 && pages.some((page) => {
+    const text = norm(plainText(page));
+    return words.every((w) => text.includes(w));
+  });
 }
 
 /** Web addresses in the body, from links and from addresses typed as plain text, each once and in order. */
@@ -289,11 +283,44 @@ export function photoIds(content: JSONNode): string[] {
 /** A document with no words and no photos. */
 export const isEmptyDoc = (doc: JSONNode) => plainText(doc) === '' && photoIds(doc).length === 0;
 
-/** A card's back, shown when it's flipped: null when it has none, or only an empty one. */
-export function cardBack(card: Pick<Card, 'type' | 'back'>): JSONNode | null {
-  if (card.type === 'tag' || !card.back || card.back.type !== 'doc') return null;
-  return isEmptyDoc(card.back) ? null : card.back;
+type Paged = Pick<Card, 'type' | 'pages' | 'back'>;
+export const isDocNode = (d: unknown): d is JSONNode => typeof d === 'object' && d !== null && (d as JSONNode).type === 'doc';
+
+/**
+ * The pages behind a card's front, as kept, blank ones included: its `pages`, or a card's `back` from before it
+ * could have more than one.
+ */
+export function storedPages(card: Paged): JSONNode[] {
+  if (card.type === 'tag') return [];
+  if (Array.isArray(card.pages)) return card.pages.filter(isDocNode);
+  return isDocNode(card.back) ? [card.back] : [];
 }
+
+/** The pages behind a card's front that have something on them, in order: what turning it over shows. */
+export const cardPages = (card: Paged): JSONNode[] => storedPages(card).filter((p) => !isEmptyDoc(p));
+
+/** The pages behind its front, as a change to the card: none left is none, and an old `back` is cleared. */
+function pagesPatch(card: Paged, pages: JSONNode[]): { pages: JSONNode[] | null; back?: null } {
+  // Blank pages at the end are nothing to turn to.
+  let end = pages.length;
+  while (end > 0 && isEmptyDoc(pages[end - 1])) end--;
+  return { pages: end ? pages.slice(0, end) : null, ...(card.back != null ? { back: null } : {}) };
+}
+
+/** A card with page `i` behind its front (0 is the first) written as `doc`; one past the last adds a page. */
+export function withPage(card: Paged, i: number, doc: JSONNode) {
+  const pages = [...storedPages(card)];
+  pages[i] = doc;
+  return pagesPatch(card, Array.from(pages, (p) => p ?? EMPTY_DOC));
+}
+
+/** A card with page `i` behind its front taken out, the ones after it moving up. */
+export function withoutPage(card: Paged, i: number) {
+  return pagesPatch(card, storedPages(card).filter((_, j) => j !== i));
+}
+
+/** A card with one more page at the end, after its last page that has something on it. */
+export const withNewPage = (card: Paged, doc: JSONNode) => pagesPatch(card, [...(pagesPatch(card, storedPages(card)).pages ?? []), doc]);
 
 /** A note or todo the user opened but never wrote anything in. A photo counts as something. */
 export function isBlank(card: Card): boolean {

@@ -2,7 +2,7 @@ import { Fragment, useEffect, useLayoutEffect, useMemo, useRef, useState, type K
 import { Link, Navigate, Outlet, useLocation, useNavigate, useParams } from 'react-router';
 import { diaryVault } from '../../domain/access';
 import { linkTitle } from '../../domain/cardIndex';
-import { backHasTranslation, backWithTranslation, cardBack, checklistProgress, CODE_CLOSE, CODE_OPEN, displayTitle, HIDE_CLOSE, HIDE_OPEN, isEmptyDoc, previewParts, splitLinks, type PreviewPart } from '../../domain/content';
+import { cardPages, checklistProgress, CODE_CLOSE, CODE_OPEN, displayTitle, HIDE_CLOSE, HIDE_OPEN, previewParts, splitLinks, storedPages, translationPage, pagesHaveTranslation, withNewPage, withoutPage, withPage, type PreviewPart } from '../../domain/content';
 import { isDateKey, relativeDay, relativeDayInSentence, toDateKey } from '../../domain/dates';
 import { STATE_BOARD } from '../../domain/board';
 import { isFiltered, parseFilter, sortGroup, streamItems, type StreamFilter, type StreamItem, type StreamSort } from '../../domain/stream';
@@ -411,16 +411,16 @@ function BubbleMeta({ card, at, fold, flip, lead }: { card: NoteCard | TodoCard;
         {lead}
         {card.template && <UseTemplate card={card} />}
         <CardBadges card={card} />
-        {flip.back && (
+        {flip.pages.length > 0 && (
           <button
             type="button"
             className={`bubble__flip${flip.on ? ' is-on' : ''}`}
-            aria-pressed={flip.on}
-            title={flip.on ? 'Show the front' : 'Show the back'}
-            onClick={flip.toggle}
+            aria-label={`Page ${flip.at + 1} of ${flip.pages.length + 1}: ${flip.last ? 'back to the front' : 'turn to the next'}`}
+            title={flip.last ? 'Back to the front' : 'Turn to the next page'}
+            onClick={flip.next}
           >
             <Icon name="flip" size={13} />
-            {flip.on ? 'Front' : 'Back'}
+            {flip.at + 1}/{flip.pages.length + 1}
           </button>
         )}
         {(fold.long || fold.folded) && (
@@ -793,45 +793,62 @@ function ShownText({ text }: { text: string }) {
   );
 }
 
-/** Entries showing their back in the stream, kept while the app is open so a filter change doesn't turn them over. */
-const flippedEntries = new Set<string>();
+/**
+ * The page each entry in the stream is turned to, 1 for the first behind its front: kept while the app is open, so
+ * a filter change doesn't turn it back.
+ */
+const turnedTo = new Map<string, number>();
 
 interface Flip {
-  /** The back, or null for a card without one. */
-  back: JSONNode | null;
-  /** Showing the back. */
+  /** The pages behind the front that have something on them; none on most cards. */
+  pages: JSONNode[];
+  /** The page showing: 0 for the front, 1 for the first behind it. */
+  at: number;
+  /** Showing a page behind the front. */
   on: boolean;
-  /** Turned over since it showed, so it turns with a flip rather than as it first draws. */
+  /** On the last page, so the next turn is back to the front. */
+  last: boolean;
+  /** Turned since it showed, so it turns rather than draws as it first did. */
   turned: boolean;
-  toggle: () => void;
+  next: () => void;
 }
 
-/** A card with a back turns over in its bubble, to show the back and then the front again. */
+/** A card with pages behind its front turns through them in its bubble, one after another and then to the front. */
 function useFlip(card: NoteCard | TodoCard): Flip {
-  const back = useMemo(() => cardBack(card), [card]);
-  const [flipped, setFlipped] = useState(() => flippedEntries.has(card.id));
+  const pages = useMemo(() => cardPages(card), [card]);
+  const [kept, setAt] = useState(() => turnedTo.get(card.id) ?? 0);
   const [turned, setTurned] = useState(false);
+  // A page taken off since leaves it on the front.
+  const at = kept <= pages.length ? kept : 0;
+  const last = at === pages.length;
   return {
-    back,
-    on: flipped && !!back,
+    pages,
+    at,
+    on: at > 0,
+    last,
     turned,
-    toggle: () => {
-      if (flipped) flippedEntries.delete(card.id);
-      else flippedEntries.add(card.id);
-      setFlipped(!flipped);
+    next: () => {
+      const to = last ? 0 : at + 1;
+      if (to) turnedTo.set(card.id, to);
+      else turnedTo.delete(card.id);
+      setAt(to);
       setTurned(true);
     },
   };
 }
 
-/** A bubble's classes for its side, and the turn that shows it. */
-const flipClass = (flip: Flip) => (flip.on ? ' is-back' : '') + (flip.turned ? (flip.on ? ' flip-to-back' : ' flip-to-front') : '');
+/**
+ * A bubble's classes for the page it's on, and the turn that shows it: forward to the next page, back to the front.
+ * The forward turn has two names, one for odd pages and one for even, so each turn plays.
+ */
+const flipClass = (flip: Flip) =>
+  (flip.on ? ' is-back' : '') + (flip.turned ? (!flip.on ? ' flip-to-front' : flip.at % 2 ? ' flip-to-back' : ' flip-to-next') : '');
 
-/** Over a bubble's text while it shows its back. */
-const BackLabel = () => (
+/** Over a bubble's text while it shows a page behind its front. */
+const PageLabel = ({ at }: { at: number }) => (
   <span className="bubble__side">
     <Icon name="flip" size={11} />
-    Back
+    Page {at + 1}
   </span>
 );
 
@@ -863,7 +880,7 @@ function useBubble(card: NoteCard | TodoCard, title: string) {
   const { undoAction } = useUndo();
   const toast = useToast();
   const flip = useFlip(card);
-  const doc = flip.on ? flip.back! : card.content;
+  const doc = flip.on ? flip.pages[flip.at - 1] : card.content;
   const titleOf = (id: string, label: string) => linkTitle(index, id, label);
   // What a translation covers: hidden words go as •••, and code isn't sent.
   const plain = previewParts(doc, titleOf, { hidden: 'mask' });
@@ -887,13 +904,12 @@ function useBubble(card: NoteCard | TodoCard, title: string) {
     else if (result.kind !== 'done')
       toast(server ? "It couldn't be translated just now." : "This browser couldn't translate it on the device.", { action: { label: 'Translate with Google', run: withGoogle } });
   };
-  // The front's translation can go on its back, like a flashcard's answer: the whole back, or after what it has.
-  const back = cardBack(card);
-  const toBack = done && !flip.on && may(card).edit && !backHasTranslation(back, done.pieces) ? (back ? 'Add to back' : 'Save to back') : null;
-  const saveToBack = (pieces: string[]) => {
+  // The front's translation can go on a page of its own behind it, like a flashcard's answer.
+  const toPage = !!done && !flip.on && may(card).edit && !pagesHaveTranslation(flip.pages, done.pieces);
+  const saveAsPage = (pieces: string[]) => {
     const action = repo.action();
-    void repo.update(card.id, { back: backWithTranslation(back, pieces) });
-    toast(back ? 'Added to the back' : 'Saved as the back', { action: { label: 'Undo', run: () => void undoAction(action) } });
+    void repo.update(card.id, withNewPage(card, translationPage(pieces)));
+    toast(`Saved as page ${flip.pages.length + 2}`, { action: { label: 'Undo', run: () => void undoAction(action) } });
   };
   const menu = useEntryMenu(card, open, {
     translate: () => void translate(),
@@ -911,9 +927,9 @@ function useBubble(card: NoteCard | TodoCard, title: string) {
         <button type="button" onClick={(e) => (e.stopPropagation(), showTranslation(card.id, false))}>
           Show original
         </button>
-        {toBack && (
-          <button type="button" title="Put this translation on the card's back" onClick={(e) => (e.stopPropagation(), saveToBack(done.pieces))}>
-            {toBack}
+        {toPage && (
+          <button type="button" title="Put this translation on a page of its own, behind the front" onClick={(e) => (e.stopPropagation(), saveAsPage(done.pieces))}>
+            Save as a page
           </button>
         )}
       </span>
@@ -932,7 +948,7 @@ function NoteBubble({ note, at }: { note: NoteCard; at: number }) {
   const { text, flip, open, menu, title, translated, selected, handlers } = useBubble(note, note.title.trim());
   return (
     <div className={`bubble${colorClass(note)}${flipClass(flip)}${selected ? ' is-selected' : ''}`} role="article" aria-current={selected || undefined} {...handlers}>
-      {flip.on && <BackLabel />}
+      {flip.on && <PageLabel at={flip.at} />}
       {translated}
       {title && (
         <strong className="bubble__title">
@@ -975,7 +991,7 @@ function StackEntry({ stack, at }: { stack: NoteCard; at: number }) {
   return (
     <>
       <div className={`bubble bubble--stack${colorClass(stack)}${flipClass(flip)}${selected ? ' is-selected' : ''}`} role="article" aria-current={selected || undefined} {...handlers}>
-        {flip.on && <BackLabel />}
+        {flip.on && <PageLabel at={flip.at} />}
         {translated}
         <span className="stack__head">
           <Icon name="stack" size={15} />
@@ -1114,7 +1130,7 @@ function TodoBubble({ todo, at }: { todo: TodoCard; at: number }) {
         />
       </label>
       <div className="bubble__body">
-        {flip.on && <BackLabel />}
+        {flip.on && <PageLabel at={flip.at} />}
         {translated}
         <span className="bubble__title">
           <LinkedText text={title} />
@@ -1194,10 +1210,21 @@ function EntryDetail({ card, fresh, edit, onClose }: { card: NoteCard | TodoCard
   const [toolbarHost, setToolbarHost] = useState<HTMLDivElement | null>(null);
   const [historyHost, setHistoryHost] = useState<HTMLSpanElement | null>(null);
   const discard = useDiscard(card, fresh);
-  // Which side of the card the text below is: the front, or the back shown when it's flipped.
-  const [side, setSide] = useState<'front' | 'back'>('front');
-  const onBack = side === 'back';
-  const hasBack = !!cardBack(card);
+  const toast = useToast();
+  const { undoAction } = useUndo();
+  // Which page of the card the text below is: 0 for the front, 1 for the first page behind it. One past the pages
+  // it has is a new one, kept once something is written on it.
+  const [page, setPage] = useState(0);
+  const onBack = page > 0;
+  const stored = storedPages(card);
+  const behind = Math.max(stored.length, page);
+  const removePage = () => {
+    setPage(page - 1);
+    if (page > stored.length) return;
+    const action = repo.action();
+    void repo.update(card.id, withoutPage(card, page - 1));
+    toast(`Took out page ${page + 1}`, { action: { label: 'Undo', run: () => void undoAction(action) } });
+  };
   const isTodo = card.type === 'todo';
   const showTitle = isTodo || !!card.title.trim() || titled;
   // Opened to edit, the cursor waits at the end of the text: a todo's title, a note's body.
@@ -1224,16 +1251,30 @@ function EntryDetail({ card, fresh, edit, onClose }: { card: NoteCard | TodoCard
           <TitleField value={card.title} autoFocus={focusTitle} readOnly={!can.edit} onSave={(title) => void repo.update(card.id, { title })} />
         </div>
       )}
-      {onBack && (
-        <p className="note-sheet__side">
+      {behind > 0 && (
+        <div className="page-tabs" role="tablist" aria-label="Pages">
           <Icon name="flip" size={14} />
-          Back of the card
-        </p>
+          {Array.from({ length: behind + 1 }, (_, i) => (
+            <button key={i} type="button" role="tab" aria-selected={page === i} className={`page-tabs__tab${page === i ? ' is-on' : ''}`} onClick={() => setPage(i)}>
+              {i === 0 ? 'Front' : i + 1}
+            </button>
+          ))}
+          {can.edit && page <= stored.length && (
+            <button type="button" className="page-tabs__tab" aria-label="Add a page" title="Add a page behind the others" onClick={() => setPage(behind + 1)}>
+              <Icon name="plus" size={13} />
+            </button>
+          )}
+          {can.edit && onBack && (
+            <button type="button" className="page-tabs__remove" onClick={removePage}>
+              Take out page {page + 1}
+            </button>
+          )}
+        </div>
       )}
-      {/* One editor for each side, so each has its own undo. */}
+      {/* One editor for each page, so each has its own undo. */}
       <Editor
-        key={side}
-        content={onBack ? (card.back ?? EMPTY_DOC) : card.content}
+        key={page}
+        content={onBack ? (stored[page - 1] ?? EMPTY_DOC) : card.content}
         selfId={card.id}
         vaultId={card.vaultId}
         editable={can.edit}
@@ -1241,9 +1282,9 @@ function EntryDetail({ card, fresh, edit, onClose }: { card: NoteCard | TodoCard
         toolbarHost={toolbarHost}
         historyHost={historyHost}
         autofocus={onBack ? can.edit : focusBody}
-        placeholder={onBack ? 'What shows when the card is flipped, like an answer' : isTodo ? 'Details' : 'Note'}
-        // An emptied back is taken off, so the bubble has nothing to flip to.
-        onChange={(content) => void repo.update(card.id, onBack ? { back: isEmptyDoc(content) ? null : content } : { content })}
+        placeholder={page === 1 ? 'What shows when the card is turned over, like an answer' : onBack ? `Page ${page + 1}` : isTodo ? 'Details' : 'Note'}
+        // A blank page is skipped in the bubble, and one at the end is taken off.
+        onChange={(content) => void repo.update(card.id, onBack ? withPage(card, page - 1, content) : { content })}
       />
       {tagging && can.edit ? (
         <TagPicker tagIds={card.tags} onChange={(tags) => void repo.update(card.id, { tags })} />
@@ -1285,15 +1326,8 @@ function EntryDetail({ card, fresh, edit, onClose }: { card: NoteCard | TodoCard
             <Icon name="tag" />
           </button>
         )}
-        {(can.edit || hasBack) && (
-          <button
-            type="button"
-            className={`icon-btn${onBack ? ' is-active' : ''}${hasBack && !onBack ? ' has-dot' : ''}`}
-            aria-pressed={onBack}
-            aria-label="Back of the card"
-            title={onBack ? 'Show the front' : hasBack ? 'Show the back' : 'Add a back, shown when the card is flipped'}
-            onClick={() => setSide(onBack ? 'front' : 'back')}
-          >
+        {can.edit && behind === 0 && (
+          <button type="button" className="icon-btn" aria-label="Add a page" title="Add a page behind the front, shown when the card is turned over" onClick={() => setPage(1)}>
             <Icon name="flip" />
           </button>
         )}
@@ -1437,7 +1471,7 @@ function StackList({ stack }: { stack: NoteCard }) {
 }
 
 /** What Discard puts back: everything about an entry its sheet can change. */
-const DISCARDED: (keyof TodoCard)[] = ['type', 'title', 'content', 'back', 'tags', 'color', 'preview', 'vaultId', 'status', 'due', 'dueTime', 'start', 'repeat'];
+const DISCARDED: (keyof TodoCard)[] = ['type', 'title', 'content', 'pages', 'back', 'tags', 'color', 'preview', 'vaultId', 'status', 'due', 'dueTime', 'start', 'repeat'];
 const sameAs = (a: NoteCard | TodoCard, b: NoteCard | TodoCard) =>
   DISCARDED.every((k) => JSON.stringify((a as TodoCard)[k] ?? null) === JSON.stringify((b as TodoCard)[k] ?? null));
 
@@ -1462,6 +1496,7 @@ function useDiscard(card: NoteCard | TodoCard, fresh: boolean) {
         type: was.type,
         title: was.title,
         content: was.content,
+        pages: was.pages ?? null,
         back: was.back ?? null,
         tags: was.tags,
         color: was.color ?? null,

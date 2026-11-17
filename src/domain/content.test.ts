@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { backHasTranslation, backWithTranslation, cardBack, checklistProgress, CODE_CLOSE, CODE_OPEN, displayTitle, hasPhoto, HIDE_CLOSE, HIDE_OPEN, isBlank, isImageUrl, linkedCardIds, linkUrls, photoIds, plainText, previewLines, previewParts, siteName, splitLinks, textToDoc } from './content';
+import { cardPages, checklistProgress, CODE_CLOSE, CODE_OPEN, displayTitle, hasPhoto, HIDE_CLOSE, HIDE_OPEN, isBlank, isImageUrl, linkedCardIds, linkUrls, photoIds, plainText, previewLines, previewParts, siteName, splitLinks, storedPages, textToDoc, translationPage, pagesHaveTranslation, withNewPage, withoutPage, withPage } from './content';
 import { doc, link, note, p, tag, text } from './testFixtures';
 import type { JSONNode } from './types';
 
@@ -155,32 +155,58 @@ describe('hidden text', () => {
   });
 });
 
-describe('a card’s back', () => {
-  it('is its back doc, or null when it has none or only an empty one', () => {
-    const back = { type: 'doc', content: [{ type: 'paragraph', content: [{ type: 'text', text: 'Lima' }] }] };
-    expect(cardBack(note('n', '', { back }))).toBe(back);
-    expect(cardBack(note('n', ''))).toBeNull();
-    expect(cardBack(note('n', '', { back: null }))).toBeNull();
-    expect(cardBack(note('n', '', { back: { type: 'doc', content: [{ type: 'paragraph' }] } }))).toBeNull();
+describe('the pages behind a card’s front', () => {
+  const page = (words: string) => ({ type: 'doc', content: [{ type: 'paragraph', content: [{ type: 'text', text: words }] }] });
+  const blank = { type: 'doc', content: [{ type: 'paragraph' }] };
+
+  it('are its pages, blank ones skipped, or none', () => {
+    expect(cardPages(note('n', '', { pages: [page('Lima'), blank, page('Peru')] }))).toEqual([page('Lima'), page('Peru')]);
+    expect(storedPages(note('n', '', { pages: [page('Lima'), blank] }))).toHaveLength(2);
+    expect(cardPages(note('n', ''))).toEqual([]);
+    expect(cardPages(note('n', '', { pages: null }))).toEqual([]);
+  });
+
+  it('read a back from before there were pages as the only one', () => {
+    expect(cardPages(note('n', '', { back: page('Lima') }))).toEqual([page('Lima')]);
+    expect(cardPages(note('n', '', { back: blank }))).toEqual([]);
+    // Pages, once written, are what it has.
+    expect(cardPages(note('n', '', { back: page('Old'), pages: [page('New')] }))).toEqual([page('New')]);
+  });
+
+  it('are written one at a time, a new one at the end, the old back cleared', () => {
+    const old = note('n', '', { back: page('Lima') });
+    expect(withPage(old, 1, page('Peru'))).toEqual({ pages: [page('Lima'), page('Peru')], back: null });
+    expect(withPage(note('n', ''), 0, page('Lima'))).toEqual({ pages: [page('Lima')] });
+    // Blank pages at the end go; one in the middle stays, to write on.
+    expect(withPage(old, 0, blank)).toEqual({ pages: null, back: null });
+    const three = note('n', '', { pages: [page('a'), page('b'), page('c')] });
+    expect(withPage(three, 1, blank)).toEqual({ pages: [page('a'), blank, page('c')] });
+    expect(withPage(three, 2, blank)).toEqual({ pages: [page('a'), page('b')] });
+  });
+
+  it('are taken out one at a time, and added after the last', () => {
+    const three = note('n', '', { pages: [page('a'), page('b'), page('c')] });
+    expect(withoutPage(three, 1)).toEqual({ pages: [page('a'), page('c')] });
+    expect(withoutPage(note('n', '', { pages: [page('a')] }), 0)).toEqual({ pages: null });
+    expect(withNewPage(note('n', '', { pages: [page('a'), blank] }), page('b'))).toEqual({ pages: [page('a'), page('b')] });
+    expect(withNewPage(note('n', '', { back: page('a') }), page('b'))).toEqual({ pages: [page('a'), page('b')], back: null });
   });
 });
 
-describe('a translation on a card’s back', () => {
+describe('a translation as a page', () => {
   const para = (text: string) => ({ type: 'paragraph', content: [{ type: 'text', text }] });
-  it('is the whole back when it had none, one paragraph per line, blanks left out', () => {
-    expect(backWithTranslation(null, ['', 'Where is the station?\nThank you'])).toEqual({ type: 'doc', content: [para('Where is the station?'), para('Thank you')] });
+  it('is one paragraph per line, blanks left out', () => {
+    expect(translationPage(['', 'Where is the station?\nThank you'])).toEqual({ type: 'doc', content: [para('Where is the station?'), para('Thank you')] });
   });
-  it('goes after what the back has', () => {
-    const back = { type: 'doc', content: [para('Thank you very much')] };
-    expect(backWithTranslation(back, ['Thanks'])).toEqual({ type: 'doc', content: [para('Thank you very much'), para('Thanks')] });
-  });
-  it('is known to be there already, whatever the case and spacing', () => {
-    const back = { type: 'doc', content: [para('Thank you very much'), para('arigatō  gozaimasu')] };
-    expect(backHasTranslation(back, ['', 'thank you'])).toBe(true);
-    expect(backHasTranslation(back, ['Arigatō gozaimasu'])).toBe(true);
-    expect(backHasTranslation(back, ['Excuse me'])).toBe(false);
-    expect(backHasTranslation(null, ['Thanks'])).toBe(false);
-    expect(backHasTranslation(back, [''])).toBe(false);
+  it('is known to be on a page already, whatever the case and spacing', () => {
+    const pages = [{ type: 'doc', content: [para('Excuse me')] }, { type: 'doc', content: [para('Thank you very much'), para('arigatō  gozaimasu')] }];
+    expect(pagesHaveTranslation(pages, ['', 'thank you'])).toBe(true);
+    expect(pagesHaveTranslation(pages, ['Arigatō gozaimasu'])).toBe(true);
+    expect(pagesHaveTranslation(pages, ['Where is it'])).toBe(false);
+    // All its words on one page, not spread over two.
+    expect(pagesHaveTranslation(pages, ['Excuse me', 'Thank you'])).toBe(false);
+    expect(pagesHaveTranslation([], ['Thanks'])).toBe(false);
+    expect(pagesHaveTranslation(pages, [''])).toBe(false);
   });
 });
 

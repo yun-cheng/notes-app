@@ -1,12 +1,12 @@
 import { strToU8, zipSync } from 'fflate';
 import { linkTitle, resolveTags, type CardIndex } from './cardIndex';
-import { cardBack, displayTitle } from './content';
+import { cardPages, displayTitle, isDocNode } from './content';
 import { isStack, stackEntries, stacksOf } from './stacks';
 import { toMarkdown } from './markdown';
 import { modernCard } from './payload';
 import { isRepeat, repeatWord } from './repeat';
 import { isDateKey, isTimeKey } from './dates';
-import { CARD_TYPES, isCardColor, type Card, type JSONNode, type NoteCard, type Vault } from './types';
+import { CARD_TYPES, isCardColor, type Card, type NoteCard, type Vault } from './types';
 
 export interface MarkdownFile {
   path: string;
@@ -47,12 +47,12 @@ export function markdownFiles(index: CardIndex): MarkdownFile[] {
     if (tags.length) front.push(`tags: [${tags.map((t) => yamlString(t.title)).join(', ')}]`);
     front.push(`created: ${iso(card.createdAt)}`, `updated: ${iso(card.updatedAt)}`);
 
-    const back = cardBack(card);
-    // A card's back follows its front, under a heading of its own.
+    // The pages behind a card's front follow it, each under a heading of its own.
+    const pages = cardPages(card).map((page, i) => `\n\n## Page ${i + 2}\n\n${toMarkdown(page, titleOf)}`).join('');
     // A stack lists its entries, in order, as links.
     const entries = isStack(card) ? stackEntries(card, index.byId, stacksOf(index)) : [];
     const stacked = entries.length ? `\n\n## In this stack\n\n${entries.map((e, i) => `${i + 1}. [[${titleOf(e.id, displayTitle(e))}]]`).join('\n')}` : '';
-    const body = toMarkdown(card.content, titleOf) + (back ? `\n\n## Back\n\n${toMarkdown(back, titleOf)}` : '') + stacked;
+    const body = toMarkdown(card.content, titleOf) + pages + stacked;
     const heading = `# ${card.title}\n\n`;
     return { path, text: `---\n${front.join('\n')}\n---\n\n${heading}${body}\n` };
   });
@@ -102,7 +102,8 @@ function isCard(value: unknown): value is Card {
     !optional(c.template, (t) => typeof t === 'boolean') ||
     !optional(c.position, (n) => typeof n === 'number' && Number.isFinite(n)) ||
     !optional((c as Partial<NoteCard>).stack, (s) => c.type === 'note' && isStrings(s)) ||
-    !optional(c.back, (b) => b === null || (typeof b === 'object' && (b as JSONNode).type === 'doc')) ||
+    !optional(c.back, (b) => b === null || isDocNode(b)) ||
+    !optional(c.pages, (pages) => pages === null || (Array.isArray(pages) && pages.every(isDocNode))) ||
     !CARD_TYPES.includes(c.type as Card['type'])
   ) {
     return false;

@@ -102,4 +102,19 @@ describe('public links', () => {
     const text = await (await call(`/api/public/${links[0].token}`)).text();
     expect(text).not.toContain('Secret plan');
   });
+  it('shows the pages behind its front, and an old back as its one page', async () => {
+    const { ann, push, send, call, json } = await people();
+    const page = (words: string) => ({ type: 'doc', content: [{ type: 'paragraph', content: [{ type: 'text', text: words }] }] });
+    const blank = { type: 'doc', content: [{ type: 'paragraph' }] };
+    await push(ann.cookie, [
+      rec(ann.vault, 'a1', { payload: note('Paged', { pages: [page('Two'), blank, page('Three')] }) }),
+      rec(ann.vault, 'a2', { payload: note('Backed', { back: page('Back') }) }),
+    ]);
+    const pagesOf = async (id: string) => {
+      const { links } = await json<CardShares>(send(ann.cookie, 'POST', `/api/cards/${id}/links`, {}));
+      return (await json<{ pages: unknown[] }>(call(`/api/public/${links[0].token}`))).pages;
+    };
+    expect(await pagesOf('a1')).toEqual([page('Two'), page('Three')]);
+    expect(await pagesOf('a2')).toEqual([page('Back')]);
+  });
 });

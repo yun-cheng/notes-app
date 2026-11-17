@@ -25,7 +25,7 @@ describe('templates', () => {
       color: 'blue',
       tags: ['w'],
       content: doc(p(text('Written {Date}')), checklist(['Inbox to zero', true], ['Plan next week', false])),
-      back: doc(p(text('Done by {today}'))),
+      pages: [doc(p(text('Done by {today}')))],
     });
     const made = fromTemplate(template, today);
     const day = formatDay(today);
@@ -35,7 +35,7 @@ describe('templates', () => {
     expect(made.color).toBe('blue');
     expect(made.content.content![0]).toEqual(p(text(`Written ${day}`)));
     expect(made.content.content![1].content!.map((i) => i.attrs?.checked)).toEqual([false, false]);
-    expect(made.back).toEqual(doc(p(text(`Done by ${day}`))));
+    expect(made.pages).toEqual([doc(p(text(`Done by ${day}`)))]);
     // The template itself is left as it was.
     expect(template.content.content![1].content![0].attrs?.checked).toBe(true);
   });

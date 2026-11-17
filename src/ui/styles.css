@@ -97,7 +97,8 @@ h1, h2, p { margin: 0; }
 .filter-chip { flex: none; gap: 0; padding: 0; color: var(--muted); }
 .filter-chip.is-set { background: var(--accent-soft); color: var(--text); font-weight: 500; }
 .filter-chip.is-set.tint { background: color-mix(in srgb, var(--tint) 24%, var(--surface)); }
-.filter-chip__open { display: inline-flex; align-items: center; gap: 4px; min-height: 28px; padding: 0 8px 0 10px; border: 0; border-radius: 999px; background: none; color: inherit; font: inherit; cursor: pointer; }
+/* `.chip .` so the small-× rule for `.chip button` doesn't make these bigger than the other chips. */
+.chip .filter-chip__open { display: inline-flex; align-items: center; gap: 4px; min-height: 28px; padding: 0 8px 0 10px; border: 0; border-radius: 999px; background: none; color: inherit; font: inherit; cursor: pointer; }
 .filter-chip:not(.is-set):hover { color: var(--text); }
 .filter-chip__open svg { opacity: 0.7; }
 .filter-chip > .filter-chip__value { padding: 0 2px 0 10px; }

@@ -10,7 +10,7 @@ import { useSelection } from './selection';
 import { ShareDialog } from './ShareDialog';
 import { useTickTodo, useToggleWaiting } from './TodoDue';
 import { usePermissions, useViewOnly } from './viewOnly';
-import { useSaveAsTemplate, useStartFromTemplate } from './useTemplates';
+import { useStartFromTemplate, useToggleTemplate } from './useTemplates';
 import { useLocation, useNavigate } from 'react-router';
 import { textToDoc } from '../domain/content';
 import { cardPath, sheetState } from './paths';
@@ -173,7 +173,7 @@ function EntryMenu({ card, at, open, extras, onShare, onClose }: MenuProps) {
   const toggleWaiting = useToggleWaiting();
   const selection = useSelection();
   const toggleViewOnly = useEntryViewOnly(card);
-  const saveAsTemplate = useSaveAsTemplate();
+  const toggleTemplate = useToggleTemplate();
   const startFrom = useStartFromTemplate();
   const viewOnly = useViewOnly();
   const can = may(card);
@@ -235,9 +235,9 @@ function EntryMenu({ card, at, open, extras, onShare, onClose }: MenuProps) {
             {extras.translated ? 'Show original' : translatesOnDevice() ? 'Translate' : 'Translate with Google'}
           </Item>
         )}
-        {!viewOnly && (
-          <Item icon="template" onClick={run(() => (card.template ? startFrom(card) : saveAsTemplate(card)))}>
-            {card.template ? 'Use this template' : 'Save as template'}
+        {!viewOnly && card.template && (
+          <Item icon="template" onClick={run(() => startFrom(card))}>
+            Use this template
           </Item>
         )}
         {selection && (
@@ -260,6 +260,10 @@ function EntryMenu({ card, at, open, extras, onShare, onClose }: MenuProps) {
           )}
           <Item icon={to} onClick={run(() => actions.retype(card.id, to))}>
             {to === 'todo' ? 'Make it a todo' : 'Make it a note'}
+          </Item>
+          {/* Ticked on a template; ticking it makes this entry one, in place. */}
+          <Item icon="template" checked={!!card.template} onClick={run(() => toggleTemplate(card))}>
+            Template
           </Item>
         </div>
       )}

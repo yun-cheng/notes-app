@@ -1020,8 +1020,10 @@ body.is-dragging-card, body.is-dragging-card * { cursor: grabbing !important; us
 @media (prefers-reduced-motion: reduce) { .hidden-text { transition: none; } }
 
 /* A card's back: the bubble turns over to show it, marked Back, and turns again to the front. */
-.bubble__flip { display: inline-flex; align-items: center; gap: 3px; padding: 0 6px 0 4px; border: 0; border-radius: 6px; background: none; color: var(--accent); font: inherit; font-size: 12px; font-weight: 600; cursor: pointer; }
+.bubble__flip, .bubble__template { display: inline-flex; align-items: center; gap: 3px; padding: 0 6px 0 4px; border: 0; border-radius: 6px; background: none; color: var(--accent); font: inherit; font-size: 12px; font-weight: 600; cursor: pointer; }
 .bubble__flip:hover, .bubble__flip.is-on { background: var(--accent-soft); }
+button.bubble__template:hover { background: var(--accent-soft); }
+span.bubble__template { color: var(--muted); cursor: default; }
 .bubble__side { display: flex; align-items: center; gap: 4px; margin-bottom: 2px; color: var(--accent); font-size: 11px; font-weight: 600; letter-spacing: 0.04em; text-transform: uppercase; }
 .bubble.is-back { border-style: dashed; }
 .flip-to-back { animation: flip-to-back 0.32s ease-out; }
@@ -1150,13 +1152,7 @@ body.is-dragging-card, body.is-dragging-card * { cursor: grabbing !important; us
 .timeline__end--end { border-radius: 0 7px 7px 0; }
 .timeline__bar:hover .timeline__end { background: color-mix(in srgb, var(--accent) 35%, transparent); }
 
-/* Templates: a list to start from, and a note over a template's own text. */
-.templates__intro { margin-bottom: 14px; }
-.templates { margin: 0; padding: 0; list-style: none; }
-.templates__item { display: flex; align-items: center; gap: 12px; padding: 10px 12px; border-bottom: 1px solid var(--line); color: var(--muted); }
-.templates__item.tint { border-left: 3px solid var(--tint); }
-.templates__name { display: flex; flex: 1; flex-direction: column; min-width: 0; color: var(--text); }
-.templates__name span { overflow: hidden; color: var(--muted); font-size: 13px; text-overflow: ellipsis; white-space: nowrap; }
+/* A note over a template's own text, in its sheet. */
 .template-note { display: flex; align-items: center; gap: 10px; margin: -4px 0 10px; padding: 8px 12px; border-radius: 9px; background: var(--accent-soft); font-size: 14px; }
 .template-note span { flex: 1; }
 .context-menu__note { display: block; padding: 6px 12px 2px; color: var(--muted); font-size: 11px; }

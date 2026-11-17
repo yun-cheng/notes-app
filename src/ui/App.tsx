@@ -18,7 +18,6 @@ import { TagsPage } from './pages/tags';
 import { SearchPage } from './pages/views';
 import { CalendarPage } from './pages/calendar';
 import { TimelinePage } from './pages/timeline';
-import { TemplatesPage } from './pages/templates';
 import { CommandPalette } from './CommandPalette';
 import { FilterPanel } from './FilterPanel';
 import { SidebarAccount } from './AccountBadge';
@@ -184,7 +183,8 @@ function SignedInApp() {
           <Route path="upcoming" element={<Navigate to={journalPath({ status: 'upcoming' })} replace />} />
           <Route path="calendar" element={<CalendarPage />} />
           <Route path="timeline" element={<TimelinePage />} />
-          <Route path="templates" element={<TemplatesPage />} />
+          {/* Templates were a page of their own until they became a journal filter. */}
+          <Route path="templates" element={<Navigate to={journalPath({ template: true })} replace />} />
           <Route path="journal" element={<JournalPage />}>
             <Route path=":id" element={<EntrySheet />} />
           </Route>

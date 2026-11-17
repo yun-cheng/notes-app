@@ -81,7 +81,7 @@ export function CommandPalette({ onClose, onShortcuts }: { onClose: () => void; 
       { id: 'go-history', group: 'Go to', label: 'History', icon: 'history', keywords: 'changes recent activity log undo redo', run: go(historyPath(current)) },
       { id: 'go-calendar', group: 'Go to', label: 'Calendar', icon: 'calendar', keywords: 'month day date', run: go('/calendar') },
       { id: 'go-timeline', group: 'Go to', label: 'Timeline', icon: 'timeline', keywords: 'gantt start due span weeks plan', run: go('/timeline') },
-      { id: 'go-templates', group: 'Go to', label: 'Templates', icon: 'template', keywords: 'template copy reuse checklist', run: go('/templates') },
+      { id: 'go-templates', group: 'Go to', label: 'Templates', icon: 'template', keywords: 'template copy reuse checklist', run: go(journalPath({ template: true })) },
       { id: 'go-search', group: 'Go to', label: 'Search', icon: 'search', keywords: 'find', run: go('/search') },
       { id: 'go-tags', group: 'Go to', label: 'All tags', icon: 'tag', keywords: 'labels folders', run: go('/tags') },
       { id: 'go-vaults', group: 'Go to', label: 'Vaults', icon: 'lock', keywords: 'private pin members', run: go('/vaults') },

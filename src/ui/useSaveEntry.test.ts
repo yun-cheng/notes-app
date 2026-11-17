@@ -12,4 +12,8 @@ describe('what the journal is narrowed to, as defaults for what is written', () 
     expect(journalDefaults({ when: '2026-11-10' }, TODAY).date).toBe('2026-11-10');
     expect(journalDefaults({ when: TODAY }, TODAY).date).toBeUndefined();
   });
+  it('makes templates under Templates', () => {
+    expect(journalDefaults({ template: true }, TODAY).template).toBe(true);
+    expect(journalDefaults({}, TODAY).template).toBeUndefined();
+  });
 });

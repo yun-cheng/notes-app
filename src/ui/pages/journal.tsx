@@ -41,7 +41,7 @@ import { usePopover } from '../usePopover';
 import { Board, BoardSetup, lastBoard, useBoardKind, useCardDrag, type DragParts } from './board';
 import { foldStacks, isStack, moveInStack, stackEntries, stacksOf } from '../../domain/stacks';
 import { openStacks } from '../useStacking';
-import { useStartFromTemplate } from '../useTemplates';
+import { useStartFromTemplate, useToggleTemplate } from '../useTemplates';
 import { clearTranslation, googleTranslateUrl, languageName, openOutside, translateEntry, translatesOnDevice, useTranslation } from '../translate';
 
 const time = (at: number) => new Date(at).toLocaleTimeString(undefined, { hour: 'numeric', minute: '2-digit' });
@@ -121,7 +121,7 @@ export function JournalPage() {
       <Page
         title={
           <>
-            {selecting ? `${selection.ids.length} selected` : 'Journal'}
+            {selecting ? `${selection.ids.length} selected` : filter.template ? 'Templates' : 'Journal'}
             {count}
           </>
         }
@@ -146,7 +146,9 @@ export function JournalPage() {
               empty={
                 filter.archived
                   ? 'Nothing archived here. Archive an entry from its menu to put it away without trashing it.'
-                  : filtered
+                  : filter.template
+                    ? 'No templates here yet. Write one below, like a packing list or a weekly review, or tick Template in any entry’s menu. {date} in one becomes the day it’s used.'
+                    : filtered
                     ? 'Nothing here yet. Write below and it lands here.'
                     : 'Nothing written yet. Write a note below, or start with [] for a todo.'
               }
@@ -370,6 +372,7 @@ function BubbleMeta({ card, at, fold, flip, lead }: { card: NoteCard | TodoCard;
       {card.viewOnly && <ViewOnlyMark card={card} />}
       <span className="bubble__end">
         {lead}
+        {card.template && <UseTemplate card={card} />}
         <CardBadges card={card} />
         {flip.back && (
           <button
@@ -1105,6 +1108,7 @@ function EntryDetail({ card, fresh, edit, onClose }: { card: NoteCard | TodoCard
   const can = may(card);
   const remove = useDeleteCard();
   const { copy, archive } = useEntryActions();
+  const toggleTemplate = useToggleTemplate();
   const [tools, setTools] = useState(false);
   const [tagging, setTagging] = useState(false);
   const [titled, setTitled] = useState(false);
@@ -1223,6 +1227,18 @@ function EntryDetail({ card, fresh, edit, onClose }: { card: NoteCard | TodoCard
         )}
         {can.edit && <StyleMenu card={card} inBar />}
         {can.protect && <ViewOnlyButton card={card} className="icon-btn" />}
+        {can.edit && !isStack(card) && (
+          <button
+            type="button"
+            className={`icon-btn${card.template ? ' is-active' : ''}`}
+            aria-pressed={!!card.template}
+            aria-label="Template"
+            title={card.template ? 'A template: press to make it an ordinary entry again' : 'Make it a template, to start new entries from'}
+            onClick={() => toggleTemplate(card)}
+          >
+            <Icon name="template" />
+          </button>
+        )}
         <button type="button" className="icon-btn" aria-label="Copy" title="Copy" onClick={() => copy([card.id])}>
           <Icon name="copy" />
         </button>
@@ -1272,6 +1288,26 @@ function EntryDetail({ card, fresh, edit, onClose }: { card: NoteCard | TodoCard
       </div>
       {sharing && <ShareDialog card={card} onClose={() => setSharing(false)} />}
     </>
+  );
+}
+
+/** In a template's bubble: Use, which starts a new entry from it. */
+function UseTemplate({ card }: { card: NoteCard | TodoCard }) {
+  const use = useStartFromTemplate();
+  const viewOnly = useViewOnly();
+  if (viewOnly) {
+    return (
+      <span className="bubble__template" title="A template">
+        <Icon name="template" size={13} />
+        Template
+      </span>
+    );
+  }
+  return (
+    <button type="button" className="bubble__template" title="Start a new entry from this template" onClick={() => void use(card)}>
+      <Icon name="template" size={13} />
+      Use
+    </button>
   );
 }
 

@@ -45,6 +45,8 @@ export interface StreamFilter {
   has?: Contains;
   /** Archived entries instead of the rest. The journal leaves them out otherwise. */
   archived?: boolean;
+  /** Templates instead of the rest (`templates.ts`): entries kept to start new ones from. The journal leaves them out otherwise. */
+  template?: boolean;
   /**
    * Shown as a board, with a tag group's tags as columns (`board.ts`): the group's ID, or `pick` to choose one.
    * Like the sort, it's how the entries show, not which.
@@ -75,6 +77,7 @@ export function parseFilter(params: URLSearchParams): StreamFilter {
     vaultId: params.get('vault') || undefined,
     has: pick<Contains>('has', CONTAINS),
     archived: params.get('archived') === '1' || undefined,
+    template: params.get('template') === '1' || undefined,
     board: params.get('board') || undefined,
   };
 }
@@ -89,24 +92,25 @@ export function filterParams(filter: StreamFilter): URLSearchParams {
   if (filter.vaultId) params.set('vault', filter.vaultId);
   if (filter.has) params.set('has', filter.has);
   if (filter.archived) params.set('archived', '1');
+  if (filter.template) params.set('template', '1');
   if (filter.board) params.set('board', filter.board);
   return params;
 }
 
-export const isFiltered = (f: StreamFilter) => !!(f.type || f.status || f.when || f.tagId || f.vaultId || f.has || f.archived);
+export const isFiltered = (f: StreamFilter) => !!(f.type || f.status || f.when || f.tagId || f.vaultId || f.has || f.archived || f.template);
 
 /**
  * A filter as the calendar and the timeline take it: they show todos with dates, so a todo status, a tag, a vault
  * and Archived narrow them. Null for a filter they can't show (notes, when written, what an entry holds, todos
- * with no date), which is the journal's.
+ * with no date, templates), which is the journal's.
  */
 export function datedFilter(f: StreamFilter): StreamFilter | null {
-  if (f.type === 'note' || f.when || f.has || f.status === 'undated') return null;
+  if (f.type === 'note' || f.when || f.has || f.status === 'undated' || f.template) return null;
   return { status: f.status, tagId: f.tagId, vaultId: f.vaultId, archived: f.archived };
 }
 
 /** One part of a filter, as a chip names it. */
-export type FilterPart = 'type' | 'status' | 'when' | 'tagId' | 'vaultId' | 'has' | 'archived';
+export type FilterPart = 'type' | 'status' | 'when' | 'tagId' | 'vaultId' | 'has' | 'archived' | 'template';
 
 /**
  * The parts a filter is made of, in the order they're named, each with the filter that's left without it (same
@@ -118,7 +122,7 @@ export function filterParts(f: StreamFilter): { part: FilterPart; without: Strea
   const parts: { part: FilterPart; without: StreamFilter }[] = [];
   if (type) parts.push({ part: 'type', without: { ...f, type: undefined, status: undefined } });
   if (f.status) parts.push({ part: 'status', without: { ...f, type, status: undefined } });
-  for (const part of ['when', 'tagId', 'vaultId', 'has', 'archived'] as const) if (f[part]) parts.push({ part, without: { ...f, [part]: undefined } });
+  for (const part of ['when', 'tagId', 'vaultId', 'has', 'archived', 'template'] as const) if (f[part]) parts.push({ part, without: { ...f, [part]: undefined } });
   return parts;
 }
 
@@ -233,7 +237,7 @@ export type SharedInto = ReadonlyMap<string, readonly string[]>;
  * only; without it, archived ones still pass here (their history shows), and the journal leaves them out itself.
  */
 export function entryMatcher(filter: StreamFilter, today: string, sharedInto?: SharedInto): (card: Card, day?: string) => boolean {
-  const { tagId, vaultId, status, has, archived } = filter;
+  const { tagId, vaultId, status, has, archived, template } = filter;
   const type = effectiveType(filter);
   const [from, to] = filter.when ? whenRange(filter.when, today) : ['', '9999'];
   return (card, day = entryDay(card)) =>
@@ -244,6 +248,7 @@ export function entryMatcher(filter: StreamFilter, today: string, sharedInto?: S
     (!status || (card.type === 'todo' && matchesStatus(card, status, today))) &&
     (!has || (has === 'link' ? linkUrls(card.content).length > 0 : hasPhoto(card.content))) &&
     (!archived || !!card.archived) &&
+    (!template || !!card.template) &&
     day >= from &&
     day <= to;
 }
@@ -253,8 +258,8 @@ export function streamItems(index: CardIndex, filter: StreamFilter = {}, today =
   const keep = entryMatcher(filter, today, sharedInto);
   const items: StreamItem[] = [];
   for (const card of index.live) {
-    // Templates are only on their own page.
-    if ((card.type !== 'note' && card.type !== 'todo') || !!card.archived !== !!filter.archived || card.template) continue;
+    // Archived entries only under Archived, and templates only under Templates.
+    if ((card.type !== 'note' && card.type !== 'todo') || !!card.archived !== !!filter.archived || !!card.template !== !!filter.template) continue;
     const day = entryDay(card);
     if (keep(card, day)) items.push({ card, day, at: card.createdAt });
   }

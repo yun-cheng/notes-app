@@ -61,7 +61,8 @@ interface CardCommon extends CardEnvelope {
    */
   back?: JSONNode | null;
   /**
-   * Kept to start new entries from, on the Templates page, and out of the journal, the todo counts and the calendar.
+   * Kept to start new entries from: listed under the journal's Templates filter, and out of the rest of the journal,
+   * the todo counts and the calendar.
    * See `templates.ts`. Missing on most cards.
    */
   template?: boolean;

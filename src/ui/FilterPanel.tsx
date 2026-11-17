@@ -149,6 +149,20 @@ export function FilterBar({ filter }: { filter: StreamFilter }) {
           Archived
         </Link>
       )}
+      {/* Templates are entries too, kept apart: the journal swaps to them, filtered by the rest as usual. */}
+      {!dated &&
+        (filter.template ? (
+          <span className="chip filter-chip is-set">
+            <span className="filter-chip__value">Templates</span>
+            <Link className="filter-chip__clear" to={path(without('template'))} aria-label="Remove filter: Templates" title="Back to entries">
+              ×
+            </Link>
+          </span>
+        ) : (
+          <Link className="chip filter-chip filter-chip--toggle" to={path({ ...filter, template: true })} title="Show templates instead: entries kept to start new ones from">
+            Templates
+          </Link>
+        ))}
       {filter.tagId && (
         <span className={`chip filter-chip is-set${tag ? colorClass(tag) : ''}`}>
           <span className="filter-chip__value">{tagTitle}</span>
@@ -355,11 +369,11 @@ export function FilterPanel({ onPick }: { onPick?: () => void }) {
     <div className="filters">
       <nav aria-label="Journal">
         {/* Journal is the one in use unless a tag or vault here is: the title bar shows the other filters. */}
-        {link('all', 'Journal', journalPath(onHistory || onDated ? filter : { sort: filter.sort, board: filter.board }), onJournal && !filter.tagId && !filter.vaultId, 'notes')}
+        {link('all', 'Journal', journalPath(onHistory || onDated ? filter : { sort: filter.sort, board: filter.board }), onJournal && !filter.tagId && !filter.vaultId && !filter.template, 'notes')}
         {link('history', 'History', historyPath(onJournal || onDated ? filter : { sort: filter.sort }), onHistory, 'history')}
         {link('calendar', 'Calendar', datedLink('/calendar'), datedActive('/calendar'), 'calendar')}
         {link('timeline', 'Timeline', datedLink('/timeline'), datedActive('/timeline'), 'timeline')}
-        {link('templates', 'Templates', '/templates', pathname === '/templates', 'template')}
+        {link('templates', 'Templates', journalPath({ template: true }), onJournal && !!filter.template && !filter.tagId && !filter.vaultId, 'template')}
       </nav>
 
       {index.tagGroups.groups

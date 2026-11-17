@@ -4,7 +4,7 @@ import { fromTemplate } from '../domain/templates';
 import type { NoteCard, TodoCard } from '../domain/types';
 import { useCards, useToday } from '../state/CardsContext';
 import { usePermissions, useViewOnly, VIEW_ONLY_NOTE } from './viewOnly';
-import { entryPath, sheetState } from './paths';
+import { entryPath, sheetState, TEMPLATES_PATH } from './paths';
 import { useToast } from './Toast';
 import { useUndo } from './useUndo';
 
@@ -37,37 +37,21 @@ export function useStartFromTemplate() {
   };
 }
 
-/** Saving an entry as a template: a copy kept on the Templates page, with no due date, the entry left as it is. */
-export function useSaveAsTemplate() {
+/**
+ * Making an entry a template, or an ordinary entry again, as it is: it moves between the journal and its Templates
+ * filter, with an undo. A todo keeps its dates, which a template doesn't pass on.
+ */
+export function useToggleTemplate() {
   const { repo } = useCards();
   const navigate = useNavigate();
   const toast = useToast();
   const { undoAction } = useUndo();
-  const vaultFor = useVaultFor();
-  return async (card: Entry) => {
+  return (card: Entry) => {
+    const template = !card.template;
     const action = repo.action();
-    const common = { title: card.title, content: card.content, back: card.back ?? undefined, tags: card.tags, color: card.color ?? undefined, preview: card.preview, vaultId: vaultFor(card), template: true };
-    if (card.type === 'todo') await repo.createTodo(common);
-    else await repo.createNote(common);
-    toast(`Saved “${displayTitle(card)}” as a template`, {
-      actions: [
-        { label: 'Templates', run: () => void navigate('/templates') },
-        { label: 'Undo', run: () => void undoAction(action) },
-      ],
-    });
-  };
-}
-
-/** A new, empty template, opened to write. */
-export function useNewTemplate() {
-  const { repo } = useCards();
-  const navigate = useNavigate();
-  const location = useLocation();
-  const viewOnly = useViewOnly();
-  const toast = useToast();
-  return async () => {
-    if (viewOnly) return toast(VIEW_ONLY_NOTE);
-    const card = await repo.createNote({ template: true });
-    void navigate(entryPath(card.id), { state: sheetState(location, card, { fresh: true, edit: true }) });
+    void repo.update(card.id, { template });
+    const undo = { label: 'Undo', run: () => void undoAction(action) };
+    if (template) toast(`Made “${displayTitle(card)}” a template`, { actions: [{ label: 'Templates', run: () => void navigate(TEMPLATES_PATH) }, undo] });
+    else toast(`“${displayTitle(card)}” is no longer a template`, { action: undo });
   };
 }

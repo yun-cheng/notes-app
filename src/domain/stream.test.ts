@@ -46,6 +46,19 @@ describe('stream', () => {
 
   const ids = (items: ReturnType<typeof streamItems>) => items.map((i) => i.card.id);
 
+  it('keeps templates apart: only under Templates, where the other filters still narrow them', () => {
+    const packing = note('tp', 'Packing', { createdAt: at('2026-11-12', 10), template: true, tags: ['work'] });
+    const review = todo('tr', null, { createdAt: at('2026-11-12', 11), template: true, vaultId: 'diary' });
+    const all = buildIndex([...cards, packing, review]);
+    expect(ids(streamItems(all, {}, TODAY))).toEqual(['n1', 'd1', 't1', 'd2', 'n2']);
+    expect(ids(streamItems(all, { template: true }, TODAY))).toEqual(['tp', 'tr']);
+    expect(ids(streamItems(all, { template: true, tagId: 'work' }, TODAY))).toEqual(['tp']);
+    expect(ids(streamItems(all, { template: true, vaultId: 'diary' }, TODAY))).toEqual(['tr']);
+    expect(parseFilter(filterParams({ template: true }))).toMatchObject({ template: true });
+    expect(isFiltered({ template: true })).toBe(true);
+    expect(datedFilter({ template: true })).toBeNull();
+  });
+
   it('narrows by type, vault and when it was written', () => {
     expect(ids(streamItems(buildIndex(cards), { vaultId: 'diary' }, TODAY))).toEqual(['d1', 'd2']);
     expect(ids(streamItems(buildIndex(cards), { when: 'today' }, TODAY))).toEqual(['t1', 'd2', 'n2']);

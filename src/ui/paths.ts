@@ -11,6 +11,9 @@ export function journalPath(filter: StreamFilter): string {
   return query ? `/journal?${query}` : '/journal';
 }
 
+/** The journal's Templates filter, where templates are kept, written and filtered like any entry. */
+export const TEMPLATES_PATH = '/journal?template=1';
+
 /** The history of changes, narrowed the way the journal is. */
 export function historyPath(filter: StreamFilter): string {
   const query = filterParams(filter).toString();

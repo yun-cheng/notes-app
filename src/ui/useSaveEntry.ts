@@ -18,7 +18,7 @@ export interface SaveResult {
   action?: string;
 }
 
-/** Where entries go: the journal filter's tag and vault, its todo default, "due today" or waiting, and the day it shows. */
+/** Where entries go: the journal filter's tag and vault, its todo default, "due today" or waiting, the day it shows, and whether they're templates. */
 export interface SaveOptions {
   due?: string;
   /** Todos start out waiting. */
@@ -29,12 +29,14 @@ export interface SaveOptions {
   vaultId?: string;
   /** A day other than today: entries are written on it, at this time of day, so they show on that day. */
   date?: string;
+  /** Entries are made as templates: written under the Templates filter. */
+  template?: boolean;
 }
 
 /** What the journal is narrowed to, as defaults for what is written or pasted into it. */
 export function journalDefaults(filter: StreamFilter, today: string): SaveOptions {
   const date = filter.when && isDateKey(filter.when) && filter.when !== today ? filter.when : undefined;
-  return { due: filter.status === 'today' ? today : undefined, waiting: filter.status === 'waiting' || undefined, tagId: filter.tagId, vaultId: filter.vaultId, date };
+  return { due: filter.status === 'today' ? today : undefined, waiting: filter.status === 'waiting' || undefined, tagId: filter.tagId, vaultId: filter.vaultId, date, template: filter.template };
 }
 
 /** The moment `date` shows the clock's time, so entries written for another day keep the order they're written in. */
@@ -89,7 +91,7 @@ export function useSaveEntries() {
     const action = repo.action();
     const at = opts.date ? onDay(opts.date) : undefined;
     const making: Promise<Card>[] = entries.map((entry, i) => {
-      const common = { title: entry.title, content: entry.content, back: entry.back, tags: tagIdsFor(entry.tags), vaultId: vaultOf(entry), createdAt: at === undefined ? undefined : at + i };
+      const common = { title: entry.title, content: entry.content, back: entry.back, tags: tagIdsFor(entry.tags), vaultId: vaultOf(entry), createdAt: at === undefined ? undefined : at + i, template: opts.template };
       if (entry.kind === 'note') return repo.createNote(common);
       const due = entry.due ?? opts.due ?? null;
       return repo.createTodo({ ...common, due, start: entry.start, dueTime: entry.dueTime, repeat: entry.repeat, done: entry.done, waiting: opts.waiting });

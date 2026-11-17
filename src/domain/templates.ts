@@ -3,8 +3,9 @@ import type { Card, CardColor, JSONNode, NoteCard, PreviewStyle, TodoCard } from
 
 /**
  * Templates: notes and todos kept to start new ones from, like a packing list or a weekly review. A template is an
- * entry marked `template`; it stays out of the journal, the todo counts, the calendar and the boards, and lives on
- * the Templates page. Starting from one copies it: its title, text, back, tags, color and previews, with every
+ * entry marked `template`, which any entry can be made, in place, and back. It stays out of the journal, the todo
+ * counts, the calendar and the boards, and shows under the journal's Templates filter instead, where it's filtered,
+ * tagged and moved between vaults like any entry, and what's written there is a template. Starting from one copies it: its title, text, back, tags, color and previews, with every
  * checklist item unticked and `{date}` written as the day it's used.
  */
 export const isTemplate = (card: Card | undefined): card is NoteCard | TodoCard => !!card && card.type !== 'tag' && !!card.template;

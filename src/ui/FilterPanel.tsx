@@ -87,8 +87,6 @@ export function FilterBar({ filter }: { filter: StreamFilter }) {
     return { key: String(value), label, checked, next: { ...filter, ...also, [key]: checked ? undefined : value } };
   };
 
-  // A todo status means todos, so Type says Todos with it, and taking Todos off (or picking Notes) takes the status off too.
-  const type = effectiveType(filter);
   const pickedDay = filter.when && !WHEN_LABEL[filter.when] ? filter.when : undefined;
   const tag = index.tags.find((t) => t.id === filter.tagId);
   const group = index.tagGroups.groupOf.get(filter.tagId ?? '');
@@ -96,21 +94,7 @@ export function FilterBar({ filter }: { filter: StreamFilter }) {
 
   return (
     <div className="filter-bar" role="group" aria-label="Filters">
-      {!dated && (
-        // Both, notes or todos, a switch rather than a menu: one press, and all three always in sight.
-        <span className="segmented filter-switch" role="group" aria-label="Type">
-          {([undefined, 'note', 'todo'] as const).map((t) => (
-            <button
-              key={t ?? 'all'}
-              type="button"
-              aria-pressed={type === t}
-              onClick={() => void navigate(path(t ? { ...filter, type: t, status: t === 'todo' ? filter.status : undefined } : { ...filter, type: undefined, status: undefined }))}
-            >
-              {t ? TYPE_LABEL[t] : 'All'}
-            </button>
-          ))}
-        </span>
-      )}
+      {!dated && <TypeCycle filter={filter} />}
       <FilterMenu
         name="Todos"
         value={filter.status && STATUS_LABEL[filter.status]}
@@ -196,6 +180,49 @@ export function FilterBar({ filter }: { filter: StreamFilter }) {
         />
       )}
     </div>
+  );
+}
+
+const TYPES = [undefined, 'note', 'todo'] as const;
+const TYPE_CYCLE: Record<string, { label: string; icon: IconName }> = {
+  all: { label: 'Notes & todos', icon: 'list' },
+  note: { label: TYPE_LABEL.note, icon: 'note' },
+  todo: { label: TYPE_LABEL.todo, icon: 'todo' },
+};
+
+/**
+ * What the journal shows, notes and todos, just notes or just todos, as one chip that moves on to the next each
+ * press, like a player's repeat button: it names what's showing, and its tooltip what a press shows next. It keeps
+ * the width of its longest label, so the row doesn't shift as it changes. Todos keeps a todo status; the others
+ * take it off.
+ */
+function TypeCycle({ filter }: { filter: StreamFilter }) {
+  const navigate = useNavigate();
+  const path = useFilterPath();
+  const type = effectiveType(filter);
+  const next = TYPES[(TYPES.indexOf(type) + 1) % TYPES.length];
+  const now = TYPE_CYCLE[type ?? 'all'];
+  const then = TYPE_CYCLE[next ?? 'all'];
+  return (
+    <button
+      type="button"
+      className={`chip filter-chip filter-cycle${type ? ' is-set' : ''}`}
+      aria-label={`Showing ${now.label.toLowerCase()}. Show ${then.label.toLowerCase()}`}
+      title={`Showing ${now.label.toLowerCase()}: press for ${then.label.toLowerCase()}`}
+      onClick={() => void navigate(path({ ...filter, type: next, status: next === 'todo' ? filter.status : undefined }))}
+    >
+      <span className="filter-cycle__labels">
+        {TYPES.map((t) => {
+          const { label, icon } = TYPE_CYCLE[t ?? 'all'];
+          return (
+            <span key={label} className="filter-cycle__label" aria-hidden={t !== type} data-on={t === type || undefined}>
+              <Icon name={icon} size={14} />
+              {label}
+            </span>
+          );
+        })}
+      </span>
+    </button>
   );
 }
 

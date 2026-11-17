@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { cardBack, checklistProgress, CODE_CLOSE, CODE_OPEN, displayTitle, hasPhoto, HIDE_CLOSE, HIDE_OPEN, isBlank, isImageUrl, linkedCardIds, linkUrls, photoIds, plainText, previewLines, previewParts, siteName, splitLinks, textToDoc } from './content';
+import { backHasTranslation, backWithTranslation, cardBack, checklistProgress, CODE_CLOSE, CODE_OPEN, displayTitle, hasPhoto, HIDE_CLOSE, HIDE_OPEN, isBlank, isImageUrl, linkedCardIds, linkUrls, photoIds, plainText, previewLines, previewParts, siteName, splitLinks, textToDoc } from './content';
 import { doc, link, note, p, tag, text } from './testFixtures';
 import type { JSONNode } from './types';
 
@@ -164,3 +164,23 @@ describe('a card’s back', () => {
     expect(cardBack(note('n', '', { back: { type: 'doc', content: [{ type: 'paragraph' }] } }))).toBeNull();
   });
 });
+
+describe('a translation on a card’s back', () => {
+  const para = (text: string) => ({ type: 'paragraph', content: [{ type: 'text', text }] });
+  it('is the whole back when it had none, one paragraph per line, blanks left out', () => {
+    expect(backWithTranslation(null, ['', 'Where is the station?\nThank you'])).toEqual({ type: 'doc', content: [para('Where is the station?'), para('Thank you')] });
+  });
+  it('goes after what the back has', () => {
+    const back = { type: 'doc', content: [para('Thank you very much')] };
+    expect(backWithTranslation(back, ['Thanks'])).toEqual({ type: 'doc', content: [para('Thank you very much'), para('Thanks')] });
+  });
+  it('is known to be there already, whatever the case and spacing', () => {
+    const back = { type: 'doc', content: [para('Thank you very much'), para('arigatō  gozaimasu')] };
+    expect(backHasTranslation(back, ['', 'thank you'])).toBe(true);
+    expect(backHasTranslation(back, ['Arigatō gozaimasu'])).toBe(true);
+    expect(backHasTranslation(back, ['Excuse me'])).toBe(false);
+    expect(backHasTranslation(null, ['Thanks'])).toBe(false);
+    expect(backHasTranslation(back, [''])).toBe(false);
+  });
+});
+

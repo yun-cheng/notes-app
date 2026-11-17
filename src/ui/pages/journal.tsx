@@ -2,7 +2,7 @@ import { Fragment, useEffect, useLayoutEffect, useMemo, useRef, useState, type K
 import { Link, Navigate, Outlet, useLocation, useNavigate, useParams } from 'react-router';
 import { diaryVault } from '../../domain/access';
 import { linkTitle } from '../../domain/cardIndex';
-import { cardBack, checklistProgress, CODE_CLOSE, CODE_OPEN, displayTitle, HIDE_CLOSE, HIDE_OPEN, isEmptyDoc, previewParts, splitLinks, type PreviewPart } from '../../domain/content';
+import { backHasTranslation, backWithTranslation, cardBack, checklistProgress, CODE_CLOSE, CODE_OPEN, displayTitle, HIDE_CLOSE, HIDE_OPEN, isEmptyDoc, previewParts, splitLinks, type PreviewPart } from '../../domain/content';
 import { isDateKey, relativeDay, relativeDayInSentence, toDateKey } from '../../domain/dates';
 import { STATE_BOARD } from '../../domain/board';
 import { isFiltered, parseFilter, sortGroup, streamItems, type StreamFilter, type StreamItem, type StreamSort } from '../../domain/stream';
@@ -858,7 +858,9 @@ function translatedParts(parts: PreviewPart[], pieces: string[]): PreviewPart[] 
  * shows (`title` and the side it's on), into the bubble, with Show original to go back.
  */
 function useBubble(card: NoteCard | TodoCard, title: string) {
-  const { index, keyring } = useCards();
+  const { index, keyring, repo } = useCards();
+  const may = usePermissions();
+  const { undoAction } = useUndo();
   const toast = useToast();
   const flip = useFlip(card);
   const doc = flip.on ? flip.back! : card.content;
@@ -885,6 +887,14 @@ function useBubble(card: NoteCard | TodoCard, title: string) {
     else if (result.kind !== 'done')
       toast(server ? "It couldn't be translated just now." : "This browser couldn't translate it on the device.", { action: { label: 'Translate with Google', run: withGoogle } });
   };
+  // The front's translation can go on its back, like a flashcard's answer: the whole back, or after what it has.
+  const back = cardBack(card);
+  const toBack = done && !flip.on && may(card).edit && !backHasTranslation(back, done.pieces) ? (back ? 'Add to back' : 'Save to back') : null;
+  const saveToBack = (pieces: string[]) => {
+    const action = repo.action();
+    void repo.update(card.id, { back: backWithTranslation(back, pieces) });
+    toast(back ? 'Added to the back' : 'Saved as the back', { action: { label: 'Undo', run: () => void undoAction(action) } });
+  };
   const menu = useEntryMenu(card, open, {
     translate: () => void translate(),
     translated: !!done,
@@ -901,6 +911,11 @@ function useBubble(card: NoteCard | TodoCard, title: string) {
         <button type="button" onClick={(e) => (e.stopPropagation(), showTranslation(card.id, false))}>
           Show original
         </button>
+        {toBack && (
+          <button type="button" title="Put this translation on the card's back" onClick={(e) => (e.stopPropagation(), saveToBack(done.pieces))}>
+            {toBack}
+          </button>
+        )}
       </span>
     ) : kept ? (
       <span className="bubble__translated">

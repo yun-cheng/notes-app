@@ -205,6 +205,28 @@ export function textToDoc(text: string): JSONNode {
   };
 }
 
+/** The words of a translation, one per line: its pieces (a title, then the lines of each part), blanks left out. */
+const translationText = (pieces: string[]) => pieces.filter((p) => p.trim()).join('\n');
+
+/**
+ * A card's back with a translation of its front on it: the whole back when it had none, else after what it has,
+ * one paragraph per line.
+ */
+export function backWithTranslation(back: JSONNode | null | undefined, pieces: string[]): JSONNode {
+  const added = textToDoc(translationText(pieces));
+  if (!back || back.type !== 'doc' || isEmptyDoc(back)) return added;
+  return { ...back, content: [...(back.content ?? []), ...(added.content ?? [])] };
+}
+
+/** Whether a card's back has a translation's words on it already, in any case, so it isn't added twice. */
+export function backHasTranslation(back: JSONNode | null | undefined, pieces: string[]): boolean {
+  if (!back) return false;
+  const norm = (s: string) => s.replace(/\s+/g, ' ').trim().toLowerCase();
+  const text = norm(plainText(back));
+  const words = pieces.map(norm).filter(Boolean);
+  return words.length > 0 && words.every((w) => text.includes(w));
+}
+
 /** Web addresses in the body, from links and from addresses typed as plain text, each once and in order. */
 export function linkUrls(content: JSONNode): string[] {
   const urls = new Set<string>();

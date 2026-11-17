@@ -40,7 +40,7 @@ import { SyncOffline } from '../../sync/engine';
 import { usePopover } from '../usePopover';
 import { Board, BoardSetup, lastBoard, useBoardKind, useCardDrag, type DragParts } from './board';
 import { foldStacks, isStack, moveInStack, stackEntries, stacksOf } from '../../domain/stacks';
-import { openStacks } from '../useStacking';
+import { openStacks, useTakeOut } from '../useStacking';
 import { useStartFromTemplate, useToggleTemplate } from '../useTemplates';
 import { clearTranslation, googleTranslateUrl, languageName, openOutside, translateEntry, translatesOnDevice, useTranslation } from '../translate';
 
@@ -947,14 +947,12 @@ function StackEntry({ stack, at }: { stack: NoteCard; at: number }) {
 
 /**
  * An open stack's entries, in its order, each as in the stream. They're dragged up and down to change the order (a
- * mouse from anywhere on one, a finger from its grip), or moved with the arrow keys on the grip, and × takes one
- * out, back into the stream. Each change can be undone.
+ * mouse from anywhere on one, a finger from its grip), or moved with the arrow keys on the grip. Each change can be
+ * undone; taking one out is in its menu.
  */
 function StackCards({ stack, members }: { stack: NoteCard; members: Entry[] }) {
   const { repo } = useCards();
   const may = usePermissions();
-  const toast = useToast();
-  const { undoAction } = useUndo();
   const can = may(stack).edit;
   const list = stack.stack ?? [];
   const shown = members.map((m) => m.id);
@@ -962,11 +960,6 @@ function StackCards({ stack, members }: { stack: NoteCard; members: Entry[] }) {
   const move = (id: string, index: number) => {
     const next = moveInStack(list, shown, id, index);
     if (next.join('\n') !== list.join('\n')) void repo.update(stack.id, { stack: next });
-  };
-  const takeOut = (card: Entry) => {
-    const action = repo.action();
-    void repo.update(stack.id, { stack: list.filter((id) => id !== card.id) });
-    toast(`Took “${displayTitle(card)}” out of the stack`, { action: { label: 'Undo', run: () => void undoAction(action) } });
   };
   const drag = useCardDrag((id, to) => move(id, to.index), STACK_PARTS);
   const moveByKey = (e: ReactKeyboardEvent, id: string, at: number) => {
@@ -1006,11 +999,6 @@ function StackCards({ stack, members }: { stack: NoteCard; members: Entry[] }) {
           </button>
         )}
         <EntryBubble card={card} at={card.createdAt} />
-        {can && (
-          <button type="button" className="stack__out" aria-label={`Take "${displayTitle(card)}" out of the stack`} title="Take out of the stack" onClick={() => takeOut(card)}>
-            ×
-          </button>
-        )}
       </div>,
     ];
   });
@@ -1118,6 +1106,7 @@ function EntryDetail({ card, fresh, edit, onClose }: { card: NoteCard | TodoCard
   const remove = useDeleteCard();
   const { copy, archive } = useEntryActions();
   const toggleTemplate = useToggleTemplate();
+  const { stackOf, takeOut } = useTakeOut();
   const [tools, setTools] = useState(false);
   const [tagging, setTagging] = useState(false);
   const [titled, setTitled] = useState(false);
@@ -1246,6 +1235,11 @@ function EntryDetail({ card, fresh, edit, onClose }: { card: NoteCard | TodoCard
             onClick={() => toggleTemplate(card)}
           >
             <Icon name="template" />
+          </button>
+        )}
+        {stackOf(card) && (
+          <button type="button" className="icon-btn" aria-label="Take out of the stack" title="Take out of the stack, back into the journal" onClick={() => takeOut(card)}>
+            <Icon name="stack" />
           </button>
         )}
         <button type="button" className="icon-btn" aria-label="Copy" title="Copy" onClick={() => copy([card.id])}>

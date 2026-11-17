@@ -1,5 +1,5 @@
 import { displayTitle } from '../domain/content';
-import { isStack, stackPlan } from '../domain/stacks';
+import { isStack, stackPlan, stacksOf } from '../domain/stacks';
 import type { NoteCard, TodoCard } from '../domain/types';
 import { useCards } from '../state/CardsContext';
 import { entries } from './entryActions';
@@ -49,4 +49,27 @@ export function useStacking() {
     openStacks.add(fresh.id);
     toast(`Stacked ${entries(stacking.length)}`, { action: undo });
   };
+}
+
+/**
+ * Taking an entry out of the stack it's in, back into the stream: `stackOf` is that stack, where this account may
+ * change it, and `takeOut` does it, undone from its toast. In the entry's menu and its sheet.
+ */
+export function useTakeOut() {
+  const { index, repo } = useCards();
+  const may = usePermissions();
+  const toast = useToast();
+  const { undoAction } = useUndo();
+  const stackOf = (card: NoteCard | TodoCard): NoteCard | null => {
+    const stack = index.byId.get(stacksOf(index).get(card.id) ?? '');
+    return isStack(stack) && may(stack).edit ? stack : null;
+  };
+  const takeOut = (card: NoteCard | TodoCard) => {
+    const stack = stackOf(card);
+    if (!stack) return;
+    const action = repo.action();
+    void repo.update(stack.id, { stack: stack.stack!.filter((id) => id !== card.id) });
+    toast(`Took “${displayTitle(card)}” out of the stack`, { action: { label: 'Undo', run: () => void undoAction(action) } });
+  };
+  return { stackOf, takeOut };
 }

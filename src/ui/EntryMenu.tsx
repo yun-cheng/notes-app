@@ -11,6 +11,7 @@ import { ShareDialog } from './ShareDialog';
 import { useTickTodo, useToggleWaiting } from './TodoDue';
 import { usePermissions, useViewOnly } from './viewOnly';
 import { useStartFromTemplate, useToggleTemplate } from './useTemplates';
+import { useTakeOut } from './useStacking';
 import { useLocation, useNavigate } from 'react-router';
 import { textToDoc } from '../domain/content';
 import { cardPath, sheetState } from './paths';
@@ -176,6 +177,8 @@ function EntryMenu({ card, at, open, extras, onShare, onClose }: MenuProps) {
   const toggleTemplate = useToggleTemplate();
   const startFrom = useStartFromTemplate();
   const viewOnly = useViewOnly();
+  const { stackOf, takeOut } = useTakeOut();
+  const inStack = !viewOnly && !!stackOf(card);
   const can = may(card);
   const run = (work: () => unknown) => () => {
     onClose();
@@ -264,6 +267,14 @@ function EntryMenu({ card, at, open, extras, onShare, onClose }: MenuProps) {
           {/* Ticked on a template; ticking it makes this entry one, in place. */}
           <Item icon="template" checked={!!card.template} onClick={run(() => toggleTemplate(card))}>
             Template
+          </Item>
+        </div>
+      )}
+      {/* In an open stack: back out into the stream. It changes the stack, so it needs leave to change that. */}
+      {inStack && (
+        <div className="style-menu__group">
+          <Item icon="stack" onClick={run(() => takeOut(card))}>
+            Take out of the stack
           </Item>
         </div>
       )}

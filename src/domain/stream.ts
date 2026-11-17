@@ -1,6 +1,7 @@
 import type { CardIndex } from './cardIndex';
 import { hasPhoto, linkUrls } from './content';
 import { addDays, isDateKey, parseDateKey, relativeDay, toDateKey } from './dates';
+import { isStack } from './stacks';
 import { rankIn, type TagGroup } from './tagGroups';
 import type { Card, NoteCard, TodoCard } from './types';
 
@@ -14,7 +15,8 @@ export interface StreamItem {
   at: number;
 }
 
-export type EntryType = 'note' | 'todo';
+/** Notes (stacks left out), todos, or stacks: notes holding other entries (`stacks.ts`). */
+export type EntryType = 'note' | 'todo' | 'stack';
 /**
  * For todos: open or done, or open and due by today, after today, or with no date, or waiting. A waiting todo is
  * open, but left out of the three by date: it's not up to you yet.
@@ -54,7 +56,7 @@ export interface StreamFilter {
   board?: string;
 }
 
-const TYPES: EntryType[] = ['note', 'todo'];
+const TYPES: EntryType[] = ['note', 'todo', 'stack'];
 const STATUSES: TodoStatus[] = ['open', 'done', 'today', 'upcoming', 'undated', 'waiting'];
 const WHENS = ['today', 'week', 'month'];
 const SORTS: BaseSort[] = ['written', 'newest', 'edited', 'due'];
@@ -101,11 +103,11 @@ export const isFiltered = (f: StreamFilter) => !!(f.type || f.status || f.when |
 
 /**
  * A filter as the calendar and the timeline take it: they show todos with dates, so a todo status, a tag, a vault
- * and Archived narrow them. Null for a filter they can't show (notes, when written, what an entry holds, todos
+ * and Archived narrow them. Null for a filter they can't show (notes, stacks, when written, what an entry holds, todos
  * with no date, templates), which is the journal's.
  */
 export function datedFilter(f: StreamFilter): StreamFilter | null {
-  if (f.type === 'note' || f.when || f.has || f.status === 'undated' || f.template) return null;
+  if (f.type === 'note' || f.type === 'stack' || f.when || f.has || f.status === 'undated' || f.template) return null;
   return { status: f.status, tagId: f.tagId, vaultId: f.vaultId, archived: f.archived };
 }
 
@@ -194,7 +196,7 @@ function rangeLabel([from, to]: [string, string], today: string, locale?: string
 export const CONTAINS_LABEL: Record<Contains, string> = { link: 'With links', photo: 'With photos' };
 export const SORT_LABEL: Record<BaseSort, string> = { written: 'Oldest first', newest: 'Newest first', edited: 'Recently edited', due: 'Due date' };
 export const STATUS_LABEL: Record<TodoStatus, string> = { open: 'Open', done: 'Done', today: 'Due today', upcoming: 'Upcoming', undated: 'No date', waiting: 'Waiting' };
-export const TYPE_LABEL: Record<EntryType, string> = { note: 'Notes', todo: 'Todos' };
+export const TYPE_LABEL: Record<EntryType, string> = { note: 'Notes', todo: 'Todos', stack: 'Stacks' };
 export const WHEN_LABEL: Record<string, string> = { today: 'Written today', week: 'Past 7 days', month: 'Past 30 days' };
 
 /** The group a sort orders by, if it's a group sort and the group is still there. */
@@ -242,7 +244,7 @@ export function entryMatcher(filter: StreamFilter, today: string, sharedInto?: S
   const [from, to] = filter.when ? whenRange(filter.when, today) : ['', '9999'];
   return (card, day = entryDay(card)) =>
     card.type !== 'tag' &&
-    (!type || card.type === type) &&
+    (!type || (type === 'stack' ? isStack(card) : card.type === type && !isStack(card))) &&
     (!tagId || card.tags.includes(tagId)) &&
     (!vaultId || card.vaultId === vaultId || !!sharedInto?.get(card.id)?.includes(vaultId)) &&
     (!status || (card.type === 'todo' && matchesStatus(card, status, today))) &&

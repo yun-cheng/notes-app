@@ -106,6 +106,20 @@ describe('stream', () => {
     expect(index.live.map((c) => c.id)).toContain('kept');
     expect(index.todos.map((c) => c.id)).toEqual(['t']);
   });
+
+  it('keeps stacks apart from notes: Stacks shows them alone, Notes leaves them out', () => {
+    const index = buildIndex([
+      note('pile', 'Pile', { createdAt: 1, stack: ['in-note', 'in-todo'] }),
+      note('in-note', 'In', { createdAt: 2 }),
+      todo('in-todo', null, { createdAt: 3 }),
+      note('plain', 'Plain', { createdAt: 4 }),
+    ]);
+    const ids = (filter: Parameters<typeof streamItems>[1]) => streamItems(index, filter, TODAY).map((i) => i.card.id);
+    expect(ids({ type: 'stack' })).toEqual(['pile']);
+    expect(ids({ type: 'note' })).toEqual(['in-note', 'plain']);
+    expect(ids({ type: 'todo' })).toEqual(['in-todo']);
+    expect(ids({})).toEqual(['pile', 'in-note', 'in-todo', 'plain']);
+  });
 });
 
 describe('entries with links or photos', () => {
@@ -155,6 +169,7 @@ describe('filter in the address', () => {
     expect(parseFilter(filterParams(filter))).toEqual(filter);
     expect(parseFilter(new URLSearchParams('type=card&status=x&when=soon&archived=yes'))).toEqual({});
     expect(parseFilter(new URLSearchParams('sort=group:p'))).toEqual({ sort: 'group:p' });
+    expect(parseFilter(new URLSearchParams('type=stack'))).toEqual({ type: 'stack' });
   });
 
   it('comes apart into chips, each removable on its own, keeping the order', () => {
@@ -188,7 +203,7 @@ describe('filter in the address', () => {
       vaultId: 'v',
       archived: true,
     });
-    for (const f of [{ type: 'note' }, { when: 'week' }, { has: 'link' }, { status: 'undated' }] as const) expect(datedFilter(f)).toBeNull();
+    for (const f of [{ type: 'note' }, { type: 'stack' }, { when: 'week' }, { has: 'link' }, { status: 'undated' }] as const) expect(datedFilter(f)).toBeNull();
   });
 });
 

@@ -99,7 +99,7 @@ export function FilterBar({ filter }: { filter: StreamFilter }) {
       {!dated && (
         // Both, notes or todos, a switch rather than a menu: one press, and all three always in sight.
         <span className="segmented filter-switch" role="group" aria-label="Type">
-          {([undefined, 'note', 'todo'] as const).map((t) => (
+          {([undefined, 'note', 'todo', 'stack'] as const).map((t) => (
             <button
               key={t ?? 'all'}
               type="button"

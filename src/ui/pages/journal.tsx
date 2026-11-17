@@ -150,6 +150,8 @@ export function JournalPage() {
               empty={
                 filter.archived
                   ? 'Nothing archived here. Archive an entry from its menu to put it away without trashing it.'
+                  : filter.type === 'stack'
+                    ? 'No stacks here yet. Pick two or more entries and press Stack in the bar at the bottom to make one.'
                   : filter.template
                     ? 'No templates here yet. Write one below, like a packing list or a weekly review, or tick Template in any entry’s menu. {date} in one becomes the day it’s used.'
                     : filtered

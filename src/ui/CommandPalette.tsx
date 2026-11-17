@@ -93,7 +93,7 @@ export function CommandPalette({ onClose, onShortcuts }: { onClose: () => void; 
       { id: 'show-all', group: 'Filter', label: 'Show everything', icon: 'notes', keywords: 'clear reset all', run: go(filterPath({ sort: current.sort })) },
     ];
     for (const type of Object.keys(TYPE_LABEL) as EntryType[]) {
-      all.push({ id: `type-${type}`, group: 'Filter', label: `Show ${TYPE_LABEL[type].toLowerCase()}`, icon: TYPE_ICON[type], keywords: 'type only', run: narrow({ type, status: undefined }) });
+      all.push({ id: `type-${type}`, group: 'Filter', label: `Show ${TYPE_LABEL[type].toLowerCase()}`, icon: type === 'stack' ? 'stack' : TYPE_ICON[type], keywords: type === 'stack' ? 'type only deck group pile' : 'type only', run: narrow({ type, status: undefined }) });
     }
     for (const status of Object.keys(STATUS_LABEL) as TodoStatus[]) {
       all.push({ id: `status-${status}`, group: 'Filter', label: `Todos: ${STATUS_LABEL[status].toLowerCase()}`, icon: 'todo', keywords: 'todo task status due', run: narrow({ status, type: undefined }) });

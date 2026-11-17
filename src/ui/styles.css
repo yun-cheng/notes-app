@@ -1,14 +1,20 @@
 :root {
   --mono: ui-monospace, "SF Mono", Menlo, Consolas, monospace;
   color-scheme: light dark;
-  --bg: #f7f4ee;
-  --surface: #fffdf9;
-  --sunken: #efebe2;
-  --line: #e2dcd0;
-  --text: #24282a;
-  --muted: #6c7270;
+  /*
+   * Each step apart by enough to tell at a glance (refined 2026-11-17, when chips, a switch's pick and a chip in use
+   * were hard to tell from what's around them): the page, the cards on it, the wells of chips and switches, the
+   * lines, and what's raised out of a well, like a switch's pick. Muted text keeps 4.5:1 on the page and in a well.
+   */
+  --bg: #f5f2ea;
+  --surface: #fffefb;
+  --sunken: #e8e3d8;
+  --raised: #ffffff;
+  --line: #d6cfc1;
+  --text: #22262a;
+  --muted: #5f6563;
   --accent: #1f5c57;
-  --accent-soft: #dcebe6;
+  --accent-soft: #c6e1d7;
   --on-accent: #fbfaf6;
   --alert: #b23a2e;
   --added: #d6ecd2;
@@ -29,14 +35,15 @@
 
 @media (prefers-color-scheme: dark) {
   :root {
-    --bg: #191c1b;
-    --surface: #222725;
-    --sunken: #2b312e;
-    --line: #363d3a;
-    --text: #e9e6df;
-    --muted: #a0a7a3;
+    --bg: #151817;
+    --surface: #232927;
+    --sunken: #313835;
+    --raised: #48514d;
+    --line: #454e4a;
+    --text: #ece9e2;
+    --muted: #a7aeaa;
     --accent: #84c9bc;
-    --accent-soft: #2c4440;
+    --accent-soft: #2e5b53;
     --on-accent: #12211e;
     --alert: #f0907f;
     --added: #24452c;
@@ -319,7 +326,7 @@ body:has(.composer:focus-within) .tabbar { display: none; }
 .field-row__label { min-width: 7.5em; }
 .segmented { display: inline-flex; padding: 2px; border: 1px solid var(--line); border-radius: 10px; background: var(--sunken); }
 .segmented button { min-height: 32px; padding: 0 12px; border: 0; border-radius: 8px; background: none; color: var(--muted); font: inherit; font-size: 14px; cursor: pointer; }
-.segmented button[aria-pressed="true"] { background: var(--surface); color: var(--text); box-shadow: 0 1px 2px rgb(0 0 0 / 12%); }
+.segmented button[aria-pressed="true"] { background: var(--raised); color: var(--text); box-shadow: 0 1px 2px rgb(0 0 0 / 12%); }
 .field-row label { display: inline-flex; align-items: center; gap: 8px; }
 .field-row input { min-height: 36px; padding: 0 8px; background: var(--surface); border: 1px solid var(--line); border-radius: 8px; color: var(--text); }
 
@@ -497,7 +504,7 @@ body:has(.composer:focus-within) .tabbar { display: none; }
 .history__title { font: 600 22px/1.3 var(--serif); margin-bottom: 4px; overflow-wrap: anywhere; }
 .segmented { display: inline-flex; padding: 2px; border-radius: 9px; background: var(--sunken); }
 .segmented button { padding: 5px 12px; border-radius: 7px; font-size: 14px; color: var(--muted); }
-.segmented button[aria-pressed="true"] { background: var(--surface); color: var(--text); font-weight: 600; box-shadow: 0 1px 2px rgb(0 0 0 / 12%); }
+.segmented button[aria-pressed="true"] { background: var(--raised); color: var(--text); font-weight: 600; box-shadow: 0 1px 2px rgb(0 0 0 / 12%); }
 .diff { font-size: 16px; line-height: 1.6; overflow-wrap: anywhere; }
 .diff__line { min-height: 1.6em; white-space: pre-wrap; padding: 1px 6px; border-radius: 4px; }
 .diff__line--added { background: var(--added); }

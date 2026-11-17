@@ -128,6 +128,7 @@ Private vaults are end-to-end encrypted since Milestone 7. Open vaults are still
 ## Technical decisions
 
 - **Client:** PWA first. React, TypeScript, Vite, vite-plugin-pwa, React Router, Dexie (IndexedDB), TipTap editor with `[[link]]` autocomplete, MiniSearch, fflate for zip export.
+- **Colors:** a few tokens at the top of `src/ui/styles.css`, light and dark: the page, cards on it, wells (chips, switches), what's raised out of a well (a switch's pick), lines, text, muted text and the accent. Refined 2026-11-17 so neighbours are easy to tell apart, chips from the page, a switch's pick from its well, a chip in use from one that isn't, especially in dark mode, and muted text keeps 4.5:1 contrast.
 - Keep storage and crypto behind small interfaces. (Meant at first for wrapping the web UI in Tauri 2; the native apps reimplement both instead, see the native apps notes.)
 - Call `navigator.storage.persist()`. Build export/backup early, including Markdown plus image files.
 - **Note format:** TipTap JSON stored in the card, plus Markdown export. Links by card ID survive renames, and it supports comments and live co-editing through Yjs.

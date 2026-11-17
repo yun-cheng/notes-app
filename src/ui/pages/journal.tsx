@@ -135,7 +135,11 @@ export function JournalPage() {
         ) : filter.board ? (
           <>
             {board ? <Board kind={board} filter={filter} /> : <BoardSetup filter={filter} />}
-            {selecting && <BatchBar selection={selection} />}
+            {selecting && (
+              <div className="journal-dock">
+                <BatchBar selection={selection} />
+              </div>
+            )}
           </>
         ) : (
           <>
@@ -153,12 +157,17 @@ export function JournalPage() {
                     : 'Nothing written yet. Write a note below, or start with [] for a todo.'
               }
             />
-            {selecting && <BatchBar selection={selection} />}
-            {viewOnly && !selecting && <ViewOnlyBar to={(filter.sort ?? 'written') === 'written' ? 'bottom' : 'top'} />}
-            {/* Hidden, not removed, while picking or viewing only, so a half-written entry survives. Archived entries are only put away, not written. */}
-            {!filter.archived && (
-              <div style={{ display: selecting || viewOnly ? 'none' : 'contents' }}>
-                <JournalBox key={`composer:${journalPath({ ...filter, sort: undefined })}`} filter={filter} />
+            {/* The bars at the foot of the journal, on a ground of their own, so entries scroll away behind them, not under and past them. */}
+            {(selecting || viewOnly || !filter.archived) && (
+              <div className="journal-dock">
+                {selecting && <BatchBar selection={selection} />}
+                {viewOnly && !selecting && <ViewOnlyBar to={(filter.sort ?? 'written') === 'written' ? 'bottom' : 'top'} />}
+                {/* Hidden, not removed, while picking or viewing only, so a half-written entry survives. Archived entries are only put away, not written. */}
+                {!filter.archived && (
+                  <div style={{ display: selecting || viewOnly ? 'none' : 'contents' }}>
+                    <JournalBox key={`composer:${journalPath({ ...filter, sort: undefined })}`} filter={filter} />
+                  </div>
+                )}
               </div>
             )}
           </>

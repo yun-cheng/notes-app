@@ -105,12 +105,10 @@ h1, h2, p { margin: 0; }
 .chip .filter-chip__clear { display: inline-flex; align-items: center; justify-content: center; width: 20px; height: 20px; margin: 0 4px 0 -4px; border-radius: 50%; color: var(--muted); font-size: 16px; line-height: 1; text-decoration: none; }
 .chip > .filter-chip__value + .filter-chip__clear { margin-left: 2px; }
 .chip .filter-chip__clear:hover { background: color-mix(in srgb, var(--text) 10%, transparent); color: var(--text); }
-/* The type chip, pressed to move on to the next: every label sits in one grid cell, only the one showing seen, so it keeps the longest one's width. */
-.chip.filter-cycle { padding: 0 12px 0 10px; border: 0; font: inherit; font-size: 13px; cursor: pointer; }
-.filter-cycle__labels { display: inline-grid; }
-.filter-cycle__label { grid-area: 1 / 1; display: inline-flex; align-items: center; gap: 6px; visibility: hidden; }
-.filter-cycle__label[data-on] { visibility: visible; }
-.filter-cycle__label svg { color: var(--muted); }
+/* The type switch: a chip-high segmented control, so it sits in the row like the chips around it. */
+.segmented.filter-switch { flex: none; padding: 2px; border: 0; border-radius: 999px; }
+.segmented.filter-switch button { min-height: 24px; padding: 0 10px; border-radius: 999px; font-size: 13px; font-weight: 400; }
+.segmented.filter-switch button[aria-pressed="true"] { font-weight: 500; }
 .filter-chip--clear-all { padding: 0 10px; border: 1px dashed var(--line); background: none; text-decoration: none; }
 .filter-chip--toggle { padding: 0 10px; text-decoration: none; }
 .filter-chip--toggle:hover { color: var(--text); }

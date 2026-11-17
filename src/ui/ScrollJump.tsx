@@ -36,10 +36,8 @@ export function ScrollJump({ to }: { to: 'top' | 'bottom' }) {
 
   if (!away) return null;
   const label = to === 'top' ? 'Scroll to top' : 'Scroll to bottom';
-  const jump = () => {
-    const smooth = !window.matchMedia('(prefers-reduced-motion: reduce)').matches;
-    window.scrollTo({ top: to === 'top' ? 0 : document.documentElement.scrollHeight, behavior: smooth ? 'smooth' : 'auto' });
-  };
+  // Straight there, without scrolling through everything on the way.
+  const jump = () => window.scrollTo({ top: to === 'top' ? 0 : document.documentElement.scrollHeight, behavior: 'instant' });
   return (
     // Not taking focus, so a half-written entry keeps its cursor.
     <button type="button" className="scroll-jump" aria-label={label} title={label} onMouseDown={(e) => e.preventDefault()} onClick={jump}>

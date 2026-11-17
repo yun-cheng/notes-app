@@ -119,7 +119,7 @@ export function JournalBox({ filter }: { filter: StreamFilter }) {
       setUnlock(result.saved ? null : (result.unlock ?? null));
       if (result.saved) {
         editor.commands.setContent(start, { emitUpdate: false });
-        if (!f.sort) requestAnimationFrame(() => window.scrollTo({ top: document.documentElement.scrollHeight, behavior: 'smooth' }));
+        if (!f.sort) requestAnimationFrame(() => window.scrollTo({ top: document.documentElement.scrollHeight, behavior: 'instant' }));
       }
     } catch (err) {
       console.error('Saving failed', err);

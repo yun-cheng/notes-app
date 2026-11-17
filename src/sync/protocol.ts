@@ -131,6 +131,12 @@ export interface RecentVersionsResponse {
   next: string | null;
 }
 
+/**
+ * An entry's words translated by the server, for a browser that can't on the device: the language they were in,
+ * and the pieces in order. `same` when they're in that language already and there's nothing else to turn them into.
+ */
+export type ServerTranslation = { kind: 'done'; from: string; to: string; pieces: string[] } | { kind: 'same'; from: string };
+
 /** What a link's page says about itself, for a preview card. Only `url` is certain. */
 export interface LinkPreview {
   url: string;

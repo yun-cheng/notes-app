@@ -1,4 +1,5 @@
 import type { Account } from '../src/sync/protocol';
+import type { AiBinding } from './translate';
 
 /** The part of Cloudflare D1 this server uses, so tests can run it against SQLite. */
 export interface Statement {
@@ -23,6 +24,8 @@ export interface Bindings {
   VAPID_PRIVATE_KEY?: string;
   /** Who push services are told sends the reminders: the app's address, or a mailto: link. */
   PUSH_SUBJECT?: string;
+  /** Workers AI, for translating where the browser can't (server/translate.ts). A binding, not a secret. */
+  AI?: AiBinding;
 }
 
 /** Hono's environment for every route: D1 and settings, plus the signed-in user once known. */

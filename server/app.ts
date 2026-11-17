@@ -28,6 +28,7 @@ import { pullRecords, pushRecords } from './sync';
 import { reminderRoutes } from './reminders';
 import { createVault, listVaults, updateVault, type VaultUpdate } from './vaults';
 import { getVersion, listRecentVersions, listVersions, sealVersions, type Device } from './versions';
+import { translateRoutes } from './translate';
 import { unfurlRoutes, type WebFetch } from './unfurl';
 
 type Env = AppEnv;
@@ -322,6 +323,7 @@ export function createApp({
   aiSessionRoutes(app, now);
   photoRoutes(app, googleFetch, now);
   unfurlRoutes(app, webFetch);
+  translateRoutes(app);
   memberRoutes(app, now);
   shareRoutes(app, now);
   commentRoutes(app, now);

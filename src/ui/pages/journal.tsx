@@ -858,7 +858,7 @@ function translatedParts(parts: PreviewPart[], pieces: string[]): PreviewPart[] 
  * shows (`title` and the side it's on), into the bubble, with Show original to go back.
  */
 function useBubble(card: NoteCard | TodoCard, title: string) {
-  const { index } = useCards();
+  const { index, keyring } = useCards();
   const toast = useToast();
   const flip = useFlip(card);
   const doc = flip.on ? flip.back! : card.content;
@@ -871,14 +871,17 @@ function useBubble(card: NoteCard | TodoCard, title: string) {
   const text = useFold(card.id, done ? translatedParts(plain, done.pieces) : previewParts(doc, titleOf, { markCode: true, hidden: 'mark' }));
   const open = useOpen(card);
   const withGoogle = () => openOutside(googleTranslateUrl(pieces.filter((p) => p.trim()).join('\n\n')));
+  // The server may translate it, unless it's in an encrypted vault, whose words never go there.
+  const server = !keyring.isEncrypted(card.vaultId);
   const translate = async () => {
     if (done) return clearTranslation(card.id);
-    if (!translatesOnDevice()) return withGoogle();
-    const result = await translateEntry(card.id, pieces);
+    if (!translatesOnDevice() && !server) return withGoogle();
+    const result = await translateEntry(card.id, pieces, { server });
     if (result.kind === 'same') toast(`It's in ${languageName(result.language)} already`);
-    else if (result.kind !== 'done') toast("This browser couldn't translate it on the device.", { action: { label: 'Translate with Google', run: withGoogle } });
+    else if (result.kind !== 'done')
+      toast(server ? "It couldn't be translated just now." : "This browser couldn't translate it on the device.", { action: { label: 'Translate with Google', run: withGoogle } });
   };
-  const menu = useEntryMenu(card, open, { translate: () => void translate(), translated: !!done });
+  const menu = useEntryMenu(card, open, { translate: () => void translate(), translated: !!done, translatesHere: server || translatesOnDevice() });
   const translated =
     translation === 'working' ? (
       <span className="bubble__translated">Translating…</span>

@@ -3,7 +3,7 @@ import type { VaultPin } from '../domain/pin';
 import type { CardRecord, JSONNode, Vault } from '../domain/types';
 import type { PhotoTransport } from '../photos/types';
 import { SyncAuthExpired, SyncOffline, type SyncTransport } from './engine';
-import type { ConfigResponse, ConnectedApp, LinkPreview, PullResponse, PushResponse, RecentVersionsResponse, SessionInfo, SharedResponse, SignedInAccounts, VersionResponse, VersionsResponse } from './protocol';
+import type { ConfigResponse, ConnectedApp, LinkPreview, PullResponse, PushResponse, RecentVersionsResponse, ServerTranslation, SessionInfo, SharedResponse, SignedInAccounts, VersionResponse, VersionsResponse } from './protocol';
 
 let requestAccount: string | null = null;
 
@@ -55,6 +55,13 @@ export const fetchConfig = () => request<ConfigResponse>('/config');
 
 /** What a web page says about itself, read by the server. The address goes in the body, not the query string. */
 export const fetchLinkPreview = (url: string) => request<LinkPreview>('/unfurl', { method: 'POST', body: JSON.stringify({ url }) });
+
+/**
+ * What an entry's bubble shows, translated by the server into `to`, or into `otherwise` when it's in `to` already.
+ * The server turns down an entry in an encrypted vault.
+ */
+export const translateOnServer = (cardId: string, pieces: string[], to: string, otherwise?: string) =>
+  request<ServerTranslation>('/translate', { method: 'POST', body: JSON.stringify({ cardId, pieces, to, otherwise }) });
 
 export const signInWithGoogle = (credential: string) =>
   request<SessionInfo>('/auth/google', { method: 'POST', body: JSON.stringify({ credential }) });

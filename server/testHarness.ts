@@ -3,6 +3,7 @@ import type { CardRecord } from '../src/domain/types';
 import type { PullResponse, PushResult, SessionInfo } from '../src/sync/protocol';
 import { createApp } from './app';
 import type { GoogleFetch } from './drive';
+import type { AiBinding } from './translate';
 import type { WebFetch } from './unfurl';
 import { InvalidGoogleToken, type VerifyGoogleToken } from './auth';
 import { createTestDb } from './testDb';
@@ -10,7 +11,7 @@ import { createTestDb } from './testDb';
 export const CLIENT_ID = 'test-client';
 export const DAY = 86_400_000;
 
-export function setup(options: { googleFetch?: GoogleFetch; webFetch?: WebFetch; clientSecret?: string } = {}) {
+export function setup(options: { googleFetch?: GoogleFetch; webFetch?: WebFetch; clientSecret?: string; ai?: AiBinding } = {}) {
   const db = createTestDb();
   let clock = 1_000_000;
   const verifyGoogle: VerifyGoogleToken = async (credential) => {
@@ -18,7 +19,7 @@ export function setup(options: { googleFetch?: GoogleFetch; webFetch?: WebFetch;
     return { sub: credential, email: `${credential}@example.com`, name: credential, picture: `https://photos.example/${credential}.jpg` };
   };
   const app = createApp({ verifyGoogle, now: () => clock, googleFetch: options.googleFetch, webFetch: options.webFetch });
-  const env = { DB: db, GOOGLE_CLIENT_ID: CLIENT_ID, GOOGLE_CLIENT_SECRET: options.clientSecret };
+  const env = { DB: db, GOOGLE_CLIENT_ID: CLIENT_ID, GOOGLE_CLIENT_SECRET: options.clientSecret, AI: options.ai };
   const call = (path: string, init: RequestInit = {}, cookie?: string) =>
     app.request(path, { ...init, headers: { 'content-type': 'application/json', ...(cookie ? { cookie } : {}), ...init.headers } }, env);
   const signIn = async (name: string) => {

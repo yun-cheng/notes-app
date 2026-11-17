@@ -1,9 +1,12 @@
 import { useSyncExternalStore } from 'react';
+import { translateOnServer } from '../sync/http';
 
 /**
- * Translating an entry's words. Where the browser can do it on the device (Chrome's built-in Translator and
- * LanguageDetector), the text never leaves it and the translation shows in the entry's bubble. Elsewhere, Google
- * Translate opens in a new tab with the text, which then goes to Google: the menu says so ("with Google").
+ * Translating an entry's words, shown in its bubble. Where the browser can do it on the device (Chrome's built-in
+ * Translator and LanguageDetector), the text never leaves it. Elsewhere, or where the device would first have to
+ * fetch a language model, the server translates it (server/translate.ts), except for an entry in an encrypted
+ * vault, whose words never go there. When neither can, Google Translate opens in a new tab with the text, which
+ * then goes to Google: the menu says so ("with Google").
  */
 
 interface Detector {
@@ -80,46 +83,71 @@ export function clearTranslation(id: string) {
 /** How long the device gets to detect and translate, its language models fetched the first time included. */
 const TIME_LIMIT = 60_000;
 
+/**
+ * How long the device gets to be ready to translate when the server can do it instead: some browsers have the
+ * translator but never answer whether it's ready.
+ */
+const READY_LIMIT = 4_000;
+
 /** A promise that gives up after a while: a browser can wait on a model it never gets. */
-const within = <T>(work: Promise<T>, ms = TIME_LIMIT) =>
-  Promise.race([work, new Promise<never>((_, reject) => setTimeout(() => reject(new Error('Took too long')), ms))]);
+const within = <T>(work: Promise<T>, ms = TIME_LIMIT): Promise<T> => {
+  let timer: ReturnType<typeof setTimeout> | undefined;
+  const late = new Promise<never>((_, reject) => (timer = setTimeout(() => reject(new Error('Took too long')), ms)));
+  return Promise.race([work, late]).finally(() => clearTimeout(timer));
+};
 
 export type TranslateResult = { kind: 'done'; from: string; to: string } | { kind: 'same'; language: string } | { kind: 'unavailable' } | { kind: 'failed' };
 
+type Outcome = { kind: 'done'; from: string; to: string; pieces: string[] } | Exclude<TranslateResult, { kind: 'done' }>;
+
+/** The device's translation: from the language it's in into the device's, or into English when it's in that already. */
+async function onDevice({ translator, detector: detectors }: NonNullable<ReturnType<typeof api>>, pieces: string[], server: boolean): Promise<Outcome> {
+  const patience = server ? READY_LIMIT : TIME_LIMIT;
+  const detector = await within(detectors.create(), patience);
+  const [best] = await within(detector.detect(pieces.join('\n')), patience);
+  const from = best?.detectedLanguage && best.detectedLanguage !== 'und' ? best.detectedLanguage : 'en';
+  const mine = deviceLanguage();
+  const same = from.split('-')[0] === mine.split('-')[0];
+  const to = same ? (mine === 'en' ? null : 'en') : mine;
+  if (!to) return { kind: 'same', language: from };
+  const ready = await within(translator.availability({ sourceLanguage: from, targetLanguage: to }), patience);
+  // A model still to be fetched can take a minute or more: the server answers sooner, where it may.
+  if (ready === 'unavailable' || (ready !== 'available' && server)) return { kind: 'unavailable' };
+  const instance = await within(translator.create({ sourceLanguage: from, targetLanguage: to }));
+  const out = await within(Promise.all(pieces.map((p) => (p.trim() ? instance.translate(p) : Promise.resolve(p)))));
+  return { kind: 'done', from, to, pieces: out };
+}
+
+/** The server's translation, into the device's language, or into English when it's in that already. */
+async function onServer(id: string, pieces: string[]): Promise<Outcome> {
+  const mine = deviceLanguage();
+  try {
+    const out = await within(translateOnServer(id, pieces, mine, mine === 'en' ? undefined : 'en'), 30_000);
+    return out.kind === 'same' ? { kind: 'same', language: out.from } : out;
+  } catch {
+    return { kind: 'failed' };
+  }
+}
+
 /**
- * Translates an entry's pieces of text (its title, lines and so on) on the device: from the language it's in, into
- * the device's, or into English when it's in the device's language already. Unavailable where the browser can't.
+ * Translates an entry's pieces of text (its title, lines and so on): on the device where the browser can, else,
+ * with `server`, by the server. Unavailable where neither may.
  */
-export async function translateEntry(id: string, pieces: string[]): Promise<TranslateResult> {
+export async function translateEntry(id: string, pieces: string[], { server = false } = {}): Promise<TranslateResult> {
   const found = api();
-  if (!found) return { kind: 'unavailable' };
+  if (!found && !server) return { kind: 'unavailable' };
   const source = pieces.join('\n');
   translations.set(id, 'working');
   changed();
-  try {
-    const detector = await within(found.detector.create());
-    const [best] = await within(detector.detect(source));
-    const from = best?.detectedLanguage && best.detectedLanguage !== 'und' ? best.detectedLanguage : 'en';
-    const mine = deviceLanguage();
-    const same = from.split('-')[0] === mine.split('-')[0];
-    const to = same ? (mine === 'en' ? null : 'en') : mine;
-    if (!to) {
-      clearTranslation(id);
-      return { kind: 'same', language: from };
-    }
-    if ((await within(found.translator.availability({ sourceLanguage: from, targetLanguage: to }))) === 'unavailable') {
-      clearTranslation(id);
-      return { kind: 'unavailable' };
-    }
-    const translator = await within(found.translator.create({ sourceLanguage: from, targetLanguage: to }));
-    const out = await within(Promise.all(pieces.map((p) => (p.trim() ? translator.translate(p) : Promise.resolve(p)))));
-    translations.set(id, { source, pieces: out, from, to });
-    changed();
-    return { kind: 'done', from, to };
-  } catch {
+  let out: Outcome = found ? await onDevice(found, pieces, server).catch((): Outcome => ({ kind: 'failed' })) : { kind: 'unavailable' };
+  if (server && (out.kind === 'unavailable' || out.kind === 'failed')) out = await onServer(id, pieces);
+  if (out.kind !== 'done') {
     clearTranslation(id);
-    return { kind: 'failed' };
+    return out;
   }
+  translations.set(id, { source, pieces: out.pieces, from: out.from, to: out.to });
+  changed();
+  return { kind: 'done', from: out.from, to: out.to };
 }
 
 /** Opens a page in a new tab, with nothing of this app's sent along. */

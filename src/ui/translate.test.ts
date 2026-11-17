@@ -1,11 +1,11 @@
-import { afterEach, describe, expect, it } from 'vitest';
+import { afterEach, describe, expect, it, vi } from 'vitest';
 import { deviceLanguage, googleSearchUrl, googleTranslateUrl, translateEntry, translatesOnDevice } from './translate';
 
 const g = globalThis as Record<string, unknown>;
-const stub = (detected: string, fail = false) => {
+const stub = (detected: string, fail = false, ready = 'available') => {
   g.LanguageDetector = { create: async () => ({ detect: async () => [{ detectedLanguage: detected, confidence: 0.9 }] }) };
   g.Translator = {
-    availability: async () => 'available',
+    availability: async () => ready,
     create: async ({ targetLanguage }: { targetLanguage: string }) => ({
       translate: async (t: string) => {
         if (fail) throw new Error('no');
@@ -15,9 +15,21 @@ const stub = (detected: string, fail = false) => {
   };
 };
 
+/** The server, answering `/api/translate` with each piece named by the language asked for. */
+const server = () => {
+  const asked: { cardId: string; to: string; otherwise?: string }[] = [];
+  vi.stubGlobal('fetch', async (_url: string, init: RequestInit) => {
+    const body = JSON.parse(init.body as string) as { cardId: string; pieces: string[]; to: string; otherwise?: string };
+    asked.push({ cardId: body.cardId, to: body.to, otherwise: body.otherwise });
+    return Response.json({ kind: 'done', from: 'ja', to: body.to, pieces: body.pieces.map((p) => `server ${body.to}: ${p}`) });
+  });
+  return asked;
+};
+
 afterEach(() => {
   delete g.LanguageDetector;
   delete g.Translator;
+  vi.unstubAllGlobals();
 });
 
 describe('translating', () => {
@@ -45,5 +57,21 @@ describe('translating', () => {
     expect(await translateEntry('b', ['Hello'])).toEqual(mine === 'en' ? { kind: 'same', language: 'en' } : { kind: 'done', from: mine, to: 'en' });
     stub('ja', true);
     expect(await translateEntry('c', ['こんにちは'])).toEqual({ kind: 'failed' });
+  });
+
+  it('asks the server where the device can’t, or would first have to fetch a model, but not when told not to', async () => {
+    const asked = server();
+    const mine = deviceLanguage();
+    expect(await translateEntry('d', ['こんにちは'], { server: true })).toEqual({ kind: 'done', from: 'ja', to: mine });
+    expect(asked).toEqual([{ cardId: 'd', to: mine, otherwise: mine === 'en' ? undefined : 'en' }]);
+    stub('ja', false, 'downloadable');
+    expect(await translateEntry('e', ['こんにちは'], { server: true })).toMatchObject({ kind: 'done', from: 'ja' });
+    expect(asked).toHaveLength(2);
+    stub('ja', true);
+    expect(await translateEntry('f', ['こんにちは'], { server: true })).toMatchObject({ kind: 'done' });
+    expect(asked).toHaveLength(3);
+    stub('ja', true);
+    expect(await translateEntry('g', ['こんにちは'])).toEqual({ kind: 'failed' });
+    expect(asked).toHaveLength(3);
   });
 });

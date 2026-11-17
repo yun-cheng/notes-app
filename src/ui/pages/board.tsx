@@ -363,6 +363,8 @@ export interface DragParts {
   grip: string;
   /** The scrolling list of a column's cards. */
   cards: string;
+  /** The part of a card its dragged copy is as wide as, where the card is wider than what shows (a stack's row). */
+  fit?: string;
 }
 
 const BOARD_PARTS: DragParts = { column: '.board__column', card: '.board__card', grip: '.board__grip', cards: '.board__cards' };
@@ -430,10 +432,11 @@ export function useCardDrag(onDrop: (id: string, to: Target) => void, parts: Dra
       if (!ghost) {
         if (Math.hypot(ev.clientX - x0, ev.clientY - y0) < 6) return;
         const rect = card.getBoundingClientRect();
+        const fit = parts.fit ? card.querySelector(parts.fit)?.getBoundingClientRect() : undefined;
         ghost = card.cloneNode(true) as HTMLElement;
         ghost.classList.add('board__ghost');
         ghost.removeAttribute('data-entry-id');
-        Object.assign(ghost.style, { width: `${rect.width}px`, left: `${rect.left}px`, top: `${rect.top}px` });
+        Object.assign(ghost.style, { width: `${fit?.width ?? rect.width}px`, left: `${fit?.left ?? rect.left}px`, top: `${rect.top}px` });
         document.body.append(ghost);
         window.getSelection()?.removeAllRanges();
         document.body.classList.add('is-dragging-card');

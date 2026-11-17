@@ -882,7 +882,7 @@ function NoteBubble({ note, at }: { note: NoteCard; at: number }) {
 type Entry = NoteCard | TodoCard;
 
 /** A stack's list is one column to drag its entries up and down in. */
-const STACK_PARTS: DragParts = { column: '.stack__cards', card: '.stack__card', grip: '.stack__grip', cards: '.stack__cards' };
+const STACK_PARTS: DragParts = { column: '.stack__cards', card: '.stack__card', grip: '.stack__grip', cards: '.stack__cards', fit: ':scope > .bubble' };
 
 /** How many of its entries a closed stack names. */
 const PEEK = 3;

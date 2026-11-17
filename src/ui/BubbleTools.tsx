@@ -1,6 +1,6 @@
 import type { NoteCard, TodoCard } from '../domain/types';
 import { useCards } from '../state/CardsContext';
-import { usePermissions } from './viewOnly';
+import { useCanRestore, useInTrash, usePermissions } from './viewOnly';
 import { TagPicker } from './components';
 import { useEntryActions } from './entryActions';
 import { Icon } from './Icon';
@@ -18,15 +18,26 @@ type Entry = NoteCard | TodoCard;
  */
 export function BubbleTools({ card, open, menu }: { card: Entry; open: (edit?: boolean) => void; menu: { openFrom: (el: HTMLElement) => void; isOpen: boolean } }) {
   const may = usePermissions();
-  const { copy } = useEntryActions();
+  const { copy, restore } = useEntryActions();
+  const trashed = useInTrash();
+  const canRestore = useCanRestore();
   const can = may(card);
   return (
     <>
       <span className={`bubble__tools${menu.isOpen ? ' is-open' : ''}`}>
-        {/* A pencil where the entry can be changed; an entry shared only to read just opens. */}
-        <button type="button" className="bubble__open" aria-label={can.edit ? 'Edit' : 'Open'} title={can.edit ? 'Edit (Enter)' : 'Open (Enter)'} onClick={() => open(can.edit)}>
-          <Icon name={can.edit ? 'edit' : 'open'} size={16} />
-        </button>
+        {/* In the Trash, Restore where the pencil is; an entry in a trashed stack, not trashed itself, has neither. */}
+        {trashed ? (
+          canRestore(card) && (
+            <button type="button" className="bubble__open" aria-label="Restore" title="Restore: back where it was" onClick={() => void restore([card.id])}>
+              <Icon name="undo" size={16} />
+            </button>
+          )
+        ) : (
+          // A pencil where the entry can be changed; an entry shared only to read just opens.
+          <button type="button" className="bubble__open" aria-label={can.edit ? 'Edit' : 'Open'} title={can.edit ? 'Edit (Enter)' : 'Open (Enter)'} onClick={() => open(can.edit)}>
+            <Icon name={can.edit ? 'edit' : 'open'} size={16} />
+          </button>
+        )}
         <button type="button" className="bubble__open" aria-label="More" aria-haspopup="menu" aria-expanded={menu.isOpen} title="More (or right-click the entry)" onClick={(e) => menu.openFrom(e.currentTarget)}>
           <Icon name="more" size={16} />
         </button>

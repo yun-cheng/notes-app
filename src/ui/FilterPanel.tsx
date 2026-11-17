@@ -24,25 +24,26 @@ import { useCards, useToday } from '../state/CardsContext';
 import { DatesDialog } from './DatesDialog';
 import { colorClass } from './EntryStyle';
 import { Icon, type IconName } from './Icon';
-import { ARCHIVE_PATH, datedPath, historyPath, isDatedPage, journalPath, TRASH_PATH, type DatedPage } from './paths';
+import { ARCHIVE_PATH, datedPath, historyPath, isDatedPage, journalPath, TRASH_PATH, trashFilter, trashPath, type DatedPage } from './paths';
 import { usePopover } from './usePopover';
 
 /**
  * The filter in the address, on the pages it narrows: the journal, the Archive (the journal's archived entries),
- * the history of changes, and the calendar and the timeline, which take the parts of it that suit todos with dates.
- * Empty on any other page.
+ * the Trash, the history of changes, and the calendar and the timeline, which take the parts of it that suit todos
+ * with dates. Empty on any other page.
  */
 export function useJournalFilter(): StreamFilter {
   const { pathname } = useLocation();
   const [params] = useSearchParams();
   if (isDatedPage(pathname)) return datedFilter(parseFilter(params)) ?? {};
   if (pathname === ARCHIVE_PATH) return { ...parseFilter(params), archived: true };
+  if (pathname === TRASH_PATH) return trashFilter(parseFilter(params));
   return pathname === '/journal' || pathname === '/history' ? parseFilter(params) : {};
 }
 
 /**
- * Where a filter leads from here: the history, the calendar or the timeline while that's the page showing,
- * otherwise the journal. A filter the calendar can't show (notes, say, or when written) leads to the journal.
+ * Where a filter leads from here: the history, the Trash, the calendar or the timeline while that's the page
+ * showing, otherwise the journal (the Archive, with `archived`). A filter the calendar can't show (notes, say, or when written) leads to the journal.
  */
 export function useFilterPath(): (filter: StreamFilter) => string {
   const { pathname } = useLocation();
@@ -53,7 +54,18 @@ export function useFilterPath(): (filter: StreamFilter) => string {
       return dated ? datedPath(pathname, dated, params) : journalPath(filter);
     };
   }
+  if (pathname === TRASH_PATH) return trashPath;
   return pathname === '/history' ? historyPath : journalPath;
+}
+
+/**
+ * Where a tag or vault named on an entry leads: its entries alone on the page showing it, the Trash or the Archive,
+ * and otherwise the journal.
+ */
+export function useShowOnly(): (part: Pick<StreamFilter, 'tagId' | 'vaultId'>) => string {
+  const { pathname } = useLocation();
+  if (pathname === TRASH_PATH) return trashPath;
+  return (part) => journalPath({ ...part, archived: pathname === ARCHIVE_PATH || undefined });
 }
 
 const STATUSES: TodoStatus[] = ['open', 'today', 'upcoming', 'undated', 'waiting', 'done'];
@@ -84,6 +96,7 @@ export function FilterBar({ filter }: { filter: StreamFilter }) {
   const onHistory = pathname === '/history';
   // On the Archive, Archived is the page, not a filter on it.
   const onArchive = pathname === ARCHIVE_PATH;
+  const onTrash = pathname === TRASH_PATH;
   const [picking, setPicking] = useState(false);
   const parts = filterParts(filter);
   const without = (part: FilterPart) => parts.find((p) => p.part === part)!.without;
@@ -159,7 +172,7 @@ export function FilterBar({ filter }: { filter: StreamFilter }) {
           </Link>
         ))}
       {/* Templates are entries too, kept apart: the journal swaps to them, filtered by the rest as usual. */}
-      {!dated && !onArchive &&
+      {!dated && !onArchive && !onTrash &&
         (filter.template ? (
           <span className="chip filter-chip is-set">
             <span className="filter-chip__value">Templates</span>
@@ -386,7 +399,7 @@ export function FilterPanel({ onPick }: { onPick?: () => void }) {
         {link('timeline', 'Timeline', datedLink('/timeline'), datedActive('/timeline'), 'timeline')}
         {/* Put away, and thrown away: each a page of its own, out of the journal. */}
         {link('archive', 'Archive', journalPath({ sort: filter.sort, archived: true }), onArchive && !filter.tagId && !filter.vaultId, 'archive', archivedCount || undefined)}
-        {link('trash', 'Trash', TRASH_PATH, pathname === TRASH_PATH, 'trash', index.trash.length || undefined)}
+        {link('trash', 'Trash', TRASH_PATH, pathname === TRASH_PATH && !filter.tagId && !filter.vaultId, 'trash', index.trash.length || undefined)}
       </nav>
 
       {index.tagGroups.groups

@@ -1,11 +1,12 @@
 import { linkTitle } from '../domain/cardIndex';
+import { displayTitle } from '../domain/content';
 import { encodeEntries, entriesClipboard, ENTRIES_TYPE, toEntries } from '../domain/clipboard';
 import type { Entry } from '../domain/entry';
 import type { EntryType } from '../domain/retype';
 import type { Card, NoteCard, TodoCard } from '../domain/types';
 import { useCards } from '../state/CardsContext';
 import { clipboardPrefs, COPY_STYLES, COPY_WORDS, type CopyStyle } from './clipboardPrefs';
-import { usePermissions } from './viewOnly';
+import { useCanRestore, usePermissions } from './viewOnly';
 import { useToast } from './Toast';
 import { useUndo } from './useUndo';
 import { useSaveEntries, type SaveOptions } from './useSaveEntry';
@@ -49,17 +50,20 @@ export async function writeClipboard(text: string, json?: string, html?: string)
   }
 }
 
-const copyable = (c: Card | undefined): c is NoteCard | TodoCard => !!c && !c.deleted && c.type !== 'tag';
+/** Entries to copy: those in the Trash too, where they can be read. */
+const copyable = (c: Card | undefined): c is NoteCard | TodoCard => !!c && c.type !== 'tag';
+const live = (c: Card | undefined): c is NoteCard | TodoCard => copyable(c) && !c.deleted;
 
-/** Copy, cut, trash, archive and paste for journal entries, each with a toast and, where it changes something, an undo. */
+/** Copy, cut, trash, restore, archive and paste for journal entries, each with a toast and, where it changes something, an undo. */
 export function useEntryActions() {
   const { index, repo, vaults } = useCards();
   const may = usePermissions();
+  const canRestore = useCanRestore();
   const toast = useToast();
   const { saveEntries } = useSaveEntries();
   const { undoAction } = useUndo();
 
-  const cardsFor = (ids: string[]) => ids.map((id) => index.byId.get(id)).filter(copyable);
+  const cardsFor = (ids: string[]) => ids.map((id) => index.byId.get(id)).filter(live);
 
   /**
    * Puts entries on the clipboard for other apps in the style the Copy setting picks, and exactly for this one, so
@@ -73,7 +77,7 @@ export function useEntryActions() {
 
   /** Copies in the setting's style, with the toast offering the others: pressing one copies the entries again that way. */
   const copy = (ids: string[], style: CopyStyle = clipboardPrefs().copy) => {
-    const cards = cardsFor(ids);
+    const cards = ids.map((id) => index.byId.get(id)).filter(copyable);
     if (!cards.length) return;
     void write(cards, style).then((ok) => {
       if (!ok) return toast("Couldn't copy here. Select the text instead.");
@@ -97,6 +101,16 @@ export function useEntryActions() {
     toast(`${verb} ${entries(removable.length)}${verb === 'Moved' ? ' to Trash' : ''}${note}`, {
       action: { label: 'Undo', run: () => void undoAction(action) },
     });
+  };
+
+  /** Brings entries, or tags, back from the Trash, where this account may, as one action with an undo. */
+  const restore = async (ids: string[]) => {
+    const cards = ids.map((id) => index.byId.get(id)).filter((c): c is Card => !!c && canRestore(c));
+    if (!cards.length) return;
+    const action = repo.action();
+    await Promise.all(cards.map((c) => repo.setDeleted(c.id, false)));
+    const what = cards.length === 1 ? `“${displayTitle(cards[0])}”` : cards.some((c) => c.type === 'tag') ? `${cards.length} items` : entries(cards.length);
+    toast(`Restored ${what}`, { action: { label: 'Undo', run: () => void undoAction(action) } });
   };
 
   /**
@@ -146,5 +160,5 @@ export function useEntryActions() {
     if (await repo.retype(id, type)) toast(type === 'todo' ? 'Made it a todo' : 'Made it a note', { action: { label: 'Undo', run: () => void undoAction(action) } });
   };
 
-  return { copy, cut, trash, archive, paste, retype };
+  return { copy, cut, trash, restore, archive, paste, retype };
 }

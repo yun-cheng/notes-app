@@ -18,6 +18,18 @@ export const ARCHIVE_PATH = '/archive';
 /** Entries and tags moved to the Trash, to restore. */
 export const TRASH_PATH = '/trash';
 
+/**
+ * The Trash, narrowed by the journal's filters. It has no order, board, archive or templates of its own: it holds
+ * whatever was trashed, newest first.
+ */
+export function trashPath(filter: StreamFilter): string {
+  const query = filterParams(trashFilter(filter)).toString();
+  return query ? `${TRASH_PATH}?${query}` : TRASH_PATH;
+}
+
+/** The parts of a filter the Trash takes. */
+export const trashFilter = (filter: StreamFilter): StreamFilter => ({ ...filter, sort: undefined, board: undefined, archived: undefined, template: undefined });
+
 /** The journal's Templates filter, where templates are kept, written and filtered like any entry. */
 export const TEMPLATES_PATH = '/journal?template=1';
 

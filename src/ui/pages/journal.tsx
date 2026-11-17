@@ -8,12 +8,12 @@ import { STATE_BOARD } from '../../domain/board';
 import { isFiltered, parseFilter, sortGroup, streamItems, type StreamFilter, type StreamItem, type StreamSort } from '../../domain/stream';
 import { EMPTY_DOC, type JSONNode, type NoteCard, type TodoCard, type Vault } from '../../domain/types';
 import { useCards, useToday } from '../../state/CardsContext';
-import { setViewOnly, usePermissions, useViewOnly } from '../viewOnly';
+import { setViewOnly, useInTrash, usePermissions, useViewOnly } from '../viewOnly';
 import { ScrollJump } from '../ScrollJump';
 import { Comments } from '../Comments';
 import { Backlinks, Empty, Page, TagChips, TagPicker, TitleField, useDeleteCard, useVaultMove, VaultField } from '../components';
 import { Editor } from '../editor/Editor';
-import { FilterBar, FilterSheet, SortMenu, useJournalFilter } from '../FilterPanel';
+import { FilterBar, FilterSheet, SortMenu, useJournalFilter, useShowOnly } from '../FilterPanel';
 import { Icon } from '../Icon';
 import { MOD } from '../Shortcuts';
 import { LockPanel } from '../LockPanel';
@@ -235,7 +235,7 @@ function BoardMenu({ filter }: { filter: StreamFilter }) {
 }
 
 /** Bubbles grouped by day. Written order opens at the newest, at the bottom, like a chat; other orders open at the top. */
-function Stream({ items, empty, sort }: { items: StreamItem[]; empty: string; sort: StreamSort }) {
+export function Stream({ items, empty, sort }: { items: StreamItem[]; empty: string; sort: StreamSort }) {
   const today = useToday();
   const chat = sort === 'written';
 
@@ -461,6 +461,7 @@ function VaultLabel({ card }: { card: NoteCard | TodoCard }) {
   const { vaults, shared, sharedInto } = useCards();
   const filter = useJournalFilter();
   const vaultMove = useVaultMove(card);
+  const showOnly = useShowOnly();
   const home = vaults.find((v) => v.id === card.vaultId);
   const also = vaults.filter((v) => v.id !== card.vaultId && sharedInto.get(card.id)?.includes(v.id));
   const inVaults = home ? [home, ...also] : also;
@@ -485,7 +486,7 @@ function VaultLabel({ card }: { card: NoteCard | TodoCard }) {
   const label = inVaults.map((v) => v.name).join(', ');
   if (!vaultMove || !home) {
     return (
-      <Link className="bubble__vault" to={journalPath({ vaultId: inVaults[0].id })} title={`In ${label}. Show only ${inVaults[0].name}`}>
+      <Link className="bubble__vault" to={showOnly({ vaultId: inVaults[0].id })} title={`In ${label}. Show only ${inVaults[0].name}`}>
         {names}
       </Link>
     );
@@ -513,6 +514,7 @@ function VaultMenu({ card, home, also, label, filtered, options, move, children 
   const { vaults, locked } = useCards();
   const { open, root, toggle, fixedStyle, close } = usePopover();
   const navigate = useNavigate();
+  const showOnly = useShowOnly();
   const alsoIn = useAlsoIn(card);
   // A private vault's entries are shared from the share dialog, which warns that the PIN won't guard them.
   const more = home.lock === 'pin' ? [] : vaults.filter((v) => v.id !== home.id && v.lock === 'none' && !locked.has(v.id));
@@ -558,7 +560,7 @@ function VaultMenu({ card, home, also, label, filtered, options, move, children 
           )}
           {!filtered && (
             <div className="style-menu__group">
-              <button type="button" role="menuitem" onClick={() => navigate(journalPath({ vaultId: home.id }))}>
+              <button type="button" role="menuitem" onClick={() => navigate(showOnly({ vaultId: home.id }))}>
                 Show only {home.name}
               </button>
             </div>
@@ -817,9 +819,13 @@ const BackLabel = () => (
 );
 
 /** Opens an entry in a sheet over this page: to edit, with its text focused, or (a tap on a phone) just to read. */
+/** Opens an entry in its sheet. In the Trash, where nothing is changed, a press picks it instead, to restore. */
 function useOpen(card: NoteCard | TodoCard) {
   const navigate = useNavigate();
   const location = useLocation();
+  const trashed = useInTrash();
+  const selection = useSelection();
+  if (trashed) return () => selection?.toggle(card.id);
   return (edit = false) => void navigate(cardPath(card), { state: sheetState(location, card, edit ? { edit } : {}) });
 }
 
@@ -904,7 +910,9 @@ const PEEK = 3;
  */
 function StackEntry({ stack, at }: { stack: NoteCard; at: number }) {
   const { index } = useCards();
-  const members = stackEntries(stack, index.byId, stacksOf(index));
+  // A stack in the Trash has let its entries go back to the stream; shown there, it lists what restoring it takes back in.
+  const of = stack.deleted ? new Map((stack.stack ?? []).filter((id) => !stacksOf(index).has(id)).map((id) => [id, stack.id])) : stacksOf(index);
+  const members = stackEntries(stack, index.byId, of);
   const { text, flip, open, menu, title, translated, selected, handlers } = useBubble(stack, stack.title.trim() || 'Stack');
   const [expanded, setExpanded] = useState(() => openStacks.has(stack.id));
   const toggle = () => {
@@ -1317,7 +1325,8 @@ function EntryDetail({ card, fresh, edit, onClose }: { card: NoteCard | TodoCard
 /** In a template's bubble: Use, which starts a new entry from it. */
 function UseTemplate({ card }: { card: NoteCard | TodoCard }) {
   const use = useStartFromTemplate();
-  const viewOnly = useViewOnly();
+  const trashed = useInTrash();
+  const viewOnly = useViewOnly() || trashed;
   if (viewOnly) {
     return (
       <span className="bubble__template" title="A template">

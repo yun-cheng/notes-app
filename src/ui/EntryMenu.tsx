@@ -9,7 +9,7 @@ import { Icon, type IconName } from './Icon';
 import { useSelection } from './selection';
 import { ShareDialog } from './ShareDialog';
 import { useTickTodo, useToggleWaiting } from './TodoDue';
-import { usePermissions, useViewOnly } from './viewOnly';
+import { useCanRestore, useInTrash, usePermissions, useViewOnly } from './viewOnly';
 import { useStartFromTemplate, useToggleTemplate } from './useTemplates';
 import { useTakeOut } from './useStacking';
 import { useLocation, useNavigate } from 'react-router';
@@ -180,10 +180,50 @@ function EntryMenu({ card, at, open, extras, onShare, onClose }: MenuProps) {
   const { stackOf, takeOut } = useTakeOut();
   const inStack = !viewOnly && !!stackOf(card);
   const can = may(card);
+  const trashed = useInTrash();
+  const canRestore = useCanRestore();
   const run = (work: () => unknown) => () => {
     onClose();
     void work();
   };
+
+  // In the Trash: copy, pick, and bring back; nothing else changes an entry there.
+  if (trashed) {
+    const several = !!selection && selection.has(card.id) && selection.ids.length > 1;
+    const ids = several ? selection!.ids : [card.id];
+    const restorable = ids.some((id) => {
+      const c = index.byId.get(id);
+      return !!c && canRestore(c);
+    });
+    const n = entries(ids.length);
+    return (
+      <ContextMenu at={at} label={several ? `${n} selected` : 'Entry'} onClose={onClose}>
+        <div className="style-menu__group">
+          {several && <span className="style-menu__label">{n} selected</span>}
+          <Item icon="copy" onClick={run(() => actions.copy(ids))}>
+            Copy
+          </Item>
+          {!several && extras.translate && (
+            <Item icon="translate" onClick={run(extras.translate)}>
+              {extras.translated ? 'Show original' : translatesOnDevice() ? 'Translate' : 'Translate with Google'}
+            </Item>
+          )}
+          {selection && (
+            <Item icon="check" onClick={run(() => (several ? selection.clear() : selection.toggle(card.id)))}>
+              {several ? 'Stop selecting' : selection.has(card.id) ? 'Unselect' : 'Select'}
+            </Item>
+          )}
+        </div>
+        {restorable && (
+          <div className="style-menu__group">
+            <Item icon="undo" onClick={run(() => (selection?.clear(), actions.restore(ids)))}>
+              Restore
+            </Item>
+          </div>
+        )}
+      </ContextMenu>
+    );
+  }
 
   if (selection && selection.has(card.id) && selection.ids.length > 1) {
     const ids = selection.ids;

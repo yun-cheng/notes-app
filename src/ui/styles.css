@@ -160,8 +160,6 @@ h1, h2, p { margin: 0; }
 .view-only-toggle { display: inline-flex; align-items: center; gap: 5px; flex: none; padding: 6px; border: 0; border-radius: 999px; background: none; color: var(--muted); font: 500 12px/1 var(--sans); cursor: pointer; }
 .view-only-toggle:hover { color: var(--text); background: var(--sunken); }
 .view-only-toggle.is-on { background: var(--accent-soft); color: var(--accent); }
-.view-only-toggle span { display: none; }
-@media (min-width: 420px) { .view-only-toggle.is-on { padding: 4px 9px; } .view-only-toggle span { display: inline; } }
 .sync-menu { position: relative; flex: none; }
 .style-menu.sync-menu__panel { width: 250px; padding: 12px; gap: 8px; font-size: 14px; }
 .sync-menu__panel p { color: var(--muted); }
@@ -653,7 +651,7 @@ a.change__title:hover { color: var(--accent); }
 .bubble__text.is-folded { max-height: 6lh; overflow: hidden; mask-image: linear-gradient(to bottom, #000 65%, transparent); }
 .bubble__fold { display: inline-flex; align-items: center; gap: 2px; padding: 0 6px 0 2px; border: 0; border-radius: 6px; background: none; color: var(--accent); font: inherit; font-size: 12px; font-weight: 600; cursor: pointer; }
 .bubble__fold:hover { background: var(--accent-soft); }
-.bubble__meta { display: flex; flex-wrap: wrap; align-items: center; gap: 6px; color: var(--muted); font-size: 11px; line-height: 1.6; }
+.bubble__meta { display: flex; flex-wrap: wrap; align-items: center; gap: 6px; min-height: 20px; color: var(--muted); font-size: 11px; line-height: 1.6; }
 /* The due date and tags start at the left; More or Less and the time keep to the right. */
 .bubble__end { display: inline-flex; flex-wrap: wrap; align-items: center; justify-content: flex-end; gap: 6px; margin-left: auto; }
 .bubble__meta time { padding-left: 4px; }
@@ -702,8 +700,10 @@ body:has(.composer:focus-within) .journal-dock { --dock-gap: 8px; --dock-margin:
   display: flex; align-items: flex-end; gap: 6px; padding: 4px 4px 4px 14px;
   background: var(--surface); border: 1px solid var(--line); border-radius: 22px; box-shadow: 0 2px 10px rgb(0 0 0 / 6%);
 }
-.composer--view-only { align-items: center; gap: 8px; color: var(--muted); font-size: 14px; }
+.composer--view-only { align-items: center; gap: 8px; min-height: 46px; padding-block: 0; color: var(--muted); font-size: 14px; }
 .composer--view-only p { flex: 1; min-width: 0; margin: 0; }
+/* As tall as the writing box it stands in for, so turning view only on or off doesn't move it. */
+.composer--view-only .btn { min-height: 36px; }
 /* Jumps back to the newest entries, just above the writing box's right end. */
 .scroll-jump {
   position: absolute; right: 2px; bottom: calc(100% + 10px); display: flex; align-items: center; justify-content: center;
@@ -904,7 +904,7 @@ body:has(.batch) .toast-slot { bottom: calc(var(--tabbar) + env(safe-area-inset-
 .bubble__add:hover { color: var(--text); border-color: var(--muted); }
 .stream__entry:hover .bubble__add, .bubble:focus-within .bubble__add, .is-open > .bubble__add { opacity: 1; }
 @media (pointer: coarse) { .bubble__add { display: none; } }
-.bubble-menu { position: relative; }
+.bubble-menu { position: relative; display: flex; }
 .style-menu.tag-menu { width: 280px; padding: 8px 10px; }
 .tag-menu .tag-picker { margin: 0; }
 .tag-menu .tag-picker__input, .tag-menu .tag-picker__input:focus { width: 100%; }

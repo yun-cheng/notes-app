@@ -67,7 +67,10 @@ export function usePermissions(): (card: Card) => Permissions {
 /** Said when something would make a change while view only is on. */
 export const VIEW_ONLY_NOTE = 'View only is on. Turn it off in the top bar to make changes.';
 
-/** The top bar's switch: an eye, named "View only" while it's on. */
+/**
+ * The top bar's switch: an eye, tinted while it's on. It keeps its size either way, so the title bar doesn't shift;
+ * the bar in place of the writing box says it's on in words.
+ */
 export function ViewOnlyToggle() {
   const on = useViewOnly();
   return (
@@ -80,7 +83,6 @@ export function ViewOnlyToggle() {
       onClick={() => setViewOnly(!on)}
     >
       <Icon name="eye" size={16} />
-      {on && <span>View only</span>}
     </button>
   );
 }

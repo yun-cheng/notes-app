@@ -1,11 +1,11 @@
 import { useEffect, useLayoutEffect, useMemo, useRef, useState, type KeyboardEvent as ReactKeyboardEvent, type ReactNode } from 'react';
-import { Link, Outlet, useLocation, useNavigate, useParams } from 'react-router';
+import { Link, Navigate, Outlet, useLocation, useNavigate, useParams } from 'react-router';
 import { diaryVault } from '../../domain/access';
 import { linkTitle } from '../../domain/cardIndex';
 import { cardBack, checklistProgress, CODE_CLOSE, CODE_OPEN, displayTitle, HIDE_CLOSE, HIDE_OPEN, isEmptyDoc, previewParts, splitLinks, type PreviewPart } from '../../domain/content';
 import { isDateKey, relativeDay, relativeDayInSentence, toDateKey } from '../../domain/dates';
 import { STATE_BOARD } from '../../domain/board';
-import { isFiltered, sortGroup, streamItems, type StreamFilter, type StreamItem, type StreamSort } from '../../domain/stream';
+import { isFiltered, parseFilter, sortGroup, streamItems, type StreamFilter, type StreamItem, type StreamSort } from '../../domain/stream';
 import { EMPTY_DOC, type JSONNode, type NoteCard, type TodoCard, type Vault } from '../../domain/types';
 import { useCards, useToday } from '../../state/CardsContext';
 import { setViewOnly, usePermissions, useViewOnly } from '../viewOnly';
@@ -51,6 +51,15 @@ const time = (at: number) => new Date(at).toLocaleTimeString(undefined, { hour: 
  * filters narrow and order it, and a locked vault asks for its PIN right here.
  */
 export function JournalPage() {
+  const { pathname, search } = useLocation();
+  // An older link to archived entries, from when they were a filter here, opens the Archive, their own page now.
+  const params = new URLSearchParams(search);
+  if (pathname === '/journal' && params.get('archived') === '1') return <Navigate to={journalPath(parseFilter(params))} replace />;
+  return <JournalStream />;
+}
+
+/** The journal itself, or on the Archive (`filter.archived`), the entries put away out of it. */
+function JournalStream() {
   const { index, vaults, locked, accountId, sharedInto } = useCards();
   const viewOnly = useViewOnly();
   const today = useToday();
@@ -121,7 +130,7 @@ export function JournalPage() {
       <Page
         title={
           <>
-            {selecting ? `${selection.ids.length} selected` : filter.template ? 'Templates' : 'Journal'}
+            {selecting ? `${selection.ids.length} selected` : filter.archived ? 'Archive' : filter.template ? 'Templates' : 'Journal'}
             {count}
           </>
         }

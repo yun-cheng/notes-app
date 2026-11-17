@@ -24,17 +24,19 @@ import { useCards, useToday } from '../state/CardsContext';
 import { DatesDialog } from './DatesDialog';
 import { colorClass } from './EntryStyle';
 import { Icon, type IconName } from './Icon';
-import { datedPath, historyPath, isDatedPage, journalPath, type DatedPage } from './paths';
+import { ARCHIVE_PATH, datedPath, historyPath, isDatedPage, journalPath, TRASH_PATH, type DatedPage } from './paths';
 import { usePopover } from './usePopover';
 
 /**
- * The filter in the address, on the pages it narrows: the journal, the history of changes, and the calendar and
- * the timeline, which take the parts of it that suit todos with dates. Empty on any other page.
+ * The filter in the address, on the pages it narrows: the journal, the Archive (the journal's archived entries),
+ * the history of changes, and the calendar and the timeline, which take the parts of it that suit todos with dates.
+ * Empty on any other page.
  */
 export function useJournalFilter(): StreamFilter {
   const { pathname } = useLocation();
   const [params] = useSearchParams();
   if (isDatedPage(pathname)) return datedFilter(parseFilter(params)) ?? {};
+  if (pathname === ARCHIVE_PATH) return { ...parseFilter(params), archived: true };
   return pathname === '/journal' || pathname === '/history' ? parseFilter(params) : {};
 }
 
@@ -65,23 +67,28 @@ interface FilterOption {
 }
 
 /**
- * The filters, in the title bar's second row on the journal and the history: Type, Todos, Written and Contains,
- * each a chip that opens its choices. A chip in use names its choice, like "Due today", with an × that takes it
- * off. Archived swaps the entries for the archived ones. A tag or vault picked in the sidebar shows here too, with its ×, and Clear all takes every filter off when
- * there are several. The order is kept throughout. On the calendar and the timeline, which show todos with dates,
- * only Todos and Archived are offered.
+ * The filters, in the title bar's second row on the journal, the Archive and the history: a switch between All,
+ * Notes, Todos and Stacks, then Todos, Written and Contains, each a chip that opens its choices. A chip in use names
+ * its choice, like "Due today", with an × that takes it off. On the history, Archived narrows it to archived
+ * entries' changes (the journal's archived entries are the Archive, a page of their own). A tag or vault picked in
+ * the sidebar shows here too, with its ×, and Clear all takes every filter off when there are several. The order is
+ * kept throughout. On the calendar and the timeline, which show todos with dates, only Todos is offered.
  */
 export function FilterBar({ filter }: { filter: StreamFilter }) {
   const { index, vaults } = useCards();
   const today = useToday();
   const path = useFilterPath();
   const navigate = useNavigate();
-  const dated = isDatedPage(useLocation().pathname);
+  const { pathname } = useLocation();
+  const dated = isDatedPage(pathname);
+  const onHistory = pathname === '/history';
+  // On the Archive, Archived is the page, not a filter on it.
+  const onArchive = pathname === ARCHIVE_PATH;
   const [picking, setPicking] = useState(false);
   const parts = filterParts(filter);
   const without = (part: FilterPart) => parts.find((p) => p.part === part)!.without;
   // The calendar's todos are all todos, so its status is no second chip.
-  const chips = dated ? parts.filter((p) => p.part !== 'type') : parts;
+  const chips = parts.filter((p) => !(dated && p.part === 'type') && !(onArchive && p.part === 'archived'));
   const option = <K extends keyof StreamFilter>(key: K, value: NonNullable<StreamFilter[K]>, label: string, also: StreamFilter = {}): FilterOption => {
     const checked = filter[key] === value;
     return { key: String(value), label, checked, next: { ...filter, ...also, [key]: checked ? undefined : value } };
@@ -138,20 +145,21 @@ export function FilterBar({ filter }: { filter: StreamFilter }) {
           options={(Object.keys(CONTAINS_LABEL) as Contains[]).map((h) => option('has', h, h === 'link' ? 'Links' : 'Photos'))}
         />
       )}
-      {filter.archived ? (
-        <span className="chip filter-chip is-set">
-          <span className="filter-chip__value">Archived</span>
-          <Link className="filter-chip__clear" to={path(without('archived'))} aria-label="Remove filter: Archived" title="Back to entries not archived">
-            ×
+      {onHistory &&
+        (filter.archived ? (
+          <span className="chip filter-chip is-set">
+            <span className="filter-chip__value">Archived</span>
+            <Link className="filter-chip__clear" to={path(without('archived'))} aria-label="Remove filter: Archived" title="Back to changes to entries not archived">
+              ×
+            </Link>
+          </span>
+        ) : (
+          <Link className="chip filter-chip filter-chip--toggle" to={path({ ...filter, archived: true })} title="Show changes to archived entries instead">
+            Archived
           </Link>
-        </span>
-      ) : (
-        <Link className="chip filter-chip filter-chip--toggle" to={path({ ...filter, archived: true })} title="Show archived entries instead">
-          Archived
-        </Link>
-      )}
+        ))}
       {/* Templates are entries too, kept apart: the journal swaps to them, filtered by the rest as usual. */}
-      {!dated &&
+      {!dated && !onArchive &&
         (filter.template ? (
           <span className="chip filter-chip is-set">
             <span className="filter-chip__value">Templates</span>
@@ -181,7 +189,7 @@ export function FilterBar({ filter }: { filter: StreamFilter }) {
         </span>
       )}
       {chips.length > 1 && (
-        <Link className="chip filter-chip filter-chip--clear-all" to={path({ sort: filter.sort, board: filter.board })}>
+        <Link className="chip filter-chip filter-chip--clear-all" to={path({ sort: filter.sort, board: filter.board, archived: onArchive || undefined })}>
           Clear all
         </Link>
       )}
@@ -326,9 +334,11 @@ export function SortMenu({ filter }: { filter: StreamFilter }) {
  */
 export function FilterPanel({ onPick }: { onPick?: () => void }) {
   const { index, vaults, locked } = useCards();
+  const archivedCount = index.live.filter((c) => (c.type === 'note' || c.type === 'todo') && c.archived && !c.template).length;
   const filter = useJournalFilter();
   const { pathname } = useLocation();
   const onJournal = pathname === '/journal';
+  const onArchive = pathname === ARCHIVE_PATH;
   const onHistory = pathname === '/history';
   const onDated = isDatedPage(pathname);
   const path = useFilterPath();
@@ -370,10 +380,14 @@ export function FilterPanel({ onPick }: { onPick?: () => void }) {
     <div className="filters">
       <nav aria-label="Journal">
         {/* Journal is the one in use unless a tag or vault here is: the title bar shows the other filters, Templates too. */}
-        {link('all', 'Journal', journalPath(onHistory || onDated ? filter : { sort: filter.sort, board: filter.board }), onJournal && !filter.tagId && !filter.vaultId, 'notes')}
-        {link('history', 'History', historyPath(onJournal || onDated ? filter : { sort: filter.sort }), onHistory, 'history')}
+        {link('all', 'Journal', journalPath(onHistory || onDated ? { ...filter, archived: undefined } : { sort: filter.sort, board: filter.board }), onJournal && !filter.tagId && !filter.vaultId, 'notes')}
+        {link('history', 'History', historyPath(onJournal || onDated || onArchive ? filter : { sort: filter.sort }), onHistory, 'history')}
         {link('calendar', 'Calendar', datedLink('/calendar'), datedActive('/calendar'), 'calendar')}
-        {link('timeline', 'Timeline', datedLink('/timeline'), datedActive('/timeline'), 'timeline')}      </nav>
+        {link('timeline', 'Timeline', datedLink('/timeline'), datedActive('/timeline'), 'timeline')}
+        {/* Put away, and thrown away: each a page of its own, out of the journal. */}
+        {link('archive', 'Archive', journalPath({ sort: filter.sort, archived: true }), onArchive && !filter.tagId && !filter.vaultId, 'archive', archivedCount || undefined)}
+        {link('trash', 'Trash', TRASH_PATH, pathname === TRASH_PATH, 'trash', index.trash.length || undefined)}
+      </nav>
 
       {index.tagGroups.groups
         .filter((g) => g.members.length)

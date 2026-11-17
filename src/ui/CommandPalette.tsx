@@ -13,7 +13,7 @@ import { useNewNote } from './components';
 import { LINK_STYLES, PHOTO_STYLES, setDisplayPrefs, type LinkStyle, type PhotoStyle } from './displayPrefs';
 import { useFilterPath, useJournalFilter } from './FilterPanel';
 import { Icon, type IconName } from './Icon';
-import { cardPath, historyPath, journalPath, sheetState } from './paths';
+import { ARCHIVE_PATH, cardPath, historyPath, journalPath, sheetState, TRASH_PATH } from './paths';
 import { MOD, REDO_KEYS } from './Shortcuts';
 import { useToast } from './Toast';
 import { useSaveEntries } from './useSaveEntry';
@@ -81,11 +81,13 @@ export function CommandPalette({ onClose, onShortcuts }: { onClose: () => void; 
       { id: 'go-history', group: 'Go to', label: 'History', icon: 'history', keywords: 'changes recent activity log undo redo', run: go(historyPath(current)) },
       { id: 'go-calendar', group: 'Go to', label: 'Calendar', icon: 'calendar', keywords: 'month day date', run: go('/calendar') },
       { id: 'go-timeline', group: 'Go to', label: 'Timeline', icon: 'timeline', keywords: 'gantt start due span weeks plan', run: go('/timeline') },
+      { id: 'go-archive', group: 'Go to', label: 'Archive', icon: 'archive', keywords: 'archived put away hidden old', run: go(ARCHIVE_PATH) },
+      { id: 'go-trash', group: 'Go to', label: 'Trash', icon: 'trash', keywords: 'deleted removed restore bin', run: go(TRASH_PATH) },
       { id: 'go-templates', group: 'Go to', label: 'Templates', icon: 'template', keywords: 'template copy reuse checklist', run: go(journalPath({ template: true })) },
       { id: 'go-search', group: 'Go to', label: 'Search', icon: 'search', keywords: 'find', run: go('/search') },
       { id: 'go-tags', group: 'Go to', label: 'All tags', icon: 'tag', keywords: 'labels folders', run: go('/tags') },
       { id: 'go-vaults', group: 'Go to', label: 'Vaults', icon: 'lock', keywords: 'private pin members', run: go('/vaults') },
-      { id: 'go-settings', group: 'Go to', label: 'Backup & settings', icon: 'settings', keywords: 'trash export import ai photos account sign out', run: go('/settings') },
+      { id: 'go-settings', group: 'Go to', label: 'Backup & settings', icon: 'settings', keywords: 'export import ai photos account sign out', run: go('/settings') },
       { id: 'undo', group: 'Edit', label: 'Undo', hint: `${MOD}Z`, icon: 'undo', keywords: 'take back revert last change', run: () => void undo() },
       { id: 'redo', group: 'Edit', label: 'Redo', hint: REDO_KEYS, icon: 'redo', keywords: 'put back again', run: () => void redo() },
       { id: 'view-only', group: 'Edit', label: viewOnly ? 'Turn off view only' : 'Turn on view only', icon: 'eye', keywords: 'read only lock editing protect', run: () => setViewOnly(!viewOnly) },
@@ -104,7 +106,6 @@ export function CommandPalette({ onClose, onShortcuts }: { onClose: () => void; 
     for (const t of index.live.filter(isTemplate)) {
       all.push({ id: `template-${t.id}`, group: 'Write', label: `New from template: ${displayTitle(t)}`, icon: 'template', keywords: 'template copy start reuse', run: () => void startFrom(t) });
     }
-    all.push({ id: 'archived', group: 'Filter', label: 'Show archived entries', icon: 'archive', keywords: 'archive put away hidden old', run: narrow({ archived: true }) });
     for (const when of Object.keys(WHEN_LABEL)) {
       all.push({ id: `when-${when}`, group: 'Filter', label: WHEN_LABEL[when], icon: 'calendar', keywords: 'written date when', run: narrow({ when }) });
     }

@@ -1,11 +1,10 @@
 import { useEffect, useRef, useState, type ChangeEvent } from 'react';
 import { makeBackup, markdownFiles, parseBackup, zipMarkdown } from '../../domain/backup';
-import { displayTitle } from '../../domain/content';
 import { isDemoAccount } from '../../auth/account';
 import { useAccount } from '../../auth/AuthContext';
 import { useCards, useSyncStatus, useToday } from '../../state/CardsContext';
 import { describeSync } from '../../sync/engine';
-import { Empty, Page, Section } from '../components';
+import { Page, Section } from '../components';
 import { ClipboardSection } from '../ClipboardSection';
 import { DisplaySection } from '../DisplaySection';
 import { RemindersSection } from '../RemindersSection';
@@ -111,25 +110,6 @@ export function SettingsPage() {
       <ClipboardSection />
       <PhotosSection />
       <AiAppsSection />
-      <Section title={`Trash (${index.trash.length})`}>
-        {index.trash.length ? (
-          <div className="list">
-            {index.trash.map((c) => (
-              <div className="row" key={c.id}>
-                <span className="row__body">
-                  <span className="row__title">{displayTitle(c)}</span>
-                  <span className="row__preview">{c.type}</span>
-                </span>
-                <button type="button" className="btn" onClick={() => void repo.setDeleted(c.id, false)}>
-                  Restore
-                </button>
-              </div>
-            ))}
-          </div>
-        ) : (
-          <Empty>Trash is empty.</Empty>
-        )}
-      </Section>
     </Page>
   );
 }

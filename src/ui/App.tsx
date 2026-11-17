@@ -15,6 +15,7 @@ import { SettingsPage } from './pages/SettingsPage';
 import { VaultPage, VaultsPage } from './pages/vaults';
 import { EntrySheet, JournalPage, OldNoteRedirect } from './pages/journal';
 import { TagsPage } from './pages/tags';
+import { TrashPage } from './pages/trash';
 import { SearchPage } from './pages/views';
 import { CalendarPage } from './pages/calendar';
 import { TimelinePage } from './pages/timeline';
@@ -188,6 +189,8 @@ function SignedInApp() {
           <Route path="journal" element={<JournalPage />}>
             <Route path=":id" element={<EntrySheet />} />
           </Route>
+          <Route path="archive" element={<JournalPage />} />
+          <Route path="trash" element={<TrashPage />} />
           <Route path="history" element={<ChangesPage />} />
           <Route path="notes/:id?" element={<OldNoteRedirect />} />
           <Route path="tags" element={<TagsPage />} />

@@ -5,11 +5,18 @@ import type { Card } from '../domain/types';
 /** Notes and todos open in a sheet, over whatever page they were opened from. */
 export const entryPath = (id: string) => `/journal/${id}`;
 
-/** The journal, narrowed by a filter. */
+/** The journal, narrowed by a filter. Archived entries are a page of their own, the Archive, filtered the same way. */
 export function journalPath(filter: StreamFilter): string {
-  const query = filterParams(filter).toString();
-  return query ? `/journal?${query}` : '/journal';
+  const page = filter.archived ? ARCHIVE_PATH : '/journal';
+  const query = filterParams({ ...filter, archived: undefined }).toString();
+  return query ? `${page}?${query}` : page;
 }
+
+/** Archived entries, put away out of the journal: the journal's page, showing them instead. */
+export const ARCHIVE_PATH = '/archive';
+
+/** Entries and tags moved to the Trash, to restore. */
+export const TRASH_PATH = '/trash';
 
 /** The journal's Templates filter, where templates are kept, written and filtered like any entry. */
 export const TEMPLATES_PATH = '/journal?template=1';

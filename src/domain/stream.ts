@@ -102,13 +102,13 @@ export function filterParams(filter: StreamFilter): URLSearchParams {
 export const isFiltered = (f: StreamFilter) => !!(f.type || f.status || f.when || f.tagId || f.vaultId || f.has || f.archived || f.template);
 
 /**
- * A filter as the calendar and the timeline take it: they show todos with dates, so a todo status, a tag, a vault
- * and Archived narrow them. Null for a filter they can't show (notes, stacks, when written, what an entry holds, todos
- * with no date, templates), which is the journal's.
+ * A filter as the calendar and the timeline take it: they show todos with dates, so a todo status, a tag and a
+ * vault narrow them. Null for a filter they can't show (notes, stacks, when written, what an entry holds, todos
+ * with no date, templates, the archive), which is the journal's.
  */
 export function datedFilter(f: StreamFilter): StreamFilter | null {
-  if (f.type === 'note' || f.type === 'stack' || f.when || f.has || f.status === 'undated' || f.template) return null;
-  return { status: f.status, tagId: f.tagId, vaultId: f.vaultId, archived: f.archived };
+  if (f.type === 'note' || f.type === 'stack' || f.when || f.has || f.status === 'undated' || f.template || f.archived) return null;
+  return { status: f.status, tagId: f.tagId, vaultId: f.vaultId };
 }
 
 /** One part of a filter, as a chip names it. */

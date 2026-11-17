@@ -4,13 +4,15 @@ import { diaryVault } from '../../domain/access';
 import { lanes, shiftDates, spanOn, spans, type Span } from '../../domain/calendar';
 import { displayTitle } from '../../domain/content';
 import { addMonths, daysBetween, formatDay, formatMonth, formatShortMonth, isDateKey, monthGrid, monthKey, parseDateKey, relativeDay, relativeDayInSentence, toDateKey } from '../../domain/dates';
+import { entryMatcher, filterParams, type StreamFilter } from '../../domain/stream';
 import type { TodoCard } from '../../domain/types';
 import { useCards, useToday } from '../../state/CardsContext';
 import { Page } from '../components';
 import { firstDayOfWeek } from '../DatesDialog';
 import { colorClass } from '../EntryStyle';
+import { FilterBar, FilterSheet, useJournalFilter } from '../FilterPanel';
 import { Icon } from '../Icon';
-import { cardPath, journalPath, sheetState } from '../paths';
+import { cardPath, datedParams, datedPath, journalPath, sheetState, type DatedPage } from '../paths';
 import { useTickTodo } from '../TodoDue';
 import { useToast } from '../Toast';
 import { useSaveEntries } from '../useSaveEntry';
@@ -52,10 +54,51 @@ export function useOpenCard() {
   return (card: TodoCard) => void navigate(cardPath(card), { state: sheetState(location, card, {}) });
 }
 
-/** The todos the calendar and the timeline show: those with a date, not archived, in a vault that's open. */
-export function useDatedTodos(): Span[] {
-  const { index } = useCards();
-  return useMemo(() => spans(index.todos.filter((t) => !t.archived && !t.deleted)), [index]);
+/**
+ * The todos the calendar and the timeline show: those with a date in a vault that's open, narrowed by the filter
+ * in the title bar. Archived ones only with the Archived filter, as in the journal.
+ */
+export function useDatedTodos(filter: StreamFilter): Span[] {
+  const { index, sharedInto } = useCards();
+  const today = useToday();
+  const key = filterParams(filter).toString();
+  return useMemo(() => {
+    const keep = entryMatcher(filter, today, sharedInto);
+    return spans(index.todos.filter((t) => !t.deleted && !!t.archived === !!filter.archived && keep(t)));
+    // The filter by what it says, not which object it is.
+  }, [index, key, today, sharedInto]);
+}
+
+/**
+ * The calendar's and the timeline's own buttons in the title bar: the switch to the other page, taking the filter
+ * along, and on a phone, where there's no sidebar, the sheet of tags and vaults (which lists both pages too).
+ */
+export function DatedActions({ filter, to }: { filter: StreamFilter; to: DatedPage }) {
+  const [filtering, setFiltering] = useState(false);
+  const toCalendar = to === '/calendar';
+  return (
+    <>
+      {/* On a phone, the sheet below lists the calendar and the timeline. */}
+      <Link
+        className="icon-btn only-desktop"
+        to={datedPath(to, filter)}
+        aria-label={toCalendar ? 'Month calendar' : 'Timeline'}
+        title={toCalendar ? 'Month calendar' : 'Timeline: todos as bars from start to due'}
+      >
+        <Icon name={toCalendar ? 'calendar' : 'timeline'} />
+      </Link>
+      <button
+        type="button"
+        className={`icon-btn only-mobile${filter.tagId || filter.vaultId ? ' is-active' : ''}`}
+        aria-label="Tags and vaults"
+        title="Tags and vaults"
+        onClick={() => setFiltering(true)}
+      >
+        <Icon name="filter" />
+      </button>
+      {filtering && <FilterSheet onClose={() => setFiltering(false)} />}
+    </>
+  );
 }
 
 /**
@@ -74,11 +117,13 @@ export function CalendarPage() {
   const day = picked && isDateKey(picked) ? picked : monthKey(today) === month ? today : `${month}-01`;
   const grid = useMemo(() => monthGrid(month, firstDayOfWeek()), [month]);
   const weeks = [0, 1, 2, 3, 4, 5].map((w) => grid.slice(w * 7, w * 7 + 7));
-  const all = useDatedTodos();
+  const filter = useJournalFilter();
+  const all = useDatedTodos(filter);
   const move = useMoveTodo();
   const open = useOpenCard();
   const may = usePermissions();
-  const go = (m: string, d?: string) => setParams(d ? { m, d } : { m }, { replace: true });
+  // Another month or day keeps the filter.
+  const go = (m: string, d?: string) => setParams(datedParams(filter, d ? { m, d } : { m }), { replace: true });
   const pick = (d: string) => go(monthKey(d) === month ? month : monthKey(d), d);
   const [over, setOver] = useState<string | null>(null);
   // Days with something written in the diary get a dot.
@@ -111,11 +156,10 @@ export function CalendarPage() {
           <button type="button" className="icon-btn" aria-label="Next month" onClick={() => go(addMonths(month, 1))}>
             <Icon name="right" />
           </button>
-          <Link className="icon-btn" to="/timeline" aria-label="Timeline" title="Timeline: todos as bars from start to due">
-            <Icon name="timeline" />
-          </Link>
+          <DatedActions filter={filter} to="/timeline" />
         </>
       }
+      below={<FilterBar filter={filter} />}
     >
       <div className="month" role="grid" aria-label={formatMonth(month)}>
         <div className="month__week month__week--head" role="row">

@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import { buildIndex } from './cardIndex';
 import { parseDateKey } from './dates';
-import { daysWhen, entryMatcher, filterParams, filterParts, isFiltered, parseFilter, spanRange, spanSide, streamItems, whenLabel, type TodoStatus } from './stream';
+import { datedFilter, daysWhen, entryMatcher, filterParams, filterParts, isFiltered, parseFilter, spanRange, spanSide, streamItems, whenLabel, type TodoStatus } from './stream';
 import { doc, note, p, tag, text, todo } from './testFixtures';
 
 const TODAY = '2026-11-12';
@@ -166,6 +166,16 @@ describe('filter in the address', () => {
       { part: 'archived', without: { archived: undefined, has: 'link' } },
     ]);
     expect(filterParts({ sort: 'newest' })).toEqual([]);
+  });
+
+  it('narrows the calendar by status, tag, vault and Archived, and leaves the rest to the journal', () => {
+    expect(datedFilter({ sort: 'due', board: 'state', type: 'todo', status: 'waiting', tagId: 'work', vaultId: 'v', archived: true })).toEqual({
+      status: 'waiting',
+      tagId: 'work',
+      vaultId: 'v',
+      archived: true,
+    });
+    for (const f of [{ type: 'note' }, { when: 'week' }, { has: 'link' }, { status: 'undated' }] as const) expect(datedFilter(f)).toBeNull();
   });
 });
 

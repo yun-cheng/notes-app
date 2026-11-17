@@ -17,6 +17,31 @@ export function historyPath(filter: StreamFilter): string {
   return query ? `/history?${query}` : '/history';
 }
 
+/** The pages showing todos by their dates. */
+export type DatedPage = '/calendar' | '/timeline';
+export const isDatedPage = (pathname: string): pathname is DatedPage => pathname === '/calendar' || pathname === '/timeline';
+
+/**
+ * The calendar or the timeline, narrowed by a filter, with what it keeps of its own in the address (the month, the
+ * day picked, where the timeline starts) kept as they are.
+ */
+export function datedPath(page: DatedPage, filter: StreamFilter, own?: URLSearchParams | Record<string, string>): string {
+  const query = datedParams(filter, own).toString();
+  return query ? `${page}?${query}` : page;
+}
+
+/** The address's query for `datedPath`. */
+export function datedParams(filter: StreamFilter, own?: URLSearchParams | Record<string, string>): URLSearchParams {
+  const kept = new URLSearchParams(own);
+  const params = new URLSearchParams();
+  for (const key of ['m', 'd', 'from']) {
+    const v = kept.get(key);
+    if (v) params.set(key, v);
+  }
+  for (const [k, v] of filterParams(filter)) params.set(k, v);
+  return params;
+}
+
 export const opensInSheet = (card: Card) => card.type === 'note' || card.type === 'todo';
 
 export const cardPath = (card: Card) => (opensInSheet(card) ? entryPath(card.id) : `/card/${card.id}`);

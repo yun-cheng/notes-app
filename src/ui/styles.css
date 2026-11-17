@@ -165,6 +165,8 @@ body:has(.composer:focus-within) .tabbar { display: none; }
 
 .only-mobile { display: inline-flex; }
 .chips.only-mobile { display: flex; }
+/* Where the title bar is short of room, and the same place is in the sheet of tags and vaults (the calendar's switch to the timeline). */
+@media (max-width: 859px) { .only-desktop { display: none !important; } }
 
 @media (min-width: 860px) {
   .app { display: grid; grid-template-columns: 248px minmax(0, 1fr); }

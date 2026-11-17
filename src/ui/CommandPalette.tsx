@@ -67,7 +67,8 @@ export function CommandPalette({ onClose, onShortcuts }: { onClose: () => void; 
   const viewOnly = useViewOnly();
   const startFrom = useStartFromTemplate();
   const go = (to: string) => () => void navigate(to);
-  // A filter narrows the page it's picked on: the history from there, the journal from anywhere else.
+  // A filter narrows the page it's picked on: the history, the calendar or the timeline from there (one the calendar
+  // can't show goes to the journal), the journal from anywhere else.
   const narrow = (next: StreamFilter) => go(filterPath({ ...current, ...next }));
   // A sort shows in the list, so picking one leaves the board.
   const order = (sort: StreamFilter['sort']) => go(journalPath({ ...current, sort, board: undefined }));

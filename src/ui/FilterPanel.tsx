@@ -3,6 +3,7 @@ import { Link, useLocation, useNavigate, useSearchParams } from 'react-router';
 import { sortVaults } from '../domain/locks';
 import {
   CONTAINS_LABEL,
+  datedFilter,
   effectiveType,
   filterParts,
   parseFilter,
@@ -24,19 +25,33 @@ import { useCards, useToday } from '../state/CardsContext';
 import { DatesDialog } from './DatesDialog';
 import { colorClass } from './EntryStyle';
 import { Icon, type IconName } from './Icon';
-import { historyPath, journalPath } from './paths';
+import { datedPath, historyPath, isDatedPage, journalPath, type DatedPage } from './paths';
 import { usePopover } from './usePopover';
 
-/** The filter in the address, on the pages it narrows: the journal, and the history of changes. Empty on any other page. */
+/**
+ * The filter in the address, on the pages it narrows: the journal, the history of changes, and the calendar and
+ * the timeline, which take the parts of it that suit todos with dates. Empty on any other page.
+ */
 export function useJournalFilter(): StreamFilter {
   const { pathname } = useLocation();
   const [params] = useSearchParams();
+  if (isDatedPage(pathname)) return datedFilter(parseFilter(params)) ?? {};
   return pathname === '/journal' || pathname === '/history' ? parseFilter(params) : {};
 }
 
-/** Where a filter leads from here: the history while that's the page showing, otherwise the journal. */
+/**
+ * Where a filter leads from here: the history, the calendar or the timeline while that's the page showing,
+ * otherwise the journal. A filter the calendar can't show (notes, say, or when written) leads to the journal.
+ */
 export function useFilterPath(): (filter: StreamFilter) => string {
   const { pathname } = useLocation();
+  const [params] = useSearchParams();
+  if (isDatedPage(pathname)) {
+    return (filter) => {
+      const dated = datedFilter(filter);
+      return dated ? datedPath(pathname, dated, params) : journalPath(filter);
+    };
+  }
   return pathname === '/history' ? historyPath : journalPath;
 }
 
@@ -54,16 +69,20 @@ interface FilterOption {
  * The filters, in the title bar's second row on the journal and the history: Type, Todos, Written and Contains,
  * each a chip that opens its choices. A chip in use names its choice, like "Due today", with an × that takes it
  * off. Archived swaps the entries for the archived ones. A tag or vault picked in the sidebar shows here too, with its ×, and Clear all takes every filter off when
- * there are several. The order is kept throughout.
+ * there are several. The order is kept throughout. On the calendar and the timeline, which show todos with dates,
+ * only Todos and Archived are offered.
  */
 export function FilterBar({ filter }: { filter: StreamFilter }) {
   const { index, vaults } = useCards();
   const today = useToday();
   const path = useFilterPath();
   const navigate = useNavigate();
+  const dated = isDatedPage(useLocation().pathname);
   const [picking, setPicking] = useState(false);
   const parts = filterParts(filter);
   const without = (part: FilterPart) => parts.find((p) => p.part === part)!.without;
+  // The calendar's todos are all todos, so its status is no second chip.
+  const chips = dated ? parts.filter((p) => p.part !== 'type') : parts;
   const option = <K extends keyof StreamFilter>(key: K, value: NonNullable<StreamFilter[K]>, label: string, also: StreamFilter = {}): FilterOption => {
     const checked = filter[key] === value;
     return { key: String(value), label, checked, next: { ...filter, ...also, [key]: checked ? undefined : value } };
@@ -78,39 +97,46 @@ export function FilterBar({ filter }: { filter: StreamFilter }) {
 
   return (
     <div className="filter-bar" role="group" aria-label="Filters">
-      <FilterMenu
-        name="Type"
-        value={type && TYPE_LABEL[type]}
-        clear={type ? path(without('type')) : undefined}
-        options={(Object.keys(TYPE_LABEL) as EntryType[]).map((t) => ({
-          key: t,
-          label: TYPE_LABEL[t],
-          checked: type === t,
-          next: type === t ? { ...filter, type: undefined, status: undefined } : { ...filter, type: t, status: t === 'todo' ? filter.status : undefined },
-        }))}
-      />
+      {!dated && (
+        <FilterMenu
+          name="Type"
+          value={type && TYPE_LABEL[type]}
+          clear={type ? path(without('type')) : undefined}
+          options={(Object.keys(TYPE_LABEL) as EntryType[]).map((t) => ({
+            key: t,
+            label: TYPE_LABEL[t],
+            checked: type === t,
+            next: type === t ? { ...filter, type: undefined, status: undefined } : { ...filter, type: t, status: t === 'todo' ? filter.status : undefined },
+          }))}
+        />
+      )}
       <FilterMenu
         name="Todos"
         value={filter.status && STATUS_LABEL[filter.status]}
         clear={filter.status ? path(without('status')) : undefined}
-        options={STATUSES.map((s) => option('status', s, STATUS_LABEL[s], { type: 'todo' }))}
+        // Every todo on the calendar has a date.
+        options={STATUSES.filter((s) => !dated || s !== 'undated').map((s) => option('status', s, STATUS_LABEL[s], { type: 'todo' }))}
       />
-      <FilterMenu
-        name="Written"
-        value={filter.when && whenLabel(filter.when, today)}
-        clear={filter.when ? path(without('when')) : undefined}
-        options={[
-          ...['today', 'week', 'month'].map((w) => option('when', w, WHEN_LABEL[w])),
-          ...(pickedDay ? [option('when', pickedDay, whenLabel(pickedDay, today))] : []),
-        ]}
-        more={{ label: 'Pick dates…', run: () => setPicking(true) }}
-      />
-      <FilterMenu
-        name="Contains"
-        value={filter.has && CONTAINS_LABEL[filter.has]}
-        clear={filter.has ? path(without('has')) : undefined}
-        options={(Object.keys(CONTAINS_LABEL) as Contains[]).map((h) => option('has', h, h === 'link' ? 'Links' : 'Photos'))}
-      />
+      {!dated && (
+        <FilterMenu
+          name="Written"
+          value={filter.when && whenLabel(filter.when, today)}
+          clear={filter.when ? path(without('when')) : undefined}
+          options={[
+            ...['today', 'week', 'month'].map((w) => option('when', w, WHEN_LABEL[w])),
+            ...(pickedDay ? [option('when', pickedDay, whenLabel(pickedDay, today))] : []),
+          ]}
+          more={{ label: 'Pick dates…', run: () => setPicking(true) }}
+        />
+      )}
+      {!dated && (
+        <FilterMenu
+          name="Contains"
+          value={filter.has && CONTAINS_LABEL[filter.has]}
+          clear={filter.has ? path(without('has')) : undefined}
+          options={(Object.keys(CONTAINS_LABEL) as Contains[]).map((h) => option('has', h, h === 'link' ? 'Links' : 'Photos'))}
+        />
+      )}
       {filter.archived ? (
         <span className="chip filter-chip is-set">
           <span className="filter-chip__value">Archived</span>
@@ -139,7 +165,7 @@ export function FilterBar({ filter }: { filter: StreamFilter }) {
           </Link>
         </span>
       )}
-      {parts.length > 1 && (
+      {chips.length > 1 && (
         <Link className="chip filter-chip filter-chip--clear-all" to={path({ sort: filter.sort, board: filter.board })}>
           Clear all
         </Link>
@@ -280,8 +306,8 @@ export function SortMenu({ filter }: { filter: StreamFilter }) {
  * The places to narrow the journal to, in the sidebar on a computer and in a sheet on a phone: its tags, by group,
  * and its vaults. The other filters (type, todos, when written, what an entry holds) are `FilterBar`, in the title
  * bar, and the order is `SortMenu`. Each choice toggles: picking the chosen one again turns it off, and choices
- * combine with each other and with the title bar's. On the history page the same choices narrow the history, and
- * Journal and History switch between the two.
+ * combine with each other and with the title bar's. On the history page the same choices narrow the history, and on
+ * the calendar and the timeline their todos; Journal, History, Calendar and Timeline switch between them.
  */
 export function FilterPanel({ onPick }: { onPick?: () => void }) {
   const { index, vaults, locked } = useCards();
@@ -289,7 +315,13 @@ export function FilterPanel({ onPick }: { onPick?: () => void }) {
   const { pathname } = useLocation();
   const onJournal = pathname === '/journal';
   const onHistory = pathname === '/history';
+  const onDated = isDatedPage(pathname);
   const path = useFilterPath();
+  // Going to the calendar or the timeline keeps what of the filter suits them; on it, its link takes the filter off,
+  // as Journal's does, and keeps the month or weeks in sight.
+  const [params] = useSearchParams();
+  const datedLink = (page: DatedPage) => (page === pathname ? datedPath(page, {}, params) : datedPath(page, datedFilter(filter) ?? {}));
+  const datedActive = (page: DatedPage) => pathname === page && !filter.tagId && !filter.vaultId;
 
   const link = (key: string, label: ReactNode, to: string, active: boolean, icon?: IconName, count?: number, tint = '') => (
     <Link key={key} to={to} className={`nav-item${active ? ' active' : ''}`} aria-current={active ? 'page' : undefined} onClick={onPick}>
@@ -323,10 +355,10 @@ export function FilterPanel({ onPick }: { onPick?: () => void }) {
     <div className="filters">
       <nav aria-label="Journal">
         {/* Journal is the one in use unless a tag or vault here is: the title bar shows the other filters. */}
-        {link('all', 'Journal', journalPath(onHistory ? filter : { sort: filter.sort, board: filter.board }), onJournal && !filter.tagId && !filter.vaultId, 'notes')}
-        {link('history', 'History', historyPath(onJournal ? filter : { sort: filter.sort }), onHistory, 'history')}
-        {link('calendar', 'Calendar', '/calendar', pathname === '/calendar', 'calendar')}
-        {link('timeline', 'Timeline', '/timeline', pathname === '/timeline', 'timeline')}
+        {link('all', 'Journal', journalPath(onHistory || onDated ? filter : { sort: filter.sort, board: filter.board }), onJournal && !filter.tagId && !filter.vaultId, 'notes')}
+        {link('history', 'History', historyPath(onJournal || onDated ? filter : { sort: filter.sort }), onHistory, 'history')}
+        {link('calendar', 'Calendar', datedLink('/calendar'), datedActive('/calendar'), 'calendar')}
+        {link('timeline', 'Timeline', datedLink('/timeline'), datedActive('/timeline'), 'timeline')}
         {link('templates', 'Templates', '/templates', pathname === '/templates', 'template')}
       </nav>
 

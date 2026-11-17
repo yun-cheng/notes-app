@@ -3,15 +3,18 @@ import { Link, useSearchParams } from 'react-router';
 import { endPatch, placeIn, type Span } from '../../domain/calendar';
 import { displayTitle } from '../../domain/content';
 import { addDays, formatDay, isDateKey, parseDateKey, relativeDayInSentence } from '../../domain/dates';
+import { isFiltered } from '../../domain/stream';
 import { useCards, useToday } from '../../state/CardsContext';
 import { Empty, Page } from '../components';
 import { firstDayOfWeek } from '../DatesDialog';
 import { colorClass } from '../EntryStyle';
+import { FilterBar, useJournalFilter } from '../FilterPanel';
 import { Icon } from '../Icon';
+import { datedParams, datedPath } from '../paths';
 import { useToast } from '../Toast';
 import { useUndo } from '../useUndo';
 import { usePermissions } from '../viewOnly';
-import { useDatedTodos, useMoveTodo, useOpenCard } from './calendar';
+import { DatedActions, useDatedTodos, useMoveTodo, useOpenCard } from './calendar';
 
 /** How wide a day is, in pixels. */
 const DAY = 34;
@@ -47,7 +50,8 @@ export function TimelinePage() {
   const { undoAction } = useUndo();
   const move = useMoveTodo();
   const open = useOpenCard();
-  const all = useDatedTodos();
+  const filter = useJournalFilter();
+  const all = useDatedTodos(filter);
   const [params, setParams] = useSearchParams();
   const param = params.get('from');
   const from = param && isDateKey(param) ? param : addDays(weekOf(today), -7);
@@ -56,7 +60,8 @@ export function TimelinePage() {
     const place = placeIn(days, span);
     return place ? [{ span, ...place }] : [];
   });
-  const go = (day: string) => setParams({ from: day }, { replace: true });
+  // Other weeks keep the filter.
+  const go = (day: string) => setParams(datedParams(filter, { from: day }), { replace: true });
   const [drag, setDrag] = useState<Drag | null>(null);
   const scroller = useRef<HTMLDivElement>(null);
 
@@ -132,11 +137,10 @@ export function TimelinePage() {
           <button type="button" className="icon-btn" aria-label="Later" title="Two weeks later" onClick={() => go(addDays(from, STEP))}>
             <Icon name="right" />
           </button>
-          <Link className="icon-btn" to="/calendar" aria-label="Month calendar" title="Month calendar">
-            <Icon name="calendar" />
-          </Link>
+          <DatedActions filter={filter} to="/calendar" />
         </>
       }
+      below={<FilterBar filter={filter} />}
     >
       <div ref={scroller} className="timeline" style={{ '--day': `${DAY}px` } as CSSProperties}>
         <div className="timeline__inner" style={{ width: `calc(var(--names) + ${LENGTH * DAY}px)` }}>
@@ -200,7 +204,14 @@ export function TimelinePage() {
           </div>
         </div>
       </div>
-      {rows.length === 0 && <Empty>No todos with dates in these weeks. Give a todo a due date, and a start date for one that takes days.</Empty>}
+      {rows.length === 0 &&
+        (isFiltered(filter) ? (
+          <Empty>
+            No todos in these weeks match the filters. <Link to={datedPath('/timeline', {}, params)}>Show all</Link>
+          </Empty>
+        ) : (
+          <Empty>No todos with dates in these weeks. Give a todo a due date, and a start date for one that takes days.</Empty>
+        ))}
     </Page>
   );
 }

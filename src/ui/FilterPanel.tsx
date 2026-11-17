@@ -368,13 +368,11 @@ export function FilterPanel({ onPick }: { onPick?: () => void }) {
   return (
     <div className="filters">
       <nav aria-label="Journal">
-        {/* Journal is the one in use unless a tag or vault here is: the title bar shows the other filters. */}
-        {link('all', 'Journal', journalPath(onHistory || onDated ? filter : { sort: filter.sort, board: filter.board }), onJournal && !filter.tagId && !filter.vaultId && !filter.template, 'notes')}
+        {/* Journal is the one in use unless a tag or vault here is: the title bar shows the other filters, Templates too. */}
+        {link('all', 'Journal', journalPath(onHistory || onDated ? filter : { sort: filter.sort, board: filter.board }), onJournal && !filter.tagId && !filter.vaultId, 'notes')}
         {link('history', 'History', historyPath(onJournal || onDated ? filter : { sort: filter.sort }), onHistory, 'history')}
         {link('calendar', 'Calendar', datedLink('/calendar'), datedActive('/calendar'), 'calendar')}
-        {link('timeline', 'Timeline', datedLink('/timeline'), datedActive('/timeline'), 'timeline')}
-        {link('templates', 'Templates', journalPath({ template: true }), onJournal && !!filter.template && !filter.tagId && !filter.vaultId, 'template')}
-      </nav>
+        {link('timeline', 'Timeline', datedLink('/timeline'), datedActive('/timeline'), 'timeline')}      </nav>
 
       {index.tagGroups.groups
         .filter((g) => g.members.length)

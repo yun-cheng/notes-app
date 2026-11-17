@@ -2,7 +2,7 @@ import Dexie, { liveQuery, type Table } from 'dexie';
 import type { ChangeEntry } from '../domain/changes';
 import type { CardRecord, Vault } from '../domain/types';
 import type { PhotoRecord, PhotoStore } from '../photos/types';
-import type { CardStore } from './types';
+import type { CardStore, SavedTranslation, TranslationStore } from './types';
 
 class NotesDb extends Dexie {
   cards!: Table<CardRecord, string>;
@@ -11,6 +11,7 @@ class NotesDb extends Dexie {
   meta!: Table<{ key: string; value: unknown }, string>;
   photos!: Table<PhotoRecord, string>;
   changes!: Table<ChangeEntry, number>;
+  translations!: Table<SavedTranslation, string>;
 
   constructor(name: string) {
     super(name);
@@ -18,10 +19,11 @@ class NotesDb extends Dexie {
     this.version(2).stores({ dirty: 'id', meta: 'key' });
     this.version(3).stores({ photos: 'id, uploaded, addedAt' });
     this.version(4).stores({ changes: '++n' });
+    this.version(5).stores({ translations: 'cardId' });
   }
 }
 
-export class DexieStore implements CardStore, PhotoStore {
+export class DexieStore implements CardStore, PhotoStore, TranslationStore {
   private db: NotesDb;
 
   constructor(name = 'notes-app') {
@@ -72,6 +74,15 @@ export class DexieStore implements CardStore, PhotoStore {
       await cards.put({ ...card, seq });
       if (card.updated_at === updatedAt) await dirty.delete(id);
     });
+  }
+  listTranslations() {
+    return this.db.translations.toArray();
+  }
+  async putTranslation(translation: SavedTranslation) {
+    await this.db.translations.put(translation);
+  }
+  async deleteTranslations(cardIds: string[]) {
+    await this.db.translations.bulkDelete(cardIds);
   }
   async getMeta(key: string) {
     return (await this.db.meta.get(key))?.value;

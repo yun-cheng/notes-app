@@ -13,6 +13,7 @@ import { preparePhoto } from '../photos/prepare';
 import { PhotoService, type PhotoState } from '../photos/service';
 import { Keyring } from '../crypto/keyring';
 import { unlockWithPin } from '../crypto/vaultKeys';
+import { forgetTranslations, keepTranslationsIn } from '../ui/translate';
 import { finishEncrypting } from './encrypting';
 import { Unsynced } from './unsynced';
 
@@ -47,6 +48,7 @@ function openAccount(accountId: string) {
     forgetAll: () => keyring.forgetAll(),
   };
   return {
+    store,
     repo,
     engine,
     keyring,
@@ -80,7 +82,12 @@ interface CardsValue {
 const CardsContext = createContext<CardsValue | null>(null);
 
 export function CardsProvider({ accountId, children }: { accountId: string; children: ReactNode }) {
-  const [{ repo, engine, locks, photos, keyring, unsynced }] = useState(() => openAccount(accountId));
+  const [{ store, repo, engine, locks, photos, keyring, unsynced }] = useState(() => openAccount(accountId));
+  // This account's translations, kept on this device.
+  useEffect(() => {
+    void keepTranslationsIn(store);
+    return () => void keepTranslationsIn(null);
+  }, [store]);
   const [cards, setCards] = useState<Card[] | null>(null);
   const [vaults, setVaults] = useState<Vault[] | null>(null);
   const open = useSyncExternalStore(locks.subscribe, locks.getOpen);
@@ -96,6 +103,13 @@ export function CardsProvider({ accountId, children }: { accountId: string; chil
     () => (index && vaults ? { index, repo, engine, vaults, locks, locked, photos, keyring, unsynced, accountId, shared, sharedInto, commentCounts } : null),
     [index, repo, engine, vaults, locks, locked, photos, keyring, unsynced, accountId, shared, sharedInto, commentCounts],
   );
+
+  // An entry moved into an encrypted vault, or whose vault became one, keeps no translation in the clear here.
+  useEffect(() => {
+    if (!index || !vaults) return;
+    const sealed = new Set(vaults.filter((v) => v.encryption).map((v) => v.id));
+    if (sealed.size) forgetTranslations((id) => sealed.has(index.byId.get(id)?.vaultId ?? ''));
+  }, [index, vaults]);
 
   // A vault whose encryption was turned on but not finished (the tab closed, a sync failed) is finished when opened.
   useEffect(() => {

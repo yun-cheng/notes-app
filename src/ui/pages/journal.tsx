@@ -873,12 +873,13 @@ function useBubble(card: NoteCard | TodoCard, title: string) {
   const text = useFold(card.id, done ? translatedParts(plain, done.pieces) : previewParts(doc, titleOf, { markCode: true, hidden: 'mark' }));
   const open = useOpen(card);
   const withGoogle = () => openOutside(googleTranslateUrl(pieces.filter((p) => p.trim()).join('\n\n')));
-  // The server may translate it, unless it's in an encrypted vault, whose words never go there.
+  // The server may translate it, and this device keep the translation, unless it's in an encrypted vault, whose
+  // words never go there and are kept here only encrypted.
   const server = !keyring.isEncrypted(card.vaultId);
   const translate = async () => {
     if (kept) return showTranslation(card.id, !kept.shown);
     if (!translatesOnDevice() && !server) return withGoogle();
-    const result = await translateEntry(card.id, pieces, { server });
+    const result = await translateEntry(card.id, pieces, { server, keep: server });
     if (result.kind === 'same') toast(`It's in ${languageName(result.language)} already`);
     else if (result.kind === 'limit') toast("That's all the translating for today. More tomorrow.", { action: { label: 'Translate with Google', run: withGoogle } });
     else if (result.kind !== 'done')

@@ -65,3 +65,23 @@ export const jsonCodec: PayloadCodec = {
   encode: async (payload) => JSON.stringify(payload),
   decode: async (data) => parsePayload(data),
 };
+
+/** An entry's translation, kept on this device so it shows again without translating again. */
+export interface SavedTranslation {
+  cardId: string;
+  /** The words translated, so an entry edited since shows its own again. */
+  source: string;
+  pieces: string[];
+  from: string;
+  to: string;
+  /** Showing in the bubble, or put aside with Show original. */
+  shown: boolean;
+  savedAt: number;
+}
+
+/** Where an account keeps its translations on this device; they go with its database at sign-out. */
+export interface TranslationStore {
+  listTranslations(): Promise<SavedTranslation[]>;
+  putTranslation(translation: SavedTranslation): Promise<void>;
+  deleteTranslations(cardIds: string[]): Promise<void>;
+}

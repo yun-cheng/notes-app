@@ -80,4 +80,17 @@ describe('DexieStore', () => {
     await dx.setMeta('cursor', 12);
     expect(await dx.getMeta('cursor')).toBe(12);
   });
+  it('keeps translations, one per entry, and drops them with the database', async () => {
+    const name = `t-${Math.random()}`;
+    const dx = new DexieStore(name);
+    const t = { cardId: 'a', source: 'こんにちは', pieces: ['Hello'], from: 'ja', to: 'en', shown: true, savedAt: 1 };
+    await dx.putTranslation(t);
+    await dx.putTranslation({ ...t, shown: false });
+    expect(await dx.listTranslations()).toEqual([{ ...t, shown: false }]);
+    await dx.deleteTranslations(['a']);
+    expect(await dx.listTranslations()).toEqual([]);
+    await dx.putTranslation(t);
+    await dx.destroy();
+    expect(await new DexieStore(name).listTranslations()).toEqual([]);
+  });
 });

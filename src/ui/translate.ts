@@ -1,4 +1,5 @@
 import { useSyncExternalStore } from 'react';
+import type { TranslationStore } from '../storage/types';
 import { translateOnServer } from '../sync/http';
 
 /**
@@ -55,7 +56,7 @@ export function googleTranslateUrl(text: string, to = deviceLanguage()): string 
 
 export const googleSearchUrl = (text: string) => `https://www.google.com/search?q=${encodeURIComponent(text.trim().slice(0, 500))}`;
 
-/** A translation of an entry's words, made on the device: the pieces in order, and the languages. */
+/** A translation of an entry's words: the pieces in order, and the languages. */
 export interface Translation {
   /** What was translated, so a changed entry shows its own words again. */
   source: string;
@@ -64,6 +65,8 @@ export interface Translation {
   to: string;
   /** Showing in the bubble; Show original hides it, kept, so showing it again asks nothing. */
   shown: boolean;
+  /** Kept on this device too, not only while the app is open. */
+  saved: boolean;
 }
 
 type State = Translation | 'working';
@@ -73,7 +76,45 @@ const listeners = new Set<() => void>();
 const changed = () => listeners.forEach((l) => l());
 const subscribe = (l: () => void) => (listeners.add(l), () => listeners.delete(l));
 
-/** An entry's translation while the app is open, or 'working' while it's being made. */
+/** How long a translation is kept on the device. One of an entry edited since is never shown, and goes then too. */
+const KEEP_FOR = 90 * 86_400_000;
+
+/** The signed-in account's database, where translations are kept on this device. */
+let store: TranslationStore | null = null;
+
+const save = (id: string, t: Translation) =>
+  void store?.putTranslation({ cardId: id, source: t.source, pieces: t.pieces, from: t.from, to: t.to, shown: t.shown, savedAt: Date.now() }).catch(() => undefined);
+
+/**
+ * Keeps translations in an account's database from now on, and shows those kept there; null when no account is
+ * open. Each account has its own, and they go with its database when it signs out.
+ */
+export async function keepTranslationsIn(next: TranslationStore | null): Promise<void> {
+  store = next;
+  translations.clear();
+  changed();
+  if (!next) return;
+  const kept = await next.listTranslations().catch(() => []);
+  if (store !== next) return;
+  const old = Date.now() - KEEP_FOR;
+  for (const t of kept) {
+    if (t.savedAt >= old && !translations.has(t.cardId)) translations.set(t.cardId, { source: t.source, pieces: t.pieces, from: t.from, to: t.to, shown: t.shown, saved: true });
+  }
+  changed();
+  const stale = kept.filter((t) => t.savedAt < old).map((t) => t.cardId);
+  if (stale.length) await next.deleteTranslations(stale).catch(() => undefined);
+}
+
+/** Forgets the saved translations of entries `drop` picks, like those now in an encrypted vault. */
+export function forgetTranslations(drop: (cardId: string) => boolean) {
+  const gone = [...translations].flatMap(([id, t]) => (t !== 'working' && t.saved && drop(id) ? [id] : []));
+  if (!gone.length) return;
+  for (const id of gone) translations.delete(id);
+  changed();
+  void store?.deleteTranslations(gone).catch(() => undefined);
+}
+
+/** An entry's translation, kept on this device, or 'working' while it's being made. */
 export function useTranslation(id: string): State | undefined {
   return useSyncExternalStore(subscribe, () => translationOf(id));
 }
@@ -84,13 +125,16 @@ export const translationOf = (id: string): State | undefined => translations.get
 export function showTranslation(id: string, shown: boolean) {
   const kept = translations.get(id);
   if (!kept || kept === 'working') return;
-  translations.set(id, { ...kept, shown });
+  const next = { ...kept, shown };
+  translations.set(id, next);
   changed();
+  if (next.saved) save(id, next);
 }
 
 export function clearTranslation(id: string) {
   translations.delete(id);
   changed();
+  void store?.deleteTranslations([id]).catch(() => undefined);
 }
 
 /** How long the device gets to detect and translate, its language models fetched the first time included. */
@@ -141,9 +185,10 @@ async function onServer(id: string, pieces: string[]): Promise<Outcome> {
 
 /**
  * Translates an entry's pieces of text (its title, lines and so on): with `server`, by the server, and where it
- * can't, on the device where the browser can. Unavailable where neither may.
+ * can't, on the device where the browser can. Unavailable where neither may. With `keep`, it's kept on this device
+ * after the app closes; never for an entry in an encrypted vault, which this device keeps only encrypted.
  */
-export async function translateEntry(id: string, pieces: string[], { server = false } = {}): Promise<TranslateResult> {
+export async function translateEntry(id: string, pieces: string[], { server = false, keep = false } = {}): Promise<TranslateResult> {
   const found = api();
   if (!found && !server) return { kind: 'unavailable' };
   const source = pieces.join('\n');
@@ -159,8 +204,10 @@ export async function translateEntry(id: string, pieces: string[], { server = fa
     clearTranslation(id);
     return out;
   }
-  translations.set(id, { source, pieces: out.pieces, from: out.from, to: out.to, shown: true });
+  const made: Translation = { source, pieces: out.pieces, from: out.from, to: out.to, shown: true, saved: keep };
+  translations.set(id, made);
   changed();
+  if (keep) save(id, made);
   return { kind: 'done', from: out.from, to: out.to };
 }
 

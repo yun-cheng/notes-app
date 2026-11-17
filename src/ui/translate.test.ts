@@ -1,5 +1,6 @@
 import { afterEach, describe, expect, it, vi } from 'vitest';
-import { deviceLanguage, googleSearchUrl, googleTranslateUrl, showTranslation, translateEntry, translatesOnDevice, translationOf } from './translate';
+import type { SavedTranslation, TranslationStore } from '../storage/types';
+import { deviceLanguage, forgetTranslations, googleSearchUrl, googleTranslateUrl, keepTranslationsIn, showTranslation, translateEntry, translatesOnDevice, translationOf } from './translate';
 
 const g = globalThis as Record<string, unknown>;
 const stub = (detected: string, fail = false, ready = 'available') => {
@@ -91,5 +92,40 @@ describe('translating', () => {
     expect(translationOf('k')).toMatchObject({ shown: false, pieces: [expect.stringContaining('こんにちは')] });
     showTranslation('k', true);
     expect(translationOf('k')).toMatchObject({ shown: true });
+  });
+
+  it('keeps translations on the device, for the account, until they’re old or its entry is sealed', async () => {
+    const rows = new Map<string, SavedTranslation>();
+    const db: TranslationStore = {
+      listTranslations: async () => [...rows.values()],
+      putTranslation: async (t) => void rows.set(t.cardId, t),
+      deleteTranslations: async (ids) => ids.forEach((id) => rows.delete(id)),
+    };
+    const old = { cardId: 'old', source: 'x', pieces: ['x'], from: 'ja', to: 'en', shown: true, savedAt: Date.now() - 100 * 86_400_000 };
+    rows.set('old', old);
+    await keepTranslationsIn(db);
+    expect(translationOf('old')).toBeUndefined();
+    expect(rows.has('old')).toBe(false);
+
+    stub('ja');
+    await translateEntry('m', ['こんにちは'], { keep: true });
+    await translateEntry('n', ['こんにちは']);
+    expect([...rows.keys()]).toEqual(['m']);
+    showTranslation('m', false);
+    await Promise.resolve();
+    expect(rows.get('m')).toMatchObject({ shown: false, from: 'ja', source: 'こんにちは' });
+
+    // Another account, then this one again: what was kept comes back as it was left, and only that.
+    await keepTranslationsIn(null);
+    expect(translationOf('m')).toBeUndefined();
+    await keepTranslationsIn(db);
+    expect(translationOf('m')).toMatchObject({ shown: false, saved: true });
+    expect(translationOf('n')).toBeUndefined();
+
+    forgetTranslations((id) => id === 'm');
+    await Promise.resolve();
+    expect(translationOf('m')).toBeUndefined();
+    expect(rows.size).toBe(0);
+    await keepTranslationsIn(null);
   });
 });

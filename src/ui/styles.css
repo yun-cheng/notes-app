@@ -1012,7 +1012,8 @@ body:has(.batch) .toast-slot { bottom: calc(var(--tabbar) + env(safe-area-inset-
 }
 .board__card.is-moving { height: 0; overflow: hidden; opacity: 0; margin: -3px 0; }
 .board__drop { flex: none; border: 2px dashed color-mix(in srgb, var(--accent) 55%, var(--line)); border-radius: 12px; background: color-mix(in srgb, var(--accent) 8%, transparent); }
-.board__ghost { position: fixed; z-index: 60; margin: 0; pointer-events: none; opacity: 0.92; box-shadow: var(--shadow); border-radius: 12px; }
+/* `body >` so a card's own position (a stack's are relative, and come later) can't pull the copy off the pointer. */
+body > .board__ghost { position: fixed; z-index: 60; margin: 0; pointer-events: none; opacity: 0.92; box-shadow: var(--shadow); border-radius: 12px; }
 .board__ghost .board__grip, .board__ghost .bubble__tools { display: none; }
 body.is-dragging-card, body.is-dragging-card * { cursor: grabbing !important; user-select: none !important; -webkit-user-select: none !important; }
 .board__more { align-self: center; }
@@ -1089,7 +1090,9 @@ span.bubble__template { color: var(--muted); cursor: default; }
 @media (pointer: coarse) {
   .stack__card .board__grip { left: -26px; right: auto; top: 0; bottom: auto; width: 22px; height: 28px; }
 }
-.stack__card.is-moving { height: 0; overflow: hidden; opacity: 0; margin: -3px 0; }
+/* The card being dragged waits, faded, where it would land; a copy of it follows the pointer. */
+.stack__card.is-moving { opacity: 0.35; }
+.stack__card.is-moving .board__grip, .stack__card.is-moving .bubble__tools, .stack__card.is-moving .bubble__copy { visibility: hidden; }
 .stack__empty { margin: 4px 0; color: var(--muted); font-size: 14px; }
 .stack-list { margin-top: 10px; }
 .stack-list h3 { margin-bottom: 4px; color: var(--muted); font: 600 12px/1.2 var(--sans); letter-spacing: 0.05em; text-transform: uppercase; }

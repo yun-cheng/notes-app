@@ -947,19 +947,31 @@ function StackEntry({ stack, at }: { stack: NoteCard; at: number }) {
 
 /**
  * An open stack's entries, in its order, each as in the stream. They're dragged up and down to change the order (a
- * mouse from anywhere on one, a finger from its grip), or moved with the arrow keys on the grip. Each change can be
- * undone; taking one out is in its menu.
+ * mouse from anywhere on one, a finger from its grip), or moved with the arrow keys on the grip. While one is
+ * dragged it moves among the others to where it would land, faded, and stays there when dropped: the new order shows
+ * at once, before it's saved. Each change can be undone; taking one out is in its menu.
  */
 function StackCards({ stack, members }: { stack: NoteCard; members: Entry[] }) {
   const { repo } = useCards();
   const may = usePermissions();
   const can = may(stack).edit;
-  const list = stack.stack ?? [];
-  const shown = members.map((m) => m.id);
+  // The order just dropped, shown until it's saved: while the stack's saved list is one from before it (`stale`).
+  const [dropped, setDropped] = useState<{ order: string[]; stale: string[] } | null>(null);
+  const saved = (stack.stack ?? []).join('\n');
+  const pending = dropped && dropped.stale.includes(saved) ? dropped.order : null;
+  const list = pending ?? stack.stack ?? [];
+  let base = members;
+  if (pending) {
+    const place = new Map(pending.map((id, i) => [id, i]));
+    base = [...members].sort((a, b) => (place.get(a.id) ?? 0) - (place.get(b.id) ?? 0));
+  }
+  const shown = base.map((m) => m.id);
 
   const move = (id: string, index: number) => {
     const next = moveInStack(list, shown, id, index);
-    if (next.join('\n') !== list.join('\n')) void repo.update(stack.id, { stack: next });
+    if (next.join('\n') === list.join('\n')) return;
+    setDropped({ order: next, stale: [...(pending && dropped ? dropped.stale : []), saved, list.join('\n')] });
+    void repo.update(stack.id, { stack: next });
   };
   const drag = useCardDrag((id, to) => move(id, to.index), STACK_PARTS);
   const moveByKey = (e: ReactKeyboardEvent, id: string, at: number) => {
@@ -971,42 +983,39 @@ function StackCards({ stack, members }: { stack: NoteCard; members: Entry[] }) {
     requestAnimationFrame(() => document.querySelector<HTMLElement>(`[data-stack-entry="${CSS.escape(id)}"] .stack__grip`)?.focus());
   };
 
-  const target = drag.dragging?.to ? drag.dragging.to.index : null;
-  let place = 0;
-  const marker = <div key="drop" className="board__drop" style={{ height: drag.dragging?.height }} />;
-  const cards = members.flatMap((card, at) => {
-    const moving = drag.dragging?.id === card.id;
-    const before = !moving && target === place ? [marker] : [];
-    if (!moving) place++;
-    return [
-      ...before,
-      <div
-        key={card.id}
-        className={`stack__card${moving ? ' is-moving' : ''}`}
-        data-stack-entry={card.id}
-        onPointerDown={can ? (e) => drag.start(e, card.id) : undefined}
-      >
-        {can && (
-          <button
-            type="button"
-            className="board__grip stack__grip"
-            aria-label={`Move "${displayTitle(card)}"`}
-            title="Drag to move, or use the arrow keys"
-            onKeyDown={(e) => moveByKey(e, card.id, at)}
-            onClick={(e) => e.preventDefault()}
-          >
-            <Icon name="grip" size={14} />
-          </button>
-        )}
-        <EntryBubble card={card} at={card.createdAt} />
-      </div>,
-    ];
-  });
-  if (target !== null && target >= place) cards.push(marker);
+  // While dragging, the dragged one shows where it would land.
+  let order = base;
+  const moving = drag.dragging;
+  if (moving?.to) {
+    const card = base.find((c) => c.id === moving.id);
+    const others = base.filter((c) => c.id !== moving.id);
+    if (card) order = [...others.slice(0, moving.to.index), card, ...others.slice(moving.to.index)];
+  }
 
   return (
-    <div ref={drag.board} className={`stack__cards${drag.dragging ? ' is-dragging' : ''}`} data-column={stack.id} aria-label={`In ${stack.title.trim() || 'the stack'}`}>
-      {cards}
+    <div ref={drag.board} className={`stack__cards${moving ? ' is-dragging' : ''}`} data-column={stack.id} aria-label={`In ${stack.title.trim() || 'the stack'}`}>
+      {order.map((card, at) => (
+        <div
+          key={card.id}
+          className={`stack__card${moving?.id === card.id ? ' is-moving' : ''}`}
+          data-stack-entry={card.id}
+          onPointerDown={can ? (e) => drag.start(e, card.id) : undefined}
+        >
+          {can && (
+            <button
+              type="button"
+              className="board__grip stack__grip"
+              aria-label={`Move "${displayTitle(card)}"`}
+              title="Drag to move, or use the arrow keys"
+              onKeyDown={(e) => moveByKey(e, card.id, at)}
+              onClick={(e) => e.preventDefault()}
+            >
+              <Icon name="grip" size={14} />
+            </button>
+          )}
+          <EntryBubble card={card} at={card.createdAt} />
+        </div>
+      ))}
       {members.length === 0 && <p className="stack__empty">Nothing in this stack yet. Pick it with entries, then Stack, to put them in.</p>}
     </div>
   );

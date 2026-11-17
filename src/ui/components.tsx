@@ -29,7 +29,7 @@ export function Page({ title, actions, below, children }: { title: ReactNode; ac
     return () => watch.disconnect();
   }, []);
   return (
-    <div className="page" ref={page}>
+    <div className="page page--headed" ref={page}>
       <header className={`page__head${below ? ' page__head--below' : ''}`} ref={head}>
         <h1>{title}</h1>
         <DemoTag />

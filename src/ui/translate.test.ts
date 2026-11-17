@@ -59,29 +59,37 @@ describe('translating', () => {
     expect(await translateEntry('c', ['こんにちは'])).toEqual({ kind: 'failed' });
   });
 
-  it('asks the server where the device can’t, or would first have to fetch a model, but not when told not to', async () => {
+  it('asks the server first, and the device where the server can’t', async () => {
     const asked = server();
     const mine = deviceLanguage();
+    stub('ja');
     expect(await translateEntry('d', ['こんにちは'], { server: true })).toEqual({ kind: 'done', from: 'ja', to: mine });
     expect(asked).toEqual([{ cardId: 'd', to: mine, otherwise: mine === 'en' ? undefined : 'en' }]);
-    stub('ja', false, 'downloadable');
+    expect(translationOf('d')).toMatchObject({ pieces: [`server ${mine}: こんにちは`] });
+    // Offline: the device does it.
+    vi.stubGlobal('fetch', async () => {
+      throw new TypeError('offline');
+    });
     expect(await translateEntry('e', ['こんにちは'], { server: true })).toMatchObject({ kind: 'done', from: 'ja' });
-    expect(asked).toHaveLength(2);
+    expect(translationOf('e')).toMatchObject({ pieces: [expect.stringMatching(/^(en|[a-z-]+): こんにちは$/)] });
+  });
+
+  it('says when the day’s translations are used up, unless the device can do it', async () => {
+    vi.stubGlobal('fetch', async () => Response.json({ error: 'used up' }, { status: 429 }));
+    expect(await translateEntry('f', ['こんにちは'], { server: true })).toEqual({ kind: 'limit' });
+    stub('ja');
+    expect(await translateEntry('g', ['こんにちは'], { server: true })).toMatchObject({ kind: 'done' });
     stub('ja', true);
-    expect(await translateEntry('f', ['こんにちは'], { server: true })).toMatchObject({ kind: 'done' });
-    expect(asked).toHaveLength(3);
-    stub('ja', true);
-    expect(await translateEntry('g', ['こんにちは'])).toEqual({ kind: 'failed' });
-    expect(asked).toHaveLength(3);
+    expect(await translateEntry('h', ['こんにちは'], { server: true })).toEqual({ kind: 'limit' });
   });
 
   it('keeps a translation after Show original, to show again without asking', async () => {
     stub('ja');
-    await translateEntry('h', ['こんにちは']);
-    expect(translationOf('h')).toMatchObject({ shown: true, from: 'ja' });
-    showTranslation('h', false);
-    expect(translationOf('h')).toMatchObject({ shown: false, pieces: [expect.stringContaining('こんにちは')] });
-    showTranslation('h', true);
-    expect(translationOf('h')).toMatchObject({ shown: true });
+    await translateEntry('k', ['こんにちは']);
+    expect(translationOf('k')).toMatchObject({ shown: true, from: 'ja' });
+    showTranslation('k', false);
+    expect(translationOf('k')).toMatchObject({ shown: false, pieces: [expect.stringContaining('こんにちは')] });
+    showTranslation('k', true);
+    expect(translationOf('k')).toMatchObject({ shown: true });
   });
 });

@@ -1,7 +1,7 @@
 import type { Hono } from 'hono';
 import type { ServerTranslation } from '../src/sync/protocol';
 import { allows, cardAccess } from './access';
-import type { AppEnv } from './db';
+import type { AppEnv, Database } from './db';
 
 /** Cloudflare's Workers AI, as a Worker reaches it through its `AI` binding: no key, the account's own. */
 export interface AiBinding {
@@ -14,6 +14,9 @@ export interface AiBinding {
  * which already keeps the notes, and aren't used to train it.
  */
 export const TRANSLATE_MODEL = '@cf/google/gemma-4-26b-a4b-it';
+
+/** How many entries one account may have translated a day: plenty for a person, a ceiling on what it can cost. */
+export const DAILY_TRANSLATIONS = 200;
 
 const MAX_PIECES = 60;
 const MAX_CHARS = 8000;
@@ -81,12 +84,32 @@ export async function translatePieces(ai: AiBinding, pieces: string[], to: strin
   return { from, pieces: answer.pieces.map((p: string, i) => (pieces[i].trim() ? p : pieces[i])) };
 }
 
+/** UTC's date for a moment, the day a translation counts towards. */
+export const utcDay = (at: number) => new Date(at).toISOString().slice(0, 10);
+
 /**
- * `POST /translate {cardId, pieces, to, otherwise}` translates what an entry's bubble shows, for a browser that
- * can't on the device: into `to`, or into `otherwise` when the entry is in `to` already. The entry has to be one
- * this account can read, and not in an encrypted vault, whose words never reach the server. Nothing is kept.
+ * Counts one more translation for an account today, unless it has had `DAILY_TRANSLATIONS` already: false then.
+ * One statement, so two at once can't both take the last one.
  */
-export function translateRoutes(app: Hono<AppEnv>) {
+async function countTranslation(db: Database, userId: string, day: string): Promise<boolean> {
+  const row = await db
+    .prepare(
+      `INSERT INTO translation_counts (user_id, day, count) VALUES (?, ?, 1)
+       ON CONFLICT (user_id, day) DO UPDATE SET count = count + 1 WHERE count < ?
+       RETURNING count`,
+    )
+    .bind(userId, day, DAILY_TRANSLATIONS)
+    .first<{ count: number }>();
+  return !!row;
+}
+
+/**
+ * `POST /translate {cardId, pieces, to, otherwise}` translates what an entry's bubble shows: into `to`, or into
+ * `otherwise` when the entry is in `to` already. The entry has to be one this account can read, and not in an
+ * encrypted vault, whose words never reach the server. Each account gets `DAILY_TRANSLATIONS` a day (UTC), after
+ * which it's a 429 until tomorrow. Nothing of the words is kept.
+ */
+export function translateRoutes(app: Hono<AppEnv>, now: () => number) {
   app.post('/translate', async (c) => {
     const ai = c.env.AI;
     if (!ai) return c.json({ error: 'Translating isn’t set up on this server' }, 501);
@@ -110,6 +133,9 @@ export function translateRoutes(app: Hono<AppEnv>) {
       .bind(cardId)
       .first();
     if (sealed) return c.json({ error: 'Entries in an encrypted vault aren’t sent to the server' }, 403);
+    if (!(await countTranslation(c.env.DB, c.get('user').id, utcDay(now())))) {
+      return c.json({ error: `That’s ${DAILY_TRANSLATIONS} translations today, as many as a day has` }, 429);
+    }
 
     const text = pieces as string[];
     let into = to;

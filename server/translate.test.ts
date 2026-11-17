@@ -1,8 +1,9 @@
 import { describe, expect, it } from 'vitest';
 import type { Vault } from '../src/domain/types';
 import type { ServerTranslation } from '../src/sync/protocol';
-import { notePayload, rec, setup } from './testHarness';
-import { TRANSLATE_MODEL, type AiBinding } from './translate';
+import { removeExpired } from './cleanup';
+import { DAY, notePayload, rec, setup } from './testHarness';
+import { DAILY_TRANSLATIONS, TRANSLATE_MODEL, type AiBinding } from './translate';
 
 const pin = { salt: 'c2FsdA==', hash: 'aGFzaA==', iterations: 300_000 };
 const encryption = { version: 1, kdf: { name: 'argon2id', salt: 'c2FsdA==', memory: 19456, iterations: 2, parallelism: 1 }, wrapped: 'd3JhcHBlZA==', recovery: 'cmVjb3Zlcnk=' };
@@ -79,5 +80,21 @@ describe('translating on the server', () => {
   it('says so where Workers AI isn’t bound', async () => {
     const { ann, translate } = await withNote();
     expect((await translate(ann.cookie, { cardId: 'n1', pieces: ['a'], to: 'en' })).status).toBe(501);
+  });
+
+  it('gives each account so many a day, and more the next', async () => {
+    const { ai, calls } = fakeAi('ja');
+    const { ann, ben, translate, advance, db, push } = await withNote(ai);
+    await push(ben.cookie, [rec(ben.vault, 'b1', { payload: notePayload('駅') })]);
+    const once = (cookie: string, cardId = 'n1') => translate(cookie, { cardId, pieces: ['駅'], to: 'en' });
+    for (let i = 0; i < DAILY_TRANSLATIONS; i++) expect((await once(ann.cookie)).status).toBe(200);
+    expect((await once(ann.cookie)).status).toBe(429);
+    expect(calls).toHaveLength(DAILY_TRANSLATIONS);
+    // Each account's count is its own.
+    expect((await once(ben.cookie, 'b1')).status).toBe(200);
+    advance(DAY);
+    expect((await once(ann.cookie)).status).toBe(200);
+    await removeExpired(db, 1_000_000 + 3 * DAY);
+    expect(await db.prepare('SELECT COUNT(*) AS n FROM translation_counts').first<{ n: number }>()).toEqual({ n: 0 });
   });
 });

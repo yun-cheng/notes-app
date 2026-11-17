@@ -880,6 +880,7 @@ function useBubble(card: NoteCard | TodoCard, title: string) {
     if (!translatesOnDevice() && !server) return withGoogle();
     const result = await translateEntry(card.id, pieces, { server });
     if (result.kind === 'same') toast(`It's in ${languageName(result.language)} already`);
+    else if (result.kind === 'limit') toast("That's all the translating for today. More tomorrow.", { action: { label: 'Translate with Google', run: withGoogle } });
     else if (result.kind !== 'done')
       toast(server ? "It couldn't be translated just now." : "This browser couldn't translate it on the device.", { action: { label: 'Translate with Google', run: withGoogle } });
   };

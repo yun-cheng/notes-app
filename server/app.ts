@@ -323,7 +323,7 @@ export function createApp({
   aiSessionRoutes(app, now);
   photoRoutes(app, googleFetch, now);
   unfurlRoutes(app, webFetch);
-  translateRoutes(app);
+  translateRoutes(app, now);
   memberRoutes(app, now);
   shareRoutes(app, now);
   commentRoutes(app, now);

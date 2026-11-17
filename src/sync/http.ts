@@ -60,8 +60,13 @@ export const fetchLinkPreview = (url: string) => request<LinkPreview>('/unfurl',
  * What an entry's bubble shows, translated by the server into `to`, or into `otherwise` when it's in `to` already.
  * The server turns down an entry in an encrypted vault.
  */
-export const translateOnServer = (cardId: string, pieces: string[], to: string, otherwise?: string) =>
-  request<ServerTranslation>('/translate', { method: 'POST', body: JSON.stringify({ cardId, pieces, to, otherwise }) });
+export async function translateOnServer(cardId: string, pieces: string[], to: string, otherwise?: string): Promise<ServerTranslation | { kind: 'limit' }> {
+  const res = await rawRequest('/translate', { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ cardId, pieces, to, otherwise }) });
+  // This account's translations for today are used up.
+  if (res.status === 429) return { kind: 'limit' };
+  if (!res.ok) throw new Error(`Translating failed with status ${res.status}`);
+  return (await res.json()) as ServerTranslation;
+}
 
 export const signInWithGoogle = (credential: string) =>
   request<SessionInfo>('/auth/google', { method: 'POST', body: JSON.stringify({ credential }) });

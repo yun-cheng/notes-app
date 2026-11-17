@@ -1,5 +1,5 @@
 import { afterEach, describe, expect, it, vi } from 'vitest';
-import { deviceLanguage, googleSearchUrl, googleTranslateUrl, translateEntry, translatesOnDevice } from './translate';
+import { deviceLanguage, googleSearchUrl, googleTranslateUrl, showTranslation, translateEntry, translatesOnDevice, translationOf } from './translate';
 
 const g = globalThis as Record<string, unknown>;
 const stub = (detected: string, fail = false, ready = 'available') => {
@@ -73,5 +73,15 @@ describe('translating', () => {
     stub('ja', true);
     expect(await translateEntry('g', ['こんにちは'])).toEqual({ kind: 'failed' });
     expect(asked).toHaveLength(3);
+  });
+
+  it('keeps a translation after Show original, to show again without asking', async () => {
+    stub('ja');
+    await translateEntry('h', ['こんにちは']);
+    expect(translationOf('h')).toMatchObject({ shown: true, from: 'ja' });
+    showTranslation('h', false);
+    expect(translationOf('h')).toMatchObject({ shown: false, pieces: [expect.stringContaining('こんにちは')] });
+    showTranslation('h', true);
+    expect(translationOf('h')).toMatchObject({ shown: true });
   });
 });

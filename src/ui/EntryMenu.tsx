@@ -39,6 +39,8 @@ export interface MenuExtras {
   translate?: () => void;
   /** Showing a translation: the item takes it away instead. */
   translated?: boolean;
+  /** A translation kept but not shown, by the language it's in: the item shows it again, asking nothing. */
+  keptIn?: string;
   /** Translated in the bubble, on the device or by the server; otherwise it's Translate with Google. */
   translatesHere?: boolean;
 }
@@ -207,7 +209,7 @@ function EntryMenu({ card, at, open, extras, onShare, onClose }: MenuProps) {
           </Item>
           {!several && extras.translate && (
             <Item icon="translate" onClick={run(extras.translate)}>
-              {extras.translated ? 'Show original' : extras.translatesHere ? 'Translate' : 'Translate with Google'}
+              {extras.translated ? 'Show original' : extras.keptIn ? `Show in ${extras.keptIn}` : extras.translatesHere ? 'Translate' : 'Translate with Google'}
             </Item>
           )}
           {selection && (
@@ -277,7 +279,7 @@ function EntryMenu({ card, at, open, extras, onShare, onClose }: MenuProps) {
         </Item>
         {extras.translate && (
           <Item icon="translate" onClick={run(extras.translate)}>
-            {extras.translated ? 'Show original' : extras.translatesHere ? 'Translate' : 'Translate with Google'}
+            {extras.translated ? 'Show original' : extras.keptIn ? `Show in ${extras.keptIn}` : extras.translatesHere ? 'Translate' : 'Translate with Google'}
           </Item>
         )}
         {!viewOnly && card.template && (

@@ -61,6 +61,8 @@ export interface Translation {
   pieces: string[];
   from: string;
   to: string;
+  /** Showing in the bubble; Show original hides it, kept, so showing it again asks nothing. */
+  shown: boolean;
 }
 
 type State = Translation | 'working';
@@ -72,7 +74,17 @@ const subscribe = (l: () => void) => (listeners.add(l), () => listeners.delete(l
 
 /** An entry's translation while the app is open, or 'working' while it's being made. */
 export function useTranslation(id: string): State | undefined {
-  return useSyncExternalStore(subscribe, () => translations.get(id));
+  return useSyncExternalStore(subscribe, () => translationOf(id));
+}
+
+export const translationOf = (id: string): State | undefined => translations.get(id);
+
+/** Shows an entry's translation in its bubble again, or its own words, keeping the translation either way. */
+export function showTranslation(id: string, shown: boolean) {
+  const kept = translations.get(id);
+  if (!kept || kept === 'working') return;
+  translations.set(id, { ...kept, shown });
+  changed();
 }
 
 export function clearTranslation(id: string) {
@@ -145,7 +157,7 @@ export async function translateEntry(id: string, pieces: string[], { server = fa
     clearTranslation(id);
     return out;
   }
-  translations.set(id, { source, pieces: out.pieces, from: out.from, to: out.to });
+  translations.set(id, { source, pieces: out.pieces, from: out.from, to: out.to, shown: true });
   changed();
   return { kind: 'done', from: out.from, to: out.to };
 }

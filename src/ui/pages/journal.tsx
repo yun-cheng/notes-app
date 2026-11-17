@@ -42,7 +42,7 @@ import { Board, BoardSetup, lastBoard, useBoardKind, useCardDrag, type DragParts
 import { foldStacks, isStack, moveInStack, stackEntries, stacksOf } from '../../domain/stacks';
 import { openStacks, useTakeOut } from '../useStacking';
 import { useStartFromTemplate, useToggleTemplate } from '../useTemplates';
-import { clearTranslation, googleTranslateUrl, languageName, openOutside, translateEntry, translatesOnDevice, useTranslation } from '../translate';
+import { googleTranslateUrl, languageName, openOutside, showTranslation, translateEntry, translatesOnDevice, useTranslation } from '../translate';
 
 const time = (at: number) => new Date(at).toLocaleTimeString(undefined, { hour: 'numeric', minute: '2-digit' });
 
@@ -867,21 +867,28 @@ function useBubble(card: NoteCard | TodoCard, title: string) {
   const plain = previewParts(doc, titleOf, { hidden: 'mask' });
   const pieces = [title, ...plain.flatMap((p) => (p.kind === 'text' ? [p.lines.join('\n')] : []))];
   const translation = useTranslation(card.id);
-  const done = translation && translation !== 'working' && translation.source === pieces.join('\n') ? translation : null;
+  // Kept while the app is open, for these words: shown, or put aside with Show original until shown again.
+  const kept = translation && translation !== 'working' && translation.source === pieces.join('\n') ? translation : null;
+  const done = kept?.shown ? kept : null;
   const text = useFold(card.id, done ? translatedParts(plain, done.pieces) : previewParts(doc, titleOf, { markCode: true, hidden: 'mark' }));
   const open = useOpen(card);
   const withGoogle = () => openOutside(googleTranslateUrl(pieces.filter((p) => p.trim()).join('\n\n')));
   // The server may translate it, unless it's in an encrypted vault, whose words never go there.
   const server = !keyring.isEncrypted(card.vaultId);
   const translate = async () => {
-    if (done) return clearTranslation(card.id);
+    if (kept) return showTranslation(card.id, !kept.shown);
     if (!translatesOnDevice() && !server) return withGoogle();
     const result = await translateEntry(card.id, pieces, { server });
     if (result.kind === 'same') toast(`It's in ${languageName(result.language)} already`);
     else if (result.kind !== 'done')
       toast(server ? "It couldn't be translated just now." : "This browser couldn't translate it on the device.", { action: { label: 'Translate with Google', run: withGoogle } });
   };
-  const menu = useEntryMenu(card, open, { translate: () => void translate(), translated: !!done, translatesHere: server || translatesOnDevice() });
+  const menu = useEntryMenu(card, open, {
+    translate: () => void translate(),
+    translated: !!done,
+    keptIn: kept && !done ? languageName(kept.to) : undefined,
+    translatesHere: server || translatesOnDevice(),
+  });
   const translated =
     translation === 'working' ? (
       <span className="bubble__translated">Translating…</span>
@@ -889,8 +896,15 @@ function useBubble(card: NoteCard | TodoCard, title: string) {
       <span className="bubble__translated">
         <Icon name="translate" size={12} />
         From {languageName(done.from)}
-        <button type="button" onClick={(e) => (e.stopPropagation(), clearTranslation(card.id))}>
+        <button type="button" onClick={(e) => (e.stopPropagation(), showTranslation(card.id, false))}>
           Show original
+        </button>
+      </span>
+    ) : kept ? (
+      <span className="bubble__translated">
+        <Icon name="translate" size={12} />
+        <button type="button" onClick={(e) => (e.stopPropagation(), showTranslation(card.id, true))}>
+          Show in {languageName(kept.to)}
         </button>
       </span>
     ) : null;

@@ -1,4 +1,4 @@
-import { useEffect, useLayoutEffect, useMemo, useRef, useState, type KeyboardEvent as ReactKeyboardEvent, type ReactNode } from 'react';
+import { Fragment, useEffect, useLayoutEffect, useMemo, useRef, useState, type KeyboardEvent as ReactKeyboardEvent, type ReactNode } from 'react';
 import { Link, Navigate, Outlet, useLocation, useNavigate, useParams } from 'react-router';
 import { diaryVault } from '../../domain/access';
 import { linkTitle } from '../../domain/cardIndex';
@@ -144,11 +144,9 @@ function JournalStream() {
         ) : filter.board ? (
           <>
             {board ? <Board kind={board} filter={filter} /> : <BoardSetup filter={filter} />}
-            {selecting && (
-              <div className="journal-dock">
-                <BatchBar selection={selection} />
-              </div>
-            )}
+            <FloatDock open={selecting}>
+              <BatchBar selection={selection} />
+            </FloatDock>
           </>
         ) : (
           <>
@@ -169,16 +167,20 @@ function JournalStream() {
               }
             />
             {/* The bars at the foot of the journal, on a ground of their own, so entries scroll away behind them, not under and past them. */}
-            {(selecting || viewOnly || !filter.archived) && (
+            {filter.archived ? (
+              // Archived entries are only put away, not written: no box, so the bars float.
+              <FloatDock open={selecting || viewOnly}>
+                {/* Hidden, the picked entries' bar keeps its room, so picking moves nothing. */}
+                {viewOnly && !selecting ? <ViewOnlyBar to={(filter.sort ?? 'written') === 'written' ? 'bottom' : 'top'} /> : <BatchBar selection={selection} />}
+              </FloatDock>
+            ) : (
               <div className="journal-dock">
                 {selecting && <BatchBar selection={selection} />}
                 {viewOnly && !selecting && <ViewOnlyBar to={(filter.sort ?? 'written') === 'written' ? 'bottom' : 'top'} />}
-                {/* Hidden, not removed, while picking or viewing only, so a half-written entry survives. Archived entries are only put away, not written. */}
-                {!filter.archived && (
-                  <div style={{ display: selecting || viewOnly ? 'none' : 'contents' }}>
-                    <JournalBox key={`composer:${journalPath({ ...filter, sort: undefined })}`} filter={filter} />
-                  </div>
-                )}
+                {/* Hidden, not removed, while picking or viewing only, so a half-written entry survives. */}
+                <div style={{ display: selecting || viewOnly ? 'none' : 'contents' }}>
+                  <JournalBox key={`composer:${journalPath({ ...filter, sort: undefined })}`} filter={filter} />
+                </div>
               </div>
             )}
           </>
@@ -187,6 +189,21 @@ function JournalStream() {
         <Outlet />
       </Page>
     </SelectionProvider>
+  );
+}
+
+/**
+ * The foot of a page with no writing box (the Archive, the Trash, the board), where the bar for picked entries
+ * shows. It's always there, keeping the room the bar takes, and only hidden until it's `open`: a bar that took
+ * room only when it showed would move every entry as the first one was picked. Its bar starts afresh each time.
+ * The entries above start at the top, even in written order, so a bar that grows (picking a todo adds buttons) can
+ * only take room below them.
+ */
+export function FloatDock({ open, children }: { open: boolean; children: ReactNode }) {
+  return (
+    <div className={`journal-dock journal-dock--bare${open ? '' : ' is-idle'}`} aria-hidden={!open} inert={!open}>
+      <Fragment key={open ? 'open' : 'idle'}>{children}</Fragment>
+    </div>
   );
 }
 

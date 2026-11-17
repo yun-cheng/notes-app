@@ -11,7 +11,7 @@ import { Icon } from '../Icon';
 import { SelectionProvider, useSelectionState, type Selection } from '../selection';
 import { MOD } from '../Shortcuts';
 import { InTrash, useCanRestore } from '../viewOnly';
-import { Stream } from './journal';
+import { FloatDock, Stream } from './journal';
 
 const isEntry = (c: Card): c is NoteCard | TodoCard => c.type === 'note' || c.type === 'todo';
 
@@ -112,26 +112,24 @@ export function TrashPage() {
             }
           />
           {tags.length > 0 && <TrashedTags tags={tags} />}
-          {selection.selecting && (
-            <div className="journal-dock">
-              <div className="batch" role="toolbar" aria-label="Selected entries in the Trash">
-                <div className="batch__bar">
-                  <span className="batch__count">{selection.ids.length} selected</span>
-                  <button type="button" className="btn btn--primary" disabled={!picked.length} onClick={() => (selection.clear(), void restore(picked))}>
-                    <Icon name="undo" size={16} />
-                    Restore
-                  </button>
-                  <button type="button" className="icon-btn" aria-label="Copy" title={`Copy (${MOD}C)`} onClick={() => copy(selection.ids)}>
-                    <Icon name="copy" />
-                  </button>
-                  <span className="note-sheet__spacer" />
-                  <button type="button" className="icon-btn batch__close" aria-label="Stop selecting" title="Stop selecting (Esc)" onClick={selection.clear}>
-                    ×
-                  </button>
-                </div>
+          <FloatDock open={selection.selecting}>
+            <div className="batch" role="toolbar" aria-label="Selected entries in the Trash">
+              <div className="batch__bar">
+                <span className="batch__count">{selection.ids.length} selected</span>
+                <button type="button" className="btn btn--primary" disabled={!picked.length} onClick={() => (selection.clear(), void restore(picked))}>
+                  <Icon name="undo" size={16} />
+                  Restore
+                </button>
+                <button type="button" className="icon-btn" aria-label="Copy" title={`Copy (${MOD}C)`} onClick={() => copy(selection.ids)}>
+                  <Icon name="copy" />
+                </button>
+                <span className="note-sheet__spacer" />
+                <button type="button" className="icon-btn batch__close" aria-label="Stop selecting" title="Stop selecting (Esc)" onClick={selection.clear}>
+                  ×
+                </button>
               </div>
-            </div>
-          )}
+              </div>
+          </FloatDock>
           {filtering && <FilterSheet onClose={() => setFiltering(false)} />}
         </Page>
       </SelectionProvider>

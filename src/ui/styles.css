@@ -94,7 +94,8 @@ h1, h2, p { margin: 0; }
   background: var(--bg); box-shadow: 0 1px 0 var(--line);
 }
 .page__head h1 { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font: 600 28px/1.2 var(--serif); letter-spacing: -0.01em; }
-.page__actions { display: flex; align-items: center; gap: 6px; flex: none; }
+/* As tall as an icon button whatever it holds, so swapping its buttons (picking entries) doesn't move the page. */
+.page__actions { display: flex; align-items: center; gap: 6px; flex: none; min-height: 40px; }
 /* A second row of the title bar: the filters, in one line that scrolls sideways, out to the screen's edges. */
 .page__head--below { flex-wrap: wrap; row-gap: 8px; }
 .page__below { flex: 0 0 100%; min-width: 0; margin: 0 -16px; }
@@ -698,6 +699,10 @@ button.bubble__vault { padding: 0; border: 0; background: none; font: inherit; c
 }
 .journal-dock::before { content: ''; position: absolute; left: 0; right: 0; bottom: 100%; height: 14px; background: linear-gradient(transparent, var(--bg)); pointer-events: none; }
 body:has(.composer:focus-within) .journal-dock { --dock-gap: 8px; --dock-margin: 8px; }
+/* A page with no writing box keeps its dock, and the room it takes, while nothing is picked, hidden (`FloatDock`). */
+.journal-dock.is-idle { visibility: hidden; }
+/* With nothing to write there, entries start at the top, even in written order, so the bar growing below moves none. */
+.stream:has(~ .journal-dock--bare) { justify-content: flex-start; }
 .composer {
   position: relative;
   display: flex; align-items: flex-end; gap: 6px; padding: 4px 4px 4px 14px;

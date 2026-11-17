@@ -105,6 +105,10 @@ h1, h2, p { margin: 0; }
 .chip .filter-chip__clear { display: inline-flex; align-items: center; justify-content: center; width: 20px; height: 20px; margin: 0 4px 0 -4px; border-radius: 50%; color: var(--muted); font-size: 16px; line-height: 1; text-decoration: none; }
 .chip > .filter-chip__value + .filter-chip__clear { margin-left: 2px; }
 .chip .filter-chip__clear:hover { background: color-mix(in srgb, var(--text) 10%, transparent); color: var(--text); }
+/* The type switch: a chip-high segmented control, so it sits in the row like the chips around it. */
+.segmented.filter-switch { flex: none; padding: 2px; border: 0; border-radius: 999px; }
+.segmented.filter-switch button { min-height: 24px; padding: 0 10px; border-radius: 999px; font-size: 13px; font-weight: 400; }
+.segmented.filter-switch button[aria-pressed="true"] { font-weight: 500; }
 .filter-chip--clear-all { padding: 0 10px; border: 1px dashed var(--line); background: none; text-decoration: none; }
 .filter-chip--toggle { padding: 0 10px; text-decoration: none; }
 .filter-chip--toggle:hover { color: var(--text); }

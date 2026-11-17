@@ -15,7 +15,6 @@ import {
   whenLabel,
   type BaseSort,
   type Contains,
-  type EntryType,
   type FilterPart,
   type StreamFilter,
   type StreamSort,
@@ -98,17 +97,19 @@ export function FilterBar({ filter }: { filter: StreamFilter }) {
   return (
     <div className="filter-bar" role="group" aria-label="Filters">
       {!dated && (
-        <FilterMenu
-          name="Type"
-          value={type && TYPE_LABEL[type]}
-          clear={type ? path(without('type')) : undefined}
-          options={(Object.keys(TYPE_LABEL) as EntryType[]).map((t) => ({
-            key: t,
-            label: TYPE_LABEL[t],
-            checked: type === t,
-            next: type === t ? { ...filter, type: undefined, status: undefined } : { ...filter, type: t, status: t === 'todo' ? filter.status : undefined },
-          }))}
-        />
+        // Both, notes or todos, a switch rather than a menu: one press, and all three always in sight.
+        <span className="segmented filter-switch" role="group" aria-label="Type">
+          {([undefined, 'note', 'todo'] as const).map((t) => (
+            <button
+              key={t ?? 'all'}
+              type="button"
+              aria-pressed={type === t}
+              onClick={() => void navigate(path(t ? { ...filter, type: t, status: t === 'todo' ? filter.status : undefined } : { ...filter, type: undefined, status: undefined }))}
+            >
+              {t ? TYPE_LABEL[t] : 'All'}
+            </button>
+          ))}
+        </span>
       )}
       <FilterMenu
         name="Todos"

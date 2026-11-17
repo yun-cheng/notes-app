@@ -3,7 +3,7 @@ import { Link, useLocation, useNavigate, useSearchParams } from 'react-router';
 import { diaryVault } from '../../domain/access';
 import { lanes, shiftDates, spanOn, spans, type Span } from '../../domain/calendar';
 import { displayTitle } from '../../domain/content';
-import { addMonths, daysBetween, formatDay, formatMonth, formatShortMonth, isDateKey, monthGrid, monthKey, parseDateKey, relativeDay, relativeDayInSentence, toDateKey } from '../../domain/dates';
+import { addMonths, daysBetween, formatDay, formatMonth, isDateKey, monthGrid, monthKey, parseDateKey, relativeDay, relativeDayInSentence, toDateKey } from '../../domain/dates';
 import { entryMatcher, filterParams, type StreamFilter } from '../../domain/stream';
 import type { TodoCard } from '../../domain/types';
 import { useCards, useToday } from '../../state/CardsContext';
@@ -70,6 +70,44 @@ export function useDatedTodos(filter: StreamFilter): Span[] {
 }
 
 /**
+ * Paging through months or weeks, with Today. It sits in the title bar, except on a narrow phone, where the bar
+ * has no room for it beside the title: there it's a row of its own under the bar, naming what's shown. Both are
+ * rendered (`head` in the bar's actions, `row` at the top of the page), and the screen's width picks one.
+ */
+export function dateNav({ label, earlier, later, onEarlier, onLater, onToday }: { label: string; earlier: string; later: string; onEarlier: () => void; onLater: () => void; onToday: () => void }) {
+  const buttons = (row: boolean) => (
+    <>
+      <button type="button" className="icon-btn" aria-label={earlier} title={earlier} onClick={onEarlier}>
+        <Icon name="left" />
+      </button>
+      {row && <span className="date-nav__label">{label}</span>}
+      <button type="button" className="icon-btn" aria-label={later} title={later} onClick={onLater}>
+        <Icon name="right" />
+      </button>
+    </>
+  );
+  const today = (
+    <button type="button" className="btn" onClick={onToday}>
+      Today
+    </button>
+  );
+  return {
+    head: (
+      <span className="date-nav date-nav--head">
+        {today}
+        {buttons(false)}
+      </span>
+    ),
+    row: (
+      <div className="date-nav date-nav--row" role="group" aria-label={label}>
+        {buttons(true)}
+        {today}
+      </div>
+    ),
+  };
+}
+
+/**
  * The calendar's and the timeline's own buttons in the title bar: the switch to the other page, taking the filter
  * along, and on a phone, where there's no sidebar, the sheet of tags and vaults (which lists both pages too).
  */
@@ -125,6 +163,14 @@ export function CalendarPage() {
   // Another month or day keeps the filter.
   const go = (m: string, d?: string) => setParams(datedParams(filter, d ? { m, d } : { m }), { replace: true });
   const pick = (d: string) => go(monthKey(d) === month ? month : monthKey(d), d);
+  const nav = dateNav({
+    label: formatMonth(month),
+    earlier: 'Previous month',
+    later: 'Next month',
+    onEarlier: () => go(addMonths(month, -1)),
+    onLater: () => go(addMonths(month, 1)),
+    onToday: () => go(monthKey(today), today),
+  });
   const [over, setOver] = useState<string | null>(null);
   // Days with something written in the diary get a dot.
   const diary = diaryVault(vaults, accountId)?.id;
@@ -142,25 +188,19 @@ export function CalendarPage() {
       title={
         <>
           <span className="title--wide">{formatMonth(month)}</span>
-          <span className="title--narrow">{formatShortMonth(month, today)}</span>
+          {/* The month is named in the row under the bar. */}
+          <span className="title--narrow">Calendar</span>
         </>
       }
       actions={
         <>
-          <button type="button" className="btn" onClick={() => go(monthKey(today), today)}>
-            Today
-          </button>
-          <button type="button" className="icon-btn" aria-label="Previous month" onClick={() => go(addMonths(month, -1))}>
-            <Icon name="left" />
-          </button>
-          <button type="button" className="icon-btn" aria-label="Next month" onClick={() => go(addMonths(month, 1))}>
-            <Icon name="right" />
-          </button>
+          {nav.head}
           <DatedActions filter={filter} to="/timeline" />
         </>
       }
       below={<FilterBar filter={filter} />}
     >
+      {nav.row}
       <div className="month" role="grid" aria-label={formatMonth(month)}>
         <div className="month__week month__week--head" role="row">
           {grid.slice(0, 7).map((d) => (

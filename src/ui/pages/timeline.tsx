@@ -9,12 +9,11 @@ import { Empty, Page } from '../components';
 import { firstDayOfWeek } from '../DatesDialog';
 import { colorClass } from '../EntryStyle';
 import { FilterBar, useJournalFilter } from '../FilterPanel';
-import { Icon } from '../Icon';
 import { datedParams, datedPath } from '../paths';
 import { useToast } from '../Toast';
 import { useUndo } from '../useUndo';
 import { usePermissions } from '../viewOnly';
-import { DatedActions, useDatedTodos, useMoveTodo, useOpenCard } from './calendar';
+import { DatedActions, dateNav, useDatedTodos, useMoveTodo, useOpenCard } from './calendar';
 
 /** How wide a day is, in pixels. */
 const DAY = 34;
@@ -62,6 +61,15 @@ export function TimelinePage() {
   });
   // Other weeks keep the filter.
   const go = (day: string) => setParams(datedParams(filter, { from: day }), { replace: true });
+  const short = (d: string) => parseDateKey(d).toLocaleDateString(undefined, { month: 'short', day: 'numeric' });
+  const nav = dateNav({
+    label: `${short(days[0])} – ${short(days[days.length - 1])}`,
+    earlier: 'Two weeks earlier',
+    later: 'Two weeks later',
+    onEarlier: () => go(addDays(from, -STEP)),
+    onLater: () => go(addDays(from, STEP)),
+    onToday: () => go(addDays(weekOf(today), -7)),
+  });
   const [drag, setDrag] = useState<Drag | null>(null);
   const scroller = useRef<HTMLDivElement>(null);
 
@@ -128,20 +136,13 @@ export function TimelinePage() {
       title="Timeline"
       actions={
         <>
-          <button type="button" className="btn" onClick={() => go(addDays(weekOf(today), -7))}>
-            Today
-          </button>
-          <button type="button" className="icon-btn" aria-label="Earlier" title="Two weeks earlier" onClick={() => go(addDays(from, -STEP))}>
-            <Icon name="left" />
-          </button>
-          <button type="button" className="icon-btn" aria-label="Later" title="Two weeks later" onClick={() => go(addDays(from, STEP))}>
-            <Icon name="right" />
-          </button>
+          {nav.head}
           <DatedActions filter={filter} to="/calendar" />
         </>
       }
       below={<FilterBar filter={filter} />}
     >
+      {nav.row}
       <div ref={scroller} className="timeline" style={{ '--day': `${DAY}px` } as CSSProperties}>
         <div className="timeline__inner" style={{ width: `calc(var(--names) + ${LENGTH * DAY}px)` }}>
           <div className="timeline__head" aria-hidden="true">

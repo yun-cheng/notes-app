@@ -57,12 +57,6 @@ export function formatMonth(month: string, locale?: string): string {
   return parseDateKey(`${month}-01`).toLocaleDateString(locale, { month: 'long', year: 'numeric' });
 }
 
-/** "Nov", or "Jan 2027" outside this year: for a title with little room, like a phone's. */
-export function formatShortMonth(month: string, today: string, locale?: string): string {
-  const sameYear = month.slice(0, 4) === today.slice(0, 4);
-  return parseDateKey(`${month}-01`).toLocaleDateString(locale, sameYear ? { month: 'short' } : { month: 'short', year: 'numeric' });
-}
-
 /** "Today", "Tomorrow", "Yesterday", or a short date. */
 export function relativeDay(key: string, today: string, locale?: string): string {
   if (key === today) return 'Today';

@@ -114,6 +114,11 @@ h1, h2, p { margin: 0; }
 /* A title with a short form for a narrow phone, like the calendar's month. */
 .title--narrow { display: none; }
 @media (max-width: 419px) { .title--wide { display: none; } .title--narrow { display: inline; } }
+/* Paging months or weeks: in the title bar, or on a narrow phone a row of its own under it, naming what's shown. */
+.date-nav { display: flex; align-items: center; gap: 6px; }
+.date-nav--row { display: none; }
+.date-nav__label { flex: 1; min-width: 0; text-align: center; font-weight: 600; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+@media (max-width: 419px) { .date-nav--head { display: none; } .date-nav--row { display: flex; margin: -4px 0 10px; } }
 @media (max-width: 419px) { .page__head { gap: 6px; } .page__actions { gap: 0; } .page__actions .icon-btn { width: 36px; } .demo-tag--head { padding: 2px 6px; letter-spacing: 0; } }
 .account-button { position: relative; }
 .style-menu.account-menu { padding: 8px; gap: 2px; font-size: 14px; }

@@ -167,7 +167,12 @@ export function CardsProvider({ accountId, children }: { accountId: string; chil
     const stop = repo.store.subscribe((records) => {
       load(records).catch((e: unknown) => setError(String(e)));
     });
-    const stopDirty = repo.store.subscribeDirty((ids) => unsynced.set(ids));
+    // Only the latest list counts, if an earlier one is still being checked.
+    let dirtyRound = 0;
+    const stopDirty = repo.store.subscribeDirty((ids) => {
+      const round = ++dirtyRound;
+      void repo.waiting(ids).then((waiting) => round === dirtyRound && unsynced.set(waiting));
+    });
     const stopVaults = repo.store.subscribeVaults((list) => {
       keyring.setVaults(list);
       setVaults(sortVaults(list));

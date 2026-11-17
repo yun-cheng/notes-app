@@ -574,11 +574,31 @@ export class CardRepository {
           await this.store.putCards([next]);
           await this.forget((entry) => entry.cardId === record.id && !isEncryptedPayload(entry.after.payload));
         }
-        if (next.seq === 0 && isBlank(await this.decode(next))) continue;
+        if (await this.staysLocal(next)) continue;
         out.push(next);
       }
       return out;
     });
+  }
+
+  /** A blank card that never reached the server: it isn't sent, so it isn't waiting to be either. */
+  private async staysLocal(record: CardRecord): Promise<boolean> {
+    if (record.seq !== 0) return false;
+    try {
+      return isBlank(await this.decode(record));
+    } catch {
+      return false;
+    }
+  }
+
+  /**
+   * Of these cards with unsent changes, the ones that will be sent: what the sync badge counts and the clock on an
+   * entry shows. Without this, a new note left blank said Syncing… for good.
+   */
+  async waiting(ids: string[]): Promise<string[]> {
+    const records = await Promise.all(ids.map((id) => this.store.getCard(id)));
+    const local = await Promise.all(records.map((r) => (r ? this.staysLocal(r) : true)));
+    return ids.filter((_, i) => !local[i]);
   }
 
   /**

@@ -135,6 +135,15 @@ describe('syncing between two devices', () => {
     expect(await mac.cards()).toEqual([]);
     expect(phone.engine.getStatus().pending).toBe(0);
   });
+
+  it('leaves such a note out of what waits to be sent, so the badge says Synced', async () => {
+    const { phone } = await twoDevices();
+    const blank = await phone.repo.createNote();
+    const written = await phone.repo.createNote({ title: 'Plan' });
+    expect(await phone.repo.waiting([blank.id, written.id])).toEqual([written.id]);
+    await phone.engine.sync();
+    expect(await phone.repo.waiting([blank.id])).toEqual([]);
+  });
 });
 
 describe('conflicts', () => {

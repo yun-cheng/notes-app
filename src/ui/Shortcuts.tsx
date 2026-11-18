@@ -24,7 +24,7 @@ const GROUPS: { title: string; keys: [string, string][] }[] = [
       ['Drag from empty space', 'Select with a box'],
       ['↑ ↓', 'Move between entries, or into them when nothing is focused'],
       ['Home End', 'First or last entry'],
-      ['← →', 'Previous or next page of the focused entry'],
+      ['← →', 'Previous or next page of the focused entry, round from the last to the first'],
       ['Shift ↑ ↓', 'Select while moving'],
       ['Space', 'Select or unselect the focused entry'],
       ['Enter', 'Edit the focused entry'],

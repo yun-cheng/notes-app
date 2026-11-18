@@ -696,58 +696,59 @@ interface Pager {
   count: number;
   /** The page showing: 0 for the first. */
   at: number;
-  /** The way the last change of page went, so the page shown slides in from that side; none until it's changed. */
+  /** The way the last step went, so the page shown slides in from that side; none until it's stepped. */
   went: '' | 'next' | 'prev';
-  go: (to: number) => void;
+  /** How many steps so far, so each plays its slide. */
+  steps: number;
+  /** To the next page (1) or the previous (-1), round from the last to the first and the other way. */
+  step: (way: 1 | -1) => void;
 }
 
 /**
- * An entry with more than one page shows one at a time in its bubble: ‹ and › down its sides step through them
- * (`PageEdges`), and its bottom row says which it's on (1/3).
+ * An entry with more than one page shows one at a time in its bubble: ‹ and › down its sides step through them,
+ * round and round (`PageEdges`), and its bottom row says which it's on (1/3).
  */
 function usePager(card: NoteCard | TodoCard): Pager {
   const pages = useMemo(() => cardPages(card), [card]);
   const [kept, setAt] = useState(() => shownPage.get(card.id) ?? 0);
-  const [went, setWent] = useState<Pager['went']>('');
+  const [moved, setMoved] = useState<{ went: Pager['went']; steps: number }>({ went: '', steps: 0 });
   // A page taken out since leaves it on the first.
   const at = kept <= pages.length ? kept : 0;
+  const count = pages.length + 1;
   return {
     pages,
-    count: pages.length + 1,
+    count,
     at,
-    went,
-    go: (to) => {
-      if (to < 0 || to > pages.length || to === at) return;
+    ...moved,
+    step: (way) => {
+      if (count < 2) return;
+      const to = (at + way + count) % count;
       if (to) shownPage.set(card.id, to);
       else shownPage.delete(card.id);
-      setWent(to > at ? 'next' : 'prev');
+      setMoved({ went: way > 0 ? 'next' : 'prev', steps: moved.steps + 1 });
       setAt(to);
     },
   };
 }
 
 /**
- * A bubble's classes for its pages: room at its sides for the arrows, and a slide for the page it just changed to,
- * in from the right for a later page and from the left for an earlier one. Each way has two names, one for odd
- * pages and one for even, so each change plays.
+ * A bubble's classes for its pages: room at its sides for the arrows, and a slide for the page it just stepped to,
+ * in from the right for the next and from the left for the previous. Each way has two names, taken in turn, so
+ * every step plays.
  */
-const pagerClass = (pager: Pager) => (pager.count > 1 ? ' has-pages' : '') + (pager.went ? ` page-in-${pager.went}${pager.at % 2 ? '' : '-2'}` : '');
+const pagerClass = (pager: Pager) => (pager.count > 1 ? ' has-pages' : '') + (pager.went ? ` page-in-${pager.went}${pager.steps % 2 ? '' : '-2'}` : '');
 
-/** The previous and next page, each the full height of a bubble's side; neither past the first or the last page. */
+/** The previous and next page, each the full height of a bubble's side, going round past the last or the first. */
 function PageEdges({ pager }: { pager: Pager }) {
   if (pager.count < 2) return null;
   return (
     <>
-      {pager.at > 0 && (
-        <button type="button" className="page-edge page-edge--prev" aria-label="Previous page" title="Previous page" onClick={() => pager.go(pager.at - 1)}>
-          <Icon name="left" size={14} />
-        </button>
-      )}
-      {pager.at < pager.count - 1 && (
-        <button type="button" className="page-edge page-edge--next" aria-label="Next page" title="Next page" onClick={() => pager.go(pager.at + 1)}>
-          <Icon name="right" size={14} />
-        </button>
-      )}
+      <button type="button" className="page-edge page-edge--prev" aria-label="Previous page" title="Previous page" onClick={() => pager.step(-1)}>
+        <Icon name="left" size={14} />
+      </button>
+      <button type="button" className="page-edge page-edge--next" aria-label="Next page" title="Next page" onClick={() => pager.step(1)}>
+        <Icon name="right" size={14} />
+      </button>
     </>
   );
 }
@@ -848,7 +849,7 @@ function useBubble(card: NoteCard | TodoCard, title: string) {
     const way = e.key === 'ArrowLeft' ? -1 : e.key === 'ArrowRight' ? 1 : 0;
     if (way && e.target === e.currentTarget && pager.count > 1 && !e.shiftKey && !e.metaKey && !e.ctrlKey && !e.altKey) {
       e.preventDefault();
-      pager.go(pager.at + way);
+      pager.step(way);
       return;
     }
     selectable.handlers.onKeyDown(e);

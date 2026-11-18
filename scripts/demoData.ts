@@ -5,7 +5,8 @@
  * overdue, due today at a time, upcoming, undated, repeating, waiting, done and archived, entries tinted, set to view
  * only or with their own preview style, a private and encrypted Diary vault, a vault shared with Sam and one Sam
  * shares to view, a card also in another vault, a note Sam shares, a public link, comments open and resolved, and
- * version history from more than one device.
+ * version history from more than one device. Two entries carry nearly all of it at once, to see how a full one looks:
+ * a launch plan note and a moving todo.
  * Run with `npm run demo` while `npm run dev:api` is running. Running it again puts the demo's own cards back as they
  * were, dated around today, and keeps anything else in the accounts.
  */
@@ -42,6 +43,14 @@ const checklist = (...entries: [string, boolean][]): JSONNode => ({
   content: entries.map(([t, checked]) => ({ type: 'taskItem', attrs: { checked }, content: [p(t)] })),
 });
 const quote = (t: string): JSONNode => ({ type: 'blockquote', content: [p(t)] });
+/** A list item with a list of its own under it. */
+const nested = (t: string | JSONNode, list: JSONNode): JSONNode => ({ type: 'listItem', content: [typeof t === 'string' ? p(t) : t, list] });
+const list = (type: 'bulletList' | 'orderedList', ...entries: (string | JSONNode)[]): JSONNode => ({
+  type,
+  content: entries.map((e) => (typeof e === 'string' ? { type: 'listItem', content: [p(e)] } : e)),
+});
+const rule: JSONNode = { type: 'horizontalRule' };
+const h3 = (t: string): JSONNode => ({ type: 'heading', attrs: { level: 3 }, content: [text(t)] });
 /** A code block, colored by its language (like typing ```js). */
 const code = (language: string, ...ls: string[]): JSONNode => ({ type: 'codeBlock', attrs: { language }, content: [text(ls.join('\n'))] });
 const doc = (...blocks: JSONNode[]): JSONNode => ({ type: 'doc', content: blocks });
@@ -344,6 +353,79 @@ export async function seed() {
       '}',
     ),
   ), [work, ideas]);
+  // The busiest entries: nearly everything an entry can have, together. The launch plan has headings, every inline
+  // style, nested lists, a checklist, a quote, code, a rule, hidden words, links to entries and the web, pages behind
+  // its front, a color, tags from both groups, reactions from two people, a place in the Family vault too, comments
+  // open and resolved, and history from two devices (see LATER). It's long, so its bubble folds.
+  const move = 'demo-todo-move';
+  const launch = note(
+    'demo-note-launch',
+    at(2, 9, 0),
+    doc(
+      h('Goal'),
+      p(
+        'Ship ',
+        text('Notes 2.0', ['bold']),
+        ' to everyone by the ',
+        text('end of the month', ['italic']),
+        ', with ',
+        text('sync', ['underline']),
+        ' and search ',
+        text('twice as fast', ['bold', 'italic']),
+        '. ',
+        text('No new settings', ['strike']),
+        ' One new setting at most. Flag: ',
+        text('notes2', ['code']),
+        '.',
+      ),
+      h('Timeline'),
+      list(
+        'orderedList',
+        nested('Week 1: freeze', list('bulletList', 'Cut the release branch', 'Only fixes after Wednesday')),
+        nested('Week 2: beta', list('bulletList', 'Ten teams on the beta', nested('Collect feedback', list('bulletList', 'In-app survey', 'Two calls a day')))),
+        'Week 3: roll out to 10%, then 50%',
+        'Week 4: everyone',
+      ),
+      h('Before launch'),
+      checklist(['Load test the sync server', true], ['Security review', true], ['Help center articles', false], ['Press kit', false], ['Status page ready', false]),
+      quote('Make it work, make it right, make it fast. In that order.'),
+      h3('Rollout switch'),
+      code('ts', "export const rollout = (userId: string, percent: number) =>", '  hash(userId) % 100 < percent;'),
+      rule,
+      p('Related: ', link('demo-note-meeting', 'Design review'), ', ', link('demo-note-deploy', 'Deploy steps'), ' and ', link('demo-note-1on1', '1:1 with Mia'), '. Staging login: launch / ', text('orange-kite-77', ['hidden']), '.'),
+      p('Announcement draft in the ', web('style guide', 'https://en.wikipedia.org/wiki/Style_guide'), '. Moving the team the same week: ', link(move, 'Move into the new flat'), '.'),
+    ),
+    [work, ideas, high],
+    'Launch plan: Notes 2.0',
+    personal,
+    {
+      color: 'blue',
+      reactions: { '🚀': [DEMO.id, SAM.id], '👀': [SAM.id], '🎉': [DEMO.id] },
+      pages: [
+        doc(h('Risks'), list('bulletList', nested(text('Sync load', ['bold']), list('bulletList', 'Mitigation: 10% first')), 'Search index rebuild takes a night', 'Support queue on day one')),
+        doc(h('FAQ'), p(text('Will my notes move?', ['bold'])), p('No. Nothing to do; they stay where they are.'), p(text('Can I go back?', ['bold'])), p('For a month, from the account menu.')),
+      ],
+    },
+  );
+  // The busiest todo: due at a time after a start date, high priority, a checklist with nested steps, links back to
+  // an archived note and a web page, a door code kept hidden, a page behind it, a tint and a reaction.
+  todo(move, 'Move into the new flat', addDays(today, 2), {
+    tags: [home, high, travel],
+    when: at(4, 20, 0),
+    start: addDays(today, -4),
+    dueTime: '18:00',
+    color: 'green',
+    reactions: { '💪': [DEMO.id] },
+    content: doc(
+      p('Keys from the agent at 5. Door code ', text('4729#', ['hidden']), '. Old place: ', link('demo-note-old-flat', 'Old flat'), '.'),
+      h3('Before'),
+      checklist(['Book the van', true], ['Pack the kitchen', true], ['Pack the books', false], ['Defrost the freezer', false]),
+      h3('On the day'),
+      list('orderedList', nested('Load the van', list('bulletList', 'Heavy boxes first', 'Plants last, in the cab')), 'Meter readings at both places', 'Photos of the empty rooms'),
+      p('Movers: ', web('checklist ideas', 'https://en.wikipedia.org/wiki/Relocation_(personal)'), ', and ', text('tip the crew', ['bold']), '.'),
+    ),
+    pages: [doc(h('Change the address'), checklist(['Bank', true], ['Doctor', false], ['Work payroll', false], ['Post office redirect', false]))],
+  });
   note('demo-note-today-1', ago(95), lines('Call the dentist about Thursday'));
   note('demo-note-today-2', ago(40), lines('Buy oat milk, bananas and coffee beans'), [home]);
   note('demo-note-secret', at(2, 23, 0), lines('Gift budget this year: 300. Don\'t tell anyone.'), [], '', diaryVault);
@@ -403,14 +485,19 @@ export async function seed() {
   });
   await call(DEMO, '/sync/push', { records: retired });
   const seqs = new Map<string, number>();
-  // The standup note as it was first written, then as edited on the phone, so its history has both.
-  const standup = pushed.find((d) => d.id === 'demo-note-standup')!;
-  await push(DEMO, [{ ...standup, at: standup.at, payload: { ...standup.payload, content: doc(h('Standup'), bullets('Shipped the search fix', 'Reviewing the export PR')) } }], keys, LAPTOP, seqs);
-  await push(DEMO, pushed.filter((d) => d !== standup), keys, LAPTOP, seqs);
-  await push(DEMO, [{ ...standup, at: ago(30) }], keys, PHONE, seqs);
+  // Entries first written shorter, then edited on the phone, so their history has both versions.
+  const LATER: Record<string, JSONNode> = {
+    'demo-note-standup': doc(h('Standup'), bullets('Shipped the search fix', 'Reviewing the export PR')),
+    'demo-note-launch': doc(h('Goal'), p('Ship Notes 2.0 by the end of the month.'), h('Before launch'), checklist(['Load test the sync server', false], ['Security review', false])),
+  };
+  const revised = pushed.filter((d) => d.id in LATER);
+  await push(DEMO, revised.map((d) => ({ ...d, payload: { ...d.payload, content: LATER[d.id] } })), keys, LAPTOP, seqs);
+  await push(DEMO, pushed.filter((d) => !revised.includes(d)), keys, LAPTOP, seqs);
+  await push(DEMO, revised.map((d) => ({ ...d, at: ago(30) })), keys, PHONE, seqs);
 
-  // Kyoto trip is in the Family vault too, so Sam sees it there; the curry recipe has a public link.
+  // Kyoto trip and the launch plan are in the Family vault too, so Sam sees them there; the curry recipe has a public link.
   await call(DEMO, `/cards/${kyoto}/shares`, { vault_id: family.id, role: 'edit' });
+  await call(DEMO, `/cards/${launch}/shares`, { vault_id: family.id, role: 'edit' });
   await call(DEMO, '/cards/demo-note-curry/links', {});
   // Claude and other AI apps may read the Personal vault.
   await call(DEMO, `/vaults/${personal}`, { ai_access: 'read' }, 'PATCH');
@@ -452,6 +539,12 @@ export async function seed() {
   await call(DEMO, `/cards/${kyoto}/comments/${asked.comments[0].id}`, { resolved: true }, 'PATCH');
   await call(SAM, `/cards/${kyoto}/comments`, { body: 'Is the ryokan booked yet?' });
   await call(SAM, '/cards/demo-sam-recipe/shares', { email: DEMO.email, role: 'comment' });
+  // The launch plan's thread: one settled, two still open.
+  const risk = await call<{ comments: { id: string }[] }>(SAM, `/cards/${launch}/comments`, { body: 'Is 10% on day one too much for the sync server?' });
+  await call(DEMO, `/cards/${launch}/comments`, { body: 'The load test passed at 3x, so it should be fine.' });
+  await call(DEMO, `/cards/${launch}/comments/${risk.comments[0].id}`, { resolved: true }, 'PATCH');
+  await call(SAM, `/cards/${launch}/comments`, { body: 'Who writes the help center articles?' });
+  await call(DEMO, `/cards/${launch}/comments`, { body: 'Mia offered. I\'ll confirm on Monday.' });
 
   writeFileSync(SESSION_FILE, JSON.stringify({ token: DEMO.token, user: { id: DEMO.id, email: DEMO.email, name: DEMO.name } }));
   return { cards: mine.length + 3, pin: DEMO_PIN, recoveryKey, diaryOpen: !!diaryKey };

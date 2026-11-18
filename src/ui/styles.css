@@ -919,7 +919,8 @@ body:has(.batch) .toast-slot { bottom: calc(var(--tabbar) + env(safe-area-inset-
 .bubble__copy { position: absolute; top: 5px; right: 5px; display: grid; place-items: center; width: 24px; height: 24px; padding: 0; border: 0; border-radius: 7px; background: none; color: var(--muted); opacity: 0; cursor: pointer; transition: opacity 0.12s; }
 .bubble__copy:hover { color: var(--text); background: color-mix(in srgb, var(--text) 8%, transparent); }
 /* Room for it on the right, kept when it's hidden so nothing moves on hover; the bottom row still runs to the edge. */
-@media (pointer: fine) { .bubble { padding-right: 32px; } .bubble__meta { margin-right: -20px; } }
+/* Room on the right for the copy button, which only the first line needs: the rows under the text reach into it. */
+@media (pointer: fine) { .bubble { padding-right: 32px; } .bubble__tags, .bubble__meta { margin-right: -20px; } }
 .stream__entry:hover .bubble__copy, .bubble:focus-within .bubble__copy { opacity: 1; }
 .bubble__add { display: inline-grid; place-items: center; width: 22px; height: 18px; padding: 0; border: 1px dashed var(--line); border-radius: 9px; background: none; color: var(--muted); opacity: 0; cursor: pointer; transition: opacity 0.12s; }
 .bubble__add:hover { color: var(--text); border-color: var(--muted); }

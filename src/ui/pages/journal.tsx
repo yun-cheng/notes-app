@@ -13,6 +13,7 @@ import { ScrollJump } from '../ScrollJump';
 import { Comments } from '../Comments';
 import { ReactionsRow } from '../Reactions';
 import { Backlinks, Empty, Page, TagChips, TagPicker, TitleField, useDeleteCard, VaultField } from '../components';
+import { NotHere } from '../NotHere';
 import { Editor } from '../editor/Editor';
 import { FilterBar, FilterSheet, SortMenu, useJournalFilter } from '../FilterPanel';
 import { Icon } from '../Icon';
@@ -1129,7 +1130,8 @@ export function EntrySheet() {
   const entry = card && !card.deleted && (card.type === 'note' || card.type === 'todo') ? card : undefined;
   let body;
   if (lockedIn) body = <LockPanel vaultId={lockedIn} />;
-  else if (!card || card.deleted) body = <Empty>{card ? 'This is in the Trash.' : "This doesn't exist on this device."}</Empty>;
+  else if (!card) body = <NotHere thing="entry" />;
+  else if (card.deleted) body = <Empty>This is in the Trash.</Empty>;
   else if (!entry) body = <Empty>That isn't a note or a todo.</Empty>;
   else body = <EntryDetail key={entry.id} card={entry} fresh={!!state?.fresh} edit={!!state?.edit} onClose={close} />;
 

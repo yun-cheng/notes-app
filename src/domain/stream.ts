@@ -84,6 +84,16 @@ export function parseFilter(params: URLSearchParams): StreamFilter {
   };
 }
 
+/**
+ * What a filter names that this account doesn't have: a vault it isn't in, or a tag it can't see (a tag in a locked
+ * vault counts as there). A link from another account, or an address left from before switching accounts.
+ */
+export function missingFromFilter(filter: StreamFilter, has: { vault: (id: string) => boolean; card: (id: string) => boolean }): 'vault' | 'tag' | null {
+  if (filter.vaultId && !has.vault(filter.vaultId)) return 'vault';
+  if (filter.tagId && !has.card(filter.tagId)) return 'tag';
+  return null;
+}
+
 export function filterParams(filter: StreamFilter): URLSearchParams {
   const params = new URLSearchParams();
   if (filter.sort && filter.sort !== 'written') params.set('sort', filter.sort);

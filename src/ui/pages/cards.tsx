@@ -5,6 +5,7 @@ import type { Card } from '../../domain/types';
 import { useCards } from '../../state/CardsContext';
 import { usePermissions } from '../viewOnly';
 import { Backlinks, Empty, Page, TagChips, TagPicker, TitleField, useDeleteCard, VaultField } from '../components';
+import { NotHere } from '../NotHere';
 import { Editor } from '../editor/Editor';
 import { LockPanel } from '../LockPanel';
 import { Comments } from '../Comments';
@@ -48,7 +49,7 @@ export function CardPage() {
   if (!card) {
     return (
       <Page title="Not found">
-        <Empty>This card doesn't exist on this device.</Empty>
+        <NotHere away={{ to: '/journal', label: 'Go to the journal' }} />
       </Page>
     );
   }

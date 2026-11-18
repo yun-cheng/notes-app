@@ -11,6 +11,7 @@ import { SyncAuthExpired, SyncOffline } from '../../sync/engine';
 import { fetchVersion, fetchVersions, sealVersions } from '../../sync/http';
 import type { VersionInfo } from '../../sync/protocol';
 import { Empty, Page } from '../components';
+import { NotHere } from '../NotHere';
 import { Diff } from '../Diff';
 import { ReadOnlyDoc } from '../editor/ReadOnlyDoc';
 import { Icon } from '../Icon';
@@ -68,7 +69,7 @@ export function HistoryPage() {
   if (!card) {
     return (
       <Page title="History">
-        <Empty>This card doesn't exist on this device.</Empty>
+        <NotHere away={{ to: '/journal', label: 'Go to the journal' }} />
       </Page>
     );
   }

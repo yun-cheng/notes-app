@@ -3,8 +3,9 @@ import { Link, Navigate, NavLink, Outlet, Route, Routes, useLocation } from 'rea
 import { registerSW } from 'virtual:pwa-register';
 import { AuthGate, useAccount } from '../auth/AuthContext';
 import { PairPage } from '../auth/PairPage';
-import { useSyncStatus } from '../state/CardsContext';
-import { useNewNote } from './components';
+import { missingFromFilter } from '../domain/stream';
+import { useCards, useSyncStatus } from '../state/CardsContext';
+import { Page, useNewNote } from './components';
 import { Icon, type IconName } from './Icon';
 import { ConnectPage } from './pages/ai';
 import { PublicPage } from './pages/public';
@@ -20,7 +21,8 @@ import { SearchPage } from './pages/views';
 import { CalendarPage } from './pages/calendar';
 import { TimelinePage } from './pages/timeline';
 import { CommandPalette } from './CommandPalette';
-import { FilterPanel } from './FilterPanel';
+import { FilterPanel, useFilterPath, useJournalFilter } from './FilterPanel';
+import { NotHere } from './NotHere';
 import { SidebarAccount } from './AccountBadge';
 import { journalPath, type SheetState } from './paths';
 import { isMac, ShortcutsDialog } from './Shortcuts';
@@ -148,12 +150,30 @@ function Layout() {
       <Sidebar onCommands={() => setCommands(true)} />
       <main className="main">
         <SessionBanner />
-        <Outlet />
+        <PageOrNotHere />
       </main>
       <TabBar />
       {commands && <CommandPalette onClose={() => setCommands(false)} onShortcuts={() => setShortcuts(true)} />}
       {shortcuts && <ShortcutsDialog onClose={() => setShortcuts(false)} />}
     </div>
+  );
+}
+
+/**
+ * The page, unless its filter names a vault or a tag this account doesn't have, as a link from another account
+ * does, or the address left over from switching accounts. Then it says so instead of showing nothing, and the
+ * journal box, which would write into that vault, isn't there.
+ */
+function PageOrNotHere() {
+  const filter = useJournalFilter();
+  const filterPath = useFilterPath();
+  const { vaults, index } = useCards();
+  const missing = missingFromFilter(filter, { vault: (id) => vaults.some((v) => v.id === id), card: (id) => index.byId.has(id) || index.lockedCards.has(id) });
+  if (!missing) return <Outlet />;
+  return (
+    <Page title="Not found">
+      <NotHere thing={missing} away={{ to: filterPath({ ...filter, vaultId: undefined, tagId: undefined }), label: 'Show without it' }} />
+    </Page>
   );
 }
 

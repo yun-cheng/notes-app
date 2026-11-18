@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import { buildIndex } from './cardIndex';
 import { parseDateKey } from './dates';
-import { datedFilter, daysWhen, entryMatcher, filterParams, filterParts, isFiltered, parseFilter, spanRange, spanSide, streamItems, whenLabel, type TodoStatus } from './stream';
+import { datedFilter, daysWhen, entryMatcher, filterParams, filterParts, isFiltered, missingFromFilter, parseFilter, spanRange, spanSide, streamItems, whenLabel, type TodoStatus } from './stream';
 import { doc, note, p, tag, text, todo } from './testFixtures';
 
 const TODAY = '2026-11-12';
@@ -251,5 +251,20 @@ describe('date ranges', () => {
     expect(label('2026-11-03..2026-11-09')).toBe('Nov 3 – 9');
     expect(label('2026-10-28..2026-11-03')).toBe('Oct 28 – Nov 3');
     expect(label('2025-12-28..2026-01-03')).toBe('Dec 28, 2025 – Jan 3, 2026');
+  });
+});
+
+describe('missingFromFilter', () => {
+  const has = { vault: (id: string) => id === 'mine', card: (id: string) => id === 'work' };
+
+  it('names a vault or tag the account does not have', () => {
+    expect(missingFromFilter({ vaultId: 'theirs' }, has)).toBe('vault');
+    expect(missingFromFilter({ tagId: 'theirs' }, has)).toBe('tag');
+    expect(missingFromFilter({ vaultId: 'theirs', tagId: 'theirs' }, has)).toBe('vault');
+  });
+
+  it('is null for a filter of its own, or none', () => {
+    expect(missingFromFilter({ vaultId: 'mine', tagId: 'work' }, has)).toBeNull();
+    expect(missingFromFilter({ sort: 'newest' }, has)).toBeNull();
   });
 });

@@ -9,6 +9,7 @@ import { useCards } from '../../state/CardsContext';
 import { SyncOffline } from '../../sync/engine';
 import { createVault, updateVault, type VaultChanges } from '../../sync/http';
 import { CardRow, Empty, Page, Section, useNewNote } from '../components';
+import { NotHere } from '../NotHere';
 import { Icon } from '../Icon';
 import { LockPanel } from '../LockPanel';
 import { useToast } from '../Toast';
@@ -304,7 +305,7 @@ export function VaultPage() {
   if (!vault) {
     return (
       <Page title="Not found">
-        <Empty>This vault doesn't exist on this device.</Empty>
+        <NotHere thing="vault" away={{ to: '/vaults', label: 'See your vaults' }} />
       </Page>
     );
   }

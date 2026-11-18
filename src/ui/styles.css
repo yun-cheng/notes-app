@@ -643,10 +643,16 @@ a.change__title:hover { color: var(--accent); }
 .bubble__snippet:hover .bubble__snippet-copy, .bubble__snippet-copy:focus-visible { opacity: 1; }
 @media (pointer: coarse) { .bubble__snippet-copy { opacity: 1; } }
 /*
- * The snippet's language, faint in the bottom corner, where a block's last line (a closing brace, often) leaves room;
- * at the top it sat on the end of the first line, the longest as often as not. The copy button keeps the top.
+ * The snippet's language, faint, in a strip of its own over the code, on the left, with the copy button on the
+ * right: over the code's end in a corner (the first line's, until 2026-11-18, then for a moment the last line's) it
+ * covered the code whenever that line was long.
  */
-.bubble__snippet-lang { position: absolute; bottom: 6px; right: 8px; padding: 1px 5px; border-radius: 4px; background: var(--sunken); color: var(--muted); font: 11px/1.4 var(--sans); pointer-events: none; }
+.bubble__snippet:has(.bubble__snippet-lang) pre { padding-top: 26px; }
+/* On a touch screen the copy button always shows, so it gets the strip too, rather than sitting on the first line. */
+@media (pointer: coarse) { .bubble__snippet pre { padding-top: 26px; } }
+.bubble__snippet:has(.bubble__snippet-lang) .bubble__snippet-copy { top: 3px; height: 22px; }
+@media (pointer: coarse) { .bubble__snippet-copy { top: 3px; height: 22px; } }
+.bubble__snippet-lang { position: absolute; top: 6px; left: 10px; color: var(--muted); font: 11px/1.4 var(--sans); pointer-events: none; }
 .bubble__link { color: var(--accent); text-decoration: underline; text-decoration-color: color-mix(in srgb, var(--accent) 45%, transparent); text-underline-offset: 2px; overflow-wrap: anywhere; }
 .bubble__link:hover { text-decoration-color: currentColor; }
 /* Syntax colors, from highlight.js's token classes, in the bubbles and the editors. */
@@ -942,6 +948,12 @@ body:has(.batch) .toast-slot { bottom: calc(var(--tabbar) + env(safe-area-inset-
 .bubble-menu { position: relative; display: flex; }
 /* Reactions: in a bubble's bottom row on the left, and under the tags in its sheet. */
 .reactions { display: inline-flex; flex-wrap: wrap; align-items: center; gap: 4px; }
+/*
+ * A bottom row holding reactions, bordered chips, gets more room than one of plain words: 8px from the tags' chips
+ * over it (rather than 4px, which left the two rows of chips nearly touching), 6px from the text when there are no
+ * tags, and 8px from the bubble's bottom edge.
+ */
+.bubble__meta:has(.reaction) { margin-top: 4px; margin-bottom: 2px; }
 .reaction { display: inline-flex; align-items: center; gap: 3px; height: 20px; padding: 0 7px 0 5px; border: 1px solid var(--line); border-radius: 10px; background: var(--surface); color: var(--muted); font: 500 11px/1 var(--sans); font-variant-numeric: tabular-nums; cursor: default; }
 button.reaction { cursor: pointer; }
 button.reaction:hover { border-color: var(--muted); color: var(--text); }
@@ -956,12 +968,6 @@ button.reaction:hover { border-color: var(--muted); color: var(--text); }
 .reaction-picker__quick { display: flex; justify-content: space-between; }
 .emoji-cell { display: inline-grid; place-items: center; width: 36px; height: 36px; padding: 0; border: 0; border-radius: 8px; background: none; color: var(--muted); font-size: 22px; line-height: 1; cursor: pointer; }
 .emoji-cell:hover, .emoji-cell:focus-visible { background: var(--sunken); outline: none; }
-/*
- * A bottom row holding reactions, bordered chips, gets more room than one of plain words: 8px from the tags' chips
- * over it (rather than 4px, which left the two rows of chips nearly touching), 6px from the text when there are no
- * tags, and 8px from the bubble's bottom edge.
- */
-.bubble__meta:has(.reaction) { margin-top: 4px; margin-bottom: 2px; }
 .emoji-cell.is-mine { background: var(--accent-soft); }
 .reaction-picker__search { width: 100%; }
 .reaction-picker__grid { max-height: 232px; overflow-y: auto; overscroll-behavior: contain; }

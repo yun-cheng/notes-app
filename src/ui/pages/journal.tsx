@@ -1413,8 +1413,8 @@ function EntryDetail({ card, fresh, edit, onClose }: { card: NoteCard | TodoCard
             type="button"
             className={`icon-btn${card.template ? ' is-active' : ''}`}
             aria-pressed={!!card.template}
-            aria-label="Template"
-            title={card.template ? 'A template: press to make it an ordinary entry again' : 'Make it a template, to start new entries from'}
+            aria-label={card.template ? 'Move back to the journal' : 'Move to Templates'}
+            title={card.template ? 'In Templates: press to move it back to the journal' : 'Move to Templates, out of the journal, to start new entries from'}
             onClick={() => toggleTemplate(card)}
           >
             <Icon name="template" />

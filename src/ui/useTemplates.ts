@@ -51,7 +51,7 @@ export function useToggleTemplate() {
     const action = repo.action();
     void repo.update(card.id, { template });
     const undo = { label: 'Undo', run: () => void undoAction(action) };
-    if (template) toast(`Made “${displayTitle(card)}” a template`, { actions: [{ label: 'Templates', run: () => void navigate(TEMPLATES_PATH) }, undo] });
-    else toast(`“${displayTitle(card)}” is no longer a template`, { action: undo });
+    if (template) toast(`Moved “${displayTitle(card)}” to Templates, to start new entries from`, { actions: [{ label: 'Show', run: () => void navigate(TEMPLATES_PATH) }, undo] });
+    else toast(`Moved “${displayTitle(card)}” back to the journal`, { action: undo });
   };
 }

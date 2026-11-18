@@ -325,9 +325,9 @@ function EntryMenu({ card, at, extras, onShare, onClose }: MenuProps) {
           <Item icon={to} onClick={run(() => actions.retype(card.id, to))}>
             {to === 'todo' ? 'Make it a todo' : 'Make it a note'}
           </Item>
-          {/* Ticked on a template; ticking it makes this entry one, in place. */}
-          <Item icon="template" checked={!!card.template} onClick={run(() => toggleTemplate(card))}>
-            Template
+          {/* A template keeps out of the journal, under Templates, to start new entries from; this moves it there or back. */}
+          <Item icon="template" onClick={run(() => toggleTemplate(card))}>
+            {card.template ? 'Move back to the journal' : 'Move to Templates'}
           </Item>
         </div>
       )}

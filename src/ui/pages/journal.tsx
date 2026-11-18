@@ -403,16 +403,19 @@ function BubbleMeta({ card, at, fold, flip, lead }: { card: NoteCard | TodoCard;
   const retag = may(card).edit ? (tags: string[]) => void repo.update(card.id, { tags }) : undefined;
   // An entry's tags have a row of their own, over the rest; one without any is offered a tag in the bottom row.
   const tagged = resolveTags(index, card.tags).length > 0;
-  // So do a todo's dates, under its tags, with whether it's waiting; one without any is offered a date in the bottom row.
+  // So do a todo's dates, under its tags, with whether it's waiting.
   const dated = card.type === 'todo' && !!(card.due || card.start);
   const waiting = card.type === 'todo' && card.waiting && card.status === 'open';
-  const due = card.type === 'todo' && (retag ? <DueMenu card={card} look={dated ? 'label' : 'add'} /> : <DueLabel todo={card} className="bubble__due" />);
+  const due = card.type === 'todo' && (retag ? <DueMenu card={card} look="label" /> : <DueLabel todo={card} className="bubble__due" />);
+  // A todo without dates is offered one beside the tag button, wherever that is.
+  const addDue = card.type === 'todo' && !dated && retag && <DueMenu card={card} look="add" />;
   return (
     <>
       {tagged && (
         <span className="bubble__tags">
           <TagChips tagIds={card.tags} onChange={retag} />
           {retag && <AddTag card={card} />}
+          {addDue}
         </span>
       )}
       {dated && (
@@ -421,9 +424,10 @@ function BubbleMeta({ card, at, fold, flip, lead }: { card: NoteCard | TodoCard;
           {due}
         </span>
       )}
-      {/* On the right: More or Less, a todo's date button while it has none, then the vault and the time it was written. */}
+      {/* On the left, the tag and date buttons while it has neither; on the right, More or Less, then the vault and the time it was written. */}
       <span className="bubble__meta">
         {!tagged && retag && <AddTag card={card} />}
+        {!tagged && addDue}
         {card.viewOnly && <ViewOnlyMark card={card} />}
         <span className="bubble__end">
           {lead}
@@ -448,7 +452,6 @@ function BubbleMeta({ card, at, fold, flip, lead }: { card: NoteCard | TodoCard;
             </button>
           )}
           {!dated && waiting && <WaitingMark />}
-          {!dated && due}
           <VaultLabel card={card} />
           <SyncMark id={card.id} />
           <time dateTime={new Date(at).toISOString()}>{time(at)}</time>

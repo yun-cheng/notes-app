@@ -307,18 +307,27 @@ export function TitleField({ value, onSave, autoFocus, readOnly }: { value: stri
 
 /**
  * An entry's tags to change: each with × to take it off, and a field to add one, found or made. In an entry's menu
- * (`inMenu`) the tags aren't links to their journal (a click there would leave the menu for another page), and each
- * tag group follows as a row of its tags, picked or not, to set or switch with one click (`TagGroupRows`).
+ * (`inMenu`) the tags aren't links to their journal (a click there would leave the menu for another page): a grouped
+ * one (Priority: High) opens its group's tags under the field instead, to switch it with one click, and a one-choice
+ * group the entry has no tag from offers itself as "+ Priority". Only the group asked for shows, so one of dozens of
+ * topics takes no room until then, and the field still finds any tag.
  */
 export function TagPicker({ tagIds, onChange, autoFocus = false, inMenu = false }: { tagIds: string[]; onChange: (tags: string[]) => void; autoFocus?: boolean; inMenu?: boolean }) {
   const { index, repo } = useCards();
   const [query, setQuery] = useState('');
   const [open, setOpen] = useState(false);
-  const current = resolveTags(index, tagIds);
+  const [shown, setShown] = useState<string | null>(null);
+  const { groupOf, groups } = index.tagGroups;
+  const current = resolveTags(index, inMenu ? orderTags(tagIds, index.tagGroups) : tagIds);
   const q = query.trim().toLowerCase();
-  // In a menu, a group's tags have their own rows below, so until something's typed only tags in no group are offered.
-  const offered = (t: TagCard) => !tagIds.includes(t.id) && t.title.toLowerCase().includes(q) && (!inMenu || !!q || !index.tagGroups.groupOf.has(t.id));
-  const options = index.tags.filter(offered).slice(0, 6);
+  const options = index.tags.filter((t) => !tagIds.includes(t.id) && t.title.toLowerCase().includes(q)).slice(0, 6);
+  const unset = inMenu ? groups.filter((g) => g.choice === 'one' && g.members.length && !g.members.some((m) => tagIds.includes(m.id))) : [];
+  const group = groups.find((g) => g.id === shown);
+  const groupButton = (g: TagGroup, label: string, className?: string) => (
+    <button type="button" className={className} aria-expanded={shown === g.id} title={`${g.title}: pick another`} onClick={() => setShown(shown === g.id ? null : g.id)}>
+      {label}
+    </button>
+  );
   const exact = index.tags.find((t) => t.title.toLowerCase() === q);
 
   const add = (id: string) => {
@@ -341,12 +350,20 @@ export function TagPicker({ tagIds, onChange, autoFocus = false, inMenu = false 
   return (
     <div className="tag-picker">
       <div className="chips">
-        {current.map((t) => (
-          <span className={`chip${colorClass(t)}`} key={t.id}>
-            {inMenu ? t.title : <Link to={journalPath({ tagId: t.id })}>{t.title}</Link>}
-            <button type="button" aria-label={`Remove tag ${t.title}`} onClick={() => onChange(tagIds.filter((x) => x !== t.id))}>
-              ×
-            </button>
+        {current.map((t) => {
+          const g = inMenu ? groupOf.get(t.id) : undefined;
+          return (
+            <span className={`chip${colorClass(t)}${g ? ' chip--grouped' : ''}${g && shown === g.id ? ' is-open' : ''}`} key={t.id}>
+              {g ? groupButton(g, t.title, 'chip__group') : inMenu ? t.title : <Link to={journalPath({ tagId: t.id })}>{t.title}</Link>}
+              <button type="button" aria-label={`Remove tag ${t.title}`} onClick={() => onChange(tagIds.filter((x) => x !== t.id))}>
+                ×
+              </button>
+            </span>
+          );
+        })}
+        {unset.map((g) => (
+          <span key={g.id} className={`chip chip--unset${shown === g.id ? ' is-open' : ''}`}>
+            {groupButton(g, `+ ${g.title}`, 'chip__group')}
           </span>
         ))}
         <input
@@ -383,42 +400,35 @@ export function TagPicker({ tagIds, onChange, autoFocus = false, inMenu = false 
           )}
         </div>
       )}
-      {inMenu && <TagGroupRows tagIds={tagIds} onChange={onChange} />}
+      {group && <GroupChoices group={group} tagIds={tagIds} onChange={onChange} />}
     </div>
   );
 }
 
 /**
- * Each tag group as a row of its tags, the entry's pressed: a click on one sets it (in a one-choice group, in place
- * of the group's other), and on a pressed one takes it off.
+ * One tag group's tags, the entry's filled: a click on one sets it (in a one-choice group, in place of the group's
+ * other), and on a filled one takes it off. A long group scrolls.
  */
-function TagGroupRows({ tagIds, onChange }: { tagIds: string[]; onChange: (tags: string[]) => void }) {
-  const { index } = useCards();
-  const groups = index.tagGroups.groups.filter((g) => g.members.length);
-  if (!groups.length) return null;
+function GroupChoices({ group, tagIds, onChange }: { group: TagGroup; tagIds: string[]; onChange: (tags: string[]) => void }) {
   return (
-    <div className="tag-groups">
-      {groups.map((g) => (
-        <div key={g.id} className="tag-groups__row" role="group" aria-label={g.title}>
-          <span className="tag-groups__name">{g.title}</span>
-          <span className="chips">
-            {g.members.map((m) => {
-              const on = tagIds.includes(m.id);
-              return (
-                <button
-                  key={m.id}
-                  type="button"
-                  className={`chip chip--small chip--option chip--button${colorClass(m)}${on ? ' is-on' : ''}`}
-                  aria-pressed={on}
-                  onClick={() => onChange(pickInGroup(tagIds, g, on ? (g.choice === 'one' ? null : m.id) : m.id))}
-                >
-                  {m.title}
-                </button>
-              );
-            })}
-          </span>
-        </div>
-      ))}
+    <div className="tag-groups" role="group" aria-label={group.title}>
+      <span className="tag-groups__name">{group.title}</span>
+      <span className="chips">
+        {group.members.map((m) => {
+          const on = tagIds.includes(m.id);
+          return (
+            <button
+              key={m.id}
+              type="button"
+              className={`chip chip--small chip--option chip--button${colorClass(m)}${on ? ' is-on' : ''}`}
+              aria-pressed={on}
+              onClick={() => onChange(pickInGroup(tagIds, group, on ? (group.choice === 'one' ? null : m.id) : m.id))}
+            >
+              {m.title}
+            </button>
+          );
+        })}
+      </span>
     </div>
   );
 }

@@ -45,6 +45,32 @@ export function firstLine(content: JSONNode): string {
   return line.length > FIRST_LINE_MAX ? `${line.slice(0, FIRST_LINE_MAX - 1).trimEnd()}…` : line;
 }
 
+/** Where a preview's first line is, when it's words and not code: the first line in its first part that isn't blank. */
+function leadAt(parts: PreviewPart[]): number {
+  const first = parts[0];
+  return first?.kind === 'text' ? first.lines.findIndex((l) => l.trim()) : -1;
+}
+
+/**
+ * The first line of a preview, as a name, when its text starts with words rather than code: what a stack with no
+ * title of its own is called. '' when there's none.
+ */
+export function leadLine(parts: PreviewPart[]): string {
+  const at = leadAt(parts);
+  if (at < 0) return '';
+  const line = (parts[0] as { lines: string[] }).lines[at].replace(/^(• |\d+\. )/, '').trim();
+  return line.length > FIRST_LINE_MAX ? `${line.slice(0, FIRST_LINE_MAX - 1).trimEnd()}…` : line;
+}
+
+/** A preview without the line `leadLine` names, or the blank lines after it, for when that line is shown as its name. */
+export function withoutLeadLine(parts: PreviewPart[]): PreviewPart[] {
+  const at = leadAt(parts);
+  if (at < 0) return parts;
+  const lines = (parts[0] as { lines: string[] }).lines.slice(at + 1);
+  while (lines.length && !lines[0].trim()) lines.shift();
+  return lines.length ? [{ kind: 'text', lines }, ...parts.slice(1)] : parts.slice(1);
+}
+
 /** Wrap inline code in a bubble's lines (`previewParts` with `markCode`), so it can be shown as code. */
 export const CODE_OPEN = '\uE000';
 export const CODE_CLOSE = '\uE001';

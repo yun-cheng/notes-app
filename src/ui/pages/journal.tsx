@@ -2,7 +2,7 @@ import { Fragment, useEffect, useLayoutEffect, useMemo, useRef, useState, type K
 import { Link, Navigate, Outlet, useLocation, useNavigate, useParams } from 'react-router';
 import { diaryVault } from '../../domain/access';
 import { linkTitle, resolveTags } from '../../domain/cardIndex';
-import { cardPages, checklistProgress, CODE_CLOSE, CODE_OPEN, displayTitle, HIDE_CLOSE, HIDE_OPEN, previewParts, splitLinks, storedPages, translationPage, pagesHaveTranslation, withNewPage, withoutPage, withPage, type PreviewPart } from '../../domain/content';
+import { cardPages, checklistProgress, CODE_CLOSE, CODE_OPEN, displayTitle, HIDE_CLOSE, HIDE_OPEN, leadLine, previewParts, splitLinks, storedPages, translationPage, pagesHaveTranslation, withNewPage, withoutLeadLine, withoutPage, withPage, type PreviewPart } from '../../domain/content';
 import { isDateKey, relativeDay, relativeDayInSentence, toDateKey } from '../../domain/dates';
 import { STATE_BOARD } from '../../domain/board';
 import { isFiltered, parseFilter, sortGroup, streamItems, type StreamFilter, type StreamItem, type StreamSort } from '../../domain/stream';
@@ -817,7 +817,8 @@ function translatedParts(parts: PreviewPart[], pieces: string[]): PreviewPart[] 
  * What every bubble does: its text, folded when long; opening it; its menu; picking it; and translating what it
  * shows (`title` and the side it's on), into the bubble, with Show original to go back.
  */
-function useBubble(card: NoteCard | TodoCard, title: string) {
+/** With `titleFromText`, the first line of its text is shown as its name (`title`), so it's left out of the text. */
+function useBubble(card: NoteCard | TodoCard, title: string, titleFromText = false) {
   const { index, keyring, repo } = useCards();
   const may = usePermissions();
   const { undoAction } = useUndo();
@@ -826,13 +827,15 @@ function useBubble(card: NoteCard | TodoCard, title: string) {
   const doc = pager.at ? pager.pages[pager.at - 1] : card.content;
   const titleOf = (id: string, label: string) => linkTitle(index, id, label);
   // What a translation covers: hidden words go as •••, and code isn't sent.
-  const plain = previewParts(doc, titleOf, { hidden: 'mask' });
+  // Only the first page's text gives the name.
+  const named = (parts: PreviewPart[]) => (titleFromText && !pager.at ? withoutLeadLine(parts) : parts);
+  const plain = named(previewParts(doc, titleOf, { hidden: 'mask' }));
   const pieces = [title, ...plain.flatMap((p) => (p.kind === 'text' ? [p.lines.join('\n')] : []))];
   const translation = useTranslation(card.id);
   // Kept while the app is open, for these words: shown, or put aside with Show original until shown again.
   const kept = translation && translation !== 'working' && translation.source === pieces.join('\n') ? translation : null;
   const done = kept?.shown ? kept : null;
-  const text = useFold(card.id, done ? translatedParts(plain, done.pieces) : previewParts(doc, titleOf, { markCode: true, hidden: 'mark' }));
+  const text = useFold(card.id, done ? translatedParts(plain, done.pieces) : named(previewParts(doc, titleOf, { markCode: true, hidden: 'mark' })));
   const open = useOpen(card);
   const withGoogle = () => openOutside(googleTranslateUrl(pieces.filter((p) => p.trim()).join('\n\n')));
   // The server may translate it, and this device keep the translation, unless it's in an encrypted vault, whose
@@ -935,7 +938,10 @@ function StackEntry({ stack, at }: { stack: NoteCard; at: number }) {
   // A stack in the Trash has let its entries go back to the stream; shown there, it lists what restoring it takes back in.
   const of = stack.deleted ? new Map((stack.stack ?? []).filter((id) => !stacksOf(index).has(id)).map((id) => [id, stack.id])) : stacksOf(index);
   const members = stackEntries(stack, index.byId, of);
-  const { text, pager, menu, title, translated, selected, handlers } = useBubble(stack, stack.title.trim() || 'Stack');
+  // With no title of its own, it's called by the first line of its text, and "Stack" only when it has none.
+  const own = stack.title.trim();
+  const lead = own ? '' : leadLine(previewParts(stack.content, (id, label) => linkTitle(index, id, label), { hidden: 'mask' }));
+  const { text, pager, menu, title, translated, selected, handlers } = useBubble(stack, own || lead || 'Stack', !!lead);
   const [expanded, setExpanded] = useState(() => openStacks.has(stack.id));
   const toggle = () => {
     if (expanded) openStacks.delete(stack.id);

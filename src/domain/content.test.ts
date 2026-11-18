@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { cardPages, checklistProgress, CODE_CLOSE, CODE_OPEN, displayTitle, hasPhoto, HIDE_CLOSE, HIDE_OPEN, isBlank, isImageUrl, linkedCardIds, linkUrls, photoIds, plainText, previewLines, previewParts, siteName, splitLinks, storedPages, textToDoc, translationPage, pagesHaveTranslation, withNewPage, withoutPage, withPage } from './content';
+import { cardPages, checklistProgress, CODE_CLOSE, CODE_OPEN, displayTitle, hasPhoto, HIDE_CLOSE, HIDE_OPEN, isBlank, isImageUrl, leadLine, linkedCardIds, linkUrls, photoIds, plainText, previewLines, previewParts, siteName, splitLinks, storedPages, textToDoc, translationPage, pagesHaveTranslation, withNewPage, withoutLeadLine, withoutPage, withPage } from './content';
 import { doc, link, note, p, tag, text } from './testFixtures';
 import type { JSONNode } from './types';
 
@@ -59,6 +59,20 @@ describe('previews', () => {
     ]);
     // Lines elsewhere (titles, comparing versions) keep code's lines, without marks.
     expect(previewLines(body)).toEqual(['Run npm test:', 'if (a) {', '  b();', '}', 'Done']);
+  });
+  it('names a stack by its first line of words, and leaves that line out of the text under it', () => {
+    const parts = previewParts(textToDoc('\nKyoto trip\n\nWhat to book first\nand when'));
+    expect(leadLine(parts)).toBe('Kyoto trip');
+    expect(withoutLeadLine(parts)).toEqual([{ kind: 'text', lines: ['What to book first', 'and when'] }]);
+    // Just the one line: nothing's left under it.
+    expect(withoutLeadLine(previewParts(textToDoc('Kyoto trip')))).toEqual([]);
+    // A list item is named without its marker.
+    expect(leadLine(previewParts(doc({ type: 'bulletList', content: [{ type: 'listItem', content: [p(text('milk'))] }] })))).toBe('milk');
+    // Code first, or no text: no name from it, and the text stays whole.
+    const code = previewParts(doc({ type: 'codeBlock', attrs: { language: null }, content: [text('x = 1')] }, p(text('after'))));
+    expect(leadLine(code)).toBe('');
+    expect(withoutLeadLine(code)).toBe(code);
+    expect(leadLine(previewParts(doc(p())))).toBe('');
   });
 });
 

@@ -290,56 +290,36 @@ function EntryMenu({ card, at, extras, onShare, onClose }: MenuProps) {
   }
 
   const to = card.type === 'note' ? 'todo' : 'note';
+  const useIt = !viewOnly && !!card.template;
+  const saveIt = can.edit && !card.template && !isStack(card);
   // Opening it, copying it, picking it and ticking a todo have their own buttons on the bubble (the pencil, the copy
-  // button in its corner, the circle beside it, the todo's box), so the menu keeps to the rest.
-  const top = !!extras.translate || (!viewOnly && !!card.template);
+  // button in its corner, the circle beside it, the todo's box), so the menu keeps to the rest. In order: what's on
+  // the entry (tags, dates, its type, its color), then what's done with it (translated, kept as a template,
+  // shared, kept from changes), then where it goes (out of its stack, the Archive, the Trash).
   return (
     <ContextMenu at={at} label="Entry" onClose={onClose} layout="entry">
-      {top && (
+      {(useIt || can.edit) && (
         <div className="style-menu__group">
-          {extras.translate && (
-            <Item icon="translate" onClick={run(extras.translate)}>
-              {extras.translated ? 'Show original' : extras.keptIn ? `Show in ${extras.keptIn}` : extras.translatesHere ? 'Translate' : 'Translate with Google'}
-            </Item>
-          )}
-          {!viewOnly && card.template && (
+          {useIt && (
             <Item icon="template" onClick={run(() => startFrom(card))}>
               Use this template
             </Item>
           )}
-        </div>
-      )}
-      {can.edit && (
-        <div className="style-menu__group">
-          <Item icon="tag" onClick={() => setPanel('tags')}>
-            Tags…
-          </Item>
-          {card.type === 'todo' && (
-            <Item icon="calendar" onClick={() => setPanel('due')}>
-              Due date…
-            </Item>
+          {can.edit && (
+            <>
+              <Item icon="tag" onClick={() => setPanel('tags')}>
+                Tags…
+              </Item>
+              {card.type === 'todo' && (
+                <Item icon="calendar" onClick={() => setPanel('due')}>
+                  Due date…
+                </Item>
+              )}
+              <Item icon={to} onClick={run(() => actions.retype(card.id, to))}>
+                {to === 'todo' ? 'Make it a todo' : 'Make it a note'}
+              </Item>
+            </>
           )}
-        </div>
-      )}
-      {can.edit && (
-        <div className="style-menu__group">
-          <Item icon={to} onClick={run(() => actions.retype(card.id, to))}>
-            {to === 'todo' ? 'Make it a todo' : 'Make it a note'}
-          </Item>
-          {/* A copy under Templates, to start new entries from; the entry stays where it is. */}
-          {!card.template && !isStack(card) && (
-            <Item icon="template" onClick={run(() => saveAsTemplate(card))}>
-              Save as template
-            </Item>
-          )}
-        </div>
-      )}
-      {/* In an open stack: back out into the stream. It changes the stack, so it needs leave to change that. */}
-      {inStack && (
-        <div className="style-menu__group">
-          <Item icon="stack" onClick={run(() => takeOut(card))}>
-            Take out of the stack
-          </Item>
         </div>
       )}
       {can.edit && (
@@ -348,8 +328,19 @@ function EntryMenu({ card, at, extras, onShare, onClose }: MenuProps) {
           <ColorSwatches value={card.color} onPick={(color) => (onClose(), void repo.update(card.id, { color }))} />
         </div>
       )}
-      {(can.share || can.protect) && (
+      {(extras.translate || saveIt || can.share || can.protect) && (
         <div className="style-menu__group">
+          {extras.translate && (
+            <Item icon="translate" onClick={run(extras.translate)}>
+              {extras.translated ? 'Show original' : extras.keptIn ? `Show in ${extras.keptIn}` : extras.translatesHere ? 'Translate' : 'Translate with Google'}
+            </Item>
+          )}
+          {/* A copy under Templates, to start new entries from; the entry stays where it is. */}
+          {saveIt && (
+            <Item icon="template" onClick={run(() => saveAsTemplate(card))}>
+              Save as template
+            </Item>
+          )}
           {can.share && (
             <Item icon="share" onClick={run(onShare)}>
               Share…
@@ -360,6 +351,14 @@ function EntryMenu({ card, at, extras, onShare, onClose }: MenuProps) {
               View only
             </Item>
           )}
+        </div>
+      )}
+      {/* In an open stack: back out into the stream. It changes the stack, so it needs leave to change that. */}
+      {inStack && (
+        <div className="style-menu__group">
+          <Item icon="stack" onClick={run(() => takeOut(card))}>
+            Take out of the stack
+          </Item>
         </div>
       )}
       {can.manage && (

@@ -8,7 +8,7 @@ import { ColorSwatches } from './EntryStyle';
 import { Icon, type IconName } from './Icon';
 import { useSelection } from './selection';
 import { ShareDialog } from './ShareDialog';
-import { DuePanel, useTickTodo, useToggleWaiting } from './TodoDue';
+import { DuePanel, useToggleWaiting } from './TodoDue';
 import { TagPicker } from './components';
 import { useCanRestore, useInTrash, usePermissions, useViewOnly } from './viewOnly';
 import { useStartFromTemplate, useToggleTemplate } from './useTemplates';
@@ -175,7 +175,6 @@ function EntryMenu({ card, at, extras, onShare, onClose }: MenuProps) {
   const [panel, setPanel] = useState<'tags' | 'due' | null>(null);
   const may = usePermissions();
   const actions = useEntryActions();
-  const tick = useTickTodo();
   const toggleWaiting = useToggleWaiting();
   const selection = useSelection();
   const toggleViewOnly = useEntryViewOnly(card);
@@ -292,8 +291,8 @@ function EntryMenu({ card, at, extras, onShare, onClose }: MenuProps) {
 
   const to = card.type === 'note' ? 'todo' : 'note';
   const done = card.type === 'todo' && card.status === 'done';
-  // Opening it, copying it and picking it have their own buttons on the bubble (the pencil, the copy button in its
-  // corner, the circle beside it), so the menu keeps to the rest.
+  // Opening it, copying it, picking it and ticking a todo have their own buttons on the bubble (the pencil, the copy
+  // button in its corner, the circle beside it, the todo's box), so the menu keeps to the rest.
   const top = !!extras.translate || (!viewOnly && !!card.template);
   return (
     <ContextMenu at={at} label="Entry" onClose={onClose} layout="entry">
@@ -325,11 +324,6 @@ function EntryMenu({ card, at, extras, onShare, onClose }: MenuProps) {
       )}
       {can.edit && (
         <div className="style-menu__group">
-          {card.type === 'todo' && (
-            <Item icon="check" onClick={run(() => tick(card))}>
-              {done ? 'Mark not done' : 'Mark done'}
-            </Item>
-          )}
           {card.type === 'todo' && !done && (
             <Item icon="hourglass" checked={!!card.waiting} onClick={run(() => toggleWaiting(card))}>
               Waiting

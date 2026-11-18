@@ -17,6 +17,12 @@ export interface SignedInAccounts {
   accounts: Account[];
 }
 
+/** What deleting an account would take: the vaults it owns, with their entries and other members, and how many vaults of other people it's in. */
+export interface AccountSummary {
+  vaults: { id: string; name: string; cards: number; others: number }[];
+  joined: number;
+}
+
 export interface SessionInfo {
   user: Account;
   vaults: Vault[];

@@ -2,7 +2,7 @@ import { Hono, type Context } from 'hono';
 import { deleteCookie, getCookie, setCookie } from 'hono/cookie';
 import type { VaultPin } from '../src/domain/pin';
 import type { CardRecord } from '../src/domain/types';
-import { PUSH_LIMIT, type ConfigResponse, type RecentVersionsResponse, type SessionInfo, type SignedInAccounts, type VersionResponse, type VersionsResponse } from '../src/sync/protocol';
+import { PUSH_LIMIT, type AccountSummary, type ConfigResponse, type RecentVersionsResponse, type SessionInfo, type SignedInAccounts, type VersionResponse, type VersionsResponse } from '../src/sync/protocol';
 import {
   createSession,
   deleteSession,
@@ -19,7 +19,8 @@ import {
 import type { AppEnv } from './db';
 import { aiPublicRoutes, aiSessionRoutes, wellKnown } from './aiApp';
 import type { GoogleFetch } from './drive';
-import { drivePublicRoutes, photoRoutes } from './photos';
+import { accountSummary, deleteAccount } from './account';
+import { driveConfig, drivePublicRoutes, photoRoutes } from './photos';
 import { commentRoutes } from './comments';
 import { memberRoutes } from './members';
 import { pairingPublicRoutes, pairingSessionRoutes } from './pairing';
@@ -241,6 +242,25 @@ export function createApp({
   app.get('/me', async (c) => {
     const user = c.get('user');
     return c.json<SessionInfo>({ user, vaults: await listVaults(c.env.DB, user.id) });
+  });
+
+  app.get('/account/summary', async (c) => c.json<AccountSummary>(await accountSummary(c.env.DB, c.get('user').id)));
+
+  /**
+   * Deletes the account the request is for, and everything it owns (`deleteAccount`). The body names its email,
+   * so a stray request can't do it. The browser stays signed in to its other accounts.
+   */
+  app.post('/account/delete', async (c) => {
+    const user = c.get('user');
+    const body = await c.req.json<{ email?: unknown }>().catch(() => null);
+    if (typeof body?.email !== 'string' || body.email.trim().toLowerCase() !== user.email.toLowerCase()) {
+      return c.json({ error: 'Type this account’s email to delete it' }, 400);
+    }
+    await deleteAccount(c.env.DB, driveConfig(c, googleFetch), user.id);
+    if (bearerToken(c)) return c.json<SignedInAccounts>({ accounts: [] });
+    // Its sessions went with it, so the cookie keeps only the others.
+    const rest = await browserSessions(c);
+    return c.json<SignedInAccounts>({ accounts: rest.map((s) => s.user) });
   });
 
   app.post('/vaults', async (c) => {

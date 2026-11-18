@@ -228,6 +228,10 @@ body:has(.composer:focus-within) .tabbar { display: none; }
 .btn--primary { background: var(--accent); border-color: var(--accent); color: var(--on-accent); }
 .btn--primary:hover { border-color: var(--accent); filter: brightness(1.08); }
 .btn--quiet { background: none; border-color: transparent; color: var(--muted); padding: 0 8px; }
+.btn--danger { color: var(--alert); border-color: color-mix(in srgb, var(--alert) 45%, var(--line)); }
+.btn--danger:hover:not(:disabled) { border-color: var(--alert); }
+.btn--danger-solid { background: var(--alert); border-color: var(--alert); color: var(--on-accent); }
+.btn--danger-solid:hover:not(:disabled) { filter: brightness(1.08); }
 .button-row { display: flex; flex-wrap: wrap; gap: 8px; margin-top: 10px; }
 .icon-btn { display: inline-flex; align-items: center; justify-content: center; width: 40px; height: 40px; flex: none; border-radius: 9px; color: var(--muted); }
 .icon-btn:hover { background: var(--sunken); color: var(--text); }
@@ -584,6 +588,9 @@ a.change__title:hover { color: var(--accent); }
 .shortcuts__list { display: grid; grid-template-columns: minmax(0, 12em) 1fr; gap: 6px 14px; align-items: baseline; margin: 6px 0 0; font-size: 14px; }
 .shortcuts__list dd { margin: 0; }
 .dialog__warn { padding: 10px 12px; border-radius: 10px; background: var(--sunken); display: flex; flex-direction: column; gap: 8px; align-items: flex-start; }
+.delete-account__list { margin: 0; padding-left: 1.2em; display: flex; flex-direction: column; gap: 6px; font-size: 14px; }
+.delete-account__confirm { display: flex; flex-direction: column; gap: 6px; font-size: 14px; color: var(--muted); }
+.delete-account__confirm strong { color: var(--text); overflow-wrap: anywhere; }
 @media (min-width: 860px) {
   .dialog-backdrop { place-items: center; }
   .dialog { border-radius: 16px; }

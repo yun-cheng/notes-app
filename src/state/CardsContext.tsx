@@ -1,3 +1,4 @@
+import Dexie from 'dexie';
 import { createContext, useContext, useEffect, useMemo, useState, useSyncExternalStore, type ReactNode } from 'react';
 import { buildIndex, type CardIndex } from '../domain/cardIndex';
 import { toDateKey } from '../domain/dates';
@@ -23,6 +24,16 @@ export function openAccountStorage(accountId: string) {
   const keyring = new Keyring();
   const repo = new CardRepository(store, keyring, undefined, undefined, localStorageJournal(`notes-app:journal:${accountId}`), `vault-${accountId}`);
   return { store, repo, keyring };
+}
+
+/** Removes an account's copy on this device: its notes, photos, keys and unsaved-edit journal. */
+export async function forgetAccountStorage(accountId: string) {
+  try {
+    localStorage.removeItem(`notes-app:journal:${accountId}`);
+  } catch {
+    // Storage the browser refuses holds nothing to remove.
+  }
+  await Dexie.delete(`notes-app:user:${accountId}`);
 }
 
 /** Where a vault's key is kept on this device for fingerprint unlock. Never extractable. */

@@ -3,7 +3,7 @@ import type { VaultPin } from '../domain/pin';
 import type { CardRecord, JSONNode, Vault } from '../domain/types';
 import type { PhotoTransport } from '../photos/types';
 import { SyncAuthExpired, SyncOffline, type SyncTransport } from './engine';
-import type { ConfigResponse, ConnectedApp, LinkPreview, PullResponse, PushResponse, RecentVersionsResponse, ServerTranslation, SessionInfo, SharedResponse, SignedInAccounts, VersionResponse, VersionsResponse } from './protocol';
+import type { Account, AccountSummary, ConfigResponse, ConnectedApp, LinkPreview, PullResponse, PushResponse, RecentVersionsResponse, ServerTranslation, SessionInfo, SharedResponse, SignedInAccounts, VersionResponse, VersionsResponse } from './protocol';
 
 let requestAccount: string | null = null;
 
@@ -84,6 +84,17 @@ export const signInWithGoogle = (credential: string) =>
 
 /** Signs this tab's account out. Returns the accounts still signed in on this browser. */
 export const signOutOfServer = async () => (await request<SignedInAccounts>('/auth/logout', { method: 'POST', body: '{}' })).accounts;
+
+/** What deleting this account would take, for the confirmation. */
+export const fetchAccountSummary = () => request<AccountSummary>('/account/summary');
+
+/** Deletes this account and everything it owns. Gives the accounts still signed in; throws a sentence saying what went wrong. */
+export async function deleteAccountOnServer(email: string): Promise<Account[]> {
+  const res = await rawRequest('/account/delete', { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ email }) });
+  if (res.ok) return ((await res.json()) as SignedInAccounts).accounts;
+  const error = ((await res.json().catch(() => ({}))) as { error?: string }).error;
+  throw new Error(error ?? "The account couldn't be deleted. Try again.");
+}
 
 /** The accounts signed in on this browser, newest sign-in first. */
 export const fetchSignedInAccounts = async () => (await request<SignedInAccounts>('/auth/accounts')).accounts;

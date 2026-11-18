@@ -39,7 +39,7 @@ Then open http://localhost:5191/demo while `npm run dev` is running. It signs th
 
 Due-date reminders need a VAPID key pair on the server. Make one with `node scripts/vapid-keys.mjs`, which only prints it, and put both lines in `.dev.vars` for the local server; for production, set each with `npx wrangler secret put VAPID_PUBLIC_KEY` and `npx wrangler secret put VAPID_PRIVATE_KEY`. Keep the private key out of the repository. Reminders only work where the service worker runs: the built app (`build`, then `preview`) or the installed one, not `npm run dev`.
 
-Sign-in needs a Google OAuth client ID in `GOOGLE_CLIENT_ID` in `wrangler.jsonc`, with `http://localhost:5191` as an authorized origin. Photo upload also needs the client secret in `.dev.vars` as `GOOGLE_CLIENT_SECRET`; see PLAN.md, Milestone 5. The privacy page is `public/privacy.html`, linked from the sign-in screen and Google's consent screen.
+Sign-in needs a Google OAuth client ID in `GOOGLE_CLIENT_ID` in `wrangler.jsonc`, with `http://localhost:5191` as an authorized origin. Photo upload also needs the client secret in `.dev.vars` as `GOOGLE_CLIENT_SECRET`; see PLAN.md, Milestone 5. The privacy page is `public/privacy.html`, linked from the sign-in screen and Google's consent screen. Settings ends with Delete account, which deletes the open account and everything it owns from the server and from this device, after showing what goes and asking for its email.
 
 | Command | What it does |
 | --- | --- |

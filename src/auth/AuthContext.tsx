@@ -1,7 +1,7 @@
 import { createContext, useCallback, useContext, useEffect, useMemo, useState, type ReactNode } from 'react';
 import { claimLegacyNotes } from '../storage/legacy';
-import { CardsProvider, openAccountStorage } from '../state/CardsContext';
-import { fetchSignedInAccounts, setRequestAccount, signInWithGoogle, signOutOfServer } from '../sync/http';
+import { CardsProvider, forgetAccountStorage, openAccountStorage } from '../state/CardsContext';
+import { deleteAccountOnServer, fetchSignedInAccounts, setRequestAccount, signInWithGoogle, signOutOfServer } from '../sync/http';
 import type { Account, SessionInfo } from '../sync/protocol';
 import { SignInScreen } from './SignInScreen';
 
@@ -37,6 +37,8 @@ interface AuthValue {
   addAccount: () => void;
   /** Signs this account out, and opens the next signed-in account if there is one. */
   signOut: () => Promise<void>;
+  /** Deletes this account for good, given its email, then its copy on this device, and opens the next signed-in account. */
+  deleteAccount: (email: string) => Promise<void>;
 }
 
 const AuthContext = createContext<AuthValue | null>(null);
@@ -109,12 +111,25 @@ export function AuthGate({ children }: { children: ReactNode }) {
     open(rest[0] ?? null);
   }, [account, signedIn, open]);
 
+  const deleteAccount = useCallback(
+    async (email: string) => {
+      if (!account) return;
+      const rest = await deleteAccountOnServer(email);
+      save(ACCOUNTS_KEY, rest);
+      setSignedIn(rest);
+      open(rest[0] ?? null);
+      // Once its notes are closed, which opening another account does.
+      await forgetAccountStorage(account.id);
+    },
+    [account, open],
+  );
+
   const value = useMemo<AuthValue | null>(
     () =>
       account
-        ? { account, others: signedIn.filter((a) => a.id !== account.id), switchTo: open, addAccount: () => setAdding(true), signOut }
+        ? { account, others: signedIn.filter((a) => a.id !== account.id), switchTo: open, addAccount: () => setAdding(true), signOut, deleteAccount }
         : null,
-    [account, signedIn, open, signOut],
+    [account, signedIn, open, signOut, deleteAccount],
   );
 
   if (!value || adding) {

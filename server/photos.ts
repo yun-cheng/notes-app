@@ -17,7 +17,7 @@ import {
 export const MAX_PHOTO_BYTES = 10 * 1024 * 1024;
 const IMAGE_TYPES: Record<string, string> = { 'image/jpeg': 'jpg', 'image/png': 'png', 'image/webp': 'webp', 'image/gif': 'gif', 'image/heic': 'heic', 'image/avif': 'avif' };
 
-function driveConfig(c: Context<AppEnv>, fetcher: GoogleFetch): DriveConfig | null {
+export function driveConfig(c: Context<AppEnv>, fetcher: GoogleFetch): DriveConfig | null {
   const { GOOGLE_CLIENT_ID: clientId, GOOGLE_CLIENT_SECRET: clientSecret } = c.env;
   if (!clientId || !clientSecret) return null;
   return { clientId, clientSecret, redirectUri: `${new URL(c.req.url).origin}/api/drive/callback`, fetch: fetcher };

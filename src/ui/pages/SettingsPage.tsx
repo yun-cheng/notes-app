@@ -14,6 +14,7 @@ import { useSaveEntries } from '../useSaveEntry';
 import { useUndo } from '../useUndo';
 import { AiAppsSection } from './ai';
 import { PhotosSection } from './photosSettings';
+import { DeleteAccountSection } from '../DeleteAccountSection';
 
 function download(data: BlobPart, name: string, type: string) {
   const url = URL.createObjectURL(new Blob([data], { type }));
@@ -152,6 +153,7 @@ export function SettingsPage() {
       <ClipboardSection />
       <PhotosSection />
       <AiAppsSection />
+      <DeleteAccountSection onExport={exportMarkdown} />
     </Page>
   );
 }

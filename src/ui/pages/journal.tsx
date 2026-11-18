@@ -6,16 +6,15 @@ import { cardPages, checklistProgress, CODE_CLOSE, CODE_OPEN, displayTitle, HIDE
 import { isDateKey, relativeDay, relativeDayInSentence, toDateKey } from '../../domain/dates';
 import { STATE_BOARD } from '../../domain/board';
 import { isFiltered, parseFilter, sortGroup, streamItems, type StreamFilter, type StreamItem, type StreamSort } from '../../domain/stream';
-import { EMPTY_DOC, type JSONNode, type NoteCard, type TodoCard, type Vault } from '../../domain/types';
+import { EMPTY_DOC, type JSONNode, type NoteCard, type TodoCard } from '../../domain/types';
 import { useCards, useToday } from '../../state/CardsContext';
 import { setViewOnly, useInTrash, usePermissions, useViewOnly } from '../viewOnly';
 import { ScrollJump } from '../ScrollJump';
 import { Comments } from '../Comments';
-import { useCanChangeVaults } from '../VaultChoices';
 import { ReactionsRow } from '../Reactions';
 import { Backlinks, Empty, Page, TagChips, TagPicker, TitleField, useDeleteCard, VaultField } from '../components';
 import { Editor } from '../editor/Editor';
-import { FilterBar, FilterSheet, SortMenu, useJournalFilter, useShowOnly } from '../FilterPanel';
+import { FilterBar, FilterSheet, SortMenu, useJournalFilter } from '../FilterPanel';
 import { Icon } from '../Icon';
 import { MOD } from '../Shortcuts';
 import { LockPanel } from '../LockPanel';
@@ -37,7 +36,6 @@ import { HighlightedCode } from '../highlight';
 import { useToast } from '../Toast';
 import { useUndo } from '../useUndo';
 import { DatesDialog } from '../DatesDialog';
-import { usePopover } from '../usePopover';
 import { Board, BoardSetup, lastBoard, useBoardKind, useCardDrag, type DragParts } from './board';
 import { foldStacks, isStack, moveInStack, stackEntries, stacksOf } from '../../domain/stacks';
 import { openStacks, useTakeOut } from '../useStacking';
@@ -485,9 +483,9 @@ function CardBadges({ card }: { card: NoteCard | TodoCard }) {
 
 /**
  * The vaults an entry is in: its own, where it's kept, then any it's also in, which share it with their members.
- * Pressed, it opens a small menu to filter the journal to one of them (`VaultInfo`); they're changed from the
- * entry's menu (Vaults…). Left out with only one vault, and when the journal already shows its one vault. An entry
- * shared with this account alone, from someone else's vault, says so.
+ * Only a label: they're changed from the entry's menu (Vaults…), and the journal is filtered to one from the
+ * sidebar. Left out with only one vault, and when the journal already shows its one vault. An entry shared with
+ * this account alone, from someone else's vault, says so.
  */
 function VaultLabel({ card }: { card: NoteCard | TodoCard }) {
   const { vaults, shared, sharedInto } = useCards();
@@ -505,69 +503,17 @@ function VaultLabel({ card }: { card: NoteCard | TodoCard }) {
   }
   if (vaults.length < 2) return null;
   if (filter.vaultId && inVaults.length < 2) return null;
-  // The label's gap spaces the names, so each but the last carries its comma.
-  const names = inVaults.map((v, i) => (
-    <span key={v.id} className="bubble__vault-name">
-      {v.lock === 'pin' && <Icon name="lock" size={11} />}
-      {v.name}
-      {i < inVaults.length - 1 && ','}
+  return (
+    // The label's gap spaces the names, so each but the last carries its comma.
+    <span className="bubble__vault" title={`In ${inVaults.map((v) => v.name).join(', ')}`}>
+      {inVaults.map((v, i) => (
+        <span key={v.id} className="bubble__vault-name">
+          {v.lock === 'pin' && <Icon name="lock" size={11} />}
+          {v.name}
+          {i < inVaults.length - 1 && ','}
+        </span>
+      ))}
     </span>
-  ));
-  return (
-    <VaultInfo card={card} inVaults={inVaults} label={inVaults.map((v) => v.name).join(', ')} filtered={filter.vaultId}>
-      {names}
-    </VaultInfo>
-  );
-}
-
-/**
- * An entry's vaults as a menu, so pressing them never jumps somewhere unasked: Show only for each, and for an
- * entry whose vaults can't be changed, why.
- */
-function VaultInfo({ card, inVaults, label, filtered, children }: { card: NoteCard | TodoCard; inVaults: Vault[]; label: string; filtered?: string; children: ReactNode }) {
-  const may = usePermissions();
-  const { open, root, toggle, fixedStyle } = usePopover();
-  const navigate = useNavigate();
-  const showOnly = useShowOnly();
-  const movable = useCanChangeVaults(card);
-  const can = may(card);
-  const why = movable
-    ? null
-    : card.viewOnly
-      ? 'Set to view only, so its vaults can\'t be changed.'
-      : can.sharedBy
-        ? can.note
-        : can.note
-          ? `${can.note}, so its vaults can't be changed.`
-          : 'There\'s no other vault to move it to.';
-  const shown = inVaults.filter((v) => v.id !== filtered);
-  if (!why && !shown.length) {
-    return (
-      <span className="bubble__vault" title={`In ${label}`}>
-        {children}
-      </span>
-    );
-  }
-  return (
-    <div ref={root} className="vault-menu" onClick={(e) => e.stopPropagation()}>
-      <button type="button" className="bubble__vault" aria-haspopup="menu" aria-expanded={!!open} title={`In ${label}`} onClick={toggle}>
-        {children}
-      </button>
-      {open && (
-        <div className={`style-menu${open === 'up' ? ' style-menu--up' : ''}`} style={fixedStyle(220)} role="menu" aria-label="Vaults">
-          {why && <p className="style-menu__note">{why}</p>}
-          {shown.length > 0 && (
-            <div className="style-menu__group">
-              {shown.map((v) => (
-                <button key={v.id} type="button" role="menuitem" onClick={() => navigate(showOnly({ vaultId: v.id }))}>
-                  Show only {v.name}
-                </button>
-              ))}
-            </div>
-          )}
-        </div>
-      )}
-    </div>
   );
 }
 

@@ -57,6 +57,17 @@ export const fetchConfig = () => request<ConfigResponse>('/config');
 export const fetchLinkPreview = (url: string) => request<LinkPreview>('/unfurl', { method: 'POST', body: JSON.stringify({ url }) });
 
 /**
+ * A picture on the web, fetched by the server, since most sites don't let a page fetch their pictures. Throws an
+ * error that says what went wrong.
+ */
+export async function fetchWebPicture(url: string): Promise<Blob> {
+  const res = await rawRequest('/fetch-image', { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ url }) });
+  if (res.ok) return res.blob();
+  const error = ((await res.json().catch(() => ({}))) as { error?: string }).error;
+  throw new Error(error ?? "That picture couldn't be brought in.");
+}
+
+/**
  * What an entry's bubble shows, translated by the server into `to`, or into `otherwise` when it's in `to` already.
  * The server turns down an entry in an encrypted vault.
  */

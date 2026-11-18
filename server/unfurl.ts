@@ -80,17 +80,22 @@ export function parsePreview(html: string, pageUrl: string): LinkPreview {
   };
 }
 
-/** The start of a response body, as text, stopping at `limit` bytes. */
-async function readStart(res: Response, limit: number): Promise<string> {
-  if (!res.body) return '';
+/** A response body up to `limit` bytes, and whether there was more. */
+async function readUpTo(res: Response, limit: number): Promise<{ bytes: Uint8Array<ArrayBuffer>; more: boolean }> {
+  if (!res.body) return { bytes: new Uint8Array(), more: false };
   const reader = res.body.getReader();
   const chunks: Uint8Array[] = [];
   let size = 0;
-  while (size < limit) {
+  let more = false;
+  while (true) {
     const { done, value } = await reader.read();
     if (done) break;
     chunks.push(value);
     size += value.byteLength;
+    if (size > limit) {
+      more = true;
+      break;
+    }
   }
   await reader.cancel().catch(() => undefined);
   const bytes = new Uint8Array(size);
@@ -99,18 +104,21 @@ async function readStart(res: Response, limit: number): Promise<string> {
     bytes.set(c, at);
     at += c.byteLength;
   }
-  return new TextDecoder().decode(bytes.subarray(0, limit));
+  return { bytes: bytes.subarray(0, limit), more };
 }
 
-/** Follows a few redirects itself, checking each address, rather than letting fetch follow them anywhere. */
-async function fetchPage(url: string, fetcher: WebFetch): Promise<{ html: string; url: string } | null> {
+/**
+ * Fetches a public address, following a few redirects itself and checking each one, rather than letting fetch
+ * follow them anywhere. Null for an address that isn't public, or a response that failed or isn't of `type`.
+ */
+async function fetchPublic(url: string, fetcher: WebFetch, accept: string, type: RegExp, timeout: number): Promise<{ res: Response; url: string } | null> {
   let current = url;
   for (let hop = 0; hop <= MAX_REDIRECTS; hop++) {
     if (!isPublicWebUrl(current)) return null;
     const res = await fetcher(current, {
       redirect: 'manual',
-      headers: { accept: 'text/html,application/xhtml+xml', 'user-agent': 'Mozilla/5.0 (compatible; notes-app link preview)' },
-      signal: AbortSignal.timeout(TIMEOUT_MS),
+      headers: { accept, 'user-agent': 'Mozilla/5.0 (compatible; notes-app link preview)' },
+      signal: AbortSignal.timeout(timeout),
     });
     const next = res.headers.get('location');
     if (res.status >= 300 && res.status < 400 && next) {
@@ -118,13 +126,18 @@ async function fetchPage(url: string, fetcher: WebFetch): Promise<{ html: string
       current = new URL(next, current).href;
       continue;
     }
-    if (!res.ok || !/html/i.test(res.headers.get('content-type') ?? '')) {
+    if (!res.ok || !type.test(res.headers.get('content-type') ?? '')) {
       await res.body?.cancel().catch(() => undefined);
       return null;
     }
-    return { html: await readStart(res, MAX_BYTES), url: current };
+    return { res, url: current };
   }
   return null;
+}
+
+async function fetchPage(url: string, fetcher: WebFetch): Promise<{ html: string; url: string } | null> {
+  const page = await fetchPublic(url, fetcher, 'text/html,application/xhtml+xml', /html/i, TIMEOUT_MS);
+  return page && { html: new TextDecoder().decode((await readUpTo(page.res, MAX_BYTES)).bytes), url: page.url };
 }
 
 /** The Workers cache, when there is one. Tests and some local setups have none. */
@@ -154,5 +167,32 @@ export function unfurlRoutes(app: Hono<AppEnv>, fetcher: WebFetch) {
     }
     await cache?.put(key, new Response(JSON.stringify(preview), { headers: { 'content-type': 'application/json', 'cache-control': `max-age=${CACHE_SECONDS}` } }));
     return c.json(preview);
+  });
+}
+
+/** Pictures a device can shrink and keep: not SVG, which is code as much as a picture. */
+const RASTER = /^image\/(jpeg|png|gif|webp|avif|heic|heif|bmp|tiff)\b/i;
+const MAX_IMAGE_BYTES = 10 * 1024 * 1024;
+const IMAGE_TIMEOUT_MS = 10_000;
+
+/**
+ * `POST /fetch-image {url}` returns a picture from the web, for one pasted as an address in a page's HTML (copied
+ * from a web page, or from an app that copies pictures that way). Most sites don't let a page fetch their pictures,
+ * so the server does. The address goes in the body, so it stays out of request logs.
+ */
+export function imageRoutes(app: Hono<AppEnv>, fetcher: WebFetch) {
+  app.post('/fetch-image', async (c) => {
+    const body = await c.req.json<{ url?: unknown }>().catch(() => null);
+    const url = typeof body?.url === 'string' ? body.url.trim() : '';
+    if (!isPublicWebUrl(url)) return c.json({ error: 'That picture’s address can’t be fetched.' }, 400);
+    try {
+      const image = await fetchPublic(url, fetcher, 'image/avif,image/webp,image/png,image/jpeg,image/*;q=0.8', RASTER, IMAGE_TIMEOUT_MS);
+      if (!image) return c.json({ error: 'There’s no picture this app can keep at that address.' }, 422);
+      const { bytes, more } = await readUpTo(image.res, MAX_IMAGE_BYTES);
+      if (more) return c.json({ error: 'That picture is larger than 10 MB.' }, 413);
+      return new Response(bytes, { headers: { 'content-type': image.res.headers.get('content-type')!.split(';')[0].trim(), 'cache-control': 'no-store' } });
+    } catch {
+      return c.json({ error: 'That picture’s site couldn’t be reached.' }, 502);
+    }
   });
 }

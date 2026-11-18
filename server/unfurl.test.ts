@@ -93,3 +93,47 @@ describe('the preview route', () => {
     }
   });
 });
+
+describe('fetching a pasted picture', () => {
+  const png = new Uint8Array([0x89, 0x50, 0x4e, 0x47, 1, 2, 3]);
+  const fetchImage = (call: ReturnType<typeof setup>['call'], cookie: string, url: string) =>
+    call('/api/fetch-image', { method: 'POST', body: JSON.stringify({ url }) }, cookie);
+
+  it('needs a session, and refuses private addresses', async () => {
+    const { call, signIn } = setup({ webFetch: async () => new Response(png, { headers: { 'content-type': 'image/png' } }) });
+    expect((await call('/api/fetch-image', { method: 'POST', body: JSON.stringify({ url: 'https://example.com/a.png' }) })).status).toBe(401);
+    const { cookie } = await signIn('ann');
+    expect((await fetchImage(call, cookie, 'http://192.168.1.1/a.png')).status).toBe(400);
+  });
+
+  it('gives back the picture, following redirects to public addresses only', async () => {
+    const webFetch = async (url: string) => {
+      if (url === 'https://cdn.example/short') return new Response(null, { status: 302, headers: { location: '/real.png' } });
+      if (url === 'https://cdn.example/real.png') return new Response(png, { headers: { 'content-type': 'image/png; charset=binary' } });
+      if (url === 'https://evil.example/') return new Response(null, { status: 302, headers: { location: 'http://169.254.169.254/' } });
+      throw new Error(`unexpected ${url}`);
+    };
+    const { call, signIn } = setup({ webFetch });
+    const { cookie } = await signIn('ann');
+    const res = await fetchImage(call, cookie, 'https://cdn.example/short');
+    expect(res.status).toBe(200);
+    expect(res.headers.get('content-type')).toBe('image/png');
+    expect(new Uint8Array(await res.arrayBuffer())).toEqual(png);
+    expect((await fetchImage(call, cookie, 'https://evil.example/')).status).toBe(422);
+  });
+
+  it('refuses what isn’t a picture it can keep, one too large, and one it can’t reach', async () => {
+    const webFetch = async (url: string) => {
+      if (url.endsWith('.svg')) return new Response('<svg/>', { headers: { 'content-type': 'image/svg+xml' } });
+      if (url.endsWith('.html')) return new Response('<p>', { headers: { 'content-type': 'text/html' } });
+      if (url.endsWith('big.jpg')) return new Response(new Uint8Array(10 * 1024 * 1024 + 1), { headers: { 'content-type': 'image/jpeg' } });
+      throw new TypeError('network down');
+    };
+    const { call, signIn } = setup({ webFetch });
+    const { cookie } = await signIn('ann');
+    expect((await fetchImage(call, cookie, 'https://a.example/x.svg')).status).toBe(422);
+    expect((await fetchImage(call, cookie, 'https://a.example/x.html')).status).toBe(422);
+    expect((await fetchImage(call, cookie, 'https://a.example/big.jpg')).status).toBe(413);
+    expect((await fetchImage(call, cookie, 'https://down.example/x.png')).status).toBe(502);
+  });
+});

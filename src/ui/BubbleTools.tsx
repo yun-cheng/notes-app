@@ -1,6 +1,5 @@
 import type { NoteCard, TodoCard } from '../domain/types';
 import { useCards } from '../state/CardsContext';
-import { useCanRestore, useInTrash, usePermissions } from './viewOnly';
 import { useEntryActions } from './entryActions';
 import { Icon } from './Icon';
 import { useToast } from './Toast';
@@ -9,42 +8,17 @@ import { useUndo } from './useUndo';
 type Entry = NoteCard | TodoCard;
 
 /**
- * The buttons beside a bubble on hover: open it to edit, and ⋯ for the rest, the same menu a right-click on the
- * bubble opens (`useEntryMenu`), which also adds its tags and a todo's due date. Copying it is a button in the bubble's
- * top right corner too. A phone has no hover; a tap opens the entry, whose sheet has every action, and a todo's due date in its
- * bubble can be tapped.
+ * The copy button in a bubble's top right corner, shown on hover, in room the bubble keeps for it so it covers none
+ * of the text. Everything else is in the entry's menu, from a right-click on the bubble (or the menu key, or
+ * Shift+F10), which starts with Edit (`useEntryMenu`). A phone has no hover; a tap opens the entry, whose sheet has
+ * every action, and a todo's due date in its bubble can be tapped.
  */
-export function BubbleTools({ card, open, menu }: { card: Entry; open: (edit?: boolean) => void; menu: { openFrom: (el: HTMLElement) => void; isOpen: boolean } }) {
-  const may = usePermissions();
-  const { copy, restore } = useEntryActions();
-  const trashed = useInTrash();
-  const canRestore = useCanRestore();
-  const can = may(card);
+export function BubbleCopy({ card }: { card: Entry }) {
+  const { copy } = useEntryActions();
   return (
-    <>
-      <span className={`bubble__tools${menu.isOpen ? ' is-open' : ''}`}>
-        {/* In the Trash, Restore where the pencil is; an entry in a trashed stack, not trashed itself, has neither. */}
-        {trashed ? (
-          canRestore(card) && (
-            <button type="button" className="bubble__open" aria-label="Restore" title="Restore: back where it was" onClick={() => void restore([card.id])}>
-              <Icon name="undo" size={16} />
-            </button>
-          )
-        ) : (
-          // A pencil where the entry can be changed; an entry shared only to read just opens.
-          <button type="button" className="bubble__open" aria-label={can.edit ? 'Edit' : 'Open'} title={can.edit ? 'Edit (Enter)' : 'Open (Enter)'} onClick={() => open(can.edit)}>
-            <Icon name={can.edit ? 'edit' : 'open'} size={16} />
-          </button>
-        )}
-        <button type="button" className="bubble__open" aria-label="More" aria-haspopup="menu" aria-expanded={menu.isOpen} title="More (or right-click the entry)" onClick={(e) => menu.openFrom(e.currentTarget)}>
-          <Icon name="more" size={16} />
-        </button>
-      </span>
-      {/* In the bubble's top right corner, in room the bubble keeps for it, so it covers none of the text. */}
-      <button type="button" className="bubble__copy" aria-label="Copy" title="Copy" onClick={() => copy([card.id])}>
-        <Icon name="copy" size={14} />
-      </button>
-    </>
+    <button type="button" className="bubble__copy" aria-label="Copy" title="Copy" onClick={() => copy([card.id])}>
+      <Icon name="copy" size={14} />
+    </button>
   );
 }
 

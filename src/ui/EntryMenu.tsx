@@ -37,8 +37,10 @@ const Shield = ({ children }: { children: ReactNode }) => (
   </div>
 );
 
-/** What a bubble adds to its menu: translating what it shows. */
+/** What a bubble adds to its menu: opening it, and translating what it shows. */
 export interface MenuExtras {
+  /** Opens the entry in its sheet, to edit where it may be changed. */
+  open?: (edit?: boolean) => void;
   translate?: () => void;
   /** Showing a translation: the item takes it away instead. */
   translated?: boolean;
@@ -49,7 +51,7 @@ export interface MenuExtras {
 }
 
 /**
- * An entry's menu: from a right-click on its bubble, or the ⋯ button beside it. A right-click on text selected in
+ * An entry's menu: from a right-click on its bubble, or the menu key or Shift+F10 on it. A right-click on text selected in
  * the bubble gets a menu for those words instead (`TextMenu`). A right-click on a link, or with Shift, gets the
  * browser's own menu. On a touch screen a long press keeps picking the entry; its sheet has every action.
  */
@@ -71,12 +73,6 @@ export function useEntryMenu(card: Entry, extras: MenuExtras = {}) {
       return setAt({ x: r.left + 12, y: r.top + 12 });
     }
     setAt({ x: e.clientX, y: e.clientY });
-  };
-
-  const openFrom = (el: HTMLElement) => {
-    const r = el.getBoundingClientRect();
-    setWords(null);
-    setAt(at ? null : { x: r.left, y: r.bottom + 4 });
   };
 
   const view = (
@@ -101,7 +97,7 @@ export function useEntryMenu(card: Entry, extras: MenuExtras = {}) {
         )}
     </>
   );
-  return { onContextMenu, openFrom, isOpen: !!at, view };
+  return { onContextMenu, view };
 }
 
 interface MenuProps {
@@ -302,14 +298,20 @@ function EntryMenu({ card, at, extras, onShare, onClose }: MenuProps) {
   const to = card.type === 'note' ? 'todo' : 'note';
   const useIt = !viewOnly && !!card.template;
   const saveIt = can.edit && !card.template && !isStack(card);
-  // Opening it, copying it, picking it and ticking a todo have their own buttons on the bubble (the pencil, the copy
-  // button in its corner, the circle beside it, the todo's box), so the menu keeps to the rest. In order: what's on
-  // the entry (tags, dates, its type, its color), then what's done with it (translated, kept as a template,
-  // shared, kept from changes), then where it goes (its vaults, out of its stack, the Archive, the Trash).
+  // Copying it, picking it and ticking a todo have their own buttons on the bubble (the copy button in its corner,
+  // the circle beside it, the todo's box), so the menu keeps to the rest. In order: opening it, then what's on the
+  // entry (tags, dates, its type, its color), then what's done with it (translated, kept as a template, shared, kept
+  // from changes), then where it goes (its vaults, out of its stack, the Archive, the Trash).
   return (
     <ContextMenu at={at} label="Entry" onClose={onClose} layout="entry">
-      {(useIt || can.edit) && (
+      {(extras.open || useIt || can.edit) && (
         <div className="style-menu__group">
+          {/* An entry shared only to read, or set to view only, just opens. */}
+          {extras.open && (
+            <Item icon={can.edit ? 'edit' : 'open'} hint="Enter" onClick={run(() => extras.open!(can.edit))}>
+              {can.edit ? 'Edit' : 'Open'}
+            </Item>
+          )}
           {useIt && (
             <Item icon="template" onClick={run(() => startFrom(card))}>
               Use this template

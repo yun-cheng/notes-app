@@ -27,7 +27,7 @@ import { BatchBar } from '../BatchBar';
 import { SelectionProvider, useBoxSelect, useSelectable, useSelection, useSelectionState } from '../selection';
 import { entries, useEntryActions, writeClipboard } from '../entryActions';
 import { useEntryShortcuts } from '../useEntryShortcuts';
-import { BubbleTools, TypeSwitch, useEntryViewOnly, ViewOnlyButton } from '../BubbleTools';
+import { BubbleCopy, TypeSwitch, useEntryViewOnly, ViewOnlyButton } from '../BubbleTools';
 import { useEntryMenu } from '../EntryMenu';
 import { DueLabel, DueMenu, useTickTodo, WaitingMark } from '../TodoDue';
 import { SyncMark } from '../SyncStatus';
@@ -821,6 +821,7 @@ function useBubble(card: NoteCard | TodoCard, title: string) {
     toast(`Saved as page ${flip.pages.length + 2}`, { action: { label: 'Undo', run: () => void undoAction(action) } });
   };
   const menu = useEntryMenu(card, {
+    open,
     translate: () => void translate(),
     translated: !!done,
     keptIn: kept && !done ? languageName(kept.to) : undefined,
@@ -850,11 +851,11 @@ function useBubble(card: NoteCard | TodoCard, title: string) {
         </button>
       </span>
     ) : null;
-  return { text, flip, open, menu, title: done ? done.pieces[0] : title, translated, ...useSelectable(card.id, open, menu.onContextMenu) };
+  return { text, flip, menu, title: done ? done.pieces[0] : title, translated, ...useSelectable(card.id, open, menu.onContextMenu) };
 }
 
 function NoteBubble({ note, at }: { note: NoteCard; at: number }) {
-  const { text, flip, open, menu, title, translated, selected, handlers } = useBubble(note, note.title.trim());
+  const { text, flip, menu, title, translated, selected, handlers } = useBubble(note, note.title.trim());
   return (
     <div className={`bubble${colorClass(note)}${flipClass(flip)}${selected ? ' is-selected' : ''}`} role="article" aria-current={selected || undefined} {...handlers}>
       {flip.on && <PageLabel at={flip.at} />}
@@ -866,7 +867,7 @@ function NoteBubble({ note, at }: { note: NoteCard; at: number }) {
       )}
       {text.view}
       <BubbleMeta card={note} at={at} fold={text.fold} flip={flip} />
-      <BubbleTools card={note} open={open} menu={menu} />
+      <BubbleCopy card={note} />
       {menu.view}
     </div>
   );
@@ -889,7 +890,7 @@ function StackEntry({ stack, at }: { stack: NoteCard; at: number }) {
   // A stack in the Trash has let its entries go back to the stream; shown there, it lists what restoring it takes back in.
   const of = stack.deleted ? new Map((stack.stack ?? []).filter((id) => !stacksOf(index).has(id)).map((id) => [id, stack.id])) : stacksOf(index);
   const members = stackEntries(stack, index.byId, of);
-  const { text, flip, open, menu, title, translated, selected, handlers } = useBubble(stack, stack.title.trim() || 'Stack');
+  const { text, flip, menu, title, translated, selected, handlers } = useBubble(stack, stack.title.trim() || 'Stack');
   const [expanded, setExpanded] = useState(() => openStacks.has(stack.id));
   const toggle = () => {
     if (expanded) openStacks.delete(stack.id);
@@ -932,7 +933,7 @@ function StackEntry({ stack, at }: { stack: NoteCard; at: number }) {
             </button>
           }
         />
-        <BubbleTools card={stack} open={open} menu={menu} />
+        <BubbleCopy card={stack} />
         {menu.view}
       </div>
       {expanded && <StackCards stack={stack} members={members} />}
@@ -1019,7 +1020,7 @@ function StackCards({ stack, members }: { stack: NoteCard; members: Entry[] }) {
 function TodoBubble({ todo, at }: { todo: TodoCard; at: number }) {
   const may = usePermissions();
   const tick = useTickTodo();
-  const { text, flip, open, menu, title, translated, selected, handlers } = useBubble(todo, displayTitle(todo));
+  const { text, flip, menu, title, translated, selected, handlers } = useBubble(todo, displayTitle(todo));
   const done = todo.status === 'done';
   const waiting = !done && !!todo.waiting;
   return (
@@ -1047,7 +1048,7 @@ function TodoBubble({ todo, at }: { todo: TodoCard; at: number }) {
         {text.view}
         <BubbleMeta card={todo} at={at} fold={text.fold} flip={flip} />
       </div>
-      <BubbleTools card={todo} open={open} menu={menu} />
+      <BubbleCopy card={todo} />
       {menu.view}
     </div>
   );

@@ -909,11 +909,9 @@ body:has(.batch) .toast-slot { bottom: calc(var(--tabbar) + env(safe-area-inset-
 .pick.is-on { border-color: var(--accent); background: var(--accent); }
 .box-select { position: fixed; z-index: 5; border: 1px solid var(--accent); border-radius: 4px; background: color-mix(in srgb, var(--accent) 14%, transparent); pointer-events: none; }
 
-/* A bubble's text can be selected; the open button beside it, Enter, or a tap on a phone opens it. */
+/* A bubble's text can be selected; Edit in its menu, Enter, or a tap on a phone opens it. */
 .bubble { position: relative; color: var(--text); }
 .bubble:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
-.bubble__tools.is-open .bubble__open { opacity: 1; }
-.bubble__tools { position: absolute; top: 2px; left: calc(100% + 4px); z-index: 5; display: grid; grid-template-columns: repeat(2, 28px); gap: 4px; }
 .bubble__copy { position: absolute; top: 5px; right: 5px; display: grid; place-items: center; width: 24px; height: 24px; padding: 0; border: 0; border-radius: 7px; background: none; color: var(--muted); opacity: 0; cursor: pointer; transition: opacity 0.12s; }
 .bubble__copy:hover { color: var(--text); background: color-mix(in srgb, var(--text) 8%, transparent); }
 /* Room for it on the right, kept when it's hidden so nothing moves on hover; the bottom row still runs to the edge. */
@@ -957,12 +955,8 @@ button.reaction:hover { border-color: var(--muted); color: var(--text); }
 /* Past due, in the alert color: the label's own color would otherwise win over `.is-alert`. */
 .due-menu__label.is-alert { color: var(--alert); }
 .due-menu__label .repeat-label { font-weight: 400; }
-.bubble__open { display: grid; place-items: center; width: 28px; height: 28px; padding: 0; border: 1px solid var(--line); border-radius: 50%; background: var(--surface); color: var(--muted); opacity: 0; cursor: pointer; transition: opacity 0.12s; }
-.bubble__open:hover { color: var(--text); border-color: var(--muted); }
-.bubble__open.is-active { color: var(--accent); border-color: var(--accent); }
-.stream__entry:hover .bubble__open, .bubble:focus-within .bubble__open { opacity: 1; }
 .entry-style { position: relative; }
-@media (pointer: coarse) { .bubble__tools, .bubble__copy { display: none; } }
+@media (pointer: coarse) { .bubble__copy { display: none; } }
 .style-menu { position: absolute; top: 32px; left: 0; z-index: 20; width: 232px; padding: 6px; display: flex; flex-direction: column; gap: 6px; background: var(--surface); border: 1px solid var(--line); border-radius: 12px; box-shadow: var(--shadow); cursor: default; }
 .style-menu--up { top: auto; bottom: 32px; }
 @media (max-width: 1100px) { .style-menu { left: auto; right: 0; } }
@@ -1050,9 +1044,6 @@ button.reaction:hover { border-color: var(--muted); color: var(--text); }
 @media (pointer: fine) { .board__card .bubble { user-select: none; -webkit-user-select: none; } }
 .board__card .attachments { max-width: 100%; }
 .board__card:hover { background: none; }
-/* The edit and menu buttons sit inside the card, by its copy button, rather than beside it. */
-.board__card .bubble__tools { left: auto; right: 30px; top: 3px; grid-template-columns: repeat(2, 26px); }
-.board__card .bubble__tools .icon-btn, .board__card .bubble__tools button { background: var(--surface); }
 .board__grip {
   position: absolute; z-index: 2; top: 50%; left: -4px; transform: translateY(-50%); display: grid; place-items: center; width: 18px; height: 30px;
   padding: 0; border: 0; border-radius: 6px; background: var(--surface); color: var(--muted); cursor: grab; opacity: 0; touch-action: none;
@@ -1067,7 +1058,7 @@ button.reaction:hover { border-color: var(--muted); color: var(--text); }
 .board__drop { flex: none; border: 2px dashed color-mix(in srgb, var(--accent) 55%, var(--line)); border-radius: 12px; background: color-mix(in srgb, var(--accent) 8%, transparent); }
 /* `body >` so a card's own position (a stack's are relative, and come later) can't pull the copy off the pointer. */
 body > .board__ghost { position: fixed; z-index: 60; margin: 0; pointer-events: none; opacity: 0.92; box-shadow: var(--shadow); border-radius: 12px; }
-.board__ghost .board__grip, .board__ghost .bubble__tools { display: none; }
+.board__ghost .board__grip { display: none; }
 body.is-dragging-card, body.is-dragging-card * { cursor: grabbing !important; user-select: none !important; -webkit-user-select: none !important; }
 .board__more { align-self: center; }
 .board__add {
@@ -1179,16 +1170,16 @@ html[data-page-turn="front"]::view-transition-new(page-turn) { z-index: 1; anima
 }
 /* The card being dragged waits, faded, where it would land; a copy of it follows the pointer. */
 .stack__card.is-moving { opacity: 0.35; }
-.stack__card.is-moving .board__grip, .stack__card.is-moving .bubble__tools, .stack__card.is-moving .bubble__copy { visibility: hidden; }
+.stack__card.is-moving .board__grip, .stack__card.is-moving .bubble__copy { visibility: hidden; }
 .stack__empty { margin: 4px 0; color: var(--muted); font-size: 14px; }
 .stack-list { margin-top: 10px; }
 .stack-list h3 { margin-bottom: 4px; color: var(--muted); font: 600 12px/1.2 var(--sans); letter-spacing: 0.05em; text-transform: uppercase; }
 .stack-list ol { margin: 0; padding-left: 22px; }
 .stack-list a { color: var(--text); }
 /* In an open stack, a card's own buttons show when it's hovered, not with the whole stack. */
-.stream__entry:hover .stack__card .bubble__copy, .stream__entry:hover .stack__card .bubble__open, .stream__entry:hover .stack__card .bubble__add { opacity: 0; }
-.stream__entry .stack__card:hover .bubble__copy, .stream__entry .stack__card:hover .bubble__open, .stream__entry .stack__card:hover .bubble__add,
-.stream__entry .stack__card .bubble:focus-within .bubble__copy, .stream__entry .stack__card .bubble:focus-within .bubble__open { opacity: 1; }
+.stream__entry:hover .stack__card .bubble__copy, .stream__entry:hover .stack__card .bubble__add { opacity: 0; }
+.stream__entry .stack__card:hover .bubble__copy, .stream__entry .stack__card:hover .bubble__add,
+.stream__entry .stack__card .bubble:focus-within .bubble__copy { opacity: 1; }
 
 /* The month: weeks of days, each with its todos as chips in rows that keep a span on one line through the week. */
 .month { display: flex; flex-direction: column; gap: 3px; }

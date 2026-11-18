@@ -667,8 +667,16 @@ a.change__title:hover { color: var(--accent); }
 /* The stream keeps its own place when older entries are drawn above, so the browser's own adjusting stays out of it. */
 .stream { overflow-anchor: none; }
 .stream__more { align-self: center; }
-.bubble--todo { flex-direction: row; align-items: flex-start; gap: 4px; padding-left: 6px; }
-.bubble--todo .check { height: 24px; margin: 0; }
+/*
+ * A todo: its box beside its title and text, and its tags and bottom row under both, from the bubble's edge.
+ * The body's rows are laid out in the bubble's grid.
+ */
+.bubble--todo { display: grid; grid-template-columns: auto minmax(0, 1fr); align-items: start; column-gap: 4px; row-gap: 2px; padding-left: 6px; }
+.bubble--todo .check { grid-column: 1; grid-row: 1; height: 24px; margin: 0; }
+.bubble--todo .bubble__body { display: contents; }
+.bubble--todo .bubble__body > * { grid-column: 2; }
+.bubble--todo .bubble__body > .bubble__tags,
+.bubble--todo .bubble__body > .bubble__meta { grid-column: 1 / -1; padding-left: 6px; }
 .bubble__body { display: flex; flex-direction: column; gap: 2px; min-width: 0; }
 .bubble--todo .bubble__title { font-weight: 400; }
 .bubble--todo.is-done .bubble__title { color: var(--muted); }

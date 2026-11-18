@@ -1,10 +1,8 @@
 import type { NoteCard, TodoCard } from '../domain/types';
 import { useCards } from '../state/CardsContext';
 import { useCanRestore, useInTrash, usePermissions } from './viewOnly';
-import { TagPicker } from './components';
 import { useEntryActions } from './entryActions';
 import { Icon } from './Icon';
-import { usePopover } from './usePopover';
 import { useToast } from './Toast';
 import { useUndo } from './useUndo';
 
@@ -12,8 +10,8 @@ type Entry = NoteCard | TodoCard;
 
 /**
  * The buttons beside a bubble on hover: open it to edit, and ⋯ for the rest, the same menu a right-click on the
- * bubble opens (`useEntryMenu`). Copying it is a button in the bubble's top right corner too. Its tags and a todo's due date are changed in their row over the bottom row; the buttons that add the first of them
- * always sit in that row, the date's on its right (`AddTag` and `DueMenu`). A phone has no hover; a tap opens the entry, whose sheet has every action, and a todo's due date in its
+ * bubble opens (`useEntryMenu`), which also adds its tags and a todo's due date. Copying it is a button in the bubble's
+ * top right corner too. A phone has no hover; a tap opens the entry, whose sheet has every action, and a todo's due date in its
  * bubble can be tapped.
  */
 export function BubbleTools({ card, open, menu }: { card: Entry; open: (edit?: boolean) => void; menu: { openFrom: (el: HTMLElement) => void; isOpen: boolean } }) {
@@ -59,25 +57,6 @@ export function TypeSwitch({ card, className, size }: { card: NoteCard | TodoCar
     <button type="button" className={className} aria-label={label} title={label} onClick={() => void retype(card.id, to)}>
       <Icon name={to} size={size} />
     </button>
-  );
-}
-
-/** A button after a bubble's tags, shown on hover, that changes them. */
-export function AddTag({ card }: { card: Entry }) {
-  const { repo } = useCards();
-  const { open, root, toggle, fixedStyle } = usePopover();
-  return (
-    // Clicks in the menu stay out of the bubble's own click handling (picking, opening).
-    <div ref={root} className={`bubble-menu${open ? ' is-open' : ''}`} onClick={(e) => e.stopPropagation()}>
-      <button type="button" className="bubble__add" aria-haspopup="dialog" aria-expanded={!!open} aria-label="Tags" title="Tags" onClick={toggle}>
-        <Icon name="tag" size={12} />
-      </button>
-      {open && (
-        <div className={`style-menu tag-menu${open === 'up' ? ' style-menu--up' : ''}`} style={fixedStyle(280)} role="dialog" aria-label="Tags">
-          <TagPicker tagIds={card.tags} onChange={(tags) => void repo.update(card.id, { tags })} autoFocus />
-        </div>
-      )}
-    </div>
   );
 }
 

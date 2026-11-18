@@ -926,7 +926,7 @@ body:has(.batch) .toast-slot { bottom: calc(var(--tabbar) + env(safe-area-inset-
 .bubble__add:hover { color: var(--text); border-color: var(--muted); }
 .stream__entry:hover .bubble__add, .bubble:focus-within .bubble__add, .is-open > .bubble__add { opacity: 1; }
 /* Without hover they're gone, taking no room in the row: its reactions start at the bubble's edge. */
-@media (pointer: coarse) { .bubble__add, .bubble-menu:has(> .bubble__add:only-child), .bubble__tags--empty { display: none; } }
+@media (pointer: coarse) { .bubble__add, .bubble-menu:has(> .bubble__add:only-child) { display: none; } }
 .bubble-menu { position: relative; display: flex; }
 /* Reactions: in a bubble's bottom row on the left, and under the tags in its sheet. */
 .reactions { display: inline-flex; flex-wrap: wrap; align-items: center; gap: 4px; }
@@ -1007,6 +1007,13 @@ button.reaction:hover { border-color: var(--muted); color: var(--text); }
 .context-menu .style-menu__group > .context-menu__item:focus-visible { outline: none; background: var(--sunken); }
 .context-menu .style-menu__group > .context-menu__item[aria-checked="true"]::before { content: none; }
 .context-menu__tick { margin-left: auto; display: inline-flex; color: var(--accent); }
+/* A panel the menu opens into, Tags or Due date, in its place. */
+.context-menu--wide { width: 280px; padding: 6px 10px 10px; }
+.context-menu__header { display: flex; align-items: center; gap: 4px; margin: 0 0 2px -4px; font-size: 13px; font-weight: 600; }
+.context-menu__header .icon-btn { width: 28px; height: 28px; }
+.context-menu--wide .tag-picker { margin: 0; }
+.context-menu--wide .tag-picker__input, .context-menu--wide .tag-picker__input:focus { width: 100%; }
+.context-menu__panel { display: flex; flex-direction: column; gap: 8px; }
 .context-menu__item--danger, .context-menu__item--danger > svg { color: var(--alert); }
 /* A row beside its bubble is clickable too, to pick it. */
 .stream__entry { border-radius: 12px; }

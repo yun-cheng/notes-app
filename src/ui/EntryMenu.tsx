@@ -8,7 +8,8 @@ import { ColorSwatches } from './EntryStyle';
 import { Icon, type IconName } from './Icon';
 import { useSelection } from './selection';
 import { ShareDialog } from './ShareDialog';
-import { useTickTodo, useToggleWaiting } from './TodoDue';
+import { DuePanel, useTickTodo, useToggleWaiting } from './TodoDue';
+import { TagPicker } from './components';
 import { useCanRestore, useInTrash, usePermissions, useViewOnly } from './viewOnly';
 import { useStartFromTemplate, useToggleTemplate } from './useTemplates';
 import { useTakeOut } from './useStacking';
@@ -50,7 +51,7 @@ export interface MenuExtras {
  * the bubble gets a menu for those words instead (`TextMenu`). A right-click on a link, or with Shift, gets the
  * browser's own menu. On a touch screen a long press keeps picking the entry; its sheet has every action.
  */
-export function useEntryMenu(card: Entry, open: (edit?: boolean) => void, extras: MenuExtras = {}) {
+export function useEntryMenu(card: Entry, extras: MenuExtras = {}) {
   const [at, setAt] = useState<Point | null>(null);
   const [words, setWords] = useState<string | null>(null);
   const [sharing, setSharing] = useState(false);
@@ -84,7 +85,7 @@ export function useEntryMenu(card: Entry, open: (edit?: boolean) => void, extras
             {words ? (
               <TextMenu card={card} words={words} at={at} onClose={() => setAt(null)} />
             ) : (
-              <EntryMenu card={card} at={at} open={open} extras={extras} onShare={() => setSharing(true)} onClose={() => setAt(null)} />
+              <EntryMenu card={card} at={at} extras={extras} onShare={() => setSharing(true)} onClose={() => setAt(null)} />
             )}
           </Shield>,
           document.body,
@@ -104,7 +105,6 @@ export function useEntryMenu(card: Entry, open: (edit?: boolean) => void, extras
 interface MenuProps {
   card: Entry;
   at: Point;
-  open: (edit?: boolean) => void;
   extras: MenuExtras;
   onShare: () => void;
   onClose: () => void;
@@ -170,8 +170,9 @@ function TextMenu({ card, words, at, onClose }: { card: Entry; words: string; at
 }
 
 /** What one entry can do, or, right-clicked among several picked ones, what all of them can. */
-function EntryMenu({ card, at, open, extras, onShare, onClose }: MenuProps) {
+function EntryMenu({ card, at, extras, onShare, onClose }: MenuProps) {
   const { repo, index } = useCards();
+  const [panel, setPanel] = useState<'tags' | 'due' | null>(null);
   const may = usePermissions();
   const actions = useEntryActions();
   const tick = useTickTodo();
@@ -203,18 +204,21 @@ function EntryMenu({ card, at, open, extras, onShare, onClose }: MenuProps) {
     return (
       <ContextMenu at={at} label={several ? `${n} selected` : 'Entry'} onClose={onClose}>
         <div className="style-menu__group">
+          {/* One entry is copied and picked from its bubble; several picked together, here. */}
           {several && <span className="style-menu__label">{n} selected</span>}
-          <Item icon="copy" onClick={run(() => actions.copy(ids))}>
-            Copy
-          </Item>
+          {several && (
+            <Item icon="copy" onClick={run(() => actions.copy(ids))}>
+              Copy
+            </Item>
+          )}
           {!several && extras.translate && (
             <Item icon="translate" onClick={run(extras.translate)}>
               {extras.translated ? 'Show original' : extras.keptIn ? `Show in ${extras.keptIn}` : extras.translatesHere ? 'Translate' : 'Translate with Google'}
             </Item>
           )}
-          {selection && (
-            <Item icon="check" onClick={run(() => (several ? selection.clear() : selection.toggle(card.id)))}>
-              {several ? 'Stop selecting' : selection.has(card.id) ? 'Unselect' : 'Select'}
+          {several && (
+            <Item icon="check" onClick={run(() => selection!.clear())}>
+              Stop selecting
             </Item>
           )}
         </div>
@@ -266,33 +270,59 @@ function EntryMenu({ card, at, open, extras, onShare, onClose }: MenuProps) {
     );
   }
 
+  // Tags and a todo's dates open in the menu's place, for an entry without any to show in its bubble too.
+  if (panel === 'tags') {
+    return (
+      <ContextMenu at={at} label="Tags" onClose={onClose} wide layout={panel}>
+        <PanelHeader title="Tags" onBack={() => setPanel(null)} />
+        <TagPicker tagIds={card.tags} onChange={(tags) => void repo.update(card.id, { tags })} autoFocus />
+      </ContextMenu>
+    );
+  }
+  if (panel === 'due' && card.type === 'todo') {
+    return (
+      <ContextMenu at={at} label="Due date" onClose={onClose} wide layout={panel}>
+        <PanelHeader title="Due date" onBack={() => setPanel(null)} />
+        <div className="context-menu__panel">
+          <DuePanel card={card} onDone={onClose} />
+        </div>
+      </ContextMenu>
+    );
+  }
+
   const to = card.type === 'note' ? 'todo' : 'note';
   const done = card.type === 'todo' && card.status === 'done';
+  // Opening it, copying it and picking it have their own buttons on the bubble (the pencil, the copy button in its
+  // corner, the circle beside it), so the menu keeps to the rest.
+  const top = !!extras.translate || (!viewOnly && !!card.template);
   return (
-    <ContextMenu at={at} label="Entry" onClose={onClose}>
-      <div className="style-menu__group">
-        <Item icon={can.edit ? 'edit' : 'open'} hint="Enter" onClick={run(() => open(can.edit))}>
-          {can.edit ? 'Edit' : 'Open'}
-        </Item>
-        <Item icon="copy" onClick={run(() => actions.copy([card.id]))}>
-          Copy
-        </Item>
-        {extras.translate && (
-          <Item icon="translate" onClick={run(extras.translate)}>
-            {extras.translated ? 'Show original' : extras.keptIn ? `Show in ${extras.keptIn}` : extras.translatesHere ? 'Translate' : 'Translate with Google'}
+    <ContextMenu at={at} label="Entry" onClose={onClose} layout="entry">
+      {top && (
+        <div className="style-menu__group">
+          {extras.translate && (
+            <Item icon="translate" onClick={run(extras.translate)}>
+              {extras.translated ? 'Show original' : extras.keptIn ? `Show in ${extras.keptIn}` : extras.translatesHere ? 'Translate' : 'Translate with Google'}
+            </Item>
+          )}
+          {!viewOnly && card.template && (
+            <Item icon="template" onClick={run(() => startFrom(card))}>
+              Use this template
+            </Item>
+          )}
+        </div>
+      )}
+      {can.edit && (
+        <div className="style-menu__group">
+          <Item icon="tag" onClick={() => setPanel('tags')}>
+            Tags…
           </Item>
-        )}
-        {!viewOnly && card.template && (
-          <Item icon="template" onClick={run(() => startFrom(card))}>
-            Use this template
-          </Item>
-        )}
-        {selection && (
-          <Item icon="check" onClick={run(() => selection.toggle(card.id))}>
-            {selection.has(card.id) ? 'Unselect' : 'Select'}
-          </Item>
-        )}
-      </div>
+          {card.type === 'todo' && (
+            <Item icon="calendar" onClick={() => setPanel('due')}>
+              Due date…
+            </Item>
+          )}
+        </div>
+      )}
       {can.edit && (
         <div className="style-menu__group">
           {card.type === 'todo' && (
@@ -356,6 +386,18 @@ function EntryMenu({ card, at, open, extras, onShare, onClose }: MenuProps) {
   );
 }
 
+/** The top of a panel the menu opened into: what it is, and a way back to the menu. */
+function PanelHeader({ title, onBack }: { title: string; onBack: () => void }) {
+  return (
+    <div className="context-menu__header">
+      <button type="button" className="icon-btn" aria-label="Back to the menu" title="Back" onClick={onBack}>
+        <Icon name="left" size={16} />
+      </button>
+      <span>{title}</span>
+    </div>
+  );
+}
+
 interface ItemProps {
   icon: IconName;
   onClick: () => void;
@@ -392,7 +434,7 @@ function Item({ icon, onClick, children, hint, checked, danger }: ItemProps) {
  * A menu at a point on the screen, kept inside it. Arrow keys move through its items, and a press outside it,
  * Escape, scrolling or leaving the window closes it. Escape comes before the page's own (stop picking).
  */
-function ContextMenu({ at, label, onClose, children }: { at: Point; label: string; onClose: () => void; children: ReactNode }) {
+function ContextMenu({ at, label, onClose, children, wide, layout }: { at: Point; label: string; onClose: () => void; children: ReactNode; wide?: boolean; layout?: string }) {
   const ref = useRef<HTMLDivElement>(null);
   const [pos, setPos] = useState<{ left: number; top: number } | null>(null);
   const close = useRef(onClose);
@@ -406,8 +448,10 @@ function ContextMenu({ at, label, onClose, children }: { at: Point; label: strin
     const left = Math.max(8, Math.min(at.x, window.innerWidth - width - 8));
     const top = at.y + height > window.innerHeight - 8 ? Math.max(8, at.y - height) : at.y;
     setPos({ left, top });
-    el.focus();
-  }, [at.x, at.y]);
+    // A panel with a field of its own (`autoFocus`) keeps it.
+    if (!el.contains(document.activeElement)) el.focus();
+    // Placed again when it shows a panel instead, which is bigger.
+  }, [at.x, at.y, layout]);
 
   useEffect(() => {
     const shut = () => close.current();
@@ -423,13 +467,17 @@ function ContextMenu({ at, label, onClose, children }: { at: Point; label: strin
     };
     document.addEventListener('pointerdown', away, true);
     window.addEventListener('keydown', onKey, true);
-    window.addEventListener('scroll', shut, true);
+    // Scrolling the page closes it; scrolling a list inside it doesn't.
+    const onScroll = (e: Event) => {
+      if (!(e.target instanceof Node) || !ref.current?.contains(e.target)) shut();
+    };
+    window.addEventListener('scroll', onScroll, true);
     window.addEventListener('resize', shut);
     window.addEventListener('blur', shut);
     return () => {
       document.removeEventListener('pointerdown', away, true);
       window.removeEventListener('keydown', onKey, true);
-      window.removeEventListener('scroll', shut, true);
+      window.removeEventListener('scroll', onScroll, true);
       window.removeEventListener('resize', shut);
       window.removeEventListener('blur', shut);
     };
@@ -448,7 +496,7 @@ function ContextMenu({ at, label, onClose, children }: { at: Point; label: strin
   return (
     <div
       ref={ref}
-      className="style-menu context-menu"
+      className={`style-menu context-menu${wide ? ' context-menu--wide' : ''}`}
       role="menu"
       aria-label={label}
       tabIndex={-1}

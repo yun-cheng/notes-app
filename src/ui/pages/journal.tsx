@@ -27,7 +27,7 @@ import { BatchBar } from '../BatchBar';
 import { SelectionProvider, useBoxSelect, useSelectable, useSelection, useSelectionState } from '../selection';
 import { entries, useEntryActions, writeClipboard } from '../entryActions';
 import { useEntryShortcuts } from '../useEntryShortcuts';
-import { AddTag, BubbleTools, TypeSwitch, useEntryViewOnly, ViewOnlyButton } from '../BubbleTools';
+import { BubbleTools, TypeSwitch, useEntryViewOnly, ViewOnlyButton } from '../BubbleTools';
 import { useEntryMenu } from '../EntryMenu';
 import { DueLabel, DueMenu, useTickTodo, WaitingMark } from '../TodoDue';
 import { SyncMark } from '../SyncStatus';
@@ -402,24 +402,20 @@ function BubbleMeta({ card, at, fold, flip, lead }: { card: NoteCard | TodoCard;
   const may = usePermissions();
   // A grouped tag (Priority: High) can be switched right here.
   const retag = may(card).edit ? (tags: string[]) => void repo.update(card.id, { tags }) : undefined;
-  // An entry's tags and a todo's dates share a row over the rest: the tags on the left, the dates on the right. An
-  // entry that can be changed always has it, for the buttons that add the first of them, so the bottom row keeps to
-  // what it says; without hover those buttons are gone, and so is a row with nothing else in it.
+  // An entry's tags and a todo's dates share a row over the rest: the tags on the left, the dates on the right. The
+  // first of either is added from the entry's menu, so nothing waits on hover for them.
   const tagged = resolveTags(index, card.tags).length > 0;
   const dated = card.type === 'todo' && !!(card.due || card.start);
   const waiting = card.type === 'todo' && card.waiting && card.status === 'open';
-  const row = tagged || dated || !!retag;
   return (
     <>
-      {row && (
-        <span className={`bubble__tags${tagged || dated ? '' : ' bubble__tags--empty'}`}>
+      {(tagged || dated) && (
+        <span className="bubble__tags">
           <TagChips tagIds={card.tags} onChange={retag} />
-          {retag && <AddTag card={card} />}
-          {/* A todo's dates on the right, or the button that adds the first. */}
-          {card.type === 'todo' && (dated || retag) && (
+          {dated && (
             <span className="bubble__dates">
-              {dated && waiting && <WaitingMark />}
-              {retag ? <DueMenu card={card} look={dated ? 'label' : 'add'} /> : <DueLabel todo={card} className="bubble__due" />}
+              {waiting && <WaitingMark />}
+              {retag ? <DueMenu card={card} look="label" /> : <DueLabel todo={card} className="bubble__due" />}
             </span>
           )}
         </span>
@@ -976,7 +972,7 @@ function useBubble(card: NoteCard | TodoCard, title: string) {
     void repo.update(card.id, withNewPage(card, translationPage(pieces)));
     toast(`Saved as page ${flip.pages.length + 2}`, { action: { label: 'Undo', run: () => void undoAction(action) } });
   };
-  const menu = useEntryMenu(card, open, {
+  const menu = useEntryMenu(card, {
     translate: () => void translate(),
     translated: !!done,
     keptIn: kept && !done ? languageName(kept.to) : undefined,

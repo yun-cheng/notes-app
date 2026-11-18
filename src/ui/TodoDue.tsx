@@ -139,22 +139,15 @@ function useDueEdits(card: TodoCard) {
 
 /**
  * A todo's due date, time and repeat, in a menu. Its button is, by `look`: a calendar showing when it's due, in an
- * open todo's bottom bar; the "Due today" in a bubble, which a phone can tap too; or, for a todo with no date, a
- * small calendar in its bubble's bottom row, shown on hover. The menu sits fixed beside the button, so a sheet that
- * scrolls doesn't clip it.
+ * open todo's bottom bar, or the "Due today" in a bubble, which a phone can tap too. A todo with no date gets one
+ * from its bubble's menu (`DuePanel` there). The menu sits fixed beside the button, so a sheet that scrolls doesn't
+ * clip it.
  */
-export function DueMenu({ card, look = 'bar' }: { card: TodoCard; look?: 'bar' | 'add' | 'label' }) {
+export function DueMenu({ card, look = 'bar' }: { card: TodoCard; look?: 'bar' | 'label' }) {
   const { open, root, toggle, fixedStyle, close } = usePopover();
-  const edits = useDueEdits(card);
-  const toggleWaiting = useToggleWaiting();
-  const { today } = edits;
-  const quick = [
-    ['Today', today],
-    ['Tomorrow', addDays(today, 1)],
-    ['In a week', addDays(today, 7)],
-  ] as const;
+  const today = useToday();
   const overdue = isOverdue(card, today) ? ' is-alert' : '';
-  const looks = { bar: `due-menu__btn${open ? ' is-active' : ''}${overdue}`, add: 'bubble__add', label: `due-menu__label bubble__due${overdue}` };
+  const looks = { bar: `due-menu__btn${open ? ' is-active' : ''}${overdue}`, label: `due-menu__label bubble__due${overdue}` };
   return (
     // Clicks in the menu stay out of a bubble's own click handling (picking, opening).
     <div ref={root} className={`due-menu${open ? ' is-open' : ''}`} onClick={(e) => e.stopPropagation()}>
@@ -179,61 +172,78 @@ export function DueMenu({ card, look = 'bar' }: { card: TodoCard; look?: 'bar' |
           </>
         ) : (
           <>
-            <Icon name="calendar" size={look === 'add' ? 12 : 18} />
-            {look === 'bar' && (card.due || card.start) && <span>{dueText(card, today, true)}</span>}
-            {look === 'bar' && card.repeat && <Icon name="repeat" size={12} />}
+            <Icon name="calendar" size={18} />
+            {(card.due || card.start) && <span>{dueText(card, today, true)}</span>}
+            {card.repeat && <Icon name="repeat" size={12} />}
           </>
         )}
       </button>
       {open && (
         <div className={`style-menu due-menu__panel${open === 'up' ? ' style-menu--up' : ''}`} style={fixedStyle(260)} role="dialog" aria-label="Due date">
-          <div className="due-menu__quick">
-            {quick.map(([label, date]) => (
-              <button key={label} type="button" className="btn" aria-pressed={card.due === date} onClick={() => edits.setDate(date)}>
-                {label}
-              </button>
-            ))}
-          </div>
-          <label className="due-menu__row">
-            <span>Date</span>
-            <input type="date" value={card.due ?? ''} onChange={(e) => edits.setDate(e.target.value)} />
-          </label>
-          <label className="due-menu__row">
-            <span>Time</span>
-            <input type="time" value={card.dueTime ?? ''} onChange={(e) => edits.setTime(e.target.value)} />
-          </label>
-          <label className="due-menu__row">
-            <span>Repeat</span>
-            {edits.repeatSelect(true)}
-          </label>
-          <label className="due-menu__row" title="The day work on it starts: the calendar and the timeline show it from then until it's due">
-            <span>Starts</span>
-            <input type="date" value={card.start ?? ''} max={card.due ?? undefined} onChange={(e) => edits.setStart(e.target.value)} />
-          </label>
-          {card.status === 'open' && (
-            <label className="due-menu__waiting">
-              <input type="checkbox" checked={!!card.waiting} onChange={() => toggleWaiting(card)} />
-              <span>
-                Waiting
-                <small>On someone or something: not due, never overdue</small>
-              </span>
-            </label>
-          )}
-          {card.due && (
-            <button
-              type="button"
-              className="btn btn--quiet due-menu__clear"
-              onClick={() => {
-                edits.clear();
-                close();
-              }}
-            >
-              No due date
-            </button>
-          )}
+          <DuePanel card={card} onDone={close} />
         </div>
       )}
     </div>
+  );
+}
+
+/** What the due-date menu holds: quick dates, the date, time, repeat and start, waiting, and No due date, which `onDone` closes it after. */
+export function DuePanel({ card, onDone }: { card: TodoCard; onDone: () => void }) {
+  const edits = useDueEdits(card);
+  const toggleWaiting = useToggleWaiting();
+  const { today } = edits;
+  const quick = [
+    ['Today', today],
+    ['Tomorrow', addDays(today, 1)],
+    ['In a week', addDays(today, 7)],
+  ] as const;
+  return (
+    <>
+      <div className="due-menu__quick">
+        {quick.map(([label, date]) => (
+          <button key={label} type="button" className="btn" aria-pressed={card.due === date} onClick={() => edits.setDate(date)}>
+            {label}
+          </button>
+        ))}
+      </div>
+      <label className="due-menu__row">
+        <span>Date</span>
+        <input type="date" value={card.due ?? ''} onChange={(e) => edits.setDate(e.target.value)} />
+      </label>
+      <label className="due-menu__row">
+        <span>Time</span>
+        <input type="time" value={card.dueTime ?? ''} onChange={(e) => edits.setTime(e.target.value)} />
+      </label>
+      <label className="due-menu__row">
+        <span>Repeat</span>
+        {edits.repeatSelect(true)}
+      </label>
+      <label className="due-menu__row" title="The day work on it starts: the calendar and the timeline show it from then until it's due">
+        <span>Starts</span>
+        <input type="date" value={card.start ?? ''} max={card.due ?? undefined} onChange={(e) => edits.setStart(e.target.value)} />
+      </label>
+      {card.status === 'open' && (
+        <label className="due-menu__waiting">
+          <input type="checkbox" checked={!!card.waiting} onChange={() => toggleWaiting(card)} />
+          <span>
+            Waiting
+            <small>On someone or something: not due, never overdue</small>
+          </span>
+        </label>
+      )}
+      {card.due && (
+        <button
+          type="button"
+          className="btn btn--quiet due-menu__clear"
+          onClick={() => {
+            edits.clear();
+            onDone();
+          }}
+        >
+          No due date
+        </button>
+      )}
+    </>
   );
 }
 

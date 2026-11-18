@@ -379,6 +379,7 @@ export class CardRepository {
   }
 
   createTodo(init: {
+    id?: string;
     title: string;
     due?: string | null;
     dueTime?: string | null;
@@ -396,7 +397,7 @@ export class CardRepository {
   } & EntryExtras): Promise<Card> {
     const action = this.acting();
     return this.enqueue(async () => {
-      const envelope = await this.newEnvelope(this.newId(), init.vaultId, init.createdAt);
+      const envelope = await this.newEnvelope(init.id ?? this.newId(), init.vaultId, init.createdAt);
       return this.write({
         ...envelope,
         type: 'todo',

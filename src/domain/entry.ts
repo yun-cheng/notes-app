@@ -30,6 +30,12 @@ export interface Entry {
   repeat?: Repeat;
   /** A todo already ticked, typed as `[x] ` or a ticked checkbox. */
   done?: boolean;
+  /** An imported file's: the ID it's saved under, so other files' links can reach it before it's made. */
+  id?: string;
+  /** When an imported file says it was written. */
+  createdAt?: number;
+  /** An imported template. */
+  template?: boolean;
 }
 
 /** `[] `, `[ ] `, `[x] ` or `TODO ` at the start of a line. A space after the brackets is optional. */

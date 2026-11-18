@@ -1,5 +1,6 @@
 import { useEffect, useRef, useState, type ChangeEvent } from 'react';
 import { makeBackup, markdownFiles, parseBackup, zipMarkdown } from '../../domain/backup';
+import { filesFromZip, IMPORT_LIMIT, IMPORTABLE, readImport, type TextFile } from '../../domain/importNotes';
 import { isDemoAccount } from '../../auth/account';
 import { useAccount } from '../../auth/AuthContext';
 import { useCards, useSyncStatus, useToday } from '../../state/CardsContext';
@@ -9,6 +10,8 @@ import { ClipboardSection } from '../ClipboardSection';
 import { DisplaySection } from '../DisplaySection';
 import { RemindersSection } from '../RemindersSection';
 import { useToast } from '../Toast';
+import { useSaveEntries } from '../useSaveEntry';
+import { useUndo } from '../useUndo';
 import { AiAppsSection } from './ai';
 import { PhotosSection } from './photosSettings';
 
@@ -29,6 +32,9 @@ export function SettingsPage() {
   const toast = useToast();
   const [persisted, setPersisted] = useState<boolean | null>(null);
   const fileInput = useRef<HTMLInputElement>(null);
+  const importInput = useRef<HTMLInputElement>(null);
+  const { saveEntries } = useSaveEntries();
+  const { undoAction } = useUndo();
 
   useEffect(() => {
     void navigator.storage?.persisted?.().then(setPersisted);
@@ -55,6 +61,30 @@ export function SettingsPage() {
       toast(`Restored: ${r.added} added, ${r.updated} updated, ${r.skipped} already current`);
     } catch (err) {
       toast(err instanceof Error ? err.message : 'That backup could not be restored.');
+    }
+  };
+
+  const importFiles = async (e: ChangeEvent<HTMLInputElement>) => {
+    const picked = [...(e.target.files ?? [])];
+    e.target.value = '';
+    if (!picked.length) return;
+    try {
+      const files: TextFile[] = [];
+      for (const file of picked) {
+        if (/\.zip$/i.test(file.name)) files.push(...filesFromZip(new Uint8Array(await file.arrayBuffer())));
+        else if (IMPORTABLE.test(file.name)) files.push({ path: file.name, text: await file.text(), modified: file.lastModified || undefined });
+      }
+      if (!files.length) return toast('No Markdown or text files to import there');
+      if (files.length > IMPORT_LIMIT) return toast(`That's ${files.length} files; import up to ${IMPORT_LIMIT} at a time`);
+      const plan = readImport(files, index, repo.newId);
+      const left = [plan.already && `${plan.already} already here`, plan.skipped && `${plan.skipped} skipped`].filter(Boolean).join(', ');
+      if (!plan.entries.length) return toast(`Nothing new to import${left ? ` (${left})` : ''}`);
+      const { saved, action } = await saveEntries(plan.entries);
+      if (!saved) return;
+      toast(`Imported ${saved} ${saved === 1 ? 'entry' : 'entries'}${left ? `; ${left}` : ''}`, action ? { action: { label: 'Undo', run: () => void undoAction(action) } } : undefined);
+    } catch (err) {
+      console.error('Import failed', err);
+      toast('Those files could not be imported.');
     }
   };
 
@@ -103,6 +133,18 @@ export function SettingsPage() {
             Export as Markdown
           </button>
           <input ref={fileInput} type="file" accept="application/json,.json" hidden onChange={(e) => void restore(e)} />
+        </div>
+      </Section>
+      <Section title="Import">
+        <p className="prose-note">
+          Bring in notes from Markdown or text files, or a zip of them, like a folder from Obsidian or Bear, or this app's Markdown export. Each file becomes an entry, titled by its
+          front matter, its first heading or its name, with the front matter's tags, date and todo fields. Links between the files are kept.
+        </p>
+        <div className="button-row">
+          <button type="button" className="btn" onClick={() => importInput.current?.click()}>
+            Import Markdown
+          </button>
+          <input ref={importInput} type="file" multiple accept=".md,.markdown,.mdown,.txt,.zip,text/markdown,text/plain,application/zip" hidden onChange={(e) => void importFiles(e)} />
         </div>
       </Section>
       <RemindersSection />

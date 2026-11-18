@@ -1006,6 +1006,15 @@ button.reaction:hover { border-color: var(--muted); color: var(--text); }
 .context-menu__header .icon-btn { width: 28px; height: 28px; }
 .context-menu--wide .tag-picker { margin: 0; }
 .context-menu--wide .tag-picker__input, .context-menu--wide .tag-picker__input:focus { width: 100%; }
+/* In an entry's menu, each tag group as a row of its tags under the field. Only the entry's are filled (in their
+   tag's color, if it has one), so a tag's color doesn't read as picked. */
+.tag-groups { display: flex; flex-direction: column; gap: 6px; max-height: 220px; margin-top: 10px; padding-top: 10px; border-top: 1px solid var(--line); overflow-y: auto; overscroll-behavior: contain; }
+.tag-groups__row { display: flex; align-items: center; gap: 8px; }
+.tag-groups__name { flex: 0 0 64px; overflow: hidden; color: var(--muted); font-size: 12px; font-weight: 600; text-overflow: ellipsis; white-space: nowrap; }
+.tag-groups .chips { gap: 4px; }
+.tag-groups .chip:not(.is-on) { background: none; color: var(--muted); }
+.tag-groups .chip.is-on { border-color: var(--accent); color: var(--text); font-weight: 600; }
+.tag-groups .chip.is-on:not(.tint) { background: var(--accent-soft); }
 .context-menu__panel { display: flex; flex-direction: column; gap: 8px; }
 .context-menu__item--danger, .context-menu__item--danger > svg { color: var(--alert); }
 /* A row beside its bubble is clickable too, to pick it. */

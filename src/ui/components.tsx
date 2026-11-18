@@ -305,13 +305,20 @@ export function TitleField({ value, onSave, autoFocus, readOnly }: { value: stri
   );
 }
 
-export function TagPicker({ tagIds, onChange, autoFocus = false }: { tagIds: string[]; onChange: (tags: string[]) => void; autoFocus?: boolean }) {
+/**
+ * An entry's tags to change: each with × to take it off, and a field to add one, found or made. In an entry's menu
+ * (`inMenu`) the tags aren't links to their journal (a click there would leave the menu for another page), and each
+ * tag group follows as a row of its tags, picked or not, to set or switch with one click (`TagGroupRows`).
+ */
+export function TagPicker({ tagIds, onChange, autoFocus = false, inMenu = false }: { tagIds: string[]; onChange: (tags: string[]) => void; autoFocus?: boolean; inMenu?: boolean }) {
   const { index, repo } = useCards();
   const [query, setQuery] = useState('');
   const [open, setOpen] = useState(false);
   const current = resolveTags(index, tagIds);
   const q = query.trim().toLowerCase();
-  const options = index.tags.filter((t) => !tagIds.includes(t.id) && t.title.toLowerCase().includes(q)).slice(0, 6);
+  // In a menu, a group's tags have their own rows below, so until something's typed only tags in no group are offered.
+  const offered = (t: TagCard) => !tagIds.includes(t.id) && t.title.toLowerCase().includes(q) && (!inMenu || !!q || !index.tagGroups.groupOf.has(t.id));
+  const options = index.tags.filter(offered).slice(0, 6);
   const exact = index.tags.find((t) => t.title.toLowerCase() === q);
 
   const add = (id: string) => {
@@ -336,7 +343,7 @@ export function TagPicker({ tagIds, onChange, autoFocus = false }: { tagIds: str
       <div className="chips">
         {current.map((t) => (
           <span className={`chip${colorClass(t)}`} key={t.id}>
-            <Link to={journalPath({ tagId: t.id })}>{t.title}</Link>
+            {inMenu ? t.title : <Link to={journalPath({ tagId: t.id })}>{t.title}</Link>}
             <button type="button" aria-label={`Remove tag ${t.title}`} onClick={() => onChange(tagIds.filter((x) => x !== t.id))}>
               ×
             </button>
@@ -376,6 +383,42 @@ export function TagPicker({ tagIds, onChange, autoFocus = false }: { tagIds: str
           )}
         </div>
       )}
+      {inMenu && <TagGroupRows tagIds={tagIds} onChange={onChange} />}
+    </div>
+  );
+}
+
+/**
+ * Each tag group as a row of its tags, the entry's pressed: a click on one sets it (in a one-choice group, in place
+ * of the group's other), and on a pressed one takes it off.
+ */
+function TagGroupRows({ tagIds, onChange }: { tagIds: string[]; onChange: (tags: string[]) => void }) {
+  const { index } = useCards();
+  const groups = index.tagGroups.groups.filter((g) => g.members.length);
+  if (!groups.length) return null;
+  return (
+    <div className="tag-groups">
+      {groups.map((g) => (
+        <div key={g.id} className="tag-groups__row" role="group" aria-label={g.title}>
+          <span className="tag-groups__name">{g.title}</span>
+          <span className="chips">
+            {g.members.map((m) => {
+              const on = tagIds.includes(m.id);
+              return (
+                <button
+                  key={m.id}
+                  type="button"
+                  className={`chip chip--small chip--option chip--button${colorClass(m)}${on ? ' is-on' : ''}`}
+                  aria-pressed={on}
+                  onClick={() => onChange(pickInGroup(tagIds, g, on ? (g.choice === 'one' ? null : m.id) : m.id))}
+                >
+                  {m.title}
+                </button>
+              );
+            })}
+          </span>
+        </div>
+      ))}
     </div>
   );
 }

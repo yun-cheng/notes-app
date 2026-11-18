@@ -395,10 +395,9 @@ export function EntryBubble({ card, at }: { card: NoteCard | TodoCard; at: numbe
 }
 
 function BubbleMeta({ card, at, fold, flip, lead }: { card: NoteCard | TodoCard; at: number; fold: Fold; flip: Flip; lead?: ReactNode }) {
-  const { repo, index } = useCards();
+  const { index } = useCards();
   const may = usePermissions();
-  // A grouped tag (Priority: High) can be switched right here.
-  const retag = may(card).edit ? (tags: string[]) => void repo.update(card.id, { tags }) : undefined;
+  const editable = may(card).edit;
   // An entry's tags and a todo's dates share a row over the rest: the tags on the left, the dates on the right. The
   // first of either is added from the entry's menu, so nothing waits on hover for them.
   const tagged = resolveTags(index, card.tags).length > 0;
@@ -408,11 +407,11 @@ function BubbleMeta({ card, at, fold, flip, lead }: { card: NoteCard | TodoCard;
     <>
       {(tagged || dated) && (
         <span className="bubble__tags">
-          <TagChips tagIds={card.tags} onChange={retag} />
+          <TagChips tagIds={card.tags} />
           {dated && (
             <span className="bubble__dates">
               {waiting && <WaitingMark />}
-              {retag ? <DueMenu card={card} look="label" /> : <DueLabel todo={card} className="bubble__due" />}
+              {editable ? <DueMenu card={card} look="label" /> : <DueLabel todo={card} className="bubble__due" />}
             </span>
           )}
         </span>

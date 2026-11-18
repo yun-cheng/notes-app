@@ -11,9 +11,9 @@ import { usePermissions } from './viewOnly';
 export const openStacks = new Set<string>();
 
 /**
- * Stacking picked entries: into the stack picked with them, at its end, or into a new stack that takes the place
- * of the first of them, opened to show them. Each leaves any other stack it was in. One action, undone from its
- * toast. Stacks picked besides the one they go into stay as they are.
+ * Stacking picked entries: into the stack picked with them, at its end, or into a new stack, saved at the time of
+ * stacking so it shows in the journal now, opened to show them. Each leaves any other stack it was in. One action,
+ * undone from its toast. Stacks picked besides the one they go into stay as they are.
  */
 export function useStacking() {
   const { index, repo } = useCards();
@@ -44,8 +44,8 @@ export function useStacking() {
     const fresh = { id: repo.newId(), stack: [] } as unknown as NoteCard;
     const lists = stackPlan(stacking.map((c) => c.id), fresh, stacks);
     for (const [id, stack] of lists) if (id !== fresh.id) void repo.update(id, { stack });
-    // Where the first of them was, in a vault this account can write in.
-    void repo.createNote({ id: fresh.id, stack: lists.get(fresh.id), vaultId: may(first).edit ? first.vaultId : undefined, createdAt: first.createdAt });
+    // Made now, in the vault of the first of them where this account can write in it.
+    void repo.createNote({ id: fresh.id, stack: lists.get(fresh.id), vaultId: may(first).edit ? first.vaultId : undefined });
     openStacks.add(fresh.id);
     toast(`Stacked ${entries(stacking.length)}`, { action: undo });
   };

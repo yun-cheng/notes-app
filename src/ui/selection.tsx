@@ -99,16 +99,20 @@ export function revealBubble(el: HTMLElement) {
 /** The bubbles in the stream `from` is in, in order. */
 const streamBubbles = (from: Element) => [...(from.closest('.stream')?.querySelectorAll<HTMLElement>(BUBBLES) ?? [])];
 
+/** The bubble last left with Escape, to come back to. */
+let left: HTMLElement | null = null;
+
 /**
- * Into the stream from the keyboard, when nothing has the focus (as after a click on empty space): ↓ focuses the
- * first bubble on the screen and ↑ the last, so the arrows go on from there. False if there's none to focus.
+ * Into the stream from the keyboard, when nothing has the focus (as after a click on empty space): back to the
+ * bubble last left with Escape if it's still on the screen, else ↓ focuses the first bubble on the screen and ↑ the
+ * last, so the arrows go on from there. False if there's none to focus.
  */
 export function focusStream(way: 'down' | 'up'): boolean {
   const shown = [...document.querySelectorAll<HTMLElement>(`.stream ${BUBBLES}`)].filter((b) => {
     const r = b.getBoundingClientRect();
     return r.bottom > 0 && r.top < window.innerHeight && r.height > 0;
   });
-  const to = way === 'down' ? shown[0] : shown[shown.length - 1];
+  const to = left && shown.includes(left) ? left : way === 'down' ? shown[0] : shown[shown.length - 1];
   if (!to) return false;
   to.focus({ preventScroll: true });
   revealBubble(to);
@@ -120,7 +124,8 @@ export function focusStream(way: 'down' | 'up'): boolean {
  * selected and copied; the open button, or Enter on the focused bubble, opens it. On a touch screen a tap opens
  * it and a long press starts picking. Cmd/Ctrl-click picks it, Shift-click picks a range, and while picking any
  * click or tap picks. Up and down arrows move between bubbles, picking along the way with Shift, and Home and End go
- * to the first and the last. A right-click with a mouse, or the menu key, opens `onMenu`.
+ * to the first and the last. Escape leaves the bubble (after it has stopped picking, if picking). A right-click with
+ * a mouse, or the menu key, opens `onMenu`.
  */
 export function useSelectable(id: string, open: (edit?: boolean) => void, onMenu?: (e: ReactMouseEvent<HTMLElement>) => void) {
   const selection = useContext(SelectionContext);
@@ -162,6 +167,10 @@ export function useSelectable(id: string, open: (edit?: boolean) => void, onMenu
           e.preventDefault();
           // Enter is Edit's shortcut, so it opens ready to type too.
           open(true);
+        } else if (e.key === 'Escape' && !selection?.selecting) {
+          // Picking, the first Escape stops it (`useSelectionState`); then one leaves the bubble.
+          left = e.currentTarget as HTMLElement;
+          left.blur();
         } else if (e.key === ' ' && selection) {
           e.preventDefault();
           selection.toggle(id, e.shiftKey);

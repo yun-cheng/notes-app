@@ -32,7 +32,7 @@ const GROUPS: { title: string; keys: [string, string][] }[] = [
       [`${MOD}X`, 'Cut them'],
       [`${MOD}V`, 'Paste copied entries; anything else goes in the writing box'],
       ['Delete', 'Move the selected entries to the Trash'],
-      ['Esc', 'Stop selecting'],
+      ['Esc', 'Stop selecting, then leave the focused entry'],
     ],
   },
   {

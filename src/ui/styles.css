@@ -1138,16 +1138,17 @@ span.bubble__template { color: var(--muted); cursor: default; }
 /* The copy button in the corner stays over the next-page side. */
 .bubble__copy { z-index: 2; }
 /* The page shown slides in from the side it came from. Two names for each way, one for odd pages and one for
-   even, so each change plays. */
-.page-in-next, .page-in-next-2 { animation: page-in-next 0.22s cubic-bezier(0.2, 0.7, 0.2, 1); }
-.page-in-next-2 { animation-name: page-in-next-2; }
-.page-in-prev, .page-in-prev-2 { animation: page-in-prev 0.22s cubic-bezier(0.2, 0.7, 0.2, 1); }
-.page-in-prev-2 { animation-name: page-in-prev-2; }
+   even, so each change plays. What's in the bubble slides, not the bubble, so the arrows and the copy button stay
+   under the pointer for the next click. */
+.page-in-next > :not(.page-edge, .bubble__copy), .page-in-next-2 > :not(.page-edge, .bubble__copy) { animation: page-in-next 0.22s cubic-bezier(0.2, 0.7, 0.2, 1); }
+.page-in-next-2 > :not(.page-edge, .bubble__copy) { animation-name: page-in-next-2; }
+.page-in-prev > :not(.page-edge, .bubble__copy), .page-in-prev-2 > :not(.page-edge, .bubble__copy) { animation: page-in-prev 0.22s cubic-bezier(0.2, 0.7, 0.2, 1); }
+.page-in-prev-2 > :not(.page-edge, .bubble__copy) { animation-name: page-in-prev-2; }
 @keyframes page-in-next { from { transform: translateX(16px); opacity: 0; } }
 @keyframes page-in-next-2 { from { transform: translateX(16px); opacity: 0; } }
 @keyframes page-in-prev { from { transform: translateX(-16px); opacity: 0; } }
 @keyframes page-in-prev-2 { from { transform: translateX(-16px); opacity: 0; } }
-@media (prefers-reduced-motion: reduce) { .page-in-next, .page-in-next-2, .page-in-prev, .page-in-prev-2 { animation: none; } }
+@media (prefers-reduced-motion: reduce) { .page-in-next > *, .page-in-next-2 > *, .page-in-prev > *, .page-in-prev-2 > * { animation: none; } }
 /* In an entry's sheet, a row for its pages, numbered, + for another, and a way to take one out. */
 .page-tabs { display: flex; flex-wrap: wrap; align-items: center; gap: 4px; margin: 0 0 6px; color: var(--accent); }
 .page-tabs__tab { min-width: 30px; height: 26px; padding: 0 8px; border: 1px solid var(--line); border-radius: 13px; background: none; color: var(--muted); font: inherit; font-size: 12px; font-weight: 600; font-variant-numeric: tabular-nums; cursor: pointer; display: inline-flex; align-items: center; justify-content: center; }

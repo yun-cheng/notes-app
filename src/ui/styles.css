@@ -481,8 +481,14 @@ body:has(.composer:focus-within) .tabbar { display: none; }
 .lock-panel__row { display: flex; gap: 6px; }
 .text-input { flex: 1; min-width: 0; min-height: 40px; padding: 0 12px; background: var(--bg); border: 1px solid var(--line); border-radius: 9px; outline: none; }
 .text-input:focus { border-color: var(--accent); }
-/* A vault PIN box: a text box with its letters hidden, so password managers leave it alone (see pinField.ts). */
-.pin-input { -webkit-text-security: disc; }
+/* A vault PIN box: a plain text box with its letters invisible and dots drawn over them (see PinInput.tsx). The
+   letters and the dots share a monospaced font, so the caret sits after the last dot. */
+.pin-box { position: relative; display: flex; flex: 1; min-width: 0; }
+.pin-box > .pin-input, .pin-box__dots { font: 16px/1 var(--mono); letter-spacing: 0.12em; }
+.pin-box > .pin-input { width: 100%; color: transparent; caret-color: var(--text); }
+.pin-box > .pin-input::placeholder { color: var(--muted); font-family: var(--sans); letter-spacing: normal; }
+.pin-box > .pin-input::selection { background: color-mix(in srgb, var(--accent) 30%, transparent); }
+.pin-box__dots { position: absolute; inset: 0; display: flex; align-items: center; padding: 0 13px; overflow: hidden; white-space: pre; color: var(--text); pointer-events: none; }
 .lock-panel__error { color: var(--alert); font-size: 14px; margin-top: 8px; }
 .lock-panel .btn--quiet { margin-top: 8px; padding: 0; }
 

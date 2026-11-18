@@ -136,9 +136,12 @@ export function focusStream(way: 'down' | 'up' | 'here'): boolean {
   return true;
 }
 
+/** Things inside a bubble that a click or double-click works on, rather than the bubble. */
+const CONTROLS = 'a, button, input, label, [role="button"]';
+
 /**
  * Click, key and touch handling for a bubble. With a mouse, a click leaves the bubble alone, so its text can be
- * selected and copied; the open button, or Enter on the focused bubble, opens it. On a touch screen a tap opens
+ * selected (by dragging) and copied; a double-click, Edit in its menu, or Enter on the focused bubble opens it. On a touch screen a tap opens
  * it and a long press starts picking. Cmd/Ctrl-click picks it, Shift-click picks a range, and while picking any
  * click or tap picks. Up and down arrows move between bubbles, picking along the way with Shift, and Home and End go
  * to the first and the last. Escape leaves the bubble (after it has stopped picking, if picking). A right-click with
@@ -150,6 +153,8 @@ export function useSelectable(id: string, open: (edit?: boolean) => void, onMenu
   const start = useRef<{ x: number; y: number } | null>(null);
   const pressed = useRef(false);
   const touch = useRef(false);
+  // Whether the first press of the latest run of clicks was on a control in the bubble.
+  const onControlFirst = useRef(false);
 
   const cancel = () => {
     if (timer.current) clearTimeout(timer.current);
@@ -163,7 +168,7 @@ export function useSelectable(id: string, open: (edit?: boolean) => void, onMenu
     handlers: {
       tabIndex: 0,
       onClick: (e: ReactMouseEvent) => {
-        if (e.target instanceof Element && e.target.closest('a, button, input, label')) return;
+        if (e.target instanceof Element && e.target.closest(CONTROLS)) return;
         if (pressed.current) {
           // The long press already picked it.
           pressed.current = false;
@@ -177,6 +182,20 @@ export function useSelectable(id: string, open: (edit?: boolean) => void, onMenu
         }
         // A tap opens; a mouse click is left for selecting text.
         if (touch.current && !String(window.getSelection() ?? '')) open();
+      },
+      onMouseDown: (e: ReactMouseEvent) => {
+        const onControl = e.target instanceof Element && !!e.target.closest(CONTROLS);
+        if (e.detail <= 1) onControlFirst.current = onControl;
+        // The second press of a double-click opens the bubble, so it doesn't also pick a word.
+        else if (!onControl && !onControlFirst.current) e.preventDefault();
+      },
+      onDoubleClick: (e: ReactMouseEvent) => {
+        if (touch.current || selection?.selecting || e.metaKey || e.ctrlKey || e.shiftKey || e.altKey) return;
+        // Clicked twice quickly, a button (a page arrow, say) keeps both clicks, though the second missed it.
+        if (onControlFirst.current || (e.target instanceof Element && e.target.closest(CONTROLS))) return;
+        window.getSelection()?.removeAllRanges();
+        // Like Enter, ready to type.
+        open(true);
       },
       onKeyDown: (e: ReactKeyboardEvent) => {
         if (e.target !== e.currentTarget) return;

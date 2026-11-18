@@ -19,7 +19,8 @@ const GROUPS: { title: string; keys: [string, string][] }[] = [
     title: 'Entries in the journal',
     keys: [
       [`${MOD}A`, 'Select all shown'],
-      ['Click beside one', 'Select or unselect it'],
+      ['Double-click', 'Open an entry to edit it'],
+      ['Click beside one','Select or unselect it'],
       [`Shift-click, ${MOD}-click`, 'Select a range, or one more'],
       ['Drag from empty space', 'Select with a box'],
       ['↑ ↓', 'Move between entries; with none focused, to the one above or below the middle of the screen'],

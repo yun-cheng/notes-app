@@ -13,6 +13,7 @@ import { TagPicker } from './components';
 import { useCanRestore, useInTrash, usePermissions, useViewOnly } from './viewOnly';
 import { useSaveAsTemplate, useStartFromTemplate } from './useTemplates';
 import { isStack } from '../domain/stacks';
+import { useCanChangeVaults, VaultChoices } from './VaultChoices';
 import { useTakeOut } from './useStacking';
 import { useLocation, useNavigate } from 'react-router';
 import { textToDoc } from '../domain/content';
@@ -173,7 +174,8 @@ function TextMenu({ card, words, at, onClose }: { card: Entry; words: string; at
 /** What one entry can do, or, right-clicked among several picked ones, what all of them can. */
 function EntryMenu({ card, at, extras, onShare, onClose }: MenuProps) {
   const { repo, index } = useCards();
-  const [panel, setPanel] = useState<'tags' | 'due' | null>(null);
+  const [panel, setPanel] = useState<'tags' | 'due' | 'vaults' | null>(null);
+  const movable = useCanChangeVaults(card);
   const may = usePermissions();
   const actions = useEntryActions();
   const selection = useSelection();
@@ -278,6 +280,14 @@ function EntryMenu({ card, at, extras, onShare, onClose }: MenuProps) {
       </ContextMenu>
     );
   }
+  if (panel === 'vaults') {
+    return (
+      <ContextMenu at={at} label="Vaults" onClose={onClose} layout={panel}>
+        <PanelHeader title="Vaults" onBack={() => setPanel(null)} />
+        <VaultChoices card={card} onMoved={onClose} />
+      </ContextMenu>
+    );
+  }
   if (panel === 'due' && card.type === 'todo') {
     return (
       <ContextMenu at={at} label="Due date" onClose={onClose} wide layout={panel}>
@@ -295,7 +305,7 @@ function EntryMenu({ card, at, extras, onShare, onClose }: MenuProps) {
   // Opening it, copying it, picking it and ticking a todo have their own buttons on the bubble (the pencil, the copy
   // button in its corner, the circle beside it, the todo's box), so the menu keeps to the rest. In order: what's on
   // the entry (tags, dates, its type, its color), then what's done with it (translated, kept as a template,
-  // shared, kept from changes), then where it goes (out of its stack, the Archive, the Trash).
+  // shared, kept from changes), then where it goes (its vaults, out of its stack, the Archive, the Trash).
   return (
     <ContextMenu at={at} label="Entry" onClose={onClose} layout="entry">
       {(useIt || can.edit) && (
@@ -353,12 +363,19 @@ function EntryMenu({ card, at, extras, onShare, onClose }: MenuProps) {
           )}
         </div>
       )}
-      {/* In an open stack: back out into the stream. It changes the stack, so it needs leave to change that. */}
-      {inStack && (
+      {/* Its vaults; in an open stack, back out into the stream, which changes the stack, so it needs leave to change that. */}
+      {(movable || inStack) && (
         <div className="style-menu__group">
-          <Item icon="stack" onClick={run(() => takeOut(card))}>
-            Take out of the stack
-          </Item>
+          {movable && (
+            <Item icon="vault" onClick={() => setPanel('vaults')}>
+              Vaults…
+            </Item>
+          )}
+          {inStack && (
+            <Item icon="stack" onClick={run(() => takeOut(card))}>
+              Take out of the stack
+            </Item>
+          )}
         </div>
       )}
       {can.manage && (

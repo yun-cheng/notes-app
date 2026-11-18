@@ -11,8 +11,9 @@ import { useCards, useToday } from '../../state/CardsContext';
 import { setViewOnly, useInTrash, usePermissions, useViewOnly } from '../viewOnly';
 import { ScrollJump } from '../ScrollJump';
 import { Comments } from '../Comments';
+import { useCanChangeVaults } from '../VaultChoices';
 import { ReactionsRow } from '../Reactions';
-import { Backlinks, Empty, Page, TagChips, TagPicker, TitleField, useDeleteCard, useVaultMove, VaultField } from '../components';
+import { Backlinks, Empty, Page, TagChips, TagPicker, TitleField, useDeleteCard, VaultField } from '../components';
 import { Editor } from '../editor/Editor';
 import { FilterBar, FilterSheet, SortMenu, useJournalFilter, useShowOnly } from '../FilterPanel';
 import { Icon } from '../Icon';
@@ -36,8 +37,6 @@ import { HighlightedCode } from '../highlight';
 import { useToast } from '../Toast';
 import { useUndo } from '../useUndo';
 import { DatesDialog } from '../DatesDialog';
-import { shareCard, unshareCard } from '../../sync/http';
-import { SyncOffline } from '../../sync/engine';
 import { usePopover } from '../usePopover';
 import { Board, BoardSetup, lastBoard, useBoardKind, useCardDrag, type DragParts } from './board';
 import { foldStacks, isStack, moveInStack, stackEntries, stacksOf } from '../../domain/stacks';
@@ -486,16 +485,13 @@ function CardBadges({ card }: { card: NoteCard | TodoCard }) {
 
 /**
  * The vaults an entry is in: its own, where it's kept, then any it's also in, which share it with their members.
- * Pressed, it opens a menu that moves the entry to another vault, puts it in more vaults or takes it out of them,
- * or filters the journal to its vault; for an entry that can't be moved (a vault shared to view, nowhere else to go)
- * it says why, with only the filter (`VaultInfo`). Left out with only one vault. When the journal already shows one vault, it's named only
- * on an entry that can be changed from there, or that's in more than one. An entry shared with this account alone,
- * from someone else's vault, says so.
+ * Pressed, it opens a small menu to filter the journal to one of them (`VaultInfo`); they're changed from the
+ * entry's menu (Vaults…). Left out with only one vault, and when the journal already shows its one vault. An entry
+ * shared with this account alone, from someone else's vault, says so.
  */
 function VaultLabel({ card }: { card: NoteCard | TodoCard }) {
   const { vaults, shared, sharedInto } = useCards();
   const filter = useJournalFilter();
-  const vaultMove = useVaultMove(card);
   const home = vaults.find((v) => v.id === card.vaultId);
   const also = vaults.filter((v) => v.id !== card.vaultId && sharedInto.get(card.id)?.includes(v.id));
   const inVaults = home ? [home, ...also] : also;
@@ -508,7 +504,7 @@ function VaultLabel({ card }: { card: NoteCard | TodoCard }) {
     ) : null;
   }
   if (vaults.length < 2) return null;
-  if (filter.vaultId && !vaultMove && inVaults.length < 2) return null;
+  if (filter.vaultId && inVaults.length < 2) return null;
   // The label's gap spaces the names, so each but the last carries its comma.
   const names = inVaults.map((v, i) => (
     <span key={v.id} className="bubble__vault-name">
@@ -517,112 +513,41 @@ function VaultLabel({ card }: { card: NoteCard | TodoCard }) {
       {i < inVaults.length - 1 && ','}
     </span>
   ));
-  const label = inVaults.map((v) => v.name).join(', ');
-  if (!vaultMove || !home) {
-    return (
-      <VaultInfo card={card} inVaults={inVaults} label={label} filtered={filter.vaultId}>
-        {names}
-      </VaultInfo>
-    );
-  }
   return (
-    <VaultMenu card={card} home={home} also={also} label={label} filtered={filter.vaultId === home.id} {...vaultMove}>
+    <VaultInfo card={card} inVaults={inVaults} label={inVaults.map((v) => v.name).join(', ')} filtered={filter.vaultId}>
       {names}
-    </VaultMenu>
-  );
-}
-
-interface VaultMenuProps {
-  card: NoteCard | TodoCard;
-  home: Vault;
-  also: Vault[];
-  label: string;
-  /** The journal already shows only the entry's own vault, so there's no Show only. */
-  filtered: boolean;
-  options: Vault[];
-  move: (id: string) => void;
-  children: ReactNode;
-}
-
-function VaultMenu({ card, home, also, label, filtered, options, move, children }: VaultMenuProps) {
-  const { vaults, locked } = useCards();
-  const { open, root, toggle, fixedStyle, close } = usePopover();
-  const navigate = useNavigate();
-  const showOnly = useShowOnly();
-  const alsoIn = useAlsoIn(card);
-  // A private vault's entries are shared from the share dialog, which warns that the PIN won't guard them.
-  const more = home.lock === 'pin' ? [] : vaults.filter((v) => v.id !== home.id && v.lock === 'none' && !locked.has(v.id));
-  return (
-    // Clicks in the menu stay out of the bubble's own click handling (picking).
-    <div ref={root} className="vault-menu" onClick={(e) => e.stopPropagation()}>
-      <button type="button" className="bubble__vault" aria-haspopup="menu" aria-expanded={!!open} title={`In ${label}. Change its vaults`} onClick={toggle}>
-        {children}
-      </button>
-      {open && (
-        <div className={`style-menu${open === 'up' ? ' style-menu--up' : ''}`} style={fixedStyle(220)} role="menu" aria-label="Vaults">
-          <div className="style-menu__group" role="group" aria-label="Lives in">
-            <span className="style-menu__label">Lives in</span>
-            {options.map((v) => (
-              <button
-                key={v.id}
-                type="button"
-                role="menuitemradio"
-                aria-checked={v.id === home.id}
-                onClick={() => {
-                  move(v.id);
-                  close();
-                }}
-              >
-                {v.name}
-                {v.lock === 'pin' && <Icon name="lock" size={12} />}
-              </button>
-            ))}
-          </div>
-          {more.length > 0 && (
-            <div className="style-menu__group" role="group" aria-label="Also in">
-              <span className="style-menu__label">Also in</span>
-              {more.map((v) => {
-                const on = also.some((a) => a.id === v.id);
-                return (
-                  <button key={v.id} type="button" role="menuitemcheckbox" aria-checked={on} onClick={() => void alsoIn(v, !on)}>
-                    {on && <Icon name="check" size={14} />}
-                    {v.name}
-                  </button>
-                );
-              })}
-            </div>
-          )}
-          {!filtered && (
-            <div className="style-menu__group">
-              <button type="button" role="menuitem" onClick={() => navigate(showOnly({ vaultId: home.id }))}>
-                Show only {home.name}
-              </button>
-            </div>
-          )}
-        </div>
-      )}
-    </div>
+    </VaultInfo>
   );
 }
 
 /**
- * The vaults of an entry this account can't move, as a menu like `VaultMenu`'s, so pressing them never jumps
- * somewhere unasked: why they can't be changed, and Show only for each.
+ * An entry's vaults as a menu, so pressing them never jumps somewhere unasked: Show only for each, and for an
+ * entry whose vaults can't be changed, why.
  */
 function VaultInfo({ card, inVaults, label, filtered, children }: { card: NoteCard | TodoCard; inVaults: Vault[]; label: string; filtered?: string; children: ReactNode }) {
   const may = usePermissions();
   const { open, root, toggle, fixedStyle } = usePopover();
   const navigate = useNavigate();
   const showOnly = useShowOnly();
+  const movable = useCanChangeVaults(card);
   const can = may(card);
-  const why = card.viewOnly
-    ? 'Set to view only, so its vaults can\'t be changed.'
-    : can.sharedBy
-      ? can.note
-      : can.note
-        ? `${can.note}, so its vaults can't be changed.`
-        : 'There\'s no other vault to move it to.';
+  const why = movable
+    ? null
+    : card.viewOnly
+      ? 'Set to view only, so its vaults can\'t be changed.'
+      : can.sharedBy
+        ? can.note
+        : can.note
+          ? `${can.note}, so its vaults can't be changed.`
+          : 'There\'s no other vault to move it to.';
   const shown = inVaults.filter((v) => v.id !== filtered);
+  if (!why && !shown.length) {
+    return (
+      <span className="bubble__vault" title={`In ${label}`}>
+        {children}
+      </span>
+    );
+  }
   return (
     <div ref={root} className="vault-menu" onClick={(e) => e.stopPropagation()}>
       <button type="button" className="bubble__vault" aria-haspopup="menu" aria-expanded={!!open} title={`In ${label}`} onClick={toggle}>
@@ -630,7 +555,7 @@ function VaultInfo({ card, inVaults, label, filtered, children }: { card: NoteCa
       </button>
       {open && (
         <div className={`style-menu${open === 'up' ? ' style-menu--up' : ''}`} style={fixedStyle(220)} role="menu" aria-label="Vaults">
-          <p className="style-menu__note">{why}</p>
+          {why && <p className="style-menu__note">{why}</p>}
           {shown.length > 0 && (
             <div className="style-menu__group">
               {shown.map((v) => (
@@ -644,29 +569,6 @@ function VaultInfo({ card, inVaults, label, filtered, children }: { card: NoteCa
       )}
     </div>
   );
-}
-
-/**
- * Puts an entry in another vault besides its own, or takes it out: a share with that vault's members, who can do
- * with it what the vault lets them. It needs a connection, and syncs at once so it shows there straight away.
- */
-function useAlsoIn(card: NoteCard | TodoCard) {
-  const { engine } = useCards();
-  const toast = useToast();
-  const change = async (vault: Vault, on: boolean) => {
-    await (on ? shareCard(card.id, { vault_id: vault.id }, 'edit') : unshareCard(card.id, 'vault', vault.id));
-    void engine.sync();
-  };
-  const failed = (err: unknown) =>
-    toast(err instanceof SyncOffline ? 'Putting an entry in another vault needs a connection.' : "That didn't work. An entry can go in another vault once it has synced.");
-  return async (vault: Vault, on: boolean) => {
-    try {
-      await change(vault, on);
-      toast(on ? `Also in ${vault.name}` : `No longer in ${vault.name}`, { action: { label: 'Undo', run: () => void change(vault, !on).catch(failed) } });
-    } catch (err) {
-      failed(err);
-    }
-  };
 }
 
 /** Marks an entry set to view only in its bubble's bottom row; pressed, by whoever may, it can be changed again. */

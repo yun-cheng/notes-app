@@ -1119,15 +1119,24 @@ body.is-dragging-card, body.is-dragging-card * { cursor: grabbing !important; us
 .hidden-text .is-open, .hidden-text.is-open { color: var(--text); text-decoration: underline dashed var(--muted); text-underline-offset: 3px; }
 @media (prefers-reduced-motion: reduce) { .hidden-text { animation: none; } }
 
-/* An entry with more than one page: a pager in its bubble's bottom row steps through them, one at a time. */
+/* An entry with more than one page: ‹ and › down its bubble's sides, the full height, shown on hover (always, but
+   faint, without one), with room kept for them so they cover no text; its bottom row says which page it's on. */
 .bubble__template { display: inline-flex; align-items: center; gap: 3px; padding: 0 6px 0 4px; border: 0; border-radius: 6px; background: none; color: var(--accent); font: inherit; font-size: 12px; font-weight: 600; cursor: pointer; }
 button.bubble__template:hover { background: var(--accent-soft); }
 span.bubble__template { color: var(--muted); cursor: default; }
-.bubble__pager { display: inline-flex; align-items: center; gap: 1px; color: var(--accent); font-size: 12px; font-weight: 600; font-variant-numeric: tabular-nums; }
-.bubble__pager button { display: inline-grid; place-items: center; width: 18px; height: 18px; padding: 0; border: 0; border-radius: 5px; background: none; color: inherit; cursor: pointer; }
-.bubble__pager button:hover:not(:disabled) { background: var(--accent-soft); }
-.bubble__pager button:disabled { color: var(--muted); opacity: 0.4; cursor: default; }
-.bubble__pager-at { min-width: 22px; text-align: center; }
+.bubble__page { color: var(--accent); font-size: 12px; font-weight: 600; font-variant-numeric: tabular-nums; }
+.bubble.has-pages { padding-left: 24px; padding-right: 24px; }
+.bubble--todo.has-pages { padding-left: 22px; }
+/* With a mouse the right side also keeps room for the copy button, and the rows under the text stay clear of ›. */
+@media (pointer: fine) { .bubble.has-pages { padding-right: 32px; } .bubble.has-pages .bubble__tags, .bubble.has-pages .bubble__meta { margin-right: -8px; } }
+.page-edge { position: absolute; top: 0; bottom: 0; z-index: 1; display: grid; place-items: center; width: 20px; padding: 0; border: 0; background: none; color: var(--accent); opacity: 0; cursor: pointer; transition: opacity 0.12s, background-color 0.12s; }
+.page-edge--prev { left: 0; border-radius: 15px 0 0 3px; }
+.page-edge--next { right: 0; border-radius: 0 15px 15px 0; }
+.stream__entry:hover .page-edge, .page-edge:focus-visible { opacity: 1; }
+.page-edge:hover { background: color-mix(in srgb, var(--accent) 12%, transparent); }
+@media (pointer: coarse) { .page-edge { opacity: 0.6; } }
+/* The copy button in the corner stays over the next-page side. */
+.bubble__copy { z-index: 2; }
 /* The page shown slides in from the side it came from. Two names for each way, one for odd pages and one for
    even, so each change plays. */
 .page-in-next, .page-in-next-2 { animation: page-in-next 0.22s cubic-bezier(0.2, 0.7, 0.2, 1); }

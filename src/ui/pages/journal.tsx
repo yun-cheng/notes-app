@@ -424,16 +424,8 @@ function BubbleMeta({ card, at, fold, pager, lead }: { card: NoteCard | TodoCard
           {card.template && <UseTemplate card={card} />}
           <CardBadges card={card} />
           {pager.count > 1 && (
-            <span className="bubble__pager" role="group" aria-label={`Page ${pager.at + 1} of ${pager.count}`}>
-              <button type="button" aria-label="Previous page" title="Previous page" disabled={pager.at === 0} onClick={() => pager.go(pager.at - 1)}>
-                <Icon name="left" size={12} />
-              </button>
-              <span className="bubble__pager-at">
-                {pager.at + 1}/{pager.count}
-              </span>
-              <button type="button" aria-label="Next page" title="Next page" disabled={pager.at === pager.count - 1} onClick={() => pager.go(pager.at + 1)}>
-                <Icon name="right" size={12} />
-              </button>
+            <span className="bubble__page" title={`Page ${pager.at + 1} of ${pager.count}`}>
+              {pager.at + 1}/{pager.count}
             </span>
           )}
           {(fold.long || fold.folded) && (
@@ -709,7 +701,10 @@ interface Pager {
   go: (to: number) => void;
 }
 
-/** An entry with more than one page shows one at a time in its bubble, with a pager to step through them. */
+/**
+ * An entry with more than one page shows one at a time in its bubble: ‹ and › down its sides step through them
+ * (`PageEdges`), and its bottom row says which it's on (1/3).
+ */
 function usePager(card: NoteCard | TodoCard): Pager {
   const pages = useMemo(() => cardPages(card), [card]);
   const [kept, setAt] = useState(() => shownPage.get(card.id) ?? 0);
@@ -732,10 +727,30 @@ function usePager(card: NoteCard | TodoCard): Pager {
 }
 
 /**
- * A bubble's slide for the page it just changed to: in from the right for a later page, from the left for an
- * earlier one. Each way has two names, one for odd pages and one for even, so each change plays.
+ * A bubble's classes for its pages: room at its sides for the arrows, and a slide for the page it just changed to,
+ * in from the right for a later page and from the left for an earlier one. Each way has two names, one for odd
+ * pages and one for even, so each change plays.
  */
-const pageSlide = (pager: Pager) => (pager.went ? ` page-in-${pager.went}${pager.at % 2 ? '' : '-2'}` : '');
+const pagerClass = (pager: Pager) => (pager.count > 1 ? ' has-pages' : '') + (pager.went ? ` page-in-${pager.went}${pager.at % 2 ? '' : '-2'}` : '');
+
+/** The previous and next page, each the full height of a bubble's side; neither past the first or the last page. */
+function PageEdges({ pager }: { pager: Pager }) {
+  if (pager.count < 2) return null;
+  return (
+    <>
+      {pager.at > 0 && (
+        <button type="button" className="page-edge page-edge--prev" aria-label="Previous page" title="Previous page" onClick={() => pager.go(pager.at - 1)}>
+          <Icon name="left" size={14} />
+        </button>
+      )}
+      {pager.at < pager.count - 1 && (
+        <button type="button" className="page-edge page-edge--next" aria-label="Next page" title="Next page" onClick={() => pager.go(pager.at + 1)}>
+          <Icon name="right" size={14} />
+        </button>
+      )}
+    </>
+  );
+}
 
 /** Opens an entry in a sheet over this page: to edit, with its text focused, or (a tap on a phone) just to read. */
 /** Opens an entry in its sheet. In the Trash, where nothing is changed, a press picks it instead, to restore. */
@@ -833,7 +848,7 @@ function useBubble(card: NoteCard | TodoCard, title: string) {
 function NoteBubble({ note, at }: { note: NoteCard; at: number }) {
   const { text, pager, menu, title, translated, selected, handlers } = useBubble(note, note.title.trim());
   return (
-    <div className={`bubble${colorClass(note)}${pageSlide(pager)}${selected ? ' is-selected' : ''}`} role="article" aria-current={selected || undefined} {...handlers}>
+    <div className={`bubble${colorClass(note)}${pagerClass(pager)}${selected ? ' is-selected' : ''}`} role="article" aria-current={selected || undefined} {...handlers}>
       {translated}
       {title && (
         <strong className="bubble__title">
@@ -842,6 +857,7 @@ function NoteBubble({ note, at }: { note: NoteCard; at: number }) {
       )}
       {text.view}
       <BubbleMeta card={note} at={at} fold={text.fold} pager={pager} />
+      <PageEdges pager={pager} />
       <BubbleCopy card={note} />
       {menu.view}
     </div>
@@ -875,7 +891,7 @@ function StackEntry({ stack, at }: { stack: NoteCard; at: number }) {
   const count = `${members.length} ${members.length === 1 ? 'card' : 'cards'}`;
   return (
     <>
-      <div className={`bubble bubble--stack${colorClass(stack)}${pageSlide(pager)}${selected ? ' is-selected' : ''}`} role="article" aria-current={selected || undefined} {...handlers}>
+      <div className={`bubble bubble--stack${colorClass(stack)}${pagerClass(pager)}${selected ? ' is-selected' : ''}`} role="article" aria-current={selected || undefined} {...handlers}>
         {translated}
         <span className="stack__head">
           <Icon name="stack" size={15} />
@@ -907,6 +923,7 @@ function StackEntry({ stack, at }: { stack: NoteCard; at: number }) {
             </button>
           }
         />
+        <PageEdges pager={pager} />
         <BubbleCopy card={stack} />
         {menu.view}
       </div>
@@ -999,7 +1016,7 @@ function TodoBubble({ todo, at }: { todo: TodoCard; at: number }) {
   const waiting = !done && !!todo.waiting;
   return (
     <div
-      className={`bubble bubble--todo${colorClass(todo)}${pageSlide(pager)}${done ? ' is-done' : ''}${selected ? ' is-selected' : ''}`}
+      className={`bubble bubble--todo${colorClass(todo)}${pagerClass(pager)}${done ? ' is-done' : ''}${selected ? ' is-selected' : ''}`}
       role="article"
       aria-current={selected || undefined}
       {...handlers}
@@ -1021,6 +1038,7 @@ function TodoBubble({ todo, at }: { todo: TodoCard; at: number }) {
         {text.view}
         <BubbleMeta card={todo} at={at} fold={text.fold} pager={pager} />
       </div>
+      <PageEdges pager={pager} />
       <BubbleCopy card={todo} />
       {menu.view}
     </div>

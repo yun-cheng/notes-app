@@ -82,15 +82,17 @@ const LONG_PRESS_MS = 450;
 
 const BUBBLES = '[data-entry-id] > [role="article"]';
 
-/**
- * Scrolls a bubble into the part of the page nothing covers: under the title bar and the day badge pinned below it,
- * above the writing box at the foot. One taller than that shows from its top.
- */
-export function revealBubble(el: HTMLElement) {
-  // The day badge pins just under the title bar.
+/** The part of the page nothing covers: under the title bar and the day badge pinned below it, above the writing box. */
+function clearArea() {
   const day = document.querySelector<HTMLElement>('.stream__day')?.offsetHeight ?? 0;
   const top = (document.querySelector('.page__head')?.getBoundingClientRect().bottom ?? 0) + day + 12;
   const bottom = (document.querySelector('.journal-dock')?.getBoundingClientRect().top ?? window.innerHeight) - 8;
+  return { top, bottom };
+}
+
+/** Scrolls a bubble into the part of the page nothing covers. One taller than that shows from its top. */
+export function revealBubble(el: HTMLElement) {
+  const { top, bottom } = clearArea();
   const r = el.getBoundingClientRect();
   if (r.top < top) window.scrollBy(0, r.top - top);
   else if (r.bottom > bottom) window.scrollBy(0, Math.min(r.bottom - bottom, r.top - top));
@@ -99,21 +101,36 @@ export function revealBubble(el: HTMLElement) {
 /** The bubbles in the stream `from` is in, in order. */
 const streamBubbles = (from: Element) => [...(from.closest('.stream')?.querySelectorAll<HTMLElement>(BUBBLES) ?? [])];
 
-/** The bubble last left with Escape, to come back to. */
+/** The bubble last left with Escape, to go on from. */
 let left: HTMLElement | null = null;
 
 /**
- * Into the stream from the keyboard, when nothing has the focus (as after a click on empty space): back to the
- * bubble last left with Escape if it's still on the screen, else ↓ focuses the first bubble on the screen and ↑ the
- * last, so the arrows go on from there. False if there's none to focus.
+ * Into the stream from the keyboard, when nothing has the focus (as after a click on empty space), from the bubble
+ * in the middle of the screen, or the one last left with Escape if it's still on the screen: Space (`here`) focuses
+ * that one, and ↓ or ↑ the one after or before it, so the arrows go on from there. False if there's none to focus.
  */
-export function focusStream(way: 'down' | 'up'): boolean {
-  const shown = [...document.querySelectorAll<HTMLElement>(`.stream ${BUBBLES}`)].filter((b) => {
-    const r = b.getBoundingClientRect();
-    return r.bottom > 0 && r.top < window.innerHeight && r.height > 0;
-  });
-  const to = left && shown.includes(left) ? left : way === 'down' ? shown[0] : shown[shown.length - 1];
-  if (!to) return false;
+export function focusStream(way: 'down' | 'up' | 'here'): boolean {
+  const all = [...document.querySelectorAll<HTMLElement>(`.stream ${BUBBLES}`)];
+  const { top, bottom } = clearArea();
+  const middle = (top + bottom) / 2;
+  let from: HTMLElement | null = left && left.isConnected ? left : null;
+  if (from) {
+    const r = from.getBoundingClientRect();
+    if (r.bottom < top || r.top > bottom) from = null;
+  }
+  if (!from) {
+    // The bubble across the middle, or else the nearest to it.
+    let best = Infinity;
+    for (const b of all) {
+      const r = b.getBoundingClientRect();
+      if (!r.height || r.bottom < top || r.top > bottom) continue;
+      const off = r.top > middle ? r.top - middle : r.bottom < middle ? middle - r.bottom : 0;
+      if (off < best) [best, from] = [off, b];
+    }
+  }
+  if (!from) return false;
+  const to = way === 'here' ? from : (all[all.indexOf(from) + (way === 'down' ? 1 : -1)] ?? from);
+  left = null;
   to.focus({ preventScroll: true });
   revealBubble(to);
   return true;

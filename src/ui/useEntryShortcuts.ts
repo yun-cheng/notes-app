@@ -45,8 +45,8 @@ function focusedEntry(): string[] {
  * The journal's keys for entries, outside text boxes: Cmd/Ctrl+A picks everything shown; Cmd+C copies the picked
  * entries (or the focused one), Cmd+X cuts them, and Delete or Backspace moves them to the Trash. Cmd+V pastes
  * copied entries as new ones; anything else pasted goes to the journal box to look over before saving. Text
- * selected in a message is copied as text, as usual. With nothing focused, ↑ and ↓ go into the entries on the
- * screen (`focusStream`).
+ * selected in a message is copied as text, as usual. With nothing focused, Space, ↑ and ↓ go into the entries
+ * on the screen from the one in the middle (`focusStream`), rather than scrolling the page.
  */
 export function useEntryShortcuts(selection: Selection, filter: StreamFilter, enabled: boolean) {
   const actions = useEntryActions();
@@ -76,11 +76,12 @@ export function useEntryShortcuts(selection: Selection, filter: StreamFilter, en
           picked.clear();
           void act.cut(ids);
         }
-      } else if (!mod && !e.shiftKey && (e.key === 'ArrowDown' || e.key === 'ArrowUp')) {
-        // Nothing focused: into the entries on the screen. A focused bubble moves on by itself (`useSelectable`).
+      } else if (!mod && !e.shiftKey && (e.key === 'ArrowDown' || e.key === 'ArrowUp' || e.key === ' ')) {
+        // Nothing focused: into the entries on the screen, instead of scrolling the page. A focused bubble moves on
+        // by itself (`useSelectable`).
         const active = document.activeElement;
         if (active && active !== document.body) return;
-        if (focusStream(e.key === 'ArrowDown' ? 'down' : 'up')) e.preventDefault();
+        if (focusStream(e.key === 'ArrowDown' ? 'down' : e.key === 'ArrowUp' ? 'up' : 'here')) e.preventDefault();
       } else if (!mod && !e.shiftKey && (e.key === 'Delete' || e.key === 'Backspace')) {
         const ids = targets();
         if (!ids.length) return;

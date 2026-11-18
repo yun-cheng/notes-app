@@ -292,7 +292,7 @@ None. Defaults chosen while building are listed in the implementation notes, and
 1. In Google Cloud project `notes-app-514219`, enable the Google Drive API.
 2. In Google Auth Platform, Clients, open the web client and add the authorized redirect URI `https://notes-app.yuncheng-dev.workers.dev/api/drive/callback` (and `http://localhost:8788/api/drive/callback` for local testing).
 3. In Data access, add the scope `.../auth/drive.file`.
-4. Copy the client secret and run `npx wrangler pages secret put GOOGLE_CLIENT_SECRET --project-name notes-app`, pasting it when asked. For local testing, put `GOOGLE_CLIENT_SECRET=...` in `.dev.vars` (ignored by git).
+4. Copy the client secret and run `npx wrangler secret put GOOGLE_CLIENT_SECRET` in the project folder, pasting it when asked (the app is a Worker now, not Pages; the secret takes effect at once, with no redeploy). `npx wrangler secret list` shows its name once it's set. For local testing, put `GOOGLE_CLIENT_SECRET=...` in `.dev.vars` (ignored by git).
 5. In the app, Backup & settings, Photos, press Connect Google Drive.
 
 ## Implementation notes from Milestone 6

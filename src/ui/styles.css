@@ -923,7 +923,8 @@ body:has(.batch) .toast-slot { bottom: calc(var(--tabbar) + env(safe-area-inset-
 /* With no reactions yet, the button that adds one floats beside it, rather than holding empty room in the bottom row. */
 .reactions:not(:has(.reaction)) > .bubble-menu { position: absolute; top: 4px; right: 32px; z-index: 2; }
 .reactions:not(:has(.reaction)) .bubble__add { width: 24px; height: 24px; border: 1px solid var(--line); border-radius: 8px; background: var(--surface); box-shadow: 0 1px 3px rgb(0 0 0 / 12%); }
-.reactions:not(:has(.reaction)) .bubble__add:hover { border-color: var(--muted); }/* With the keyboard's focus too, not a click's: a bubble clicked keeps the focus, and would keep them showing once the mouse left it. */
+.reactions:not(:has(.reaction)) .bubble__add:hover { border-color: var(--muted); }
+/* With the keyboard's focus too, not a click's: a bubble clicked keeps the focus, and would keep them showing once the mouse left it. */
 .stream__entry:hover .bubble__copy, .bubble:focus-visible .bubble__copy, .bubble:has(:focus-visible) .bubble__copy { opacity: 1; }
 .bubble__add { display: inline-grid; place-items: center; width: 22px; height: 18px; padding: 0; border: 1px dashed var(--line); border-radius: 9px; background: none; color: var(--muted); opacity: 0; cursor: pointer; transition: opacity 0.12s; }
 .bubble__add:hover { color: var(--text); border-color: var(--muted); }
@@ -947,6 +948,12 @@ button.reaction:hover { border-color: var(--muted); color: var(--text); }
 .reaction-picker__quick { display: flex; justify-content: space-between; }
 .emoji-cell { display: inline-grid; place-items: center; width: 36px; height: 36px; padding: 0; border: 0; border-radius: 8px; background: none; color: var(--muted); font-size: 22px; line-height: 1; cursor: pointer; }
 .emoji-cell:hover, .emoji-cell:focus-visible { background: var(--sunken); outline: none; }
+/*
+ * A bottom row holding reactions, bordered chips, gets more room than one of plain words: 8px from the tags' chips
+ * over it (rather than 4px, which left the two rows of chips nearly touching), 6px from the text when there are no
+ * tags, and 8px from the bubble's bottom edge.
+ */
+.bubble__meta:has(.reaction) { margin-top: 4px; margin-bottom: 2px; }
 .emoji-cell.is-mine { background: var(--accent-soft); }
 .reaction-picker__search { width: 100%; }
 .reaction-picker__grid { max-height: 232px; overflow-y: auto; overscroll-behavior: contain; }

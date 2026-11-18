@@ -934,10 +934,18 @@ body:has(.batch) .toast-slot { bottom: calc(var(--tabbar) + env(safe-area-inset-
  */
 .bubble__copy { position: absolute; top: 4px; right: 4px; display: grid; place-items: center; width: 24px; height: 24px; padding: 0; border: 1px solid var(--line); border-radius: 8px; background: var(--surface); box-shadow: 0 1px 3px rgb(0 0 0 / 12%); color: var(--muted); opacity: 0; cursor: pointer; transition: opacity 0.12s; }
 .bubble__copy:hover { color: var(--text); border-color: var(--muted); }
-/* With no reactions yet, the button that adds one floats beside it, rather than holding empty room in the bottom row. */
-.reactions:not(:has(.reaction)) > .bubble-menu { position: absolute; top: 4px; right: 32px; z-index: 2; }
-.reactions:not(:has(.reaction)) .bubble__add { width: 24px; height: 24px; border: 1px solid var(--line); border-radius: 8px; background: var(--surface); box-shadow: 0 1px 3px rgb(0 0 0 / 12%); }
-.reactions:not(:has(.reaction)) .bubble__add:hover { border-color: var(--muted); }
+/*
+ * With no reactions yet, the button that adds one shows on hover where they'd start, at the left of the bottom row,
+ * without holding room there while it's hidden: its row is an anchor of no width (its gap taken back), and the button
+ * floats from it, over the row's words if a narrow bubble's row has no room to spare. Until 2026-11-18 it held 28px
+ * there, hidden or not, and for a moment that day it floated in the top right corner beside the copy button.
+ */
+.reactions:not(:has(.reaction)) { position: relative; width: 0; margin-right: -6px; }
+/* Centred in the 20px row by its offset: a transform would make it the box its picker's fixed position is taken from. */
+.reactions:not(:has(.reaction)) > .bubble-menu { position: absolute; top: -9px; left: 0; z-index: 2; }
+/* Open, its picker goes over the copy button, which shares its layer. */
+.reactions:not(:has(.reaction)) > .bubble-menu.is-open { z-index: 3; }
+.reactions:not(:has(.reaction)) .bubble__add { background: var(--surface); }
 /* With the keyboard's focus too, not a click's: a bubble clicked keeps the focus, and would keep them showing once the mouse left it. */
 .stream__entry:hover .bubble__copy, .bubble:focus-visible .bubble__copy, .bubble:has(:focus-visible) .bubble__copy { opacity: 1; }
 .bubble__add { display: inline-grid; place-items: center; width: 22px; height: 18px; padding: 0; border: 1px dashed var(--line); border-radius: 9px; background: none; color: var(--muted); opacity: 0; cursor: pointer; transition: opacity 0.12s; }

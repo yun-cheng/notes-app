@@ -406,30 +406,29 @@ function BubbleMeta({ card, at, fold, flip, lead }: { card: NoteCard | TodoCard;
   const dated = card.type === 'todo' && !!(card.due || card.start);
   const waiting = card.type === 'todo' && card.waiting && card.status === 'open';
   const row = tagged || dated;
-  // The buttons that add a tag, and a date to a todo without one, sit together: in that row, or the bottom row without it.
-  const adding = (
-    <>
-      {retag && <AddTag card={card} />}
-      {card.type === 'todo' && !dated && retag && <DueMenu card={card} look="add" />}
-    </>
-  );
+  // The button that adds a date to a todo without one: on the right of that row, where its dates go, or beside the
+  // tag button in the bottom row while there's no such row.
+  const addDue = card.type === 'todo' && !dated && retag && <DueMenu card={card} look="add" />;
   return (
     <>
       {row && (
         <span className="bubble__tags">
           <TagChips tagIds={card.tags} onChange={retag} />
-          {adding}
-          {dated && (
+          {retag && <AddTag card={card} />}
+          {dated ? (
             <span className="bubble__dates">
               {waiting && <WaitingMark />}
               {retag ? <DueMenu card={card} look="label" /> : <DueLabel todo={card} className="bubble__due" />}
             </span>
+          ) : (
+            addDue && <span className="bubble__dates">{addDue}</span>
           )}
         </span>
       )}
       {/* On the left, the add buttons while it has no tags or dates; on the right, More or Less, then the vault and the time it was written. */}
       <span className="bubble__meta">
-        {!row && adding}
+        {!row && retag && <AddTag card={card} />}
+        {!row && addDue}
         {card.viewOnly && <ViewOnlyMark card={card} />}
         <span className="bubble__end">
           {lead}

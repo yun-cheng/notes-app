@@ -627,15 +627,18 @@ a.change__title:hover { color: var(--accent); }
 /* Code: in a code font, kept as typed. A code block scrolls sideways when wide, with a copy button on hover. */
 .bubble__code { padding: 0.05em 0.3em; border-radius: 4px; background: var(--sunken); font: 0.88em/1.4 var(--mono); }
 .bubble__snippet { position: relative; margin: 4px 0; }
+/* Last in the text, it leaves no more room under it than text would: the rows under the text keep their own gap. */
+.bubble__snippet:last-child, .bubble__snippet:has(+ .bubble__lines:empty:last-child) { margin-bottom: 0; }
 .bubble__snippet pre { margin: 0; padding: 8px 10px; border-radius: 8px; background: var(--sunken); overflow-x: auto; overflow-wrap: normal; font: 13px/1.45 var(--mono); tab-size: 2; }
 .bubble__snippet-copy { position: absolute; top: 4px; right: 4px; display: grid; place-items: center; width: 24px; height: 24px; padding: 0; border: 0; border-radius: 6px; background: var(--sunken); color: var(--muted); opacity: 0; cursor: pointer; transition: opacity 0.12s; }
 .bubble__snippet-copy:hover { color: var(--text); }
 .bubble__snippet:hover .bubble__snippet-copy, .bubble__snippet-copy:focus-visible { opacity: 1; }
 @media (pointer: coarse) { .bubble__snippet-copy { opacity: 1; } }
-/* The snippet's language, faint in the corner, giving way to the copy button on hover. */
-.bubble__snippet-lang { position: absolute; top: 6px; right: 8px; padding: 1px 5px; border-radius: 4px; background: var(--sunken); color: var(--muted); font: 11px/1.4 var(--sans); pointer-events: none; transition: opacity 0.12s; }
-.bubble__snippet:hover .bubble__snippet-lang, .bubble__snippet:has(:focus-visible) .bubble__snippet-lang { opacity: 0; }
-@media (pointer: coarse) { .bubble__snippet-lang { right: 32px; } .bubble__snippet:hover .bubble__snippet-lang { opacity: 1; } }
+/*
+ * The snippet's language, faint in the bottom corner, where a block's last line (a closing brace, often) leaves room;
+ * at the top it sat on the end of the first line, the longest as often as not. The copy button keeps the top.
+ */
+.bubble__snippet-lang { position: absolute; bottom: 6px; right: 8px; padding: 1px 5px; border-radius: 4px; background: var(--sunken); color: var(--muted); font: 11px/1.4 var(--sans); pointer-events: none; }
 .bubble__link { color: var(--accent); text-decoration: underline; text-decoration-color: color-mix(in srgb, var(--accent) 45%, transparent); text-underline-offset: 2px; overflow-wrap: anywhere; }
 .bubble__link:hover { text-decoration-color: currentColor; }
 /* Syntax colors, from highlight.js's token classes, in the bubbles and the editors. */
@@ -910,12 +913,17 @@ body:has(.batch) .toast-slot { bottom: calc(var(--tabbar) + env(safe-area-inset-
 /* A bubble's text can be selected; Edit in its menu, Enter, or a tap on a phone opens it. */
 .bubble { position: relative; color: var(--text); }
 .bubble:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
-.bubble__copy { position: absolute; top: 5px; right: 5px; display: grid; place-items: center; width: 24px; height: 24px; padding: 0; border: 0; border-radius: 7px; background: none; color: var(--muted); opacity: 0; cursor: pointer; transition: opacity 0.12s; }
-.bubble__copy:hover { color: var(--text); background: color-mix(in srgb, var(--text) 8%, transparent); }
-/* Room for it on the right, kept when it's hidden so nothing moves on hover; the bottom row still runs to the edge. */
-/* Room on the right for the copy button, which only the first line needs: the rows under the text reach into it. */
-@media (pointer: fine) { .bubble { padding-right: 32px; } .bubble__tags, .bubble__meta { margin-right: -20px; } }
-/* With the keyboard's focus too, not a click's: a bubble clicked keeps the focus, and would keep them showing once the mouse left it. */
+/*
+ * The copy button floats in the bubble's top right corner, over the end of its first line while it shows, so the
+ * bubble keeps no empty room for it: the same space on both sides. Until 2026-11-18 every bubble kept 32px on the
+ * right for it, hidden or not.
+ */
+.bubble__copy { position: absolute; top: 4px; right: 4px; display: grid; place-items: center; width: 24px; height: 24px; padding: 0; border: 1px solid var(--line); border-radius: 8px; background: var(--surface); box-shadow: 0 1px 3px rgb(0 0 0 / 12%); color: var(--muted); opacity: 0; cursor: pointer; transition: opacity 0.12s; }
+.bubble__copy:hover { color: var(--text); border-color: var(--muted); }
+/* With no reactions yet, the button that adds one floats beside it, rather than holding empty room in the bottom row. */
+.reactions:not(:has(.reaction)) > .bubble-menu { position: absolute; top: 4px; right: 32px; z-index: 2; }
+.reactions:not(:has(.reaction)) .bubble__add { width: 24px; height: 24px; border: 1px solid var(--line); border-radius: 8px; background: var(--surface); box-shadow: 0 1px 3px rgb(0 0 0 / 12%); }
+.reactions:not(:has(.reaction)) .bubble__add:hover { border-color: var(--muted); }/* With the keyboard's focus too, not a click's: a bubble clicked keeps the focus, and would keep them showing once the mouse left it. */
 .stream__entry:hover .bubble__copy, .bubble:focus-visible .bubble__copy, .bubble:has(:focus-visible) .bubble__copy { opacity: 1; }
 .bubble__add { display: inline-grid; place-items: center; width: 22px; height: 18px; padding: 0; border: 1px dashed var(--line); border-radius: 9px; background: none; color: var(--muted); opacity: 0; cursor: pointer; transition: opacity 0.12s; }
 .bubble__add:hover { color: var(--text); border-color: var(--muted); }
@@ -1128,7 +1136,6 @@ span.bubble__template { color: var(--muted); cursor: default; }
 .bubble.has-pages { padding-left: 24px; padding-right: 24px; }
 .bubble--todo.has-pages { padding-left: 22px; }
 /* With a mouse the right side also keeps room for the copy button, and the rows under the text stay clear of ›. */
-@media (pointer: fine) { .bubble.has-pages { padding-right: 32px; } .bubble.has-pages .bubble__tags, .bubble.has-pages .bubble__meta { margin-right: -8px; } }
 .page-edge { position: absolute; top: 0; bottom: 0; z-index: 1; display: grid; place-items: center; width: 20px; padding: 0; border: 0; background: none; color: var(--accent); opacity: 0; cursor: pointer; transition: opacity 0.12s, background-color 0.12s; }
 .page-edge--prev { left: 0; border-radius: 15px 0 0 3px; }
 .page-edge--next { right: 0; border-radius: 0 15px 15px 0; }

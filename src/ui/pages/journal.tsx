@@ -489,8 +489,8 @@ function CardBadges({ card }: { card: NoteCard | TodoCard }) {
 /**
  * The vaults an entry is in: its own, where it's kept, then any it's also in, which share it with their members.
  * Pressed, it opens a menu that moves the entry to another vault, puts it in more vaults or takes it out of them,
- * or filters the journal to its vault; an entry that can't be changed (a vault shared to view, nowhere else to go)
- * filters straight away. Left out with only one vault. When the journal already shows one vault, it's named only
+ * or filters the journal to its vault; for an entry that can't be moved (a vault shared to view, nowhere else to go)
+ * it says why, with only the filter (`VaultInfo`). Left out with only one vault. When the journal already shows one vault, it's named only
  * on an entry that can be changed from there, or that's in more than one. An entry shared with this account alone,
  * from someone else's vault, says so.
  */
@@ -498,7 +498,6 @@ function VaultLabel({ card }: { card: NoteCard | TodoCard }) {
   const { vaults, shared, sharedInto } = useCards();
   const filter = useJournalFilter();
   const vaultMove = useVaultMove(card);
-  const showOnly = useShowOnly();
   const home = vaults.find((v) => v.id === card.vaultId);
   const also = vaults.filter((v) => v.id !== card.vaultId && sharedInto.get(card.id)?.includes(v.id));
   const inVaults = home ? [home, ...also] : also;
@@ -523,9 +522,9 @@ function VaultLabel({ card }: { card: NoteCard | TodoCard }) {
   const label = inVaults.map((v) => v.name).join(', ');
   if (!vaultMove || !home) {
     return (
-      <Link className="bubble__vault" to={showOnly({ vaultId: inVaults[0].id })} title={`In ${label}. Show only ${inVaults[0].name}`}>
+      <VaultInfo card={card} inVaults={inVaults} label={label} filtered={filter.vaultId}>
         {names}
-      </Link>
+      </VaultInfo>
     );
   }
   return (
@@ -600,6 +599,47 @@ function VaultMenu({ card, home, also, label, filtered, options, move, children 
               <button type="button" role="menuitem" onClick={() => navigate(showOnly({ vaultId: home.id }))}>
                 Show only {home.name}
               </button>
+            </div>
+          )}
+        </div>
+      )}
+    </div>
+  );
+}
+
+/**
+ * The vaults of an entry this account can't move, as a menu like `VaultMenu`'s, so pressing them never jumps
+ * somewhere unasked: why they can't be changed, and Show only for each.
+ */
+function VaultInfo({ card, inVaults, label, filtered, children }: { card: NoteCard | TodoCard; inVaults: Vault[]; label: string; filtered?: string; children: ReactNode }) {
+  const may = usePermissions();
+  const { open, root, toggle, fixedStyle } = usePopover();
+  const navigate = useNavigate();
+  const showOnly = useShowOnly();
+  const can = may(card);
+  const why = card.viewOnly
+    ? 'Set to view only, so its vaults can\'t be changed.'
+    : can.sharedBy
+      ? can.note
+      : can.note
+        ? `${can.note}, so its vaults can't be changed.`
+        : 'There\'s no other vault to move it to.';
+  const shown = inVaults.filter((v) => v.id !== filtered);
+  return (
+    <div ref={root} className="vault-menu" onClick={(e) => e.stopPropagation()}>
+      <button type="button" className="bubble__vault" aria-haspopup="menu" aria-expanded={!!open} title={`In ${label}`} onClick={toggle}>
+        {children}
+      </button>
+      {open && (
+        <div className={`style-menu${open === 'up' ? ' style-menu--up' : ''}`} style={fixedStyle(220)} role="menu" aria-label="Vaults">
+          <p className="style-menu__note">{why}</p>
+          {shown.length > 0 && (
+            <div className="style-menu__group">
+              {shown.map((v) => (
+                <button key={v.id} type="button" role="menuitem" onClick={() => navigate(showOnly({ vaultId: v.id }))}>
+                  Show only {v.name}
+                </button>
+              ))}
             </div>
           )}
         </div>

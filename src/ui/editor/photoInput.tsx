@@ -1,4 +1,5 @@
 import { useRef, type RefObject } from 'react';
+import { useNavigate } from 'react-router';
 import type { Editor as TiptapEditor } from '@tiptap/react';
 import type { EditorView } from '@tiptap/pm/view';
 import { picturesInHtml } from '../../photos/pasted';
@@ -31,24 +32,42 @@ async function pictureAt(src: string): Promise<Blob> {
 export function usePhotoInput(editor: RefObject<TiptapEditor | null>, vaultId: () => string | undefined) {
   const { photos } = useCards();
   const toast = useToast();
+  const navigate = useNavigate();
   const picker = useRef<HTMLInputElement>(null);
 
   /** Adds each picture in turn, in order: at the cursor, or from `at` on. */
   const addAll = async (pictures: (() => Promise<Blob>)[], at?: number) => {
     let pos = at;
+    let added = 0;
     for (const picture of pictures) {
       try {
         const id = await photos.add(await picture(), vaultId()!);
         const ed = editor.current;
         if (!ed || ed.isDestroyed) return;
         const node = { type: 'photo', attrs: { id } };
+        // At the start of a line with words on it, the picture goes before the line rather than splitting it.
+        const { $from, empty } = ed.state.selection;
+        if (pos === undefined && empty && $from.depth === 1 && $from.parentOffset === 0 && $from.parent.content.size) pos = $from.before();
         if (pos === undefined) ed.chain().focus().insertContent(node).run();
         else ed.chain().focus().insertContentAt(Math.min(pos, ed.state.doc.content.size), node).run();
-        if (pos !== undefined) pos = ed.state.selection.to;
+        // The editor leaves the photo picked, so the next key would replace it. The cursor goes on the line after
+        // it instead, a new one if a line doesn't follow, and the next picture goes in after this one.
+        const end = ed.state.selection.to;
+        if (!ed.state.doc.resolve(end).nodeAfter?.isTextblock) ed.commands.insertContentAt(end, { type: 'paragraph' });
+        ed.commands.setTextSelection(end + 1);
+        pos = end;
+        added++;
       } catch (err) {
         toast(err instanceof Error ? err.message : "That photo couldn't be added.");
       }
     }
+    if (!added) return;
+    // A photo shows here at once either way; said when it can't go on to the server, so other devices won't have it.
+    await photos.upload();
+    const { problem } = photos.getState();
+    const these = added > 1 ? 'These photos stay' : 'This photo stays';
+    if (problem === 'needs_drive') toast(`${these} on this device until Google Drive is connected.`, { action: { label: 'Settings', run: () => void navigate('/settings') } });
+    else if (problem === 'not_configured') toast(`${these} on this device for now: photo storage isn't set up on the server yet.`);
   };
   const add = (files: File[], at?: number) => addAll(images(files).map((file) => async () => file), at);
 

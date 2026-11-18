@@ -7,8 +7,9 @@ import { fromMarkdown, type LinkResolver } from '../../domain/markdownIn';
 import type { JSONNode } from '../../domain/types';
 import { clipboardPrefs, COPY_STYLES, COPY_WORDS, PASTE_STYLES, PASTE_WORDS, type CopyStyle, type PasteStyle } from '../clipboardPrefs';
 import { writeClipboard } from '../entryActions';
+import { hasPasteChoice, showPasteChoice } from './pasteChoice';
 
-/** Shows a message with a button for each other style: the toast, in the app. */
+/** Shows a message with a button for each other style: the toast, in the app. A paste uses it only in an editor without `PasteChoices`. */
 export type OfferStyles = (message: string, actions: { label: string; run: () => void }[]) => void;
 
 /** What was pasted, read while the paste event lasts. */
@@ -18,10 +19,10 @@ export interface Pasted {
 }
 
 /**
- * Copying and pasting in an editor. Each goes in the style the Copy & paste settings pick, and its toast offers
- * the other styles for that one copy or paste: a copy is made again, a paste is put back the other way. Rich text is
- * the editor's own HTML, with plain words beside it for apps that take only text. Text inside a code block is
- * always copied and pasted as it is, with nothing offered.
+ * Copying and pasting in an editor. Each goes in the style the Copy & paste settings pick, and offers the other
+ * styles for that one copy or paste: a copy's toast makes it again, and a paste's chip, right after the pasted text
+ * (`PasteChoices`), puts it back the other way. Rich text is the editor's own HTML, with plain words beside it for
+ * apps that take only text. Text inside a code block is always copied and pasted as it is, with nothing offered.
  */
 export function clipboardProps(title: () => TitleResolver, offer: OfferStyles, resolve: () => LinkResolver = () => () => null) {
   const copy = (view: EditorView, event: ClipboardEvent, cut: boolean) => {
@@ -63,24 +64,39 @@ export function clipboardProps(title: () => TitleResolver, offer: OfferStyles, r
     const kinds = pasteKinds(view.state.schema, pasted, resolve());
     const distinct = [style, ...others(PASTE_STYLES, style)].filter((s, i, list) => list.findIndex((o) => kinds[o] === kinds[s]) === i);
     if (distinct.length < 2) return true;
-    const say = (now: PasteStyle, doc: ProseNode, end: number) =>
+    const again = (other: PasteStyle, doc: ProseNode, end: number) => {
+      // Only while the text is as the paste left it, so nothing typed since is lost.
+      if (view.isDestroyed || !view.state.doc.eq(doc)) return false;
+      view.dispatch(view.state.tr.setSelection(TextSelection.create(view.state.doc, start, end)));
+      pasteAs(view, pasted, other, resolve());
+      view.focus();
+      say(other);
+      return true;
+    };
+    // In a chip after the pasted text where the editor has one, else in the toast.
+    const say = (now: PasteStyle) => {
+      const { doc } = view.state;
+      const end = view.state.selection.to;
+      if (hasPasteChoice(view.state)) {
+        showPasteChoice(view, {
+          from: start,
+          to: end,
+          title: `Pasted ${PASTE_WORDS[now]}`,
+          options: distinct.map((s) => ({ label: PASTE_STYLES[s], current: s === now, run: () => void again(s, doc, end) })),
+        });
+        return;
+      }
       offer(
         `Pasted ${PASTE_WORDS[now]}`,
         distinct
           .filter((s) => s !== now)
           .map((other) => ({
             label: PASTE_STYLES[other],
-            run: () => {
-              // Only while the text is as the paste left it, so nothing typed since is lost.
-              if (view.isDestroyed || !view.state.doc.eq(doc)) return offer('The text has changed since, so the paste stays as it is.', []);
-              view.dispatch(view.state.tr.setSelection(TextSelection.create(view.state.doc, start, end)));
-              pasteAs(view, pasted, other, resolve());
-              view.focus();
-              say(other, view.state.doc, view.state.selection.to);
-            },
+            run: () => void (again(other, doc, end) || offer('The text has changed since, so the paste stays as it is.', [])),
           })),
       );
-    say(style, view.state.doc, view.state.selection.to);
+    };
+    say(style);
     return true;
   };
 

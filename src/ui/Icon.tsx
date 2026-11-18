@@ -14,6 +14,8 @@ const PATHS = {
   color: 'M12 3.5s-6 6.4-6 10.6a6 6 0 0 0 12 0c0-4.2-6-10.6-6-10.6Z',
   cut: 'M6 9a3 3 0 1 0 0-6 3 3 0 0 0 0 6ZM6 21a3 3 0 1 0 0-6 3 3 0 0 0 0 6ZM20 4 8.1 15.9M14.5 14.5 20 20M8.1 8.1 12 12',
   code: 'M8 7l-5 5 5 5M16 7l5 5-5 5M14 4l-4 16',
+  // A clipboard: the options after a paste.
+  paste: 'M9 3h6v3H9ZM9 4.5H7a2 2 0 0 0-2 2V19a2 2 0 0 0 2 2h10a2 2 0 0 0 2-2V6.5a2 2 0 0 0-2-2h-2',
   copy: 'M9 9h10a1 1 0 0 1 1 1v10a1 1 0 0 1-1 1H9a1 1 0 0 1-1-1V10a1 1 0 0 1 1-1ZM5 15H4a1 1 0 0 1-1-1V4a1 1 0 0 1 1-1h10a1 1 0 0 1 1 1v1',
   filter: 'M4 6h16M7 12h10M10 18h4',
   sort: 'M7 4v16M3 16l4 4 4-4M14 6h7M14 12h5M14 18h3',
@@ -68,4 +70,16 @@ export function Icon({ name, size = 20 }: { name: IconName; size?: number }) {
       <path d={PATHS[name]} />
     </svg>
   );
+}
+
+/** The same icon as a plain element, for drawing outside React, like a widget in the editor's text. */
+export function iconElement(name: IconName, size = 20): SVGSVGElement {
+  const ns = 'http://www.w3.org/2000/svg';
+  const svg = document.createElementNS(ns, 'svg');
+  const attrs = { width: size, height: size, viewBox: '0 0 24 24', fill: 'none', stroke: 'currentColor', 'stroke-width': 1.7, 'stroke-linecap': 'round', 'stroke-linejoin': 'round', 'aria-hidden': 'true' };
+  for (const [k, v] of Object.entries(attrs)) svg.setAttribute(k, String(v));
+  const path = document.createElementNS(ns, 'path');
+  path.setAttribute('d', PATHS[name]);
+  svg.append(path);
+  return svg;
 }

@@ -17,6 +17,7 @@ import { useToast } from '../Toast';
 import { linkTitle } from '../../domain/cardIndex';
 import { CardLink, insertCardLink, type LinkOption } from './cardLink';
 import { clipboardProps, titleResolver } from './clipboardStyle';
+import { PasteChoices } from './pasteChoice';
 import { CodeHighlight } from './codeHighlight';
 import { Hidden } from './hidden';
 import { Photo } from './photo';
@@ -259,6 +260,7 @@ export function Editor({ content, onChange, placeholder, selfId, vaultId, editab
       Photo,
       CodeHighlight,
       Hidden,
+      PasteChoices,
       typeahead('slashMenu', '/', slashItems, slash.render('Add')),
       CardLink.configure({
         suggestion: {

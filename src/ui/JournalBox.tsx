@@ -17,6 +17,7 @@ import type { JSONNode } from '../domain/types';
 import { useCards, useToday } from '../state/CardsContext';
 import { linkTitle } from '../domain/cardIndex';
 import { clipboardProps, titleResolver } from './editor/clipboardStyle';
+import { PasteChoices } from './editor/pasteChoice';
 import { CodeHighlight } from './editor/codeHighlight';
 import { Photo } from './editor/photo';
 import { usePhotoInput } from './editor/photoInput';
@@ -196,6 +197,7 @@ export function JournalBox({ filter }: { filter: StreamFilter }) {
       Photo,
       CodeHighlight,
       TaskList,
+      PasteChoices,
       TaskItem.configure({ nested: true }),
       TodoWord,
       tokenHighlight(() => latest.current.today),

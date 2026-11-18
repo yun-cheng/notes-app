@@ -1,5 +1,5 @@
 import { useLocation, useNavigate } from 'react-router';
-import { displayTitle } from '../domain/content';
+import { cardPages, displayTitle } from '../domain/content';
 import { fromTemplate } from '../domain/templates';
 import type { NoteCard, TodoCard } from '../domain/types';
 import { useCards, useToday } from '../state/CardsContext';
@@ -38,20 +38,25 @@ export function useStartFromTemplate() {
 }
 
 /**
- * Making an entry a template, or an ordinary entry again, as it is: it moves between the journal and its Templates
- * filter, with an undo. A todo keeps its dates, which a template doesn't pass on.
+ * Saving a copy of an entry as a template, under the journal's Templates filter, to start new entries from; the
+ * entry itself stays as it is, where it is. The copy has its words, pages, tags, color and previews, and a todo's
+ * copy is an open todo without dates, which a template wouldn't pass on anyway. With an undo.
  */
-export function useToggleTemplate() {
+export function useSaveAsTemplate() {
   const { repo } = useCards();
   const navigate = useNavigate();
   const toast = useToast();
   const { undoAction } = useUndo();
+  const vaultFor = useVaultFor();
   return (card: Entry) => {
-    const template = !card.template;
     const action = repo.action();
-    void repo.update(card.id, { template });
-    const undo = { label: 'Undo', run: () => void undoAction(action) };
-    if (template) toast(`Moved “${displayTitle(card)}” to Templates, to start new entries from`, { actions: [{ label: 'Show', run: () => void navigate(TEMPLATES_PATH) }, undo] });
-    else toast(`Moved “${displayTitle(card)}” back to the journal`, { action: undo });
+    const copy = { title: card.title, content: card.content, pages: cardPages(card), tags: card.tags, vaultId: vaultFor(card), color: card.color ?? undefined, preview: card.preview, template: true };
+    void (card.type === 'todo' ? repo.createTodo(copy) : repo.createNote(copy));
+    toast(`Saved a template of “${displayTitle(card)}”`, {
+      actions: [
+        { label: 'Show', run: () => void navigate(TEMPLATES_PATH) },
+        { label: 'Undo', run: () => void undoAction(action) },
+      ],
+    });
   };
 }

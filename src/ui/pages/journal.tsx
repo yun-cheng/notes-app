@@ -42,7 +42,7 @@ import { usePopover } from '../usePopover';
 import { Board, BoardSetup, lastBoard, useBoardKind, useCardDrag, type DragParts } from './board';
 import { foldStacks, isStack, moveInStack, stackEntries, stacksOf } from '../../domain/stacks';
 import { openStacks, useTakeOut } from '../useStacking';
-import { useStartFromTemplate, useToggleTemplate } from '../useTemplates';
+import { useSaveAsTemplate, useStartFromTemplate } from '../useTemplates';
 import { turnPage } from '../pageTurn';
 import { googleTranslateUrl, languageName, openOutside, showTranslation, translateEntry, translatesOnDevice, useTranslation } from '../translate';
 
@@ -1261,7 +1261,7 @@ function EntryDetail({ card, fresh, edit, onClose }: { card: NoteCard | TodoCard
   const can = may(card);
   const remove = useDeleteCard();
   const { copy, archive } = useEntryActions();
-  const toggleTemplate = useToggleTemplate();
+  const saveAsTemplate = useSaveAsTemplate();
   const { stackOf, takeOut } = useTakeOut();
   const [tools, setTools] = useState(false);
   const [tagging, setTagging] = useState(false);
@@ -1408,14 +1408,13 @@ function EntryDetail({ card, fresh, edit, onClose }: { card: NoteCard | TodoCard
         )}
         {can.edit && <StyleMenu card={card} inBar />}
         {can.protect && <ViewOnlyButton card={card} className="icon-btn" />}
-        {can.edit && !isStack(card) && (
+        {can.edit && !isStack(card) && !card.template && (
           <button
             type="button"
-            className={`icon-btn${card.template ? ' is-active' : ''}`}
-            aria-pressed={!!card.template}
-            aria-label={card.template ? 'Move back to the journal' : 'Move to Templates'}
-            title={card.template ? 'In Templates: press to move it back to the journal' : 'Move to Templates, out of the journal, to start new entries from'}
-            onClick={() => toggleTemplate(card)}
+            className="icon-btn"
+            aria-label="Save as template"
+            title="Save a copy as a template, to start new entries from"
+            onClick={() => saveAsTemplate(card)}
           >
             <Icon name="template" />
           </button>

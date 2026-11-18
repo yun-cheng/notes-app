@@ -11,7 +11,8 @@ import { ShareDialog } from './ShareDialog';
 import { DuePanel } from './TodoDue';
 import { TagPicker } from './components';
 import { useCanRestore, useInTrash, usePermissions, useViewOnly } from './viewOnly';
-import { useStartFromTemplate, useToggleTemplate } from './useTemplates';
+import { useSaveAsTemplate, useStartFromTemplate } from './useTemplates';
+import { isStack } from '../domain/stacks';
 import { useTakeOut } from './useStacking';
 import { useLocation, useNavigate } from 'react-router';
 import { textToDoc } from '../domain/content';
@@ -177,7 +178,7 @@ function EntryMenu({ card, at, extras, onShare, onClose }: MenuProps) {
   const actions = useEntryActions();
   const selection = useSelection();
   const toggleViewOnly = useEntryViewOnly(card);
-  const toggleTemplate = useToggleTemplate();
+  const saveAsTemplate = useSaveAsTemplate();
   const startFrom = useStartFromTemplate();
   const viewOnly = useViewOnly();
   const { stackOf, takeOut } = useTakeOut();
@@ -325,10 +326,12 @@ function EntryMenu({ card, at, extras, onShare, onClose }: MenuProps) {
           <Item icon={to} onClick={run(() => actions.retype(card.id, to))}>
             {to === 'todo' ? 'Make it a todo' : 'Make it a note'}
           </Item>
-          {/* A template keeps out of the journal, under Templates, to start new entries from; this moves it there or back. */}
-          <Item icon="template" onClick={run(() => toggleTemplate(card))}>
-            {card.template ? 'Move back to the journal' : 'Move to Templates'}
-          </Item>
+          {/* A copy under Templates, to start new entries from; the entry stays where it is. */}
+          {!card.template && !isStack(card) && (
+            <Item icon="template" onClick={run(() => saveAsTemplate(card))}>
+              Save as template
+            </Item>
+          )}
         </div>
       )}
       {/* In an open stack: back out into the stream. It changes the stack, so it needs leave to change that. */}

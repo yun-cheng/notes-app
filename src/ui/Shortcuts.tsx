@@ -48,6 +48,13 @@ const GROUPS: { title: string; keys: [string, string][] }[] = [
       ['/', 'Lists, headings, photos and more'],
     ],
   },
+  {
+    title: 'An open entry',
+    keys: [
+      ['Enter, Shift Enter', 'New line, or the next item in a list'],
+      ['Esc', 'Close it'],
+    ],
+  },
 ];
 
 /** Every keyboard shortcut, opened with `?` or from the command box. */

@@ -346,6 +346,8 @@ body:has(.composer:focus-within) .tabbar { display: none; }
 
 .prose { min-height: 34dvh; padding: 10px 0 24px; outline: none; font-size: 17px; line-height: 1.65; overflow-wrap: anywhere; }
 .prose > * + * { margin-top: 0.7em; }
+/* Lines of text follow one another with no gap, as in the journal box and the bubbles; an empty line makes one. */
+.prose > p + p { margin-top: 0; }
 .prose p { margin-bottom: 0; }
 .prose h1, .prose h2, .prose h3 { font-family: var(--serif); line-height: 1.3; margin: 1.1em 0 0; }
 .prose h1 { font-size: 24px; } .prose h2 { font-size: 21px; } .prose h3 { font-size: 18px; }

@@ -1,5 +1,6 @@
 import { useEffect, useRef, useState } from 'react';
 import { createPortal } from 'react-dom';
+import { Extension } from '@tiptap/core';
 import { EditorContent, useEditor, type Editor as TiptapEditor } from '@tiptap/react';
 import { TaskItem, TaskList } from '@tiptap/extension-list';
 import { StarterKit } from '@tiptap/starter-kit';
@@ -52,6 +53,20 @@ function settledText(doc: JSONNode): string {
   while (blocks.length && blocks[blocks.length - 1].type === 'paragraph' && !blocks[blocks.length - 1].content?.length) blocks.pop();
   return JSON.stringify({ ...doc, content: blocks });
 }
+
+/**
+ * Shift+Enter (and Cmd+Enter) do what Enter does: a new line, the next item in a list, a new line in code. Left to
+ * themselves they put a line break inside the paragraph, which looked and behaved differently from Enter's new
+ * paragraph (no new list item) for no reason anyone could see. The journal box's Shift+Enter is this new line too.
+ */
+const OneEnter = Extension.create({
+  name: 'oneEnter',
+  priority: 1000,
+  addKeyboardShortcuts() {
+    const enter = () => this.editor.commands.enter();
+    return { 'Shift-Enter': enter, 'Mod-Enter': enter };
+  },
+});
 
 export function linkOptions(index: CardIndex, rawQuery: string, selfId?: string): LinkOption[] {
   const typed = rawQuery.replace(/\]+$/, '').trim();
@@ -235,6 +250,7 @@ export function Editor({ content, onChange, placeholder, selfId, vaultId, editab
   const editor = useEditor({
     extensions: [
       StarterKit.configure({ heading: { levels: [1, 2, 3] } }),
+      OneEnter,
       // A checklist in the body: its items tick here, not in the journal, and `[ ] ` at a line's start makes one.
       TaskList,
       TaskItem.configure({ nested: true }),

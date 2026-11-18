@@ -1080,14 +1080,29 @@ button.bubble__template:hover { background: var(--accent-soft); }
 span.bubble__template { color: var(--muted); cursor: default; }
 .bubble__side { display: flex; align-items: center; gap: 4px; margin-bottom: 2px; color: var(--accent); font-size: 11px; font-weight: 600; letter-spacing: 0.04em; text-transform: uppercase; }
 .bubble.is-back { border-style: dashed; }
-/* Two names for the same turn forward, one for odd pages and one for even, so each turn plays again. */
-.flip-to-back { animation: flip-to-back 0.32s ease-out; }
-.flip-to-next { animation: flip-to-next 0.32s ease-out; }
-.flip-to-front { animation: flip-to-front 0.32s ease-out; }
-@keyframes flip-to-back { from { transform: perspective(900px) rotateY(-90deg); } to { transform: none; } }
-@keyframes flip-to-next { from { transform: perspective(900px) rotateY(-90deg); } to { transform: none; } }
-@keyframes flip-to-front { from { transform: perspective(900px) rotateY(90deg); } to { transform: none; } }
-@media (prefers-reduced-motion: reduce) { .flip-to-back, .flip-to-next, .flip-to-front { animation: none; } }
+/* Turning a page, like the top card of a deck (`turnPage` in pageTurn.ts): on to the next, the page showing slides
+   off to the left, tipping as it goes, and the one behind comes up from under it; back to the front, the front
+   slides in again over the last page, which sinks back. The rest of the page changes at once. */
+html[data-page-turn]::view-transition-old(root), html[data-page-turn]::view-transition-new(root) { animation: none; }
+::view-transition-group(page-turn) { animation-duration: 0.3s; animation-timing-function: cubic-bezier(0.2, 0.7, 0.2, 1); }
+::view-transition-old(page-turn), ::view-transition-new(page-turn) { animation-duration: 0.3s; animation-timing-function: cubic-bezier(0.2, 0.7, 0.2, 1); animation-fill-mode: both; mix-blend-mode: normal; }
+html[data-page-turn="next"]::view-transition-old(page-turn) { z-index: 1; animation-name: page-off; }
+html[data-page-turn="next"]::view-transition-new(page-turn) { animation-name: page-up; }
+html[data-page-turn="front"]::view-transition-old(page-turn) { animation-name: page-down; }
+html[data-page-turn="front"]::view-transition-new(page-turn) { z-index: 1; animation-name: page-back; }
+@keyframes page-off { to { transform: translateX(-40%) rotate(-5deg); opacity: 0; } }
+@keyframes page-back { from { transform: translateX(-40%) rotate(-5deg); opacity: 0; } }
+@keyframes page-up { from { transform: scale(0.94) translateY(4px); opacity: 0.4; } }
+@keyframes page-down { to { transform: scale(0.94) translateY(4px); opacity: 0; } }
+/* Where the browser can't do that, or in a sheet, the page shown slides in from the side it came from. Two names
+   for the same slide to the next page, one for odd pages and one for even, so each plays. */
+.page-in-next { animation: page-in-next 0.24s cubic-bezier(0.2, 0.7, 0.2, 1); }
+.page-in-next-2 { animation: page-in-next-2 0.24s cubic-bezier(0.2, 0.7, 0.2, 1); }
+.page-in-front { animation: page-in-front 0.24s cubic-bezier(0.2, 0.7, 0.2, 1); }
+@keyframes page-in-next { from { transform: translateX(24px); opacity: 0; } }
+@keyframes page-in-next-2 { from { transform: translateX(24px); opacity: 0; } }
+@keyframes page-in-front { from { transform: translateX(-24px); opacity: 0; } }
+@media (prefers-reduced-motion: reduce) { .page-in-next, .page-in-next-2, .page-in-front { animation: none; } }
 /* In an entry's sheet, a row for its pages: the front, each page behind it, + for another, and a way to take one out. */
 .page-tabs { display: flex; flex-wrap: wrap; align-items: center; gap: 4px; margin: 0 0 6px; color: var(--accent); }
 .page-tabs__tab { min-width: 30px; height: 26px; padding: 0 8px; border: 1px solid var(--line); border-radius: 13px; background: none; color: var(--muted); font: inherit; font-size: 12px; font-weight: 600; font-variant-numeric: tabular-nums; cursor: pointer; display: inline-flex; align-items: center; justify-content: center; }

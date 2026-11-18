@@ -625,6 +625,13 @@ a.change__title:hover { color: var(--accent); }
 .bubble__title { font-weight: 600; }
 .bubble__text { min-width: 0; }
 .bubble__lines { display: block; white-space: pre-line; }
+/*
+ * A list item's line (`indentRuns`): its marker apart, so a long item wraps under its own text, and indented an em a
+ * level when nested (the text's pre-line collapses the spaces it starts with).
+ */
+.bubble__item { display: flex; }
+.bubble__item > :last-child { min-width: 0; }
+.bubble__marker { flex: none; white-space: pre; }
 /* Code: in a code font, kept as typed. A code block scrolls sideways when wide, with a copy button on hover. */
 .bubble__code { padding: 0.05em 0.3em; border-radius: 4px; background: var(--sunken); font: 0.88em/1.4 var(--mono); }
 .bubble__snippet { position: relative; margin: 4px 0; }

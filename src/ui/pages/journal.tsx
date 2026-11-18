@@ -586,7 +586,24 @@ function useFold(id: string, parts: PreviewPart[]) {
       {parts.map((part, i) =>
         part.kind === 'text' ? (
           <span key={i} className="bubble__lines">
-            <LinkedText text={part.lines.join('\n')} />
+            {indentRuns(part.lines).map((run, j) =>
+              run.marker !== undefined ? (
+                <span key={j} className="bubble__item" style={run.depth ? { paddingLeft: `${run.depth}em` } : undefined}>
+                  <span className="bubble__marker">{run.marker}</span>
+                  <span>
+                    <LinkedText text={run.text} />
+                  </span>
+                </span>
+              ) : run.depth ? (
+                <span key={j} className="bubble__item" style={{ paddingLeft: `${run.depth}em` }}>
+                  <span>
+                    <LinkedText text={run.text} />
+                  </span>
+                </span>
+              ) : (
+                <LinkedText key={j} text={run.text} />
+              ),
+            )}
           </span>
         ) : (
           <CodeSnippet key={i} code={part.text} language={part.language} />
@@ -595,6 +612,29 @@ function useFold(id: string, parts: PreviewPart[]) {
     </div>
   ) : null;
   return { fold, view };
+}
+
+/** A list item's marker at the start of a preview line, as `previewParts` writes it. */
+const LIST_MARKER = /^(• |\d+\. |☐ |☑ )/;
+
+/**
+ * A bubble's lines in runs, for laying out lists: each list item, with its marker apart so a long item wraps under
+ * its own text rather than under the marker; and how far a line is indented, which `previewParts` writes as two
+ * spaces a level for a nested list, and which the bubble shows as an em of room a level (its text collapses the
+ * spaces a line starts with). Other lines stay together in one run.
+ */
+function indentRuns(lines: string[]): { depth: number; marker?: string; text: string }[] {
+  const runs: { depth: number; marker?: string; text: string }[] = [];
+  for (const line of lines) {
+    const depth = Math.floor((line.length - line.trimStart().length) / 2);
+    const rest = line.trimStart();
+    const marker = LIST_MARKER.exec(rest)?.[0];
+    const last = runs[runs.length - 1];
+    if (marker) runs.push({ depth, marker, text: rest.slice(marker.length) });
+    else if (!depth && last && !last.depth && last.marker === undefined) last.text += `\n${line}`;
+    else runs.push({ depth, text: depth ? rest : line });
+  }
+  return runs;
 }
 
 /**

@@ -653,7 +653,7 @@ a.change__title:hover { color: var(--accent); }
 .bubble__fold { display: inline-flex; align-items: center; gap: 2px; padding: 0 6px 0 2px; border: 0; border-radius: 6px; background: none; color: var(--accent); font: inherit; font-size: 12px; font-weight: 600; cursor: pointer; }
 .bubble__fold:hover { background: var(--accent-soft); }
 /* An entry's tags, and a todo's dates kept to the right, in a row of their own over the bottom row. */
-.bubble__dates { display: inline-flex; flex-wrap: wrap; align-items: center; justify-content: flex-end; gap: 6px; margin-left: auto; }
+.bubble__dates { display: inline-flex; flex-wrap: wrap; align-items: center; justify-content: flex-end; gap: 6px; margin-left: auto; padding-left: 12px; }
 .bubble__tags { display: flex; flex-wrap: wrap; align-items: center; gap: 6px; margin: 4px 0 2px; color: var(--muted); font-size: 11px; line-height: 1.6; }
 .bubble__tags .chip--small { min-height: 18px; }
 .bubble__meta { display: flex; flex-wrap: wrap; align-items: center; gap: 6px; min-height: 20px; color: var(--muted); font-size: 11px; line-height: 1.6; }

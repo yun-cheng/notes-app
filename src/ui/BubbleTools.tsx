@@ -12,7 +12,7 @@ type Entry = NoteCard | TodoCard;
 
 /**
  * The buttons beside a bubble on hover: open it to edit, and ⋯ for the rest, the same menu a right-click on the
- * bubble opens (`useEntryMenu`). Copying it is a button in the bubble's top right corner too. Its tags and a todo's due date are changed in its bottom row (`AddTag` and
+ * bubble opens (`useEntryMenu`). Copying it is a button in the bubble's top right corner too. Its tags are changed in their own row, and a todo's due date in its bottom row (`AddTag` and
  * `DueMenu`). A phone has no hover; a tap opens the entry, whose sheet has every action, and a todo's due date in its
  * bubble can be tapped.
  */

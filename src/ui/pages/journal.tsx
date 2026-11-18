@@ -1,7 +1,7 @@
 import { Fragment, useEffect, useLayoutEffect, useMemo, useRef, useState, type KeyboardEvent as ReactKeyboardEvent, type ReactNode } from 'react';
 import { Link, Navigate, Outlet, useLocation, useNavigate, useParams } from 'react-router';
 import { diaryVault } from '../../domain/access';
-import { linkTitle } from '../../domain/cardIndex';
+import { linkTitle, resolveTags } from '../../domain/cardIndex';
 import { cardPages, checklistProgress, CODE_CLOSE, CODE_OPEN, displayTitle, HIDE_CLOSE, HIDE_OPEN, previewParts, splitLinks, storedPages, translationPage, pagesHaveTranslation, withNewPage, withoutPage, withPage, type PreviewPart } from '../../domain/content';
 import { isDateKey, relativeDay, relativeDayInSentence, toDateKey } from '../../domain/dates';
 import { STATE_BOARD } from '../../domain/board';
@@ -397,45 +397,54 @@ export function EntryBubble({ card, at }: { card: NoteCard | TodoCard; at: numbe
 }
 
 function BubbleMeta({ card, at, fold, flip, lead }: { card: NoteCard | TodoCard; at: number; fold: Fold; flip: Flip; lead?: ReactNode }) {
-  const { repo } = useCards();
+  const { repo, index } = useCards();
   const may = usePermissions();
   // A grouped tag (Priority: High) can be switched right here.
   const retag = may(card).edit ? (tags: string[]) => void repo.update(card.id, { tags }) : undefined;
+  // An entry's tags have a row of their own, over the rest; one without any is offered a tag in the bottom row.
+  const tagged = resolveTags(index, card.tags).length > 0;
   return (
-    // Tags and the vault on the left; More or Less, the due date and the time it was written on the right.
-    <span className="bubble__meta">
-      <TagChips tagIds={card.tags} onChange={retag} />
-      {retag && <AddTag card={card} />}
-      <VaultLabel card={card} />
-      {card.viewOnly && <ViewOnlyMark card={card} />}
-      <span className="bubble__end">
-        {lead}
-        {card.template && <UseTemplate card={card} />}
-        <CardBadges card={card} />
-        {flip.pages.length > 0 && (
-          <button
-            type="button"
-            className={`bubble__flip${flip.on ? ' is-on' : ''}`}
-            aria-label={`Page ${flip.at + 1} of ${flip.pages.length + 1}: ${flip.last ? 'back to the front' : 'turn to the next'}`}
-            title={flip.last ? 'Back to the front' : 'Turn to the next page'}
-            onClick={(e) => flip.next(e.currentTarget)}
-          >
-            <Icon name="flip" size={13} />
-            {flip.at + 1}/{flip.pages.length + 1}
-          </button>
-        )}
-        {(fold.long || fold.folded) && (
-          <button type="button" className="bubble__fold" aria-expanded={!fold.folded} onClick={fold.toggle}>
-            <Icon name={fold.folded ? 'down' : 'up'} size={14} />
-            {fold.folded ? 'More' : 'Less'}
-          </button>
-        )}
-        {card.type === 'todo' && card.waiting && card.status === 'open' && <WaitingMark />}
-        {card.type === 'todo' && (retag ? <DueMenu card={card} look={card.due || card.start ? 'label' : 'add'} /> : <DueLabel todo={card} className="bubble__due" />)}
-        <SyncMark id={card.id} />
-        <time dateTime={new Date(at).toISOString()}>{time(at)}</time>
+    <>
+      {tagged && (
+        <span className="bubble__tags">
+          <TagChips tagIds={card.tags} onChange={retag} />
+          {retag && <AddTag card={card} />}
+        </span>
+      )}
+      {/* The vault on the left; More or Less, the due date and the time it was written on the right. */}
+      <span className="bubble__meta">
+        {!tagged && retag && <AddTag card={card} />}
+        <VaultLabel card={card} />
+        {card.viewOnly && <ViewOnlyMark card={card} />}
+        <span className="bubble__end">
+          {lead}
+          {card.template && <UseTemplate card={card} />}
+          <CardBadges card={card} />
+          {flip.pages.length > 0 && (
+            <button
+              type="button"
+              className={`bubble__flip${flip.on ? ' is-on' : ''}`}
+              aria-label={`Page ${flip.at + 1} of ${flip.pages.length + 1}: ${flip.last ? 'back to the front' : 'turn to the next'}`}
+              title={flip.last ? 'Back to the front' : 'Turn to the next page'}
+              onClick={(e) => flip.next(e.currentTarget)}
+            >
+              <Icon name="flip" size={13} />
+              {flip.at + 1}/{flip.pages.length + 1}
+            </button>
+          )}
+          {(fold.long || fold.folded) && (
+            <button type="button" className="bubble__fold" aria-expanded={!fold.folded} onClick={fold.toggle}>
+              <Icon name={fold.folded ? 'down' : 'up'} size={14} />
+              {fold.folded ? 'More' : 'Less'}
+            </button>
+          )}
+          {card.type === 'todo' && card.waiting && card.status === 'open' && <WaitingMark />}
+          {card.type === 'todo' && (retag ? <DueMenu card={card} look={card.due || card.start ? 'label' : 'add'} /> : <DueLabel todo={card} className="bubble__due" />)}
+          <SyncMark id={card.id} />
+          <time dateTime={new Date(at).toISOString()}>{time(at)}</time>
+        </span>
       </span>
-    </span>
+    </>
   );
 }
 

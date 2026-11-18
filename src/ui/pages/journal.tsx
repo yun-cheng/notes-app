@@ -402,34 +402,30 @@ function BubbleMeta({ card, at, fold, flip, lead }: { card: NoteCard | TodoCard;
   const may = usePermissions();
   // A grouped tag (Priority: High) can be switched right here.
   const retag = may(card).edit ? (tags: string[]) => void repo.update(card.id, { tags }) : undefined;
-  // An entry's tags and a todo's dates share a row over the rest: the tags on the left, the dates on the right.
+  // An entry's tags and a todo's dates share a row over the rest: the tags on the left, the dates on the right. An
+  // entry that can be changed always has it, for the buttons that add the first of them, so the bottom row keeps to
+  // what it says; without hover those buttons are gone, and so is a row with nothing else in it.
   const tagged = resolveTags(index, card.tags).length > 0;
   const dated = card.type === 'todo' && !!(card.due || card.start);
   const waiting = card.type === 'todo' && card.waiting && card.status === 'open';
-  const row = tagged || dated;
-  // The button that adds a date to a todo without one: on the right of that row, where its dates go, or beside the
-  // tag button in the bottom row while there's no such row.
-  const addDue = card.type === 'todo' && !dated && retag && <DueMenu card={card} look="add" />;
+  const row = tagged || dated || !!retag;
   return (
     <>
       {row && (
-        <span className="bubble__tags">
+        <span className={`bubble__tags${tagged || dated ? '' : ' bubble__tags--empty'}`}>
           <TagChips tagIds={card.tags} onChange={retag} />
           {retag && <AddTag card={card} />}
-          {dated ? (
+          {/* A todo's dates on the right, or the button that adds the first. */}
+          {card.type === 'todo' && (dated || retag) && (
             <span className="bubble__dates">
-              {waiting && <WaitingMark />}
-              {retag ? <DueMenu card={card} look="label" /> : <DueLabel todo={card} className="bubble__due" />}
+              {dated && waiting && <WaitingMark />}
+              {retag ? <DueMenu card={card} look={dated ? 'label' : 'add'} /> : <DueLabel todo={card} className="bubble__due" />}
             </span>
-          ) : (
-            addDue && <span className="bubble__dates">{addDue}</span>
           )}
         </span>
       )}
-      {/* On the left, the add buttons while it has no tags or dates, and its reactions; on the right, More or Less, then the vault and the time it was written. */}
+      {/* On the left, its reactions; on the right, More or Less, then the vault and the time it was written. */}
       <span className="bubble__meta">
-        {!row && retag && <AddTag card={card} />}
-        {!row && addDue}
         {card.viewOnly && <ViewOnlyMark card={card} />}
         <ReactionsRow card={card} />
         <span className="bubble__end">

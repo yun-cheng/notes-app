@@ -12,8 +12,8 @@ type Entry = NoteCard | TodoCard;
 
 /**
  * The buttons beside a bubble on hover: open it to edit, and ⋯ for the rest, the same menu a right-click on the
- * bubble opens (`useEntryMenu`). Copying it is a button in the bubble's top right corner too. Its tags and a todo's due date are changed in their row over the bottom row; the buttons that add the first of them sit in that row, the date's on its right, or together in its bottom row (`AddTag` and
- * `DueMenu`). A phone has no hover; a tap opens the entry, whose sheet has every action, and a todo's due date in its
+ * bubble opens (`useEntryMenu`). Copying it is a button in the bubble's top right corner too. Its tags and a todo's due date are changed in their row over the bottom row; the buttons that add the first of them
+ * always sit in that row, the date's on its right (`AddTag` and `DueMenu`). A phone has no hover; a tap opens the entry, whose sheet has every action, and a todo's due date in its
  * bubble can be tapped.
  */
 export function BubbleTools({ card, open, menu }: { card: Entry; open: (edit?: boolean) => void; menu: { openFrom: (el: HTMLElement) => void; isOpen: boolean } }) {

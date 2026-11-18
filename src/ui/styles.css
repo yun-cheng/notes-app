@@ -926,7 +926,7 @@ body:has(.batch) .toast-slot { bottom: calc(var(--tabbar) + env(safe-area-inset-
 .bubble__add:hover { color: var(--text); border-color: var(--muted); }
 .stream__entry:hover .bubble__add, .bubble:focus-within .bubble__add, .is-open > .bubble__add { opacity: 1; }
 /* Without hover they're gone, taking no room in the row: its reactions start at the bubble's edge. */
-@media (pointer: coarse) { .bubble__add, .bubble-menu:has(> .bubble__add:only-child) { display: none; } }
+@media (pointer: coarse) { .bubble__add, .bubble-menu:has(> .bubble__add:only-child), .bubble__tags--empty { display: none; } }
 .bubble-menu { position: relative; display: flex; }
 /* Reactions: in a bubble's bottom row on the left, and under the tags in its sheet. */
 .reactions { display: inline-flex; flex-wrap: wrap; align-items: center; gap: 4px; }

@@ -80,12 +80,33 @@ export function useSelectionState(order: string[]): Selection {
 
 const LONG_PRESS_MS = 450;
 
+const BUBBLES = '[data-entry-id] > [role="article"]';
+
+/** The bubbles in the stream `from` is in, in order. */
+const streamBubbles = (from: Element) => [...(from.closest('.stream')?.querySelectorAll<HTMLElement>(BUBBLES) ?? [])];
+
+/**
+ * Into the stream from the keyboard, when nothing has the focus (as after a click on empty space): ↓ focuses the
+ * first bubble on the screen and ↑ the last, so the arrows go on from there. False if there's none to focus.
+ */
+export function focusStream(way: 'down' | 'up'): boolean {
+  const shown = [...document.querySelectorAll<HTMLElement>(`.stream ${BUBBLES}`)].filter((b) => {
+    const r = b.getBoundingClientRect();
+    return r.bottom > 0 && r.top < window.innerHeight && r.height > 0;
+  });
+  const to = way === 'down' ? shown[0] : shown[shown.length - 1];
+  if (!to) return false;
+  to.focus();
+  to.scrollIntoView({ block: 'nearest' });
+  return true;
+}
+
 /**
  * Click, key and touch handling for a bubble. With a mouse, a click leaves the bubble alone, so its text can be
  * selected and copied; the open button, or Enter on the focused bubble, opens it. On a touch screen a tap opens
  * it and a long press starts picking. Cmd/Ctrl-click picks it, Shift-click picks a range, and while picking any
- * click or tap picks. Up and down arrows move between bubbles, picking along the way with Shift. A right-click
- * with a mouse, or the menu key, opens `onMenu`.
+ * click or tap picks. Up and down arrows move between bubbles, picking along the way with Shift, and Home and End go
+ * to the first and the last. A right-click with a mouse, or the menu key, opens `onMenu`.
  */
 export function useSelectable(id: string, open: (edit?: boolean) => void, onMenu?: (e: ReactMouseEvent<HTMLElement>) => void) {
   const selection = useContext(SelectionContext);
@@ -130,10 +151,11 @@ export function useSelectable(id: string, open: (edit?: boolean) => void, onMenu
         } else if (e.key === ' ' && selection) {
           e.preventDefault();
           selection.toggle(id, e.shiftKey);
-        } else if ((e.key === 'ArrowDown' || e.key === 'ArrowUp') && !e.metaKey && !e.ctrlKey && !e.altKey) {
-          // To the next or previous bubble; with Shift, picking from here to there.
-          const bubbles = [...(e.currentTarget.closest('.stream')?.querySelectorAll<HTMLElement>('[data-entry-id] > [role="article"]') ?? [])];
-          const next = bubbles[bubbles.indexOf(e.currentTarget as HTMLElement) + (e.key === 'ArrowDown' ? 1 : -1)];
+        } else if (['ArrowDown', 'ArrowUp', 'Home', 'End'].includes(e.key) && !e.metaKey && !e.ctrlKey && !e.altKey) {
+          // To the next or previous bubble, or the first or last; with Shift, picking from here to there.
+          const bubbles = streamBubbles(e.currentTarget);
+          const here = bubbles.indexOf(e.currentTarget as HTMLElement);
+          const next = bubbles[e.key === 'Home' ? 0 : e.key === 'End' ? bubbles.length - 1 : here + (e.key === 'ArrowDown' ? 1 : -1)];
           const nextId = next?.closest<HTMLElement>('[data-entry-id]')?.dataset.entryId;
           if (!next || !nextId) return;
           e.preventDefault();

@@ -842,7 +842,18 @@ function useBubble(card: NoteCard | TodoCard, title: string) {
         </button>
       </span>
     ) : null;
-  return { text, pager, menu, title: done ? done.pieces[0] : title, translated, ...useSelectable(card.id, open, menu.onContextMenu) };
+  const selectable = useSelectable(card.id, open, menu.onContextMenu);
+  // ← and → on the focused bubble step through its pages.
+  const onKeyDown = (e: ReactKeyboardEvent) => {
+    const way = e.key === 'ArrowLeft' ? -1 : e.key === 'ArrowRight' ? 1 : 0;
+    if (way && e.target === e.currentTarget && pager.count > 1 && !e.shiftKey && !e.metaKey && !e.ctrlKey && !e.altKey) {
+      e.preventDefault();
+      pager.go(pager.at + way);
+      return;
+    }
+    selectable.handlers.onKeyDown(e);
+  };
+  return { text, pager, menu, title: done ? done.pieces[0] : title, translated, selected: selectable.selected, handlers: { ...selectable.handlers, onKeyDown } };
 }
 
 function NoteBubble({ note, at }: { note: NoteCard; at: number }) {

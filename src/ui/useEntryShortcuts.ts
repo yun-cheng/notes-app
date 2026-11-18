@@ -3,7 +3,7 @@ import { decodeEntries, ENTRIES_TYPE } from '../domain/clipboard';
 import type { StreamFilter } from '../domain/stream';
 import { useToday } from '../state/CardsContext';
 import { useEntryActions } from './entryActions';
-import type { Selection } from './selection';
+import { focusStream, type Selection } from './selection';
 import { journalDefaults } from './useSaveEntry';
 
 /** Sent to the journal box with something pasted outside it, for the box to take as if pasted there. */
@@ -45,7 +45,8 @@ function focusedEntry(): string[] {
  * The journal's keys for entries, outside text boxes: Cmd/Ctrl+A picks everything shown; Cmd+C copies the picked
  * entries (or the focused one), Cmd+X cuts them, and Delete or Backspace moves them to the Trash. Cmd+V pastes
  * copied entries as new ones; anything else pasted goes to the journal box to look over before saving. Text
- * selected in a message is copied as text, as usual.
+ * selected in a message is copied as text, as usual. With nothing focused, ↑ and ↓ go into the entries on the
+ * screen (`focusStream`).
  */
 export function useEntryShortcuts(selection: Selection, filter: StreamFilter, enabled: boolean) {
   const actions = useEntryActions();
@@ -75,6 +76,11 @@ export function useEntryShortcuts(selection: Selection, filter: StreamFilter, en
           picked.clear();
           void act.cut(ids);
         }
+      } else if (!mod && !e.shiftKey && (e.key === 'ArrowDown' || e.key === 'ArrowUp')) {
+        // Nothing focused: into the entries on the screen. A focused bubble moves on by itself (`useSelectable`).
+        const active = document.activeElement;
+        if (active && active !== document.body) return;
+        if (focusStream(e.key === 'ArrowDown' ? 'down' : 'up')) e.preventDefault();
       } else if (!mod && !e.shiftKey && (e.key === 'Delete' || e.key === 'Backspace')) {
         const ids = targets();
         if (!ids.length) return;

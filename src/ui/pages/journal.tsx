@@ -1165,7 +1165,7 @@ function EntryDetail({ card, fresh, edit, onClose }: { card: NoteCard | TodoCard
           <Icon name="flip" size={14} />
           {Array.from({ length: behind + 1 }, (_, i) => (
             <button key={i} type="button" role="tab" aria-selected={page === i} className={`page-tabs__tab${page === i ? ' is-on' : ''}`} onClick={() => goTo(i)}>
-              {i === 0 ? 'Front' : i + 1}
+              {i + 1}
             </button>
           ))}
           {can.edit && page <= stored.length && (

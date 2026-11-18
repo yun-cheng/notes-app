@@ -128,6 +128,9 @@ export function SignInScreen({ onCredential, accounts = [], onPick, onCancel }: 
             Cancel
           </button>
         )}
+        <p className="signin__foot">
+          <a href="/privacy.html">Privacy</a>
+        </p>
       </div>
     </main>
   );

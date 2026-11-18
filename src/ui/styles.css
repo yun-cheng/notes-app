@@ -467,6 +467,8 @@ body:has(.composer:focus-within) .tabbar { display: none; }
 .signin__account { display: flex; align-items: center; gap: 12px; padding: 10px 14px; border: 1px solid var(--line); border-radius: 12px; background: var(--surface); text-align: left; }
 .signin__account:hover { border-color: var(--accent); }
 .signin__accounts .signin__note { margin-top: 8px; }
+.signin__foot { margin-top: 28px; font-size: 13px; }
+.signin__foot a { color: var(--muted); }
 .signin__cancel { margin-top: 20px; }
 .signin__error { color: var(--alert); font-size: 14px; margin-top: 14px; }
 

@@ -78,7 +78,8 @@ export default defineConfig({
       workbox: {
         globPatterns: ['**/*.{js,css,html,svg,png,ico}'],
         navigateFallback: '/index.html',
-        navigateFallbackDenylist: [/^\/api\//],
+        // The privacy page is a plain page of its own (public/privacy.html), not one of the app's.
+        navigateFallbackDenylist: [/^\/api\//, /^\/privacy/],
         // Shows due-date reminders pushed by the server (public/push-sw.js).
         importScripts: ['push-sw.js'],
       },

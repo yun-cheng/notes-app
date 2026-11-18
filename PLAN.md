@@ -295,6 +295,8 @@ None. Defaults chosen while building are listed in the implementation notes, and
 4. Copy the client secret and run `npx wrangler secret put GOOGLE_CLIENT_SECRET` in the project folder, pasting it when asked (the app is a Worker now, not Pages; the secret takes effect at once, with no redeploy). `npx wrangler secret list` shows its name once it's set. For local testing, put `GOOGLE_CLIENT_SECRET=...` in `.dev.vars` (ignored by git).
 5. In the app, Backup & settings, Photos, press Connect Google Drive.
 
+Done on 2026-11-19 except the secret and publishing: the Drive API is enabled, and both redirect addresses and the `drive.file` scope are in. To publish, Branding needs the homepage and the privacy page (`public/privacy.html`, served at `/privacy` without the app or a sign-in, and left out of the service worker's fallback so it isn't swapped for the app). Google wants a homepage and a privacy policy before an app leaves Testing, and in Testing it ends grants for a scope like `drive.file` after 7 days, so Drive would disconnect weekly. The page says only what the code does: no analytics or tracking, a locked vault never reaches the server or translation, Drive access is only to the app's own files, and an account is removed on request, since the app has no way to do it yet. Change it when what the app keeps or sends changes.
+
 ## Implementation notes from Milestone 6
 
 - Sharing a vault: its owner adds people by email as editors or viewers. Someone without an account is invited and joins at first sign-in. Members can leave. Viewers can read and comment; editors can also change, add, move and trash cards.

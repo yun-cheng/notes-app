@@ -1132,7 +1132,7 @@ span.bubble__template { color: var(--muted); cursor: default; }
 .page-edge { position: absolute; top: 0; bottom: 0; z-index: 1; display: grid; place-items: center; width: 20px; padding: 0; border: 0; background: none; color: var(--accent); opacity: 0; cursor: pointer; transition: opacity 0.12s, background-color 0.12s; }
 .page-edge--prev { left: 0; border-radius: 15px 0 0 3px; }
 .page-edge--next { right: 0; border-radius: 0 15px 15px 0; }
-.stream__entry:hover .page-edge, .page-edge:focus-visible { opacity: 1; }
+.stream__entry:hover .page-edge, .bubble:focus-visible .page-edge, .page-edge:focus-visible { opacity: 1; }
 .page-edge:hover { background: color-mix(in srgb, var(--accent) 12%, transparent); }
 @media (pointer: coarse) { .page-edge { opacity: 0.6; } }
 /* The copy button in the corner stays over the next-page side. */

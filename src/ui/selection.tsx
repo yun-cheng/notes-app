@@ -82,6 +82,20 @@ const LONG_PRESS_MS = 450;
 
 const BUBBLES = '[data-entry-id] > [role="article"]';
 
+/**
+ * Scrolls a bubble into the part of the page nothing covers: under the title bar and the day badge pinned below it,
+ * above the writing box at the foot. One taller than that shows from its top.
+ */
+export function revealBubble(el: HTMLElement) {
+  // The day badge pins just under the title bar.
+  const day = document.querySelector<HTMLElement>('.stream__day')?.offsetHeight ?? 0;
+  const top = (document.querySelector('.page__head')?.getBoundingClientRect().bottom ?? 0) + day + 12;
+  const bottom = (document.querySelector('.journal-dock')?.getBoundingClientRect().top ?? window.innerHeight) - 8;
+  const r = el.getBoundingClientRect();
+  if (r.top < top) window.scrollBy(0, r.top - top);
+  else if (r.bottom > bottom) window.scrollBy(0, Math.min(r.bottom - bottom, r.top - top));
+}
+
 /** The bubbles in the stream `from` is in, in order. */
 const streamBubbles = (from: Element) => [...(from.closest('.stream')?.querySelectorAll<HTMLElement>(BUBBLES) ?? [])];
 
@@ -96,8 +110,8 @@ export function focusStream(way: 'down' | 'up'): boolean {
   });
   const to = way === 'down' ? shown[0] : shown[shown.length - 1];
   if (!to) return false;
-  to.focus();
-  to.scrollIntoView({ block: 'nearest' });
+  to.focus({ preventScroll: true });
+  revealBubble(to);
   return true;
 }
 
@@ -159,8 +173,8 @@ export function useSelectable(id: string, open: (edit?: boolean) => void, onMenu
           const nextId = next?.closest<HTMLElement>('[data-entry-id]')?.dataset.entryId;
           if (!next || !nextId) return;
           e.preventDefault();
-          next.focus();
-          next.scrollIntoView({ block: 'nearest' });
+          next.focus({ preventScroll: true });
+          revealBubble(next);
           if (e.shiftKey && selection) {
             if (!selection.has(id)) selection.toggle(id);
             selection.toggle(nextId, true);

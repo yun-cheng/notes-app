@@ -606,9 +606,10 @@ a.change__title:hover { color: var(--accent); }
 /* Journal stream: everything as compact bubbles, newest at the bottom, with a box to write the next one. */
 .page:has(> .stream) { display: flex; flex-direction: column; min-height: calc(100dvh - var(--tabbar) - env(safe-area-inset-bottom)); }
 .main:has(.stream) { padding-bottom: calc(var(--tabbar) + env(safe-area-inset-bottom)); }
-.stream { flex: 1; display: flex; flex-direction: column; justify-content: flex-end; gap: 6px; padding-bottom: 10px; }
+/* 8px between entries, twice the 4px between an entry and its photos or link previews, so those read as its own. */
+.stream { flex: 1; display: flex; flex-direction: column; justify-content: flex-end; gap: 8px; padding-bottom: 10px; }
 .stream__item { display: flex; flex-direction: column; align-items: flex-start; }
-.stream__group { display: flex; flex-direction: column; gap: 6px; }
+.stream__group { display: flex; flex-direction: column; gap: 8px; }
 /* A day's badge stays pinned just under the title bar while that day's entries scroll past. */
 .stream__day {
   position: sticky; top: calc(var(--head-height, 58px) + 6px); z-index: 4; align-self: center; margin: 14px 0 0; padding: 2px 10px;
@@ -864,7 +865,7 @@ body:has(.batch) .toast-slot { bottom: calc(var(--tabbar) + env(safe-area-inset-
 .batch__close { font-size: 22px; line-height: 1; }
 
 /* Photos and links under a bubble, and the photo viewer */
-.attachments { display: flex; flex-direction: column; align-items: flex-start; gap: 4px; max-width: min(85%, 560px); margin-top: 3px; }
+.attachments { display: flex; flex-direction: column; align-items: flex-start; gap: 4px; max-width: min(85%, 560px); margin-top: 4px; }
 .attachments { width: fit-content; }
 .attachments__photos { display: flex; flex-wrap: wrap; gap: 4px; }
 .thumb { position: relative; width: 112px; height: 112px; padding: 0; overflow: hidden; border: 1px solid var(--line); border-radius: 12px; background: var(--sunken); cursor: zoom-in; }
@@ -1183,7 +1184,7 @@ span.bubble__template { color: var(--muted); cursor: default; }
 .stack__peek li::before { content: "▤ "; opacity: 0.6; }
 .stack__peek .stack__more::before { content: none; }
 .stack__more { font-size: 13px; }
-.stack__cards { display: flex; flex-direction: column; gap: 6px; width: min(85%, 560px); margin: 0 0 8px 10px; padding: 2px 0 2px 26px; border-left: 2px solid var(--line); }
+.stack__cards { display: flex; flex-direction: column; gap: 8px; width: min(85%, 560px); margin: 0 0 8px 10px; padding: 2px 0 2px 26px; border-left: 2px solid var(--line); }
 .stack__card { position: relative; display: flex; flex-direction: column; align-items: flex-start; }
 .stack__card .bubble { max-width: 100%; }
 /* A mouse drags a card from anywhere on it, so its words aren't picked as text on the way. */

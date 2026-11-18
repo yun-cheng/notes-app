@@ -634,7 +634,7 @@ a.change__title:hover { color: var(--accent); }
 @media (pointer: coarse) { .bubble__snippet-copy { opacity: 1; } }
 /* The snippet's language, faint in the corner, giving way to the copy button on hover. */
 .bubble__snippet-lang { position: absolute; top: 6px; right: 8px; padding: 1px 5px; border-radius: 4px; background: var(--sunken); color: var(--muted); font: 11px/1.4 var(--sans); pointer-events: none; transition: opacity 0.12s; }
-.bubble__snippet:hover .bubble__snippet-lang, .bubble__snippet:focus-within .bubble__snippet-lang { opacity: 0; }
+.bubble__snippet:hover .bubble__snippet-lang, .bubble__snippet:has(:focus-visible) .bubble__snippet-lang { opacity: 0; }
 @media (pointer: coarse) { .bubble__snippet-lang { right: 32px; } .bubble__snippet:hover .bubble__snippet-lang { opacity: 1; } }
 .bubble__link { color: var(--accent); text-decoration: underline; text-decoration-color: color-mix(in srgb, var(--accent) 45%, transparent); text-underline-offset: 2px; overflow-wrap: anywhere; }
 .bubble__link:hover { text-decoration-color: currentColor; }
@@ -917,10 +917,11 @@ body:has(.batch) .toast-slot { bottom: calc(var(--tabbar) + env(safe-area-inset-
 /* Room for it on the right, kept when it's hidden so nothing moves on hover; the bottom row still runs to the edge. */
 /* Room on the right for the copy button, which only the first line needs: the rows under the text reach into it. */
 @media (pointer: fine) { .bubble { padding-right: 32px; } .bubble__tags, .bubble__meta { margin-right: -20px; } }
-.stream__entry:hover .bubble__copy, .bubble:focus-within .bubble__copy { opacity: 1; }
+/* With the keyboard's focus too, not a click's: a bubble clicked keeps the focus, and would keep them showing once the mouse left it. */
+.stream__entry:hover .bubble__copy, .bubble:focus-visible .bubble__copy, .bubble:has(:focus-visible) .bubble__copy { opacity: 1; }
 .bubble__add { display: inline-grid; place-items: center; width: 22px; height: 18px; padding: 0; border: 1px dashed var(--line); border-radius: 9px; background: none; color: var(--muted); opacity: 0; cursor: pointer; transition: opacity 0.12s; }
 .bubble__add:hover { color: var(--text); border-color: var(--muted); }
-.stream__entry:hover .bubble__add, .bubble:focus-within .bubble__add, .is-open > .bubble__add { opacity: 1; }
+.stream__entry:hover .bubble__add, .bubble:focus-visible .bubble__add, .bubble:has(:focus-visible) .bubble__add, .is-open > .bubble__add { opacity: 1; }
 /* Without hover they're gone, taking no room in the row: its reactions start at the bubble's edge. */
 @media (pointer: coarse) { .bubble__add, .bubble-menu:has(> .bubble__add:only-child) { display: none; } }
 .bubble-menu { position: relative; display: flex; }
@@ -1179,7 +1180,7 @@ html[data-page-turn="front"]::view-transition-new(page-turn) { z-index: 1; anima
 /* In an open stack, a card's own buttons show when it's hovered, not with the whole stack. */
 .stream__entry:hover .stack__card .bubble__copy, .stream__entry:hover .stack__card .bubble__add { opacity: 0; }
 .stream__entry .stack__card:hover .bubble__copy, .stream__entry .stack__card:hover .bubble__add,
-.stream__entry .stack__card .bubble:focus-within .bubble__copy { opacity: 1; }
+.stream__entry .stack__card .bubble:focus-visible .bubble__copy, .stream__entry .stack__card .bubble:has(:focus-visible) .bubble__copy { opacity: 1; }
 
 /* The month: weeks of days, each with its todos as chips in rows that keep a span on one line through the week. */
 .month { display: flex; flex-direction: column; gap: 3px; }

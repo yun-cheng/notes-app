@@ -448,6 +448,8 @@ function ContextMenu({ at, label, onClose, children, wide, layout }: { at: Point
   const close = useRef(onClose);
   close.current = onClose;
   const back = useRef<Element | null>(document.activeElement);
+  // Escape gives the focus back, showing it only if it showed before: a bubble right-clicked was focused by the mouse.
+  const backVisible = useRef(!!document.activeElement?.matches(':focus-visible'));
 
   useLayoutEffect(() => {
     const el = ref.current;
@@ -471,7 +473,7 @@ function ContextMenu({ at, label, onClose, children, wide, layout }: { at: Point
       e.preventDefault();
       e.stopImmediatePropagation();
       shut();
-      if (back.current instanceof HTMLElement) back.current.focus();
+      if (back.current instanceof HTMLElement) back.current.focus({ focusVisible: backVisible.current });
     };
     document.addEventListener('pointerdown', away, true);
     window.addEventListener('keydown', onKey, true);

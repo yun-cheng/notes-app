@@ -683,9 +683,7 @@ a.change__title:hover { color: var(--accent); }
 .bubble--todo.is-done .bubble__title { color: var(--muted); }
 .bubble__due { font-weight: 600; }
 .bubble__vault { display: inline-flex; align-items: center; gap: 3px; color: var(--muted); }
-.bubble__view-only { display: inline-flex; align-items: center; padding: 0; border: 0; background: none; color: var(--accent); cursor: default; }
-button.bubble__view-only { cursor: pointer; }
-button.bubble__view-only:hover { color: var(--text); }
+.bubble__view-only { display: inline-flex; align-items: center; color: var(--accent); }
 .bubble__vault-name { display: inline-flex; align-items: center; gap: 3px; }
 .vault-choices .style-menu__group > button svg { margin-left: auto; color: var(--muted); }
 .vault-choices .style-menu__group > button[role="menuitemcheckbox"]::before { content: none; }

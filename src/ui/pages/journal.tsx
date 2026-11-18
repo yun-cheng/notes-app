@@ -27,7 +27,7 @@ import { BatchBar } from '../BatchBar';
 import { SelectionProvider, useBoxSelect, useSelectable, useSelection, useSelectionState } from '../selection';
 import { entries, useEntryActions, writeClipboard } from '../entryActions';
 import { useEntryShortcuts } from '../useEntryShortcuts';
-import { BubbleCopy, TypeSwitch, useEntryViewOnly, ViewOnlyButton } from '../BubbleTools';
+import { BubbleCopy, TypeSwitch, ViewOnlyButton } from '../BubbleTools';
 import { useEntryMenu } from '../EntryMenu';
 import { DueLabel, DueMenu, useTickTodo, WaitingMark } from '../TodoDue';
 import { SyncMark } from '../SyncStatus';
@@ -418,7 +418,7 @@ function BubbleMeta({ card, at, fold, flip, lead }: { card: NoteCard | TodoCard;
       )}
       {/* On the left, its reactions; on the right, More or Less, then the vault and the time it was written. */}
       <span className="bubble__meta">
-        {card.viewOnly && <ViewOnlyMark card={card} />}
+        {card.viewOnly && <ViewOnlyMark />}
         <ReactionsRow card={card} />
         <span className="bubble__end">
           {lead}
@@ -516,22 +516,15 @@ function VaultLabel({ card }: { card: NoteCard | TodoCard }) {
   );
 }
 
-/** Marks an entry set to view only in its bubble's bottom row; pressed, by whoever may, it can be changed again. */
-function ViewOnlyMark({ card }: { card: NoteCard | TodoCard }) {
-  const may = usePermissions();
-  const allow = useEntryViewOnly(card);
-  if (!may(card).protect) {
-    return (
-      <span className="bubble__view-only" title="View only">
-        <Icon name="eye" size={12} />
-      </span>
-    );
-  }
+/**
+ * Marks an entry set to view only in its bubble's bottom row. Only a mark: it's turned off from the entry's menu or
+ * its sheet's bar (until 2026-11-18 a press on it did that too).
+ */
+function ViewOnlyMark() {
   return (
-    // Its click stays out of the bubble's own click handling (picking).
-    <button type="button" className="bubble__view-only" aria-label="View only. Allow changes" title="View only: press to allow changes again" onClick={(e) => (e.stopPropagation(), allow())}>
+    <span className="bubble__view-only" title="View only" aria-label="View only">
       <Icon name="eye" size={12} />
-    </button>
+    </span>
   );
 }
 

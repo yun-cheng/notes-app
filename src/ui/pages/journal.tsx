@@ -401,33 +401,35 @@ function BubbleMeta({ card, at, fold, flip, lead }: { card: NoteCard | TodoCard;
   const may = usePermissions();
   // A grouped tag (Priority: High) can be switched right here.
   const retag = may(card).edit ? (tags: string[]) => void repo.update(card.id, { tags }) : undefined;
-  // An entry's tags have a row of their own, over the rest; one without any is offered a tag in the bottom row.
+  // An entry's tags and a todo's dates share a row over the rest: the tags on the left, the dates on the right.
   const tagged = resolveTags(index, card.tags).length > 0;
-  // So do a todo's dates, under its tags, with whether it's waiting.
   const dated = card.type === 'todo' && !!(card.due || card.start);
   const waiting = card.type === 'todo' && card.waiting && card.status === 'open';
-  const due = card.type === 'todo' && (retag ? <DueMenu card={card} look="label" /> : <DueLabel todo={card} className="bubble__due" />);
-  // A todo without dates is offered one beside the tag button, wherever that is.
-  const addDue = card.type === 'todo' && !dated && retag && <DueMenu card={card} look="add" />;
+  const row = tagged || dated;
+  // The buttons that add a tag, and a date to a todo without one, sit together: in that row, or the bottom row without it.
+  const adding = (
+    <>
+      {retag && <AddTag card={card} />}
+      {card.type === 'todo' && !dated && retag && <DueMenu card={card} look="add" />}
+    </>
+  );
   return (
     <>
-      {tagged && (
+      {row && (
         <span className="bubble__tags">
           <TagChips tagIds={card.tags} onChange={retag} />
-          {retag && <AddTag card={card} />}
-          {addDue}
+          {adding}
+          {dated && (
+            <span className="bubble__dates">
+              {waiting && <WaitingMark />}
+              {retag ? <DueMenu card={card} look="label" /> : <DueLabel todo={card} className="bubble__due" />}
+            </span>
+          )}
         </span>
       )}
-      {dated && (
-        <span className="bubble__dates">
-          {waiting && <WaitingMark />}
-          {due}
-        </span>
-      )}
-      {/* On the left, the tag and date buttons while it has neither; on the right, More or Less, then the vault and the time it was written. */}
+      {/* On the left, the add buttons while it has no tags or dates; on the right, More or Less, then the vault and the time it was written. */}
       <span className="bubble__meta">
-        {!tagged && retag && <AddTag card={card} />}
-        {!tagged && addDue}
+        {!row && adding}
         {card.viewOnly && <ViewOnlyMark card={card} />}
         <span className="bubble__end">
           {lead}

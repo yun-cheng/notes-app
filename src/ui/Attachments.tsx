@@ -6,6 +6,7 @@ import { usePhotoUrl } from './editor/photo';
 import { previewFor, useDisplayPrefs } from './displayPrefs';
 import { Icon } from './Icon';
 import { useLinkPreview } from './useLinkPreview';
+import { useBackdropClose } from './useBackdrop';
 
 const MAX_PHOTOS = 4;
 const MAX_LINKS = 3;
@@ -104,6 +105,7 @@ export function LinkCard({ url, preview: allowed, compact = false }: { url: stri
 
 /** Photos full size, one at a time, with arrows and keys to move between them. */
 export function PhotoViewer({ ids, start, onClose }: { ids: string[]; start: number; onClose: () => void }) {
+  const backdrop = useBackdropClose(onClose);
   const [at, setAt] = useState(start);
   const { url, state } = usePhotoUrl(ids[at]);
   const step = (d: number) => setAt((i) => (i + d + ids.length) % ids.length);
@@ -122,7 +124,7 @@ export function PhotoViewer({ ids, start, onClose }: { ids: string[]; start: num
   });
 
   return (
-    <div className="dialog-backdrop viewer" role="dialog" aria-label="Photo" onClick={(e) => e.target === e.currentTarget && onClose()}>
+    <div className="dialog-backdrop viewer" role="dialog" aria-label="Photo" {...backdrop}>
       {url ? <img className="viewer__img" src={url} alt={`Photo ${at + 1} of ${ids.length}`} /> : <p className="viewer__note">{state === 'loading' ? 'Loading photo…' : 'This photo isn’t available yet.'}</p>}
       {ids.length > 1 && (
         <>

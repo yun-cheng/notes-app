@@ -1,4 +1,5 @@
 import { Fragment, useEffect } from 'react';
+import { useBackdropClose } from './useBackdrop';
 
 export const isMac = typeof navigator !== 'undefined' && /Mac|iPhone|iPad/.test(navigator.platform);
 /** The command key as the keyboard shows it: ⌘ on a Mac, Ctrl elsewhere. */
@@ -51,6 +52,7 @@ const GROUPS: { title: string; keys: [string, string][] }[] = [
 
 /** Every keyboard shortcut, opened with `?` or from the command box. */
 export function ShortcutsDialog({ onClose }: { onClose: () => void }) {
+  const backdrop = useBackdropClose(onClose);
   useEffect(() => {
     const onKey = (e: KeyboardEvent) => {
       if (e.key !== 'Escape' && e.key !== '?') return;
@@ -64,7 +66,7 @@ export function ShortcutsDialog({ onClose }: { onClose: () => void }) {
   }, [onClose]);
 
   return (
-    <div className="dialog-backdrop" onClick={(e) => e.target === e.currentTarget && onClose()}>
+    <div className="dialog-backdrop" {...backdrop}>
       <div className="dialog shortcuts" role="dialog" aria-label="Keyboard shortcuts">
         <h2 className="shortcuts__title">Keyboard shortcuts</h2>
         {GROUPS.map((group) => (

@@ -21,6 +21,7 @@ import { setViewOnly, useViewOnly } from './viewOnly';
 import { useUndo } from './useUndo';
 import { useStartFromTemplate } from './useTemplates';
 import { isTemplate } from '../domain/templates';
+import { useBackdropClose } from './useBackdrop';
 
 interface Command {
   id: string;
@@ -47,6 +48,7 @@ function matches(command: Command, words: string[]): boolean {
  * offers to save the text to the journal (markers like `[]` and `#tag` work), and finds notes by their text.
  */
 export function CommandPalette({ onClose, onShortcuts }: { onClose: () => void; onShortcuts: () => void }) {
+  const backdrop = useBackdropClose(onClose);
   const { index, vaults, locked, locks } = useCards();
   const today = useToday();
   const navigate = useNavigate();
@@ -201,7 +203,7 @@ export function CommandPalette({ onClose, onShortcuts }: { onClose: () => void; 
 
   let lastGroup = '';
   return (
-    <div className="dialog-backdrop palette-backdrop" onClick={(e) => e.target === e.currentTarget && onClose()}>
+    <div className="dialog-backdrop palette-backdrop" {...backdrop}>
       <div className="palette" role="dialog" aria-label="Commands">
         <input
           className="palette__input"

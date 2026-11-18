@@ -26,6 +26,7 @@ import { colorClass } from './EntryStyle';
 import { Icon, type IconName } from './Icon';
 import { ARCHIVE_PATH, datedPath, historyPath, isDatedPage, journalPath, TRASH_PATH, trashFilter, trashPath, type DatedPage } from './paths';
 import { usePopover } from './usePopover';
+import { useBackdropClose } from './useBackdrop';
 
 /**
  * The filter in the address, on the pages it narrows: the journal, the Archive (the journal's archived entries),
@@ -480,8 +481,9 @@ function FilterSection({ id, title, children }: { id: string; title: string; chi
 
 /** The sidebar's tags and vaults in a sheet, for a phone, where there's no sidebar. Picking one closes it. */
 export function FilterSheet({ onClose }: { onClose: () => void }) {
+  const backdrop = useBackdropClose(onClose);
   return (
-    <div className="dialog-backdrop" onClick={(e) => e.target === e.currentTarget && onClose()}>
+    <div className="dialog-backdrop" {...backdrop}>
       <div className="dialog filter-sheet" role="dialog" aria-label="Tags and vaults">
         <FilterPanel onPick={onClose} />
         <div className="note-sheet__bar">

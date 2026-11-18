@@ -42,6 +42,7 @@ import { foldStacks, isStack, moveInStack, stackEntries, stacksOf } from '../../
 import { openStacks, useTakeOut } from '../useStacking';
 import { useSaveAsTemplate, useStartFromTemplate } from '../useTemplates';
 import { googleTranslateUrl, languageName, openOutside, showTranslation, translateEntry, translatesOnDevice, useTranslation } from '../translate';
+import { useBackdropClose } from '../useBackdrop';
 
 const time = (at: number) => new Date(at).toLocaleTimeString(undefined, { hour: 'numeric', minute: '2-digit' });
 
@@ -1114,6 +1115,7 @@ export function EntrySheet() {
   };
   const closeRef = useRef(close);
   closeRef.current = close;
+  const backdrop = useBackdropClose(close);
 
   useEffect(() => {
     const onKey = (e: KeyboardEvent) => {
@@ -1136,7 +1138,7 @@ export function EntrySheet() {
   else body = <EntryDetail key={entry.id} card={entry} fresh={!!state?.fresh} edit={!!state?.edit} onClose={close} />;
 
   return (
-    <div className="dialog-backdrop" onClick={(e) => e.target === e.currentTarget && close()}>
+    <div className="dialog-backdrop" {...backdrop}>
       <div className="dialog note-sheet" role="dialog" aria-label={entry?.type === 'todo' ? 'Todo' : 'Note'}>
         {body}
         {!entry && (

@@ -290,6 +290,8 @@ export function Editor({ content, onChange, placeholder, selfId, vaultId, editab
                 return !!item;
               }
               if (event.key === 'Escape') {
+                // Only the menu closes, not a sheet the editor is in (`EntrySheet`).
+                event.stopPropagation();
                 setMenu(null);
                 return true;
               }

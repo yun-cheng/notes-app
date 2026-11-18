@@ -1076,7 +1076,11 @@ export function EntrySheet() {
 
   useEffect(() => {
     const onKey = (e: KeyboardEvent) => {
-      if (e.key === 'Escape' && !e.defaultPrevented && document.querySelectorAll('.dialog-backdrop').length < 2) closeRef.current();
+      if (e.key !== 'Escape' || document.querySelectorAll('.dialog-backdrop').length >= 2) return;
+      // ProseMirror marks every Escape typed in the text as handled, though it does nothing with it; the editor's own
+      // menus stop theirs before it gets here. So from the text, Escape closes the sheet too.
+      const inText = e.target instanceof Element && !!e.target.closest('.ProseMirror');
+      if (!e.defaultPrevented || inText) closeRef.current();
     };
     window.addEventListener('keydown', onKey);
     return () => window.removeEventListener('keydown', onKey);

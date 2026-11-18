@@ -106,7 +106,7 @@ describe('copying entries', () => {
   });
 });
 
-describe('a card with pages behind its front', () => {
+describe('a card with more than one page', () => {
   const card = note('f', 'Peru', { content: doc(p(text('Capital?'))), pages: [doc(p(text('Lima'))), doc(p(text('Spanish')))] });
 
   it('copies its pages after its front, in every style', () => {

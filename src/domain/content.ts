@@ -299,7 +299,7 @@ export function storedPages(card: Paged): JSONNode[] {
 /** The pages behind a card's front that have something on them, in order: what turning it over shows. */
 export const cardPages = (card: Paged): JSONNode[] => storedPages(card).filter((p) => !isEmptyDoc(p));
 
-/** The pages behind its front, as a change to the card: none left is none, and an old `back` is cleared. */
+/** Its pages after the first, as a change to the card: none left is none, and an old `back` is cleared. */
 function pagesPatch(card: Paged, pages: JSONNode[]): { pages: JSONNode[] | null; back?: null } {
   // Blank pages at the end are nothing to turn to.
   let end = pages.length;
@@ -307,14 +307,14 @@ function pagesPatch(card: Paged, pages: JSONNode[]): { pages: JSONNode[] | null;
   return { pages: end ? pages.slice(0, end) : null, ...(card.back != null ? { back: null } : {}) };
 }
 
-/** A card with page `i` behind its front (0 is the first) written as `doc`; one past the last adds a page. */
+/** A card with page `i` after the first (0 is the second) written as `doc`; one past the last adds a page. */
 export function withPage(card: Paged, i: number, doc: JSONNode) {
   const pages = [...storedPages(card)];
   pages[i] = doc;
   return pagesPatch(card, Array.from(pages, (p) => p ?? EMPTY_DOC));
 }
 
-/** A card with page `i` behind its front taken out, the ones after it moving up. */
+/** A card with page `i` after the first taken out, the ones after it moving up. */
 export function withoutPage(card: Paged, i: number) {
   return pagesPatch(card, storedPages(card).filter((_, j) => j !== i));
 }

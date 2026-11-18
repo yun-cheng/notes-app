@@ -216,7 +216,7 @@ export async function seed() {
     mine.push({ id, vaultId, at: when, payload: { createdAt: when, ...payload } as CardPayload });
     return id;
   };
-  /** Fields only some entries have: a tint, a preview style, view only, archived, pages behind the front, a stack's entries, a template, reactions. */
+  /** Fields only some entries have: a tint, a preview style, view only, archived, pages after the first, a stack's entries, a template, reactions. */
   type Extras = Partial<Pick<NoteCard, 'color' | 'preview' | 'viewOnly' | 'archived' | 'pages' | 'stack' | 'template' | 'reactions'>>;
   const tag = (id: string, title: string, pinned: boolean, description = '', color?: CardColor) =>
     add(id, personal, at(9, 9), { type: 'tag', title, pinned, tags: [], content: description ? lines(description) : doc(p()), ...(color ? { color } : {}) });
@@ -286,9 +286,9 @@ export async function seed() {
     [travel],
     'Kyoto trip',
   );
-  // Flashcards for the trip, stacked in an order of their own (not the order written): each has a page behind its
-  // front, shown when it's turned over, and the first has a second, for when to say it.
-  note('demo-stack-phrases', at(8, 21, 39), lines('Phrases to learn before the trip. Turn each card over for what it means.'), [travel], 'Kyoto phrases', personal, {
+  // Phrase cards for the trip, stacked in an order of their own (not the order written): each has a second page with
+  // what it means, and the first has a third, for when to say it.
+  note('demo-stack-phrases', at(8, 21, 39), lines('Phrases to learn before the trip. Page 2 of each card says what it means.'), [travel], 'Kyoto phrases', personal, {
     stack: ['demo-card-where', 'demo-card-thanks', 'demo-card-excuse'],
   });
   note('demo-card-thanks', at(8, 21, 40), lines('ありがとうございます'), [travel], '', personal, {
@@ -354,8 +354,8 @@ export async function seed() {
     ),
   ), [work, ideas]);
   // The busiest entries: nearly everything an entry can have, together. The launch plan has headings, every inline
-  // style, nested lists, a checklist, a quote, code, a rule, hidden words, links to entries and the web, pages behind
-  // its front, a color, tags from both groups, reactions from two people, a place in the Family vault too, comments
+  // style, nested lists, a checklist, a quote, code, a rule, hidden words, links to entries and the web, two more
+  // pages, a color, tags from both groups, reactions from two people, a place in the Family vault too, comments
   // open and resolved, and history from two devices (see LATER). It's long, so its bubble folds.
   const move = 'demo-todo-move';
   const launch = note(
@@ -408,7 +408,7 @@ export async function seed() {
     },
   );
   // The busiest todo: due at a time after a start date, high priority, a checklist with nested steps, links back to
-  // an archived note and a web page, a door code kept hidden, a page behind it, a tint and a reaction.
+  // an archived note and a web page, a door code kept hidden, a second page, a tint and a reaction.
   todo(move, 'Move into the new flat', addDays(today, 2), {
     tags: [home, high, travel],
     when: at(4, 20, 0),

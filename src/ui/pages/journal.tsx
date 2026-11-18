@@ -40,7 +40,6 @@ import { Board, BoardSetup, lastBoard, useBoardKind, useCardDrag, type DragParts
 import { foldStacks, isStack, moveInStack, stackEntries, stacksOf } from '../../domain/stacks';
 import { openStacks, useTakeOut } from '../useStacking';
 import { useSaveAsTemplate, useStartFromTemplate } from '../useTemplates';
-import { turnPage } from '../pageTurn';
 import { googleTranslateUrl, languageName, openOutside, showTranslation, translateEntry, translatesOnDevice, useTranslation } from '../translate';
 
 const time = (at: number) => new Date(at).toLocaleTimeString(undefined, { hour: 'numeric', minute: '2-digit' });
@@ -394,7 +393,7 @@ export function EntryBubble({ card, at }: { card: NoteCard | TodoCard; at: numbe
   return <NoteBubble note={card} at={at} />;
 }
 
-function BubbleMeta({ card, at, fold, flip, lead }: { card: NoteCard | TodoCard; at: number; fold: Fold; flip: Flip; lead?: ReactNode }) {
+function BubbleMeta({ card, at, fold, pager, lead }: { card: NoteCard | TodoCard; at: number; fold: Fold; pager: Pager; lead?: ReactNode }) {
   const { index } = useCards();
   const may = usePermissions();
   const editable = may(card).edit;
@@ -424,17 +423,18 @@ function BubbleMeta({ card, at, fold, flip, lead }: { card: NoteCard | TodoCard;
           {lead}
           {card.template && <UseTemplate card={card} />}
           <CardBadges card={card} />
-          {flip.pages.length > 0 && (
-            <button
-              type="button"
-              className={`bubble__flip${flip.on ? ' is-on' : ''}`}
-              aria-label={`Page ${flip.at + 1} of ${flip.pages.length + 1}: ${flip.last ? 'back to the front' : 'turn to the next'}`}
-              title={flip.last ? 'Back to the front' : 'Turn to the next page'}
-              onClick={(e) => flip.next(e.currentTarget)}
-            >
-              <Icon name="flip" size={13} />
-              {flip.at + 1}/{flip.pages.length + 1}
-            </button>
+          {pager.count > 1 && (
+            <span className="bubble__pager" role="group" aria-label={`Page ${pager.at + 1} of ${pager.count}`}>
+              <button type="button" aria-label="Previous page" title="Previous page" disabled={pager.at === 0} onClick={() => pager.go(pager.at - 1)}>
+                <Icon name="left" size={12} />
+              </button>
+              <span className="bubble__pager-at">
+                {pager.at + 1}/{pager.count}
+              </span>
+              <button type="button" aria-label="Next page" title="Next page" disabled={pager.at === pager.count - 1} onClick={() => pager.go(pager.at + 1)}>
+                <Icon name="right" size={12} />
+              </button>
+            </span>
           )}
           {(fold.long || fold.folded) && (
             <button type="button" className="bubble__fold" aria-expanded={!fold.folded} onClick={fold.toggle}>
@@ -692,66 +692,50 @@ function ShownText({ text }: { text: string }) {
 }
 
 /**
- * The page each entry in the stream is turned to, 1 for the first behind its front: kept while the app is open, so
- * a filter change doesn't turn it back.
+ * The page each entry in the stream shows, 1 for its second: kept while the app is open, so a filter change doesn't
+ * take it back to the first.
  */
-const turnedTo = new Map<string, number>();
+const shownPage = new Map<string, number>();
 
-interface Flip {
-  /** The pages behind the front that have something on them; none on most cards. */
+interface Pager {
+  /** The pages after the first that have something on them; none on most entries. */
   pages: JSONNode[];
-  /** The page showing: 0 for the front, 1 for the first behind it. */
+  /** How many pages it has, the first among them. */
+  count: number;
+  /** The page showing: 0 for the first. */
   at: number;
-  /** Showing a page behind the front. */
-  on: boolean;
-  /** On the last page, so the next turn is back to the front. */
-  last: boolean;
-  /** Turned since it showed, where the browser can't turn it smoothly, so it slides in rather than draws as it first did. */
-  turned: boolean;
-  /** Turns the bubble `from` is in to its next page, or from the last back to the front. */
-  next: (from: Element) => void;
+  /** The way the last change of page went, so the page shown slides in from that side; none until it's changed. */
+  went: '' | 'next' | 'prev';
+  go: (to: number) => void;
 }
 
-/** A card with pages behind its front turns through them in its bubble, one after another and then to the front. */
-function useFlip(card: NoteCard | TodoCard): Flip {
+/** An entry with more than one page shows one at a time in its bubble, with a pager to step through them. */
+function usePager(card: NoteCard | TodoCard): Pager {
   const pages = useMemo(() => cardPages(card), [card]);
-  const [kept, setAt] = useState(() => turnedTo.get(card.id) ?? 0);
-  const [turned, setTurned] = useState(false);
-  // A page taken off since leaves it on the front.
+  const [kept, setAt] = useState(() => shownPage.get(card.id) ?? 0);
+  const [went, setWent] = useState<Pager['went']>('');
+  // A page taken out since leaves it on the first.
   const at = kept <= pages.length ? kept : 0;
-  const last = at === pages.length;
   return {
     pages,
+    count: pages.length + 1,
     at,
-    on: at > 0,
-    last,
-    turned,
-    next: (from) => {
-      const to = last ? 0 : at + 1;
-      if (to) turnedTo.set(card.id, to);
-      else turnedTo.delete(card.id);
-      if (turnPage(from, to ? 'next' : 'front', () => (setAt(to), setTurned(false)))) return;
+    went,
+    go: (to) => {
+      if (to < 0 || to > pages.length || to === at) return;
+      if (to) shownPage.set(card.id, to);
+      else shownPage.delete(card.id);
+      setWent(to > at ? 'next' : 'prev');
       setAt(to);
-      setTurned(true);
     },
   };
 }
 
 /**
- * A bubble's classes for the page it's on, and, where the browser can't turn it (`turnPage`), the slide that shows
- * it: in from the right for the next page, from the left for the front. The slide to the next page has two names,
- * one for odd pages and one for even, so each plays.
+ * A bubble's slide for the page it just changed to: in from the right for a later page, from the left for an
+ * earlier one. Each way has two names, one for odd pages and one for even, so each change plays.
  */
-const flipClass = (flip: Flip) =>
-  (flip.on ? ' is-back' : '') + (flip.turned ? (!flip.on ? ' page-in-front' : flip.at % 2 ? ' page-in-next' : ' page-in-next-2') : '');
-
-/** Over a bubble's text while it shows a page behind its front. */
-const PageLabel = ({ at }: { at: number }) => (
-  <span className="bubble__side">
-    <Icon name="flip" size={11} />
-    Page {at + 1}
-  </span>
-);
+const pageSlide = (pager: Pager) => (pager.went ? ` page-in-${pager.went}${pager.at % 2 ? '' : '-2'}` : '');
 
 /** Opens an entry in a sheet over this page: to edit, with its text focused, or (a tap on a phone) just to read. */
 /** Opens an entry in its sheet. In the Trash, where nothing is changed, a press picks it instead, to restore. */
@@ -780,8 +764,8 @@ function useBubble(card: NoteCard | TodoCard, title: string) {
   const may = usePermissions();
   const { undoAction } = useUndo();
   const toast = useToast();
-  const flip = useFlip(card);
-  const doc = flip.on ? flip.pages[flip.at - 1] : card.content;
+  const pager = usePager(card);
+  const doc = pager.at ? pager.pages[pager.at - 1] : card.content;
   const titleOf = (id: string, label: string) => linkTitle(index, id, label);
   // What a translation covers: hidden words go as •••, and code isn't sent.
   const plain = previewParts(doc, titleOf, { hidden: 'mask' });
@@ -805,12 +789,12 @@ function useBubble(card: NoteCard | TodoCard, title: string) {
     else if (result.kind !== 'done')
       toast(server ? "It couldn't be translated just now." : "This browser couldn't translate it on the device.", { action: { label: 'Translate with Google', run: withGoogle } });
   };
-  // The front's translation can go on a page of its own behind it, like a flashcard's answer.
-  const toPage = !!done && !flip.on && may(card).edit && !pagesHaveTranslation(flip.pages, done.pieces);
+  // The first page's translation can go on a new page of its own after the others.
+  const toPage = !!done && !pager.at && may(card).edit && !pagesHaveTranslation(pager.pages, done.pieces);
   const saveAsPage = (pieces: string[]) => {
     const action = repo.action();
     void repo.update(card.id, withNewPage(card, translationPage(pieces)));
-    toast(`Saved as page ${flip.pages.length + 2}`, { action: { label: 'Undo', run: () => void undoAction(action) } });
+    toast(`Saved as page ${pager.count + 1}`, { action: { label: 'Undo', run: () => void undoAction(action) } });
   };
   const menu = useEntryMenu(card, {
     open,
@@ -830,7 +814,7 @@ function useBubble(card: NoteCard | TodoCard, title: string) {
           Show original
         </button>
         {toPage && (
-          <button type="button" title="Put this translation on a page of its own, behind the front" onClick={(e) => (e.stopPropagation(), saveAsPage(done.pieces))}>
+          <button type="button" title="Put this translation on a new page of its own" onClick={(e) => (e.stopPropagation(), saveAsPage(done.pieces))}>
             Save as a page
           </button>
         )}
@@ -843,14 +827,13 @@ function useBubble(card: NoteCard | TodoCard, title: string) {
         </button>
       </span>
     ) : null;
-  return { text, flip, menu, title: done ? done.pieces[0] : title, translated, ...useSelectable(card.id, open, menu.onContextMenu) };
+  return { text, pager, menu, title: done ? done.pieces[0] : title, translated, ...useSelectable(card.id, open, menu.onContextMenu) };
 }
 
 function NoteBubble({ note, at }: { note: NoteCard; at: number }) {
-  const { text, flip, menu, title, translated, selected, handlers } = useBubble(note, note.title.trim());
+  const { text, pager, menu, title, translated, selected, handlers } = useBubble(note, note.title.trim());
   return (
-    <div className={`bubble${colorClass(note)}${flipClass(flip)}${selected ? ' is-selected' : ''}`} role="article" aria-current={selected || undefined} {...handlers}>
-      {flip.on && <PageLabel at={flip.at} />}
+    <div className={`bubble${colorClass(note)}${pageSlide(pager)}${selected ? ' is-selected' : ''}`} role="article" aria-current={selected || undefined} {...handlers}>
       {translated}
       {title && (
         <strong className="bubble__title">
@@ -858,7 +841,7 @@ function NoteBubble({ note, at }: { note: NoteCard; at: number }) {
         </strong>
       )}
       {text.view}
-      <BubbleMeta card={note} at={at} fold={text.fold} flip={flip} />
+      <BubbleMeta card={note} at={at} fold={text.fold} pager={pager} />
       <BubbleCopy card={note} />
       {menu.view}
     </div>
@@ -882,7 +865,7 @@ function StackEntry({ stack, at }: { stack: NoteCard; at: number }) {
   // A stack in the Trash has let its entries go back to the stream; shown there, it lists what restoring it takes back in.
   const of = stack.deleted ? new Map((stack.stack ?? []).filter((id) => !stacksOf(index).has(id)).map((id) => [id, stack.id])) : stacksOf(index);
   const members = stackEntries(stack, index.byId, of);
-  const { text, flip, menu, title, translated, selected, handlers } = useBubble(stack, stack.title.trim() || 'Stack');
+  const { text, pager, menu, title, translated, selected, handlers } = useBubble(stack, stack.title.trim() || 'Stack');
   const [expanded, setExpanded] = useState(() => openStacks.has(stack.id));
   const toggle = () => {
     if (expanded) openStacks.delete(stack.id);
@@ -892,8 +875,7 @@ function StackEntry({ stack, at }: { stack: NoteCard; at: number }) {
   const count = `${members.length} ${members.length === 1 ? 'card' : 'cards'}`;
   return (
     <>
-      <div className={`bubble bubble--stack${colorClass(stack)}${flipClass(flip)}${selected ? ' is-selected' : ''}`} role="article" aria-current={selected || undefined} {...handlers}>
-        {flip.on && <PageLabel at={flip.at} />}
+      <div className={`bubble bubble--stack${colorClass(stack)}${pageSlide(pager)}${selected ? ' is-selected' : ''}`} role="article" aria-current={selected || undefined} {...handlers}>
         {translated}
         <span className="stack__head">
           <Icon name="stack" size={15} />
@@ -917,7 +899,7 @@ function StackEntry({ stack, at }: { stack: NoteCard; at: number }) {
           card={stack}
           at={at}
           fold={text.fold}
-          flip={flip}
+          pager={pager}
           lead={
             <button type="button" className="bubble__fold" aria-expanded={expanded} title={expanded ? 'Close the stack' : 'Open the stack'} onClick={toggle}>
               <Icon name={expanded ? 'up' : 'down'} size={14} />
@@ -1012,12 +994,12 @@ function StackCards({ stack, members }: { stack: NoteCard; members: Entry[] }) {
 function TodoBubble({ todo, at }: { todo: TodoCard; at: number }) {
   const may = usePermissions();
   const tick = useTickTodo();
-  const { text, flip, menu, title, translated, selected, handlers } = useBubble(todo, displayTitle(todo));
+  const { text, pager, menu, title, translated, selected, handlers } = useBubble(todo, displayTitle(todo));
   const done = todo.status === 'done';
   const waiting = !done && !!todo.waiting;
   return (
     <div
-      className={`bubble bubble--todo${colorClass(todo)}${flipClass(flip)}${done ? ' is-done' : ''}${selected ? ' is-selected' : ''}`}
+      className={`bubble bubble--todo${colorClass(todo)}${pageSlide(pager)}${done ? ' is-done' : ''}${selected ? ' is-selected' : ''}`}
       role="article"
       aria-current={selected || undefined}
       {...handlers}
@@ -1032,13 +1014,12 @@ function TodoBubble({ todo, at }: { todo: TodoCard; at: number }) {
         />
       </label>
       <div className="bubble__body">
-        {flip.on && <PageLabel at={flip.at} />}
         {translated}
         <span className="bubble__title">
           <LinkedText text={title} />
         </span>
         {text.view}
-        <BubbleMeta card={todo} at={at} fold={text.fold} flip={flip} />
+        <BubbleMeta card={todo} at={at} fold={text.fold} pager={pager} />
       </div>
       <BubbleCopy card={todo} />
       {menu.view}
@@ -1114,14 +1095,14 @@ function EntryDetail({ card, fresh, edit, onClose }: { card: NoteCard | TodoCard
   const discard = useDiscard(card, fresh);
   const toast = useToast();
   const { undoAction } = useUndo();
-  // Which page of the card the text below is: 0 for the front, 1 for the first page behind it. One past the pages
-  // it has is a new one, kept once something is written on it.
+  // Which page of the entry the text below is: 0 for the first. One past the pages it has is a new one, kept once
+  // something is written on it.
   const [page, setPage] = useState(0);
   // The way the last change of page went, so the page shown slides in from that side; none until one is changed.
-  const [slide, setSlide] = useState<'' | ' page-in-next' | ' page-in-front'>('');
+  const [slide, setSlide] = useState<'' | ' page-in-next' | ' page-in-prev'>('');
   const goTo = (to: number) => {
     if (to === page) return;
-    setSlide(to > page ? ' page-in-next' : ' page-in-front');
+    setSlide(to > page ? ' page-in-next' : ' page-in-prev');
     setPage(to);
   };
   const onBack = page > 0;
@@ -1162,14 +1143,14 @@ function EntryDetail({ card, fresh, edit, onClose }: { card: NoteCard | TodoCard
       )}
       {behind > 0 && (
         <div className="page-tabs" role="tablist" aria-label="Pages">
-          <Icon name="flip" size={14} />
+          <Icon name="pages" size={14} />
           {Array.from({ length: behind + 1 }, (_, i) => (
             <button key={i} type="button" role="tab" aria-selected={page === i} className={`page-tabs__tab${page === i ? ' is-on' : ''}`} onClick={() => goTo(i)}>
               {i + 1}
             </button>
           ))}
           {can.edit && page <= stored.length && (
-            <button type="button" className="page-tabs__tab" aria-label="Add a page" title="Add a page behind the others" onClick={() => goTo(behind + 1)}>
+            <button type="button" className="page-tabs__tab" aria-label="Add a page" title="Add a page after the others" onClick={() => goTo(behind + 1)}>
               <Icon name="plus" size={13} />
             </button>
           )}
@@ -1191,7 +1172,7 @@ function EntryDetail({ card, fresh, edit, onClose }: { card: NoteCard | TodoCard
           toolbarHost={toolbarHost}
           historyHost={historyHost}
           autofocus={onBack ? can.edit : focusBody}
-          placeholder={page === 1 ? 'What shows when the card is turned over, like an answer' : onBack ? `Page ${page + 1}` : isTodo ? 'Details' : 'Note'}
+          placeholder={onBack ? `Page ${page + 1}` : isTodo ? 'Details' : 'Note'}
           // A blank page is skipped in the bubble, and one at the end is taken off.
           onChange={(content) => void repo.update(card.id, onBack ? withPage(card, page - 1, content) : { content })}
         />
@@ -1238,8 +1219,8 @@ function EntryDetail({ card, fresh, edit, onClose }: { card: NoteCard | TodoCard
           </button>
         )}
         {can.edit && behind === 0 && (
-          <button type="button" className="icon-btn" aria-label="Add a page" title="Add a page behind the front, shown when the card is turned over" onClick={() => goTo(1)}>
-            <Icon name="flip" />
+          <button type="button" className="icon-btn" aria-label="Add a page" title="Add a second page" onClick={() => goTo(1)}>
+            <Icon name="pages" />
           </button>
         )}
         {can.edit && !showTitle && (

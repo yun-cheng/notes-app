@@ -386,7 +386,7 @@ export class CardRepository {
     start?: string | null;
     repeat?: Repeat | null;
     content?: JSONNode;
-    /** A pasted card's pages behind its front. */
+    /** A pasted card's pages after the first. */
     pages?: JSONNode[];
     tags?: string[];
     vaultId?: string;

@@ -56,12 +56,12 @@ interface CardCommon extends CardEnvelope {
    */
   position?: number;
   /**
-   * Pages behind the front, in order, turned to one after another in the bubble, like a flashcard's answer and
-   * then an example. Missing or null on most cards; a blank page is skipped. See `cardPages` in `content.ts`.
+   * Its pages after the first (`content`), in order, shown one at a time in the bubble with a pager. Missing or null
+   * on most cards; a blank page is skipped. See `cardPages` in `content.ts`.
    */
   pages?: JSONNode[] | null;
   /**
-   * The one page behind the front, from before a card could have more: read as its only page while `pages` is
+   * Its one page after the first, from before a card could have more: read as its only page while `pages` is
    * missing, and cleared when its pages are next written.
    */
   back?: JSONNode | null;

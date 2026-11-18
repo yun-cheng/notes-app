@@ -26,13 +26,13 @@ export function toEntries(cards: Copyable[], tagName: TagName): Entry[] {
   return cards.map((card) => {
     const tags = card.tags.map(tagName).filter((t): t is string => !!t);
     const pages = cardPages(card);
-    const flip = pages.length ? { pages } : {};
+    const paged = pages.length ? { pages } : {};
     if (card.type === 'todo') {
       return {
         kind: 'todo',
         title: card.title,
         content: card.content,
-        ...flip,
+        ...paged,
         tags,
         due: card.due,
         ...(isDateKey(card.start) ? { start: card.start } : {}),
@@ -41,7 +41,7 @@ export function toEntries(cards: Copyable[], tagName: TagName): Entry[] {
         ...(card.status === 'done' ? { done: true } : {}),
       };
     }
-    return { kind: 'note', title: card.title, content: card.content, ...flip, tags, due: null };
+    return { kind: 'note', title: card.title, content: card.content, ...paged, tags, due: null };
   });
 }
 

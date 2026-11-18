@@ -100,6 +100,7 @@ function isCard(value: unknown): value is Card {
     !optional(c.color, (color) => color === null || isCardColor(color)) ||
     !optional(c.archived, (a) => typeof a === 'boolean') ||
     !optional(c.template, (t) => typeof t === 'boolean') ||
+    !optional(c.reactions, (r) => r === null || (typeof r === 'object' && !Array.isArray(r) && Object.values(r).every(isStrings))) ||
     !optional(c.position, (n) => typeof n === 'number' && Number.isFinite(n)) ||
     !optional((c as Partial<NoteCard>).stack, (s) => c.type === 'note' && isStrings(s)) ||
     !optional(c.back, (b) => b === null || isDocNode(b)) ||

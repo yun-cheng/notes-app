@@ -925,8 +925,32 @@ body:has(.batch) .toast-slot { bottom: calc(var(--tabbar) + env(safe-area-inset-
 .bubble__add { display: inline-grid; place-items: center; width: 22px; height: 18px; padding: 0; border: 1px dashed var(--line); border-radius: 9px; background: none; color: var(--muted); opacity: 0; cursor: pointer; transition: opacity 0.12s; }
 .bubble__add:hover { color: var(--text); border-color: var(--muted); }
 .stream__entry:hover .bubble__add, .bubble:focus-within .bubble__add, .is-open > .bubble__add { opacity: 1; }
-@media (pointer: coarse) { .bubble__add { display: none; } }
+/* Without hover they're gone, taking no room in the row: its reactions start at the bubble's edge. */
+@media (pointer: coarse) { .bubble__add, .bubble-menu:has(> .bubble__add:only-child) { display: none; } }
 .bubble-menu { position: relative; display: flex; }
+/* Reactions: in a bubble's bottom row on the left, and under the tags in its sheet. */
+.reactions { display: inline-flex; flex-wrap: wrap; align-items: center; gap: 4px; }
+.reaction { display: inline-flex; align-items: center; gap: 3px; height: 20px; padding: 0 7px 0 5px; border: 1px solid var(--line); border-radius: 10px; background: var(--surface); color: var(--muted); font: 500 11px/1 var(--sans); font-variant-numeric: tabular-nums; cursor: default; }
+button.reaction { cursor: pointer; }
+button.reaction:hover { border-color: var(--muted); color: var(--text); }
+.reaction.is-mine { border-color: color-mix(in srgb, var(--accent) 55%, transparent); background: var(--accent-soft); color: var(--text); }
+.reaction__emoji { font-size: 13px; line-height: 1; }
+.note-sheet__reactions { display: flex; margin: 8px 0 0; }
+.note-sheet__reactions .reaction { height: 28px; padding: 0 10px 0 8px; border-radius: 14px; font-size: 13px; }
+.note-sheet__reactions .reaction__emoji { font-size: 16px; }
+.reaction--add { padding: 0 8px; border-style: dashed; color: var(--muted); }
+.style-menu.reaction-menu { width: 296px; padding: 6px; }
+.reaction-picker { display: flex; flex-direction: column; gap: 6px; }
+.reaction-picker__quick { display: flex; justify-content: space-between; }
+.emoji-cell { display: inline-grid; place-items: center; width: 36px; height: 36px; padding: 0; border: 0; border-radius: 8px; background: none; color: var(--muted); font-size: 22px; line-height: 1; cursor: pointer; }
+.emoji-cell:hover, .emoji-cell:focus-visible { background: var(--sunken); outline: none; }
+.emoji-cell.is-mine { background: var(--accent-soft); }
+.reaction-picker__search { width: 100%; }
+.reaction-picker__grid { max-height: 232px; overflow-y: auto; overscroll-behavior: contain; }
+.reaction-picker__cells { display: grid; grid-template-columns: repeat(8, 1fr); }
+.reaction-picker__cells .emoji-cell { width: 100%; height: 34px; font-size: 20px; }
+.reaction-picker__group { margin: 6px 4px 2px; color: var(--muted); font-size: 12px; font-weight: 600; }
+.reaction-picker__empty { margin: 8px 4px; color: var(--muted); font-size: 13px; line-height: 1.4; }
 .style-menu.tag-menu { width: 280px; padding: 8px 10px; }
 .tag-menu .tag-picker { margin: 0; }
 .tag-menu .tag-picker__input, .tag-menu .tag-picker__input:focus { width: 100%; }

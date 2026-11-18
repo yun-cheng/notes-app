@@ -71,6 +71,8 @@ interface CardCommon extends CardEnvelope {
    * See `templates.ts`. Missing on most cards.
    */
   template?: boolean;
+  /** Emoji reactions, each with the accounts that put it on. Missing on most cards. See `reactions.ts`. */
+  reactions?: Record<string, string[]> | null;
 }
 
 export interface NoteCard extends CardCommon {

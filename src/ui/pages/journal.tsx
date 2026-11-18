@@ -11,6 +11,7 @@ import { useCards, useToday } from '../../state/CardsContext';
 import { setViewOnly, useInTrash, usePermissions, useViewOnly } from '../viewOnly';
 import { ScrollJump } from '../ScrollJump';
 import { Comments } from '../Comments';
+import { ReactionsRow } from '../Reactions';
 import { Backlinks, Empty, Page, TagChips, TagPicker, TitleField, useDeleteCard, useVaultMove, VaultField } from '../components';
 import { Editor } from '../editor/Editor';
 import { FilterBar, FilterSheet, SortMenu, useJournalFilter, useShowOnly } from '../FilterPanel';
@@ -425,11 +426,12 @@ function BubbleMeta({ card, at, fold, flip, lead }: { card: NoteCard | TodoCard;
           )}
         </span>
       )}
-      {/* On the left, the add buttons while it has no tags or dates; on the right, More or Less, then the vault and the time it was written. */}
+      {/* On the left, the add buttons while it has no tags or dates, and its reactions; on the right, More or Less, then the vault and the time it was written. */}
       <span className="bubble__meta">
         {!row && retag && <AddTag card={card} />}
         {!row && addDue}
         {card.viewOnly && <ViewOnlyMark card={card} />}
+        <ReactionsRow card={card} />
         <span className="bubble__end">
           {lead}
           {card.template && <UseTemplate card={card} />}
@@ -1370,6 +1372,7 @@ function EntryDetail({ card, fresh, edit, onClose }: { card: NoteCard | TodoCard
           </div>
         )
       )}
+      <ReactionsRow card={card} look="sheet" />
       {isStack(card) && !onBack && <StackList stack={card} />}
       <Comments card={card} />
       <Backlinks cardId={card.id} />

@@ -207,8 +207,8 @@ export async function seed() {
     mine.push({ id, vaultId, at: when, payload: { createdAt: when, ...payload } as CardPayload });
     return id;
   };
-  /** Fields only some entries have: a tint, a preview style, view only, archived, pages behind the front, a stack's entries, a template. */
-  type Extras = Partial<Pick<NoteCard, 'color' | 'preview' | 'viewOnly' | 'archived' | 'pages' | 'stack' | 'template'>>;
+  /** Fields only some entries have: a tint, a preview style, view only, archived, pages behind the front, a stack's entries, a template, reactions. */
+  type Extras = Partial<Pick<NoteCard, 'color' | 'preview' | 'viewOnly' | 'archived' | 'pages' | 'stack' | 'template' | 'reactions'>>;
   const tag = (id: string, title: string, pinned: boolean, description = '', color?: CardColor) =>
     add(id, personal, at(9, 9), { type: 'tag', title, pinned, tags: [], content: description ? lines(description) : doc(p()), ...(color ? { color } : {}) });
   /** A tag group: one choice (an entry takes at most one of its tags) or many, ordered to sort by or not. */
@@ -312,7 +312,7 @@ export async function seed() {
     personal,
     { preview: { links: 'compact' } },
   );
-  note('demo-note-meeting', at(1, 11, 0), doc(h('Design review'), p('Decided to keep the sidebar and move settings under the account menu.'), p('Next: prototype by Friday. See ', link(kyoto, 'Kyoto trip'), ' for the photo layout we liked.')), [work, ideas, high]);
+  note('demo-note-meeting', at(1, 11, 0), doc(h('Design review'), p('Decided to keep the sidebar and move settings under the account menu.'), p('Next: prototype by Friday. See ', link(kyoto, 'Kyoto trip'), ' for the photo layout we liked.')), [work, ideas, high], '', personal, { reactions: { '👍': [DEMO.id] } });
   note('demo-note-long', at(1, 21, 15), lines(
     'Long note, to show how bubbles clamp:',
     'Line two of a note that keeps going.',
@@ -390,7 +390,10 @@ export async function seed() {
 
   // A shared vault with Sam: notes from both of you.
   note('demo-family-groceries', at(2, 17, 0), doc(p('Shared shopping list'), checklist(['Rice', true], ['Eggs', false], ['Dish soap', false])), [], '', family.id);
-  note('demo-family-trip', at(1, 9, 30), lines('Summer trip: beach or mountains? Vote below.'), [], 'Summer trip', family.id);
+  // Reactions: Sam's and yours together on one, Sam's alone on the other; a press puts yours on or takes it off.
+  note('demo-family-trip', at(1, 9, 30), lines('Summer trip: beach or mountains? Vote below.'), [], 'Summer trip', family.id, {
+    reactions: { '🏔️': [SAM.id, DEMO.id], '🏖️': [SAM.id] },
+  });
 
   const pushed = diaryKey ? mine : mine.filter((d) => d.vaultId !== diaryVault);
   // Cards an earlier demo had and this one doesn't: sent as deleted, so a browser that synced them lets them go.
@@ -436,6 +439,8 @@ export async function seed() {
         tags: [],
         createdAt: at(3, 19, 0),
         content: doc(p('November: ', text('Klara and the Sun', ['italic'])), p('Meet at the café on the 28th.')),
+        // A vault you can only view: its reactions show, and none can be added.
+        reactions: { '📚': [SAM.id] },
       }),
     ],
     new Map(),

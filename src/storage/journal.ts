@@ -31,6 +31,8 @@ export interface CardPatch {
   /** A stack's entries, in order. */
   stack?: string[];
   template?: boolean;
+  /** Every reaction, as `toggleReaction` leaves them; null takes the last off. */
+  reactions?: Record<string, string[]> | null;
   members?: string[];
   choice?: 'one' | 'many';
   ordered?: boolean;

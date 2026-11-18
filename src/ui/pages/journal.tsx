@@ -421,10 +421,9 @@ function BubbleMeta({ card, at, fold, flip, lead }: { card: NoteCard | TodoCard;
           {due}
         </span>
       )}
-      {/* The vault on the left; More or Less, the due date and the time it was written on the right. */}
+      {/* On the right: More or Less, a todo's date button while it has none, then the vault and the time it was written. */}
       <span className="bubble__meta">
         {!tagged && retag && <AddTag card={card} />}
-        <VaultLabel card={card} />
         {card.viewOnly && <ViewOnlyMark card={card} />}
         <span className="bubble__end">
           {lead}
@@ -450,6 +449,7 @@ function BubbleMeta({ card, at, fold, flip, lead }: { card: NoteCard | TodoCard;
           )}
           {!dated && waiting && <WaitingMark />}
           {!dated && due}
+          <VaultLabel card={card} />
           <SyncMark id={card.id} />
           <time dateTime={new Date(at).toISOString()}>{time(at)}</time>
         </span>

@@ -403,8 +403,18 @@ function BubbleMeta({ card, at, fold, flip, lead }: { card: NoteCard | TodoCard;
   const retag = may(card).edit ? (tags: string[]) => void repo.update(card.id, { tags }) : undefined;
   // An entry's tags have a row of their own, over the rest; one without any is offered a tag in the bottom row.
   const tagged = resolveTags(index, card.tags).length > 0;
+  // So do a todo's dates, with whether it's waiting; one without any is offered a date in the bottom row.
+  const dated = card.type === 'todo' && !!(card.due || card.start);
+  const waiting = card.type === 'todo' && card.waiting && card.status === 'open';
+  const due = card.type === 'todo' && (retag ? <DueMenu card={card} look={dated ? 'label' : 'add'} /> : <DueLabel todo={card} className="bubble__due" />);
   return (
     <>
+      {dated && (
+        <span className="bubble__dates">
+          {waiting && <WaitingMark />}
+          {due}
+        </span>
+      )}
       {tagged && (
         <span className="bubble__tags">
           <TagChips tagIds={card.tags} onChange={retag} />
@@ -438,8 +448,8 @@ function BubbleMeta({ card, at, fold, flip, lead }: { card: NoteCard | TodoCard;
               {fold.folded ? 'More' : 'Less'}
             </button>
           )}
-          {card.type === 'todo' && card.waiting && card.status === 'open' && <WaitingMark />}
-          {card.type === 'todo' && (retag ? <DueMenu card={card} look={card.due || card.start ? 'label' : 'add'} /> : <DueLabel todo={card} className="bubble__due" />)}
+          {!dated && waiting && <WaitingMark />}
+          {!dated && due}
           <SyncMark id={card.id} />
           <time dateTime={new Date(at).toISOString()}>{time(at)}</time>
         </span>

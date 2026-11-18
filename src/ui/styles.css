@@ -652,8 +652,8 @@ a.change__title:hover { color: var(--accent); }
 .bubble__text.is-folded { max-height: 6lh; overflow: hidden; mask-image: linear-gradient(to bottom, #000 65%, transparent); }
 .bubble__fold { display: inline-flex; align-items: center; gap: 2px; padding: 0 6px 0 2px; border: 0; border-radius: 6px; background: none; color: var(--accent); font: inherit; font-size: 12px; font-weight: 600; cursor: pointer; }
 .bubble__fold:hover { background: var(--accent-soft); }
-/* An entry's tags, in a row of their own over the bottom row. */
-.bubble__tags { display: flex; flex-wrap: wrap; align-items: center; gap: 6px; margin-bottom: 2px; color: var(--muted); font-size: 11px; line-height: 1.6; }
+/* A todo's dates, then an entry's tags, each in a row of their own over the bottom row. */
+.bubble__dates, .bubble__tags { display: flex; flex-wrap: wrap; align-items: center; gap: 6px; margin-bottom: 2px; color: var(--muted); font-size: 11px; line-height: 1.6; }
 .bubble__tags .chip--small { min-height: 18px; }
 .bubble__meta { display: flex; flex-wrap: wrap; align-items: center; gap: 6px; min-height: 20px; color: var(--muted); font-size: 11px; line-height: 1.6; }
 /* The due date and tags start at the left; More or Less and the time keep to the right. */
@@ -675,6 +675,7 @@ a.change__title:hover { color: var(--accent); }
 .bubble--todo .check { grid-column: 1; grid-row: 1; height: 24px; margin: 0; }
 .bubble--todo .bubble__body { display: contents; }
 .bubble--todo .bubble__body > * { grid-column: 2; }
+.bubble--todo .bubble__body > .bubble__dates,
 .bubble--todo .bubble__body > .bubble__tags,
 .bubble--todo .bubble__body > .bubble__meta { grid-column: 1 / -1; padding-left: 6px; }
 .bubble__body { display: flex; flex-direction: column; gap: 2px; min-width: 0; }

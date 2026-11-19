@@ -411,38 +411,3 @@ export function isBlank(card: Card): boolean {
   if (card.type === 'note' && Array.isArray(card.stack)) return false;
   return card.title.trim() === '' && card.tags.length === 0 && isEmptyDoc(card.content);
 }
-
-/**
- * A body with the photos `ids` taken out, anywhere in it. A list item or quote left with nothing in it gets an empty
- * line, as the editor needs one there. With none of them in it, the same node.
- */
-export function dropPhotos(node: JSONNode, ids: ReadonlySet<string>): JSONNode {
-  if (!node.content) return node;
-  let changed = false;
-  const kept: JSONNode[] = [];
-  for (const child of node.content) {
-    if (child.type === 'photo' && typeof child.attrs?.id === 'string' && ids.has(child.attrs.id)) {
-      changed = true;
-      continue;
-    }
-    const next = dropPhotos(child, ids);
-    if (next !== child) changed = true;
-    kept.push(next);
-  }
-  if (!changed) return node;
-  return { ...node, content: kept.length ? kept : [{ type: 'paragraph' }] };
-}
-
-/**
- * The photos `ids` taken out of a card's front and its other pages, as a change to it (a page left blank at the end
- * goes too); null if it holds none of them.
- */
-export function withoutPhotos(card: Card, ids: ReadonlySet<string>): { content?: JSONNode; pages?: JSONNode[] | null; back?: null } | null {
-  if (card.type === 'tag') return null;
-  const content = dropPhotos(card.content, ids);
-  const pages = storedPages(card);
-  const after = pages.map((page) => dropPhotos(page, ids));
-  const paged = after.some((page, i) => page !== pages[i]);
-  if (content === card.content && !paged) return null;
-  return { ...(content !== card.content ? { content } : {}), ...(paged ? pagesPatch(card, after) : {}) };
-}

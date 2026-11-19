@@ -1,11 +1,8 @@
-import { displayTitle, withoutPhotos } from '../domain/content';
-import { cardPhotoIds, photoFileNames, type PhotoItem } from '../domain/photos';
+import { displayTitle } from '../domain/content';
+import { photoFileNames, type PhotoItem } from '../domain/photos';
 import { zip } from '../domain/zip';
 import { useCards, useToday } from '../state/CardsContext';
-import { entries } from './entryActions';
 import { useToast } from './Toast';
-import { useUndo } from './useUndo';
-import { usePermissions } from './viewOnly';
 
 const count = (n: number) => (n === 1 ? '1 photo' : `${n} photos`);
 
@@ -24,15 +21,13 @@ function save(blob: Blob, name: string) {
 
 /**
  * What can be done with photos picked on the Photos page, all at once: download them (one as itself, more in a zip),
- * share them, or take them out of their entries, which can be undone. A photo not on this device and not yet
+ * or share them. A photo not on this device and not yet
  * uploaded from the one it was added on is left out, and the toast says so.
  */
 export function usePhotoActions() {
-  const { photos, index, repo } = useCards();
+  const { photos } = useCards();
   const today = useToday();
-  const may = usePermissions();
   const toast = useToast();
-  const { undoAction } = useUndo();
 
   /** The photos' files, named by day and entry, and how many weren't here. */
   const gather = async (items: readonly PhotoItem[]) => {
@@ -70,25 +65,5 @@ export function usePhotoActions() {
     }
   };
 
-  /**
-   * Takes the photos out of every entry they're in that the journal shows (not templates, not archived ones), as
-   * the Photos page has a photo in two entries once. Entries this account can't change are left alone and counted.
-   */
-  const remove = async (items: readonly PhotoItem[]) => {
-    const ids = new Set(items.map((i) => i.id));
-    const holders = index.live.filter((c) => (c.type === 'note' || c.type === 'todo') && !c.archived && !c.template && cardPhotoIds(c).some((id) => ids.has(id)));
-    const steps = holders.filter((c) => may(c).edit).flatMap((c) => {
-      const patch = withoutPhotos(c, ids);
-      return patch ? [{ id: c.id, patch }] : [];
-    });
-    const skipped = holders.length - steps.length;
-    if (!steps.length) return toast(items.length === 1 ? "This photo is in an entry you can't change." : "These photos are in entries you can't change.");
-    const action = repo.action();
-    await Promise.all(steps.map((s) => repo.update(s.id, s.patch)));
-    toast(`Removed ${count(ids.size)} from ${entries(steps.length)}${skipped ? `; ${entries(skipped)} couldn't be changed` : ''}`, {
-      action: { label: 'Undo', run: () => void undoAction(action) },
-    });
-  };
-
-  return { download, share, remove };
+  return { download, share };
 }

@@ -58,7 +58,7 @@ const sizes = (width: number) =>
  *
  * Photos are picked as in a photo library: by the check on each (or on a day, for all of it), Cmd/Ctrl-click, a long
  * press on a touch screen, or Cmd/Ctrl+A for all; then a click picks, and Shift picks everything from the last one.
- * The bar on top then copies one, or downloads, shares or takes out of their entries all of them. Escape stops.
+ * The bar on top then copies one, or downloads or shares all of them. Escape stops.
  */
 export function PhotosPage() {
   const today = useToday();
@@ -175,12 +175,6 @@ export function PhotosPage() {
     );
   };
 
-  const remove = () => {
-    const items = chosen;
-    clear();
-    void act.remove(items);
-  };
-
   let n = 0;
   return (
     <Page
@@ -211,9 +205,6 @@ export function PhotosPage() {
             )}
             <button type="button" className="icon-btn" aria-label="Download" title={chosen.length === 1 ? 'Download' : 'Download, in a zip'} onClick={() => void act.download(chosen)}>
               <Icon name="download" />
-            </button>
-            <button type="button" className="icon-btn" aria-label="Remove from entries" title="Take out of their entries" onClick={remove}>
-              <Icon name="trash" />
             </button>
           </>
         ) : (

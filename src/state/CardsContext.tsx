@@ -16,7 +16,7 @@ import { PhotoService, type PhotoState } from '../photos/service';
 import { Keyring } from '../crypto/keyring';
 import { unlockWithPin } from '../crypto/vaultKeys';
 import { forgetTranslations, keepTranslationsIn } from '../ui/translate';
-import { draftsKey } from '../ui/commentDrafts';
+import { forgetDrafts } from '../ui/drafts';
 import { finishEncrypting } from './encrypting';
 import { Unsynced } from './unsynced';
 
@@ -28,14 +28,14 @@ export function openAccountStorage(accountId: string) {
   return { store, repo, keyring };
 }
 
-/** Removes an account's copy on this device: its notes, photos, keys, unsaved-edit journal and unsent comments. */
+/** Removes an account's copy on this device: its notes, photos, keys, unsaved-edit journal and drafts. */
 export async function forgetAccountStorage(accountId: string) {
   try {
     localStorage.removeItem(`notes-app:journal:${accountId}`);
-    localStorage.removeItem(draftsKey(accountId));
   } catch {
     // Storage the browser refuses holds nothing to remove.
   }
+  forgetDrafts(accountId);
   await Dexie.delete(`notes-app:user:${accountId}`);
 }
 

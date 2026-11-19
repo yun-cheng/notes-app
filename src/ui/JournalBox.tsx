@@ -29,6 +29,8 @@ import { LockPanel } from './LockPanel';
 import { useToast } from './Toast';
 import { BOX_PASTE, type ForwardedPaste } from './useEntryShortcuts';
 import { journalDefaults, useSaveEntries } from './useSaveEntry';
+import { loadDraft, saveDraft } from './drafts';
+import { journalPath } from './paths';
 
 /** Enter saves on a computer. On a phone, Return makes a new line and the button saves. */
 const enterSaves = () => !window.matchMedia('(pointer: coarse)').matches;
@@ -99,8 +101,24 @@ export function JournalBox({ filter }: { filter: StreamFilter }) {
   const diary = !!diaryId && filter.vaultId === diaryId;
   const start = todoFirst ? EMPTY_TODO : EMPTY;
   const photoVault = filter.vaultId ?? mainVault(vaults, accountId)?.id;
-  const latest = useRef({ index, today, photoVault, diary, filter, saving });
-  latest.current = { index, today, photoVault, diary, filter, saving };
+  const latest = useRef({ index, today, photoVault, diary, filter, saving, vaults });
+  latest.current = { index, today, photoVault, diary, filter, saving, vaults };
+  // What's written is kept as it's typed, one draft for each view of the journal, as the box is new in each.
+  const draftKey = journalPath({ ...filter, sort: undefined });
+  const keepDraft = (doc: JSONNode) => {
+    const { filter: f, today: day, vaults: vs } = latest.current;
+    const entries = entriesFromDoc(doc, day);
+    if (!entries.length) return saveDraft('journal', accountId, draftKey, null);
+    // One bound for an encrypted vault stays out of storage: the device keeps those entries only encrypted.
+    const diaryOf = diaryVault(vs, accountId)?.id;
+    const home = f.vaultId ?? mainVault(vs, accountId)?.id;
+    const encrypted = entries.some((e) => vs.find((v) => v.id === (e.diary && diaryOf ? diaryOf : home))?.encryption);
+    saveDraft('journal', accountId, draftKey, doc, encrypted);
+  };
+  const [draft] = useState(() => {
+    const kept = loadDraft('journal', accountId, draftKey) as JSONNode | undefined;
+    return kept?.type === 'doc' ? kept : undefined;
+  });
   const editorRef = useRef<TiptapEditor | null>(null);
 
   const photoInput = usePhotoInput(editorRef, () => latest.current.photoVault);
@@ -123,6 +141,7 @@ export function JournalBox({ filter }: { filter: StreamFilter }) {
       setUnlock(result.saved ? null : (result.unlock ?? null));
       if (result.saved) {
         editor.commands.setContent(start, { emitUpdate: false });
+        saveDraft('journal', accountId, draftKey, null);
         if (!f.sort) requestAnimationFrame(() => window.scrollTo({ top: document.documentElement.scrollHeight, behavior: 'instant' }));
       }
     } catch (err) {
@@ -209,7 +228,8 @@ export function JournalBox({ filter }: { filter: StreamFilter }) {
       typeahead('tagMenu', '#', tagItems, menu.render('Tags')),
       typeahead('dateMenu', '@', dateItems, menu.render('Due date')),
     ],
-    content: start,
+    content: draft ?? start,
+    onUpdate: ({ editor: e }) => keepDraft(e.getJSON() as JSONNode),
     editorProps: {
       attributes: { class: 'composer__prose', 'aria-label': 'Write in the journal', role: 'textbox', 'aria-multiline': 'true' },
       handleKeyDown: (_view, event) => {

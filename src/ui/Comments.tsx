@@ -5,7 +5,7 @@ import { usePermissions } from './viewOnly';
 import { SyncOffline } from '../sync/engine';
 import { addComment, deleteComment, fetchComments, resolveComment, type CardComment } from '../sync/http';
 import { useToast } from './Toast';
-import { loadDraft, saveDraft } from './commentDrafts';
+import { loadDraft, saveDraft } from './drafts';
 
 function when(at: number) {
   return new Date(at).toLocaleString(undefined, { dateStyle: 'medium', timeStyle: 'short' });
@@ -20,11 +20,15 @@ export function Comments({ card }: { card: Card }) {
   const [comments, setComments] = useState<CardComment[] | null>(null);
   const [offline, setOffline] = useState(false);
   // Kept on the device as it's written, per entry: a sheet that moves to another entry reads that one's.
-  const [kept, setKept] = useState(() => ({ card: card.id, text: loadDraft(accountId, card.id) }));
-  const draft = kept.card === card.id ? kept.text : loadDraft(accountId, card.id);
+  const stored = (id: string) => {
+    const text = loadDraft('comment', accountId, id);
+    return typeof text === 'string' ? text : '';
+  };
+  const [kept, setKept] = useState(() => ({ card: card.id, text: stored(card.id) }));
+  const draft = kept.card === card.id ? kept.text : stored(card.id);
   const setDraft = (text: string) => {
     setKept({ card: card.id, text });
-    saveDraft(accountId, card.id, text);
+    saveDraft('comment', accountId, card.id, text.trim() ? text : null);
   };
   const [showResolved, setShowResolved] = useState(false);
   const synced = card.seq > 0;
@@ -51,7 +55,7 @@ export function Comments({ card }: { card: Card }) {
     const cardId = card.id;
     if (draft.trim() && (await run(() => addComment(cardId, draft.trim())))) {
       // The entry shown may have changed while it was sending: drop the sent one's draft, not the one now shown.
-      saveDraft(accountId, cardId, '');
+      saveDraft('comment', accountId, cardId, null);
       setKept((k) => (k.card === cardId ? { card: cardId, text: '' } : k));
     }
   };

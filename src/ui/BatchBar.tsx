@@ -157,7 +157,7 @@ export function BatchBar({ selection }: { selection: Selection }) {
             <Icon name="stack" />
           </button>
         )}
-        <button type="button" className="icon-btn" disabled={none} aria-label="Copy" title={`Copy (${MOD}C)`} onClick={() => actions.copy(selection.ids)}>
+        <button type="button" className="icon-btn" disabled={none} aria-label="Copy" title={`Copy (${MOD}C)`} onClick={(e) => actions.copy(selection.ids, undefined, e.currentTarget)}>
           <Icon name="copy" />
         </button>
         <button type="button" className="icon-btn" disabled={!manageable.length} aria-label={archiving ? 'Archive' : 'Unarchive'} title={archiving ? 'Archive: out of the journal, still in search' : 'Unarchive: back to the journal'} onClick={archive}>

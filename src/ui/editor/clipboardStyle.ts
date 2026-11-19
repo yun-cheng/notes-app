@@ -6,10 +6,10 @@ import { toMarkdown, toPlainText, type TitleResolver } from '../../domain/markdo
 import { fromMarkdown, type LinkResolver } from '../../domain/markdownIn';
 import type { JSONNode } from '../../domain/types';
 import { clipboardPrefs, COPY_STYLES, COPY_WORDS, PASTE_STYLES, PASTE_WORDS, type CopyStyle, type PasteStyle } from '../clipboardPrefs';
-import { writeClipboard } from '../entryActions';
-import { hasPasteChoice, showPasteChoice } from './pasteChoice';
+import { writeClipboard, writingClipboard } from '../entryActions';
+import { hasEditorChoice, showEditorChoice } from './clipboardChoices';
 
-/** Shows a message with a button for each other style: the toast, in the app. A paste uses it only in an editor without `PasteChoices`. */
+/** Shows a message with a button for each other style: the toast, in the app, for an editor without `ClipboardChoices`. */
 export type OfferStyles = (message: string, actions: { label: string; run: () => void }[]) => void;
 
 /** What was pasted, read while the paste event lasts. */
@@ -19,32 +19,40 @@ export interface Pasted {
 }
 
 /**
- * Copying and pasting in an editor. Each goes in the style the Copy & paste settings pick, and offers the other
- * styles for that one copy or paste: a copy's toast makes it again, and a paste's chip, right after the pasted text
- * (`PasteChoices`), puts it back the other way. Rich text is the editor's own HTML, with plain words beside it for
+ * Copying and pasting in an editor. Each goes in the style the Copy & paste settings pick, and a chip right after
+ * the text (`ClipboardChoices`) offers the other styles for that one copy or paste: a copy is made again, a paste is
+ * put back the other way. Rich text is the editor's own HTML, with plain words beside it for
  * apps that take only text. Text inside a code block is always copied and pasted as it is, with nothing offered.
  */
 export function clipboardProps(title: () => TitleResolver, offer: OfferStyles, resolve: () => LinkResolver = () => () => null) {
   const copy = (view: EditorView, event: ClipboardEvent, cut: boolean) => {
     const { selection } = view.state;
-    if (selection.empty || !event.clipboardData) return false;
+    // A copy this app asks the browser for (a chip's other style) is `writeClipboard`'s.
+    if (selection.empty || !event.clipboardData || writingClipboard()) return false;
     if (selection.$from.parent.type.spec.code && selection.$from.sameParent(selection.$to)) {
       put(event, view.state.doc.textBetween(selection.from, selection.to));
     } else {
       const doc = sliceDoc(selection.content());
       const style = clipboardPrefs().copy;
-      const say = (s: CopyStyle) =>
-        offer(
-          `Copied as ${COPY_WORDS[s]}`,
-          others(COPY_STYLES, s).map((other) => ({
-            label: COPY_STYLES[other],
-            run: () => {
-              const again = copyText(doc, other, title());
-              void writeClipboard(again.text, undefined, again.html).then((ok) => (ok ? say(other) : offer("Couldn't copy here.", [])));
-            },
-          })),
-        );
-      say(style);
+      const { from, to } = selection;
+      const say = (now: CopyStyle) => {
+        if (view.isDestroyed) return;
+        const options = (Object.keys(COPY_STYLES) as CopyStyle[]).map((s) => ({
+          label: COPY_STYLES[s],
+          current: s === now,
+          run: () => {
+            const again = copyText(doc, s, title());
+            void writeClipboard(again.text, undefined, again.html).then((ok) => (ok ? say(s) : offer("Couldn't copy here.", [])));
+          },
+        }));
+        const choice = { kind: 'copy' as const, title: `Copied as ${COPY_WORDS[now]}`, options };
+        // After a cut, where the words were.
+        const at = cut ? view.state.selection.from : null;
+        if (hasEditorChoice(view.state)) showEditorChoice(view, { ...choice, from: at ?? from, to: at ?? to });
+        else offer(choice.title, options.filter((o) => !o.current));
+      };
+      // Once the copy, or the cut, is done.
+      queueMicrotask(() => say(style));
       // Rich text is the editor's own copy, which keeps the most of what was picked; its plain words come from
       // `clipboardTextSerializer` below.
       if (style === 'rich') return false;
@@ -77,8 +85,9 @@ export function clipboardProps(title: () => TitleResolver, offer: OfferStyles, r
     const say = (now: PasteStyle) => {
       const { doc } = view.state;
       const end = view.state.selection.to;
-      if (hasPasteChoice(view.state)) {
-        showPasteChoice(view, {
+      if (hasEditorChoice(view.state)) {
+        showEditorChoice(view, {
+          kind: 'paste',
           from: start,
           to: end,
           title: `Pasted ${PASTE_WORDS[now]}`,

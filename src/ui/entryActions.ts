@@ -5,6 +5,7 @@ import type { Entry } from '../domain/entry';
 import type { EntryType } from '../domain/retype';
 import type { Card, NoteCard, TodoCard } from '../domain/types';
 import { useCards } from '../state/CardsContext';
+import { entryOnScreen, showChoiceNear } from './clipboardChoice';
 import { clipboardPrefs, COPY_STYLES, COPY_WORDS, type CopyStyle } from './clipboardPrefs';
 import { useCanRestore, usePermissions } from './viewOnly';
 import { useToast } from './Toast';
@@ -27,6 +28,9 @@ if (typeof document !== 'undefined') {
     if (pending.json) e.clipboardData.setData(ENTRIES_TYPE, pending.json);
   });
 }
+
+/** Whether a copy now is one `writeClipboard` asked for, so an editor's own copy handling leaves it alone. */
+export const writingClipboard = () => pending !== null;
 
 /**
  * Puts text, with HTML and an exact copy of entries when given, on the clipboard. The browser's own copy command fires a copy
@@ -75,14 +79,22 @@ export function useEntryActions() {
     return writeClipboard(text, encodeEntries(toEntries(cards, tagName)), html);
   };
 
-  /** Copies in the setting's style, with the toast offering the others: pressing one copies the entries again that way. */
-  const copy = (ids: string[], style: CopyStyle = clipboardPrefs().copy) => {
+  /**
+   * Copies in the setting's style, with a chip offering the others beside the first of the entries on the screen,
+   * or by `anchor` (a copy button outside the entries, as in the batch bar); pressing one copies the entries again
+   * that way. With neither, it's the toast.
+   */
+  const copy = (ids: string[], style: CopyStyle = clipboardPrefs().copy, anchor?: Element | null) => {
     const cards = ids.map((id) => index.byId.get(id)).filter(copyable);
     if (!cards.length) return;
     void write(cards, style).then((ok) => {
       if (!ok) return toast("Couldn't copy here. Select the text instead.");
-      const others = (Object.keys(COPY_STYLES) as CopyStyle[]).filter((s) => s !== style);
-      toast(`Copied ${entries(cards.length)} as ${COPY_WORDS[style]}`, { actions: others.map((s) => ({ label: COPY_STYLES[s], run: () => copy(ids, s) })) });
+      const title = `Copied ${entries(cards.length)} as ${COPY_WORDS[style]}`;
+      const button = anchor?.isConnected ? anchor : null;
+      const near = button ?? entryOnScreen(ids);
+      const options = (Object.keys(COPY_STYLES) as CopyStyle[]).map((s) => ({ label: COPY_STYLES[s], current: s === style, run: () => copy(ids, s, button) }));
+      if (near) showChoiceNear(near, { kind: 'copy', title, options }, button ? 'below' : 'right');
+      else toast(title, { actions: options.filter((o) => !o.current) });
     });
   };
 

@@ -1333,10 +1333,12 @@ span.bubble__template { color: var(--muted); cursor: default; }
 .bubble__translated { display: flex; align-items: center; gap: 5px; color: var(--accent); font-size: 11px; font-weight: 600; letter-spacing: 0.03em; }
 .bubble__translated button { padding: 0 4px; border: 0; border-radius: 4px; background: none; color: var(--accent); font: inherit; text-decoration: underline; cursor: pointer; }
 
-/* The paste options chip, right after pasted text (`src/ui/editor/pasteChoice.ts`). */
-.paste-choice { display: inline-flex; align-items: center; gap: 2px; margin-left: 4px; padding: 1px; vertical-align: text-bottom; border: 1px solid var(--line); border-radius: 7px; background: var(--raised); box-shadow: var(--shadow); font: 500 13px/1 var(--sans); white-space: nowrap; user-select: none; -webkit-user-select: none; }
-.paste-choice button { display: inline-flex; align-items: center; gap: 3px; min-height: 22px; padding: 0 6px; border-radius: 5px; color: var(--muted); }
-.paste-choice button:hover, .paste-choice button:focus-visible { background: var(--sunken); color: var(--text); }
-.paste-choice .paste-choice__toggle { padding: 0 3px; }
-.paste-choice.is-open .paste-choice__toggle, .paste-choice button[aria-pressed='true'] { color: var(--text); }
-.paste-choice__menu { display: inline-flex; flex-wrap: wrap; gap: 2px; padding-left: 2px; border-left: 1px solid var(--line); }
+/* The chip offering the other styles after a copy or paste (`src/ui/clipboardChoice.ts`): after the text in an editor, or over the page by the copy button or the entry copied. */
+.clip-choice { display: inline-flex; align-items: center; gap: 2px; margin-left: 4px; padding: 1px; vertical-align: text-bottom; border: 1px solid var(--line); border-radius: 7px; background: var(--raised); box-shadow: var(--shadow); font: 500 13px/1 var(--sans); white-space: nowrap; user-select: none; -webkit-user-select: none; }
+.clip-choice button { display: inline-flex; align-items: center; gap: 3px; min-height: 22px; padding: 0 6px; border-radius: 5px; color: var(--muted); }
+.clip-choice button:hover, .clip-choice button:focus-visible { background: var(--sunken); color: var(--text); }
+.clip-choice .clip-choice__toggle { padding: 0 3px; }
+.clip-choice.is-open .clip-choice__toggle, .clip-choice button[aria-pressed='true'] { color: var(--text); }
+.clip-choice__menu { display: inline-flex; flex-wrap: wrap; gap: 2px; padding-left: 2px; border-left: 1px solid var(--line); }
+.clip-choice-float { position: fixed; z-index: 55; }
+.clip-choice-float > .clip-choice { margin: 0; }

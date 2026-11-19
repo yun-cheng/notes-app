@@ -1330,7 +1330,7 @@ function EntryDetail({ card, fresh, edit, onClose }: { card: NoteCard | TodoCard
             <Icon name="stack" />
           </button>
         )}
-        <button type="button" className="icon-btn" aria-label="Copy" title="Copy" onClick={() => copy([card.id])}>
+        <button type="button" className="icon-btn" aria-label="Copy" title="Copy" onClick={(e) => copy([card.id], undefined, e.currentTarget)}>
           <Icon name="copy" />
         </button>
         {can.share && (

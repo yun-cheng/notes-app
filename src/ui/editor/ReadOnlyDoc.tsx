@@ -6,6 +6,7 @@ import type { JSONNode } from '../../domain/types';
 import { CardLink } from './cardLink';
 import { useToast } from '../Toast';
 import { clipboardProps } from './clipboardStyle';
+import { ClipboardChoices } from './clipboardChoices';
 import { CodeHighlight } from './codeHighlight';
 import { Hidden } from './hidden';
 import { Photo } from './photo';
@@ -17,7 +18,7 @@ export function ReadOnlyDoc({ content }: { content: JSONNode }) {
   const clipboard = useRef(clipboardProps(() => (_id, label) => label, (message, actions) => toast(message, { actions }))).current;
   const editor = useEditor({
     editable: false,
-    extensions: [StarterKit.configure({ heading: { levels: [1, 2, 3] } }), TaskList, TaskItem.configure({ nested: true }), CardLink.configure({ suggestion: { char: '[[', items: () => [] } }), Photo, CodeHighlight, Hidden],
+    extensions: [StarterKit.configure({ heading: { levels: [1, 2, 3] } }), TaskList, TaskItem.configure({ nested: true }), CardLink.configure({ suggestion: { char: '[[', items: () => [] } }), Photo, CodeHighlight, Hidden, ClipboardChoices],
     content,
     editorProps: { attributes: { class: 'prose prose--readonly' }, handleDOMEvents: clipboard.handleDOMEvents, clipboardTextSerializer: clipboard.clipboardTextSerializer },
   });

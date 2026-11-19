@@ -20,7 +20,8 @@ import { isStack } from '../domain/stacks';
 import { useCanChangeVaults, VaultChoices } from './VaultChoices';
 import { useTakeOut } from './useStacking';
 import { useLocation, useNavigate } from 'react-router';
-import { textToDoc } from '../domain/content';
+import { textToDoc, type FileInfo } from '../domain/content';
+import { useFileActions } from './files';
 import { cardPath, sheetState } from './paths';
 import { useToast } from './Toast';
 import { googleSearchUrl, googleTranslateUrl, openOutside } from './translate';
@@ -217,6 +218,25 @@ export function PhotoItems({ id, onClose }: { id: string; onClose: () => void })
     <div className="style-menu__group">
       <Item icon="copy" onClick={() => (onClose(), copyPhoto(id))}>
         Copy photo
+      </Item>
+    </div>
+  );
+}
+
+/** The video a right-click landed on, by the ID and name its player carries; null for anything else. */
+export function videoAt(target: EventTarget | null): FileInfo | null {
+  const el = target instanceof Element ? target.closest<HTMLElement>('[data-video-id]') : null;
+  const id = el?.dataset.videoId;
+  return id ? { id, name: el.dataset.videoName || 'Video', mime: el.dataset.videoMime || null, size: null } : null;
+}
+
+/** A video right-clicked: download it, as itself. */
+export function VideoItems({ video, onClose }: { video: FileInfo; onClose: () => void }) {
+  const act = useFileActions();
+  return (
+    <div className="style-menu__group">
+      <Item icon="download" onClick={() => (onClose(), void act(video, true))}>
+        Download video
       </Item>
     </div>
   );

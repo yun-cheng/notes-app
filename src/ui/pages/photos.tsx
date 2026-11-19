@@ -309,7 +309,11 @@ export function PhotosPage() {
           onClose={() => setMenu(null)}
           lead={
             <div className="style-menu__group">
-              {!all[menu.at].video && (
+              {all[menu.at].video ? (
+                <Item icon="download" onClick={() => (setMenu(null), void act.download([all[menu.at]]))}>
+                  Download video
+                </Item>
+              ) : (
                 <Item icon="copy" onClick={() => (setMenu(null), copyPhoto(all[menu.at].id))}>
                   Copy photo
                 </Item>

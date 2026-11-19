@@ -2,8 +2,6 @@ import { useEffect, useState, useSyncExternalStore, type MouseEvent } from 'reac
 import { clipLength, type FileInfo } from '../domain/content';
 import { useCards } from '../state/CardsContext';
 import { usePhotoUrl } from './editor/photo';
-import { fileKind, useFileActions } from './files';
-import { fileSize } from '../photos/service';
 import { Icon } from './Icon';
 
 /** Where a video plays from: this device's copy, or the server a range at a time (`PhotoService.playAddress`). */
@@ -120,20 +118,19 @@ export function HoverPlay({ file, on }: { file: FileInfo; on: boolean }) {
 }
 
 /**
- * A video playing where it is, with the browser's own controls, its still showing until it starts. Under it, its name,
- * size and kind, and a button to download it; while it goes up from this device, how far it's got.
+ * A video playing where it is, with the browser's own controls, its still showing until it starts: nothing more, as a
+ * photo is shown, save how far it's got while it goes up from this device. A right-click on it offers Download video
+ * (`videoAt`, by the ID and name it carries).
  */
 export function VideoPlayer({ file, autoPlay = false, className = '' }: { file: FileInfo; autoPlay?: boolean; className?: string }) {
   const { address, failed } = useVideoAddress(file.id);
   const { url: poster } = usePhotoUrl(file.poster ?? '');
-  const act = useFileActions();
   const share = useUploadShare(file.id);
   const [broken, setBroken] = useState(false);
   const stop = (e: MouseEvent) => e.stopPropagation();
   const ratio = file.width && file.height ? `${file.width} / ${file.height}` : undefined;
-  const detail = [file.duration ? clipLength(file.duration) : null, file.size !== null ? fileSize(file.size) : null, fileKind(file.name)].filter(Boolean).join(' · ');
   return (
-    <span className={`video-player ${className}`}>
+    <span className={`video-player ${className}`} data-video-id={file.id} data-video-name={file.name} data-video-mime={file.mime ?? undefined}>
       {address && !broken ? (
         <video
           className="video-player__video"
@@ -152,16 +149,7 @@ export function VideoPlayer({ file, autoPlay = false, className = '' }: { file: 
           {broken ? "This browser can't play this video. Download it to watch it." : failed ? 'This video isn’t available offline.' : 'Loading video…'}
         </span>
       )}
-      <span className="video-player__bar">
-        <Icon name="video" size={14} />
-        <span className="video-player__name" title={file.name}>
-          {file.name}
-        </span>
-        <span className="video-player__detail">{share !== null ? `Uploading ${Math.round(share * 100)}%` : detail}</span>
-        <button type="button" className="icon-btn video-player__save" aria-label={`Download ${file.name}`} title="Download" onClick={(e) => (stop(e), void act(file, true))}>
-          <Icon name="download" size={16} />
-        </button>
-      </span>
+      {share !== null && <span className="video-player__sending">Uploading {Math.round(share * 100)}%</span>}
     </span>
   );
 }

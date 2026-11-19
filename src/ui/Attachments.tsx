@@ -7,7 +7,7 @@ import { usePhotoUrl } from './editor/photo';
 import { usePhotoZoom } from './photoZoom';
 import { previewFor, useDisplayPrefs } from './displayPrefs';
 import { FileChip } from './files';
-import { ContextMenu, PhotoItems, Shield, type Point } from './EntryMenu';
+import { ContextMenu, PhotoItems, Shield, VideoItems, type Point } from './EntryMenu';
 import { Icon } from './Icon';
 import { useLinkPreview } from './useLinkPreview';
 import { useBackdropClose } from './useBackdrop';
@@ -46,8 +46,8 @@ export function Attachments({ card }: { card: Card }) {
   const files = fileAttachments(card.content).filter((f) => !isVideo(f));
   const links = prefs.links === 'off' ? [] : linkUrls(card.content);
   const [viewing, setViewing] = useState<number | null>(null);
-  // A photo right-clicked: a menu to copy it. (The entry's own menu is the bubble's, beside these.)
-  const [photoMenu, setPhotoMenu] = useState<{ id: string; at: Point } | null>(null);
+  // A photo right-clicked: a menu to copy it, or a video's to download it. (The entry's own menu is the bubble's, beside these.)
+  const [photoMenu, setPhotoMenu] = useState<{ id: string; video?: FileInfo; at: Point } | null>(null);
   if (!photos.length && !files.length && !links.length) return null;
   const extra = photos.length - MAX_PHOTOS;
 
@@ -73,7 +73,7 @@ export function Attachments({ card }: { card: Card }) {
                 // Shift keeps the browser's menu.
                 if (e.shiftKey) return;
                 e.preventDefault();
-                if (!video) setPhotoMenu({ id, at: { x: e.clientX, y: e.clientY } });
+                setPhotoMenu({ id, video, at: { x: e.clientX, y: e.clientY } });
               }}
             >
               {video ? <VideoStill file={video} lazy /> : <Thumb id={id} />}
@@ -91,7 +91,7 @@ export function Attachments({ card }: { card: Card }) {
       ))}
       {links.length > MAX_LINKS && <span className="attachments__more">and {links.length - MAX_LINKS} more links</span>}
       {viewing !== null && <PhotoViewer ids={photos.map((m) => m.id)} videos={videosIn(photos)} start={viewing} onClose={() => setViewing(null)} />}
-      {photoMenu && <PhotoMenu id={photoMenu.id} at={photoMenu.at} onClose={() => setPhotoMenu(null)} />}
+      {photoMenu && <PhotoMenu id={photoMenu.id} video={photoMenu.video} at={photoMenu.at} onClose={() => setPhotoMenu(null)} />}
     </div>
   );
 }
@@ -150,7 +150,7 @@ export function LinkCard({ url, preview: allowed, compact = false, address = fal
  * Photos and videos full size, one at a time (a video, among `videos`, playing), with arrows and keys to move between them, and, for more than one, a row of them
  * all along the bottom, the one shown marked and kept in sight, any of them pressed to show it. Each zooms with the
  * wheel or a pinch (`usePhotoZoom`), and Cmd+C (Ctrl+C) copies the one shown. `caption` puts something about the
- * photo shown above the row. A right-click opens a menu to copy the photo, or `onMenu`'s instead: on the Photos
+ * photo shown above the row. A right-click opens a menu to copy the photo or download the video, or `onMenu`'s instead: on the Photos
  * page, its entry and what to do with it, as well.
  */
 export function PhotoViewer({
@@ -209,10 +209,12 @@ export function PhotoViewer({
         <span
           className="viewer__video"
           onContextMenu={(e) => {
-            if (e.shiftKey || !onMenu) return;
+            if (e.shiftKey) return;
             e.preventDefault();
             e.stopPropagation();
-            onMenu(at, { x: e.clientX, y: e.clientY });
+            const point = { x: e.clientX, y: e.clientY };
+            if (onMenu) onMenu(at, point);
+            else setMenu(point);
           }}
         >
           <VideoPlayer key={ids[at]} file={video} autoPlay />
@@ -264,17 +266,17 @@ export function PhotoViewer({
       <button type="button" className="viewer__close" aria-label="Close" onClick={onClose}>
         ×
       </button>
-      {menu && <PhotoMenu id={ids[at]} at={menu} onClose={() => setMenu(null)} />}
+      {menu && <PhotoMenu id={ids[at]} video={video} at={menu} onClose={() => setMenu(null)} />}
     </div>
   );
 }
 
-/** A photo's own menu, on a right-click: copy it. */
-function PhotoMenu({ id, at, onClose }: { id: string; at: Point; onClose: () => void }) {
+/** A photo's own menu, on a right-click: copy it; or a video's, to download it. */
+function PhotoMenu({ id, video, at, onClose }: { id: string; video?: FileInfo; at: Point; onClose: () => void }) {
   return createPortal(
     <Shield>
-      <ContextMenu at={at} label="Photo" onClose={onClose}>
-        <PhotoItems id={id} onClose={onClose} />
+      <ContextMenu at={at} label={video ? 'Video' : 'Photo'} onClose={onClose}>
+        {video ? <VideoItems video={video} onClose={onClose} /> : <PhotoItems id={id} onClose={onClose} />}
       </ContextMenu>
     </Shield>,
     document.body,

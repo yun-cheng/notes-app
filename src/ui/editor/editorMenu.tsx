@@ -2,7 +2,8 @@ import { useState, type ReactNode } from 'react';
 import { createPortal } from 'react-dom';
 import { AllSelection, TextSelection } from '@tiptap/pm/state';
 import type { EditorView } from '@tiptap/pm/view';
-import { ContextMenu, Item, LinkItems, photoAt, PhotoItems, Shield, WordItems, type Point } from '../EntryMenu';
+import type { FileInfo } from '../../domain/content';
+import { ContextMenu, Item, LinkItems, photoAt, PhotoItems, Shield, videoAt, VideoItems, WordItems, type Point } from '../EntryMenu';
 import { MOD } from '../Shortcuts';
 import { useToast } from '../Toast';
 import type { Pasted } from './clipboardStyle';
@@ -13,6 +14,8 @@ interface MenuState {
   words: string;
   href: string | null;
   photo: string | null;
+  /** A video right-clicked: Download video. */
+  video: FileInfo | null;
 }
 
 interface EditorMenuOptions {
@@ -64,6 +67,7 @@ export function useEditorMenu({ paste, addFiles, vaultId }: EditorMenuOptions) {
       words: sel.empty ? '' : view.state.doc.textBetween(sel.from, sel.to, '\n', ' ').trim(),
       href: target?.closest<HTMLAnchorElement>('a[href]')?.href ?? null,
       photo: photoAt(target),
+      video: videoAt(target),
     });
     return true;
   };
@@ -109,6 +113,7 @@ export function useEditorMenu({ paste, addFiles, vaultId }: EditorMenuOptions) {
       <Shield>
         <ContextMenu at={menu.at} label="Text" onClose={close}>
           {menu.photo && <PhotoItems id={menu.photo} onClose={close} />}
+          {menu.video && <VideoItems video={menu.video} onClose={close} />}
           {menu.href && <LinkItems href={menu.href} onClose={close} />}
           <div className="style-menu__group">
             {editable && menu.words && (

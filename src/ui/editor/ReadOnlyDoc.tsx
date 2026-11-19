@@ -7,6 +7,7 @@ import { CardLink } from './cardLink';
 import { useToast } from '../Toast';
 import { clipboardProps } from './clipboardStyle';
 import { ClipboardChoices } from './clipboardChoices';
+import { useEditorMenu } from './editorMenu';
 import { CodeHighlight } from './codeHighlight';
 import { Hidden } from './hidden';
 import { Photo } from './photo';
@@ -16,11 +17,18 @@ export function ReadOnlyDoc({ content }: { content: JSONNode }) {
   const toast = useToast();
   // Words copied from it go the way the Copy setting says, with a linked card named by the link's own label.
   const clipboard = useRef(clipboardProps(() => (_id, label) => label, (message, actions) => toast(message, { actions }))).current;
+  // Nothing to paste into here, so Paste isn't offered.
+  const textMenu = useEditorMenu({ paste: () => undefined });
   const editor = useEditor({
     editable: false,
     extensions: [StarterKit.configure({ heading: { levels: [1, 2, 3] } }), TaskList, TaskItem.configure({ nested: true }), CardLink.configure({ suggestion: { char: '[[', items: () => [] } }), Photo, CodeHighlight, Hidden, ClipboardChoices],
     content,
-    editorProps: { attributes: { class: 'prose prose--readonly' }, handleDOMEvents: clipboard.handleDOMEvents, clipboardTextSerializer: clipboard.clipboardTextSerializer },
+    editorProps: { attributes: { class: 'prose prose--readonly' }, handleDOMEvents: { ...clipboard.handleDOMEvents, contextmenu: (view, event) => textMenu.contextmenu(view, event) }, clipboardTextSerializer: clipboard.clipboardTextSerializer },
   });
-  return <EditorContent editor={editor} />;
+  return (
+    <>
+      <EditorContent editor={editor} />
+      {textMenu.view}
+    </>
+  );
 }

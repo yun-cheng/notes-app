@@ -1,5 +1,6 @@
 import { useEffect, useRef, useState } from 'react';
 import { useBubbleWordsCopy } from './bubbleWords';
+import { useNoBrowserMenu } from './browserMenu';
 import { Link, Navigate, NavLink, Outlet, Route, Routes, useLocation } from 'react-router';
 import { registerSW } from 'virtual:pwa-register';
 import { AuthGate, useAccount } from '../auth/AuthContext';
@@ -180,6 +181,7 @@ function PageOrNotHere() {
 
 export function App() {
   useBubbleWordsCopy();
+  useNoBrowserMenu();
   return (
     <ToastProvider>
       <Routes>

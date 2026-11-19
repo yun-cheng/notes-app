@@ -27,14 +27,14 @@ import { useUndo } from './useUndo';
 
 type Entry = NoteCard | TodoCard;
 
-interface Point {
+export interface Point {
   x: number;
   y: number;
 }
 
 /** Events inside a portal still reach the bubble through React, so they're stopped before they open or pick it. */
 const stop = (e: { stopPropagation: () => void }) => e.stopPropagation();
-const Shield = ({ children }: { children: ReactNode }) => (
+export const Shield = ({ children }: { children: ReactNode }) => (
   <div onClick={stop} onPointerDown={stop} onKeyDown={stop} onContextMenu={(e) => (e.preventDefault(), stop(e))}>
     {children}
   </div>
@@ -55,16 +55,19 @@ export interface MenuExtras {
 
 /**
  * An entry's menu: from a right-click on its bubble, or the menu key or Shift+F10 on it. A right-click on text selected in
- * the bubble gets a menu for those words instead (`TextMenu`). A right-click on a link, or with Shift, gets the
- * browser's own menu. On a touch screen a long press keeps picking the entry; its sheet has every action.
+ * the bubble gets a menu for those words instead (`TextMenu`), and one on a link a menu to open it or copy its
+ * address (`LinkItems`). With Shift it gets the browser's own menu. On a touch screen a long press keeps picking the
+ * entry; its sheet has every action.
  */
 export function useEntryMenu(card: Entry, extras: MenuExtras = {}) {
   const [at, setAt] = useState<Point | null>(null);
   const [words, setWords] = useState<{ text: string; end: ChipAnchor } | null>(null);
+  const [link, setLink] = useState<string | null>(null);
   const [sharing, setSharing] = useState(false);
 
   const onContextMenu = (e: ReactMouseEvent<HTMLElement>) => {
-    if (e.shiftKey || (e.target instanceof Element && e.target.closest('a, input, textarea, select'))) return;
+    if (e.shiftKey || (e.target instanceof Element && e.target.closest('input, textarea, select'))) return;
+    setLink(e.target instanceof Element ? (e.target.closest<HTMLAnchorElement>('a[href]')?.href ?? null) : null);
     const picked = window.getSelection();
     // Taken now: the menu takes the focus, and with it the selection.
     const selected = picked && !picked.isCollapsed && e.currentTarget.contains(picked.anchorNode) ? picked.toString().trim() : '';
@@ -83,7 +86,11 @@ export function useEntryMenu(card: Entry, extras: MenuExtras = {}) {
       {at &&
         createPortal(
           <Shield>
-            {words ? (
+            {link ? (
+              <ContextMenu at={at} label="Link" onClose={() => setAt(null)}>
+                <LinkItems href={link} onClose={() => setAt(null)} />
+              </ContextMenu>
+            ) : words ? (
               <TextMenu card={card} words={words.text} end={words.end} at={at} onClose={() => setAt(null)} />
             ) : (
               <EntryMenu card={card} at={at} extras={extras} onShare={() => setSharing(true)} onClose={() => setAt(null)} />
@@ -118,13 +125,40 @@ const quoted = (words: string) => {
 };
 
 /**
- * Words selected in a bubble, right-clicked: copy them, look them up on Google, translate them with Google (both
- * open a new tab, and send the words there), or start a new note with them, in the same vault as the entry where
- * this account may write there. Shift with the right-click still gives the browser's own menu.
+ * Words selected in a bubble, right-clicked: copy them (in the Copy setting's style), and what `WordItems` offers,
+ * a new note going in the same vault as the entry where this account may write there. Shift with the right-click
+ * still gives the browser's own menu.
  */
 function TextMenu({ card, words, end, at, onClose }: { card: Entry; words: string; end: ChipAnchor; at: Point; onClose: () => void }) {
-  const { repo } = useCards();
   const may = usePermissions();
+  const toast = useToast();
+  // In the Copy setting's style, with the chip under where the words end.
+  const copy = async () => {
+    const style = clipboardPrefs().copy;
+    const { text, html } = styledWords(words, style);
+    if (await writeClipboard(text, undefined, html)) offerWordStyles(words, style, end);
+    else toast("Couldn't copy here.");
+  };
+  return (
+    <ContextMenu at={at} label="Selected text" onClose={onClose}>
+      <div className="style-menu__group">
+        <Item icon="copy" onClick={() => (onClose(), void copy())}>
+          Copy
+        </Item>
+      </div>
+      <WordItems words={words} vaultId={may(card).edit ? card.vaultId : undefined} onClose={onClose} />
+      <span className="context-menu__note">Shift-right-click for the browser's menu</span>
+    </ContextMenu>
+  );
+}
+
+/**
+ * What can be done with words selected, after copying them: start a new note with them (in `vaultId`, else the
+ * account's own vault), look them up on Google or translate them with Google (both open a new tab, and send the
+ * words there).
+ */
+export function WordItems({ words, vaultId, onClose }: { words: string; vaultId?: string; onClose: () => void }) {
+  const { repo } = useCards();
   const viewOnly = useViewOnly();
   const toast = useToast();
   const { undoAction } = useUndo();
@@ -134,16 +168,9 @@ function TextMenu({ card, words, end, at, onClose }: { card: Entry; words: strin
     onClose();
     void work();
   };
-  // In the Copy setting's style, with the chip under where the words end.
-  const copy = async () => {
-    const style = clipboardPrefs().copy;
-    const { text, html } = styledWords(words, style);
-    if (await writeClipboard(text, undefined, html)) offerWordStyles(words, style, end);
-    else toast("Couldn't copy here.");
-  };
   const newNote = async () => {
     const action = repo.action();
-    const note = await repo.createNote({ content: textToDoc(words), vaultId: may(card).edit ? card.vaultId : undefined });
+    const note = await repo.createNote({ content: textToDoc(words), vaultId });
     toast('Made a new note from the selection', {
       actions: [
         { label: 'Open', run: () => void navigate(cardPath(note), { state: sheetState(location, note, { edit: true }) }) },
@@ -152,17 +179,14 @@ function TextMenu({ card, words, end, at, onClose }: { card: Entry; words: strin
     });
   };
   return (
-    <ContextMenu at={at} label="Selected text" onClose={onClose}>
-      <div className="style-menu__group">
-        <Item icon="copy" onClick={run(copy)}>
-          Copy
-        </Item>
-        {!viewOnly && (
+    <>
+      {!viewOnly && (
+        <div className="style-menu__group">
           <Item icon="plus" onClick={run(newNote)}>
             New note from selection
           </Item>
-        )}
-      </div>
+        </div>
+      )}
       <div className="style-menu__group">
         <Item icon="search" onClick={run(() => openOutside(googleSearchUrl(words)))}>
           Search Google for {quoted(words)}
@@ -171,8 +195,22 @@ function TextMenu({ card, words, end, at, onClose }: { card: Entry; words: strin
           Translate with Google
         </Item>
       </div>
-      <span className="context-menu__note">Shift-right-click for the browser's menu</span>
-    </ContextMenu>
+    </>
+  );
+}
+
+/** A link right-clicked: open it in a new tab, or copy its address. */
+export function LinkItems({ href, onClose }: { href: string; onClose: () => void }) {
+  const toast = useToast();
+  return (
+    <div className="style-menu__group">
+      <Item icon="open" onClick={() => (onClose(), openOutside(href))}>
+        Open link
+      </Item>
+      <Item icon="link" onClick={() => (onClose(), void writeClipboard(href).then((ok) => toast(ok ? 'Copied the link' : "Couldn't copy here.")))}>
+        Copy link address
+      </Item>
+    </div>
   );
 }
 
@@ -425,7 +463,7 @@ interface ItemProps {
   danger?: boolean;
 }
 
-function Item({ icon, onClick, children, hint, checked, danger }: ItemProps) {
+export function Item({ icon, onClick, children, hint, checked, danger }: ItemProps) {
   return (
     <button
       type="button"
@@ -451,7 +489,7 @@ function Item({ icon, onClick, children, hint, checked, danger }: ItemProps) {
  * A menu at a point on the screen, kept inside it. Arrow keys move through its items, and a press outside it,
  * Escape, scrolling or leaving the window closes it. Escape comes before the page's own (stop picking).
  */
-function ContextMenu({ at, label, onClose, children, wide, layout }: { at: Point; label: string; onClose: () => void; children: ReactNode; wide?: boolean; layout?: string }) {
+export function ContextMenu({ at, label, onClose, children, wide, layout }: { at: Point; label: string; onClose: () => void; children: ReactNode; wide?: boolean; layout?: string }) {
   const ref = useRef<HTMLDivElement>(null);
   const [pos, setPos] = useState<{ left: number; top: number } | null>(null);
   const close = useRef(onClose);

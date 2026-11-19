@@ -18,6 +18,7 @@ import { linkTitle } from '../../domain/cardIndex';
 import { CardLink, insertCardLink, type LinkOption } from './cardLink';
 import { clipboardProps, titleResolver } from './clipboardStyle';
 import { ClipboardChoices } from './clipboardChoices';
+import { useEditorMenu } from './editorMenu';
 import { CodeHighlight } from './codeHighlight';
 import { Hidden } from './hidden';
 import { Photo } from './photo';
@@ -202,6 +203,7 @@ export function Editor({ content, onChange, placeholder, selfId, vaultId, editab
       () => titleResolver(latest.current.index.live),
     ),
   ).current;
+  const textMenu = useEditorMenu({ paste: clipboard.paste, addFiles: (files) => void photoInput.add(files), vaultId: () => latest.current.vaultId });
   const command = useRef<((item: LinkOption) => void) | null>(null);
   const pending = useRef<JSONNode | null>(null);
   const echoes = useRef(new Echoes()).current;
@@ -325,7 +327,7 @@ export function Editor({ content, onChange, placeholder, selfId, vaultId, editab
     editorProps: {
       attributes: { class: 'prose' },
       ...photoInput.editorProps,
-      handleDOMEvents: clipboard.handleDOMEvents,
+      handleDOMEvents: { ...clipboard.handleDOMEvents, contextmenu: (view, event) => textMenu.contextmenu(view, event) },
       clipboardTextSerializer: clipboard.clipboardTextSerializer,
       handlePaste: (view, event) => photoInput.editorProps.handlePaste(view, event) || clipboard.handlePaste(view, event),
     },
@@ -409,6 +411,7 @@ export function Editor({ content, onChange, placeholder, selfId, vaultId, editab
           : <Toolbar editor={editor} onPhoto={photoInput.pick} history={!historyHost} />)}
       {editor && editable && historyHost && createPortal(<HistoryButtons editor={editor} />, historyHost)}
       <EditorContent editor={editor} />
+      {textMenu.view}
       {slash.view}
       {photoInput.input}
       {menu && (

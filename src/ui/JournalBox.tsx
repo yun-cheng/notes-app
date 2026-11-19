@@ -18,6 +18,7 @@ import { useCards, useToday } from '../state/CardsContext';
 import { linkTitle } from '../domain/cardIndex';
 import { clipboardProps, titleResolver } from './editor/clipboardStyle';
 import { ClipboardChoices } from './editor/clipboardChoices';
+import { useEditorMenu } from './editor/editorMenu';
 import { CodeHighlight } from './editor/codeHighlight';
 import { Photo } from './editor/photo';
 import { usePhotoInput } from './editor/photoInput';
@@ -105,6 +106,7 @@ export function JournalBox({ filter }: { filter: StreamFilter }) {
   const linkTitleOf = () => (id: string, label: string) => linkTitle(latest.current.index, id, label);
   const resolveLink = () => titleResolver(latest.current.index.live);
   const clipboard = useRef(clipboardProps(linkTitleOf, (message, actions) => toast(message, { actions }), resolveLink)).current;
+  const textMenu = useEditorMenu({ paste: clipboard.paste, addFiles: (files) => void photoInputRef.current.add(files), vaultId: () => latest.current.photoVault });
   const photoInputRef = useRef(photoInput);
   photoInputRef.current = photoInput;
 
@@ -230,7 +232,7 @@ export function JournalBox({ filter }: { filter: StreamFilter }) {
         return false;
       },
       ...photoInput.editorProps,
-      handleDOMEvents: clipboard.handleDOMEvents,
+      handleDOMEvents: { ...clipboard.handleDOMEvents, contextmenu: (view, event) => textMenu.contextmenu(view, event) },
       clipboardTextSerializer: clipboard.clipboardTextSerializer,
       handlePaste: (view, event) => photoInput.editorProps.handlePaste(view, event) || clipboard.handlePaste(view, event),
     },
@@ -287,6 +289,7 @@ export function JournalBox({ filter }: { filter: StreamFilter }) {
           <Icon name="todo" size={20} />
         </button>
         <EditorContent editor={editor} className="composer__editor" />
+        {textMenu.view}
         <button type="button" className="composer__kind" aria-label="Add a photo" title="Add a photo" onMouseDown={(e) => e.preventDefault()} onClick={photoInput.pick}>
           <Icon name="image" size={20} />
         </button>

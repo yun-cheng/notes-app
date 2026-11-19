@@ -34,8 +34,8 @@ function setup(cards: Card[]) {
   const meta = new Map<string, unknown>();
   const forgotten: string[] = [];
   const keeper = new AttachmentKeeper(server.api, { get: async (k) => meta.get(k), set: async (k, v) => void meta.set(k, v) }, async (id) => void forgotten.push(id), () => clock.now);
-  const view = { cards, mayDelete: true };
-  keeper.watch(() => ({ cards: () => view.cards, judges: () => true, mayDelete: view.mayDelete }));
+  const view = { cards, mayDelete: true, ready: true, stored: null as Card[] | null };
+  keeper.watch(() => ({ ready: view.ready, cards: () => view.cards, fresh: async () => view.stored ?? view.cards, judges: () => true, mayDelete: view.mayDelete }));
   return { keeper, clock, rows, server, forgotten, view };
 }
 
@@ -63,6 +63,24 @@ describe('AttachmentKeeper', () => {
     expect(t.server.removed).toEqual(['a']);
     expect(t.forgotten).toEqual(['a']);
     expect(t.keeper.getState().trash).toEqual([]);
+  });
+
+  it('only fetches the list before a sync has finished, and checks storage again before deleting for good', async () => {
+    const t = setup([holding('m', 'b')]);
+    t.clock.now += DAY;
+    t.view.ready = false;
+    await t.keeper.sweep(true);
+    expect(t.rows.every((r) => r.trashed_at === null)).toBe(true);
+    expect(t.keeper.getState().trash).toEqual([]);
+    t.view.ready = true;
+    await t.keeper.sweep();
+    expect(t.keeper.getState().trash!.map((a) => a.id)).toEqual(['a']);
+    // 30 days on, the sync has just brought an entry holding it, not drawn yet.
+    t.clock.now += 30 * DAY;
+    t.view.stored = [holding('m', 'b'), holding('n', 'a')];
+    await t.keeper.sweep();
+    expect(t.server.removed).toEqual([]);
+    expect(t.rows.find((r) => r.id === 'a')!.trashed_at).toBeNull();
   });
 
   it('sweeps at most every 10 minutes unless asked, and puts back or deletes at once', async () => {

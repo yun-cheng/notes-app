@@ -132,8 +132,11 @@ export function CardsProvider({ accountId, children }: { accountId: string; chil
   useEffect(() => {
     attachments.watch(() => {
       const { index: now, vaults: all, locked: shut } = sweepView.current;
+      const { state, pending, lastSyncedAt } = engine.getStatus();
       return {
+        ready: state === 'idle' && !pending && !!lastSyncedAt && !!now,
         cards: () => now?.byId.values() ?? [],
+        fresh: async () => (await repo.exportAll(shut)).cards,
         judges: (id) => {
           const vault = all?.find((v) => v.id === id);
           return !!vault && (vault.role ?? 'owner') !== 'viewer' && !shut.has(id);
@@ -143,9 +146,9 @@ export function CardsProvider({ accountId, children }: { accountId: string; chil
     });
     return engine.subscribe(() => {
       const { state, pending, lastSyncedAt } = engine.getStatus();
-      if (state === 'idle' && !pending && lastSyncedAt && sweepView.current.index) void attachments.sweep();
+      if (state === 'idle' && !pending && lastSyncedAt) void attachments.sweep();
     });
-  }, [attachments, engine]);
+  }, [attachments, engine, repo]);
 
   // An entry moved into an encrypted vault, or whose vault became one, keeps no translation in the clear here.
   useEffect(() => {

@@ -1,4 +1,4 @@
-import { planSweep, type Holder, type StoredAttachment } from '../domain/attachments';
+import { heldBy, planSweep, type Holder, type StoredAttachment } from '../domain/attachments';
 import type { Card } from '../domain/types';
 import { SyncOffline } from '../sync/engine';
 import type { DeleteResult } from '../sync/http';
@@ -12,7 +12,11 @@ export interface AttachmentApi {
 
 /** What this device can read and judge right now (`SweepInput`'s). */
 export interface SweepView {
+  /** Whether the last sync finished with nothing left to send: until then, the entries here may be behind. */
+  ready: boolean;
   cards: () => Iterable<Card>;
+  /** Every card readable here, read from storage now, not as last drawn: checked again before deleting for good. */
+  fresh: () => Promise<Iterable<Card>>;
   judges: (vaultId: string) => boolean;
   mayDelete: boolean;
 }
@@ -68,12 +72,15 @@ export class AttachmentKeeper {
     this.view = view;
   }
 
-  /** Sweeps, unless one ran in the last 10 minutes; `now` sweeps anyway. One already running is waited for. */
+  /**
+   * Sweeps, unless one ran in the last 10 minutes; `now` sweeps anyway. One already running is waited for. Before a
+   * sync has finished, it only fetches the list to show.
+   */
   sweep(now = false): Promise<void> {
     if (this.running) return this.running;
     if (!this.view || (!now && this.now() - this.last < EVERY_MS)) return Promise.resolve();
     const view = this.view();
-    this.last = this.now();
+    if (view.ready) this.last = this.now();
     this.running = this.run(view).finally(() => (this.running = null));
     return this.running;
   }
@@ -81,9 +88,16 @@ export class AttachmentKeeper {
   private async run(view: SweepView) {
     try {
       const stored = await this.api.list();
+      if (!view.ready) return this.show(stored);
       const kept = await this.meta.get(HOLDERS);
       const holders = new Map<string, Holder>(kept && typeof kept === 'object' ? (Object.entries(kept) as [string, Holder][]) : []);
       const plan = planSweep({ stored, cards: view.cards(), judges: view.judges, mayDelete: view.mayDelete, holders, now: this.now() });
+      if (plan.remove.length) {
+        // The entries drawn may be a moment behind what the sync just brought; deleting for good waits for none.
+        const held = new Set([...(await view.fresh())].flatMap((c) => heldBy(c).map((h) => h.id)));
+        plan.keep.push(...plan.remove.filter((id) => held.has(id)));
+        plan.remove = plan.remove.filter((id) => !held.has(id));
+      }
       if (plan.trash.length || plan.keep.length) await this.api.mark({ trash: plan.trash, keep: plan.keep });
       for (const id of plan.remove) {
         const result = await this.api.remove(id);

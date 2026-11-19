@@ -174,7 +174,6 @@ export function PhotosPage() {
             <PhotoMenu
               item={all[menu.at]}
               at={menu.point}
-              onView={viewing === null ? () => setViewing(menu.at) : undefined}
               onOpen={() => openEntry(all[menu.at])}
               onShow={() => showInJournal(all[menu.at].card)}
               onClose={() => setMenu(null)}
@@ -187,10 +186,10 @@ export function PhotosPage() {
 }
 
 /**
- * A photo's menu, on a right-click: its entry named, opened over the page or gone to in the journal, and the photo
- * full screen when it isn't already.
+ * A photo's menu, on a right-click: its entry named, opened over the page or gone to in the journal. (A click shows
+ * the photo full screen, so the menu doesn't offer it.)
  */
-function PhotoMenu({ item, at, onView, onOpen, onShow, onClose }: { item: PhotoItem; at: Point; onView?: () => void; onOpen: () => void; onShow: () => void; onClose: () => void }) {
+function PhotoMenu({ item, at, onOpen, onShow, onClose }: { item: PhotoItem; at: Point; onOpen: () => void; onShow: () => void; onClose: () => void }) {
   const today = useToday();
   const run = (work: () => void) => () => {
     onClose();
@@ -203,11 +202,6 @@ function PhotoMenu({ item, at, onView, onOpen, onShow, onClose }: { item: PhotoI
         <span>{relativeDay(item.day, today)}</span>
       </span>
       <div className="style-menu__group">
-        {onView && (
-          <Item icon="image" onClick={run(onView)}>
-            View photo
-          </Item>
-        )}
         <Item icon="open" onClick={run(onOpen)}>
           Open entry
         </Item>

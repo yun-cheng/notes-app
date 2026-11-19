@@ -9,6 +9,7 @@ import type { Card } from '../../domain/types';
 import { useCards, useToday } from '../../state/CardsContext';
 import { LinkCard } from '../Attachments';
 import { Empty, Page } from '../components';
+import { DriveLinkItems } from '../driveLink';
 import { ContextMenu, Item, LinkItems, Shield, type Point } from '../EntryMenu';
 import { FileChip, showsInTab, useFileActions } from '../files';
 import { FilterBar, FilterSheet, useJournalFilter } from '../FilterPanel';
@@ -235,19 +236,22 @@ export function FilesPage() {
   );
 }
 
-/** A file right-clicked: open it (one the browser shows), or download it. */
+/** A file right-clicked: open it (one the browser shows), download it, or share it by its Google Drive link. */
 function FileItems({ file, onClose }: { file: FileInfo; onClose: () => void }) {
   const act = useFileActions();
   return (
-    <div className="style-menu__group">
-      {showsInTab(file.mime) && (
-        <Item icon="open" onClick={() => (onClose(), void act(file))}>
-          Open file
+    <>
+      <div className="style-menu__group">
+        {showsInTab(file.mime) && (
+          <Item icon="open" onClick={() => (onClose(), void act(file))}>
+            Open file
+          </Item>
+        )}
+        <Item icon="download" onClick={() => (onClose(), void act(file, true))}>
+          Download
         </Item>
-      )}
-      <Item icon="download" onClick={() => (onClose(), void act(file, true))}>
-        Download
-      </Item>
-    </div>
+      </div>
+      <DriveLinkItems id={file.id} noun="file" onClose={onClose} />
+    </>
   );
 }

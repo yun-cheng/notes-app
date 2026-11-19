@@ -12,7 +12,7 @@
  * were, dated around today, and keeps anything else in the accounts.
  */
 import { execFileSync } from 'node:child_process';
-import { mkdirSync, statSync, writeFileSync } from 'node:fs';
+import { mkdirSync, readdirSync, statSync, writeFileSync } from 'node:fs';
 import { createVaultKey, encryptPayload, unlockWithPin } from '../src/crypto/vaultKeys';
 import { addDays, toDateKey } from '../src/domain/dates';
 import { hashPin } from '../src/domain/pin';
@@ -122,8 +122,8 @@ function runSql(statements: string[]) {
  * Photos and files taken out of every entry wait in the Trash (`GET /api/attachments`), so the demo has three there,
  * served by the dev server like its others: a second, crooked shot of the lake and a video panning over it (with its
  * still, which goes with it), out of the Summer trip a couple of hours ago, and the Kyoto itinerary's first draft, out of the Kyoto note 27 days ago, so it shows 3 days left. With no
- * Drive file, deleting one only forgets it. The demo's other photos have no record here, as they never uploaded,
- * so nothing sends them to the Trash.
+ * Drive file, deleting one only forgets it. The demo's other photos have a record too (`heldAttachments`), but as
+ * entries hold them, nothing sends them to the Trash.
  */
 function trashedAttachments(owner: string, family: string, personal: string) {
   // A video's width, height and length, as the device that added it would have sent them.
@@ -136,6 +136,32 @@ function trashedAttachments(owner: string, family: string, personal: string) {
     row('demo-file-lake-pan', family, 'video/mp4', statSync('scripts/demoFiles/lake-pan.mp4').size, at(1, 9, 30), ago(140), 'demo-family-trip', 'lake-pan.mp4', [960, 540, 6]),
     row('demo-file-lake-pan-poster', family, 'image/jpeg', statSync('scripts/demoFiles/lake-pan-poster.jpg').size, at(1, 9, 30), ago(140), 'demo-family-trip', null),
   ]);
+}
+
+/** What the demo's files are, by their ending. */
+const DEMO_MIME: Record<string, string> = { jpg: 'image/jpeg', mp4: 'video/mp4', pdf: 'application/pdf', csv: 'text/csv', txt: 'text/plain' };
+
+/**
+ * The demo's other photos, videos and files have a record too, as each would once uploaded, with no Drive file, so
+ * a right-click on one offers Copy Drive link as for a real one, and says the demo's aren't in a Google Drive. Each
+ * goes with the first entry the server can read that holds it (none in the encrypted Diary); the Trash's are kept.
+ */
+function heldAttachments() {
+  const found = (dir: string, prefix: string) =>
+    readdirSync(dir)
+      .filter((f) => !f.endsWith('.mjs'))
+      .map((f) => {
+        const dot = f.lastIndexOf('.');
+        return { id: `${prefix}${f.slice(0, dot)}`, mime: DEMO_MIME[f.slice(dot + 1)] ?? 'application/octet-stream', size: statSync(`${dir}/${f}`).size, name: prefix === 'demo-file-' && !f.includes('-poster.') ? f : null };
+      });
+  runSql(
+    [...found('scripts/demoPhotos', 'demo-photo-'), ...found('scripts/demoFiles', 'demo-file-')].map(
+      ({ id, mime, size, name }) =>
+        `INSERT OR IGNORE INTO attachments (id, owner_id, vault_id, drive_file_id, mime, size, created_at, name)
+         SELECT ${sql(id)}, v.owner_id, c.vault_id, '', ${sql(mime)}, ${size}, c.updated_at, ${name ? sql(name) : 'NULL'}
+         FROM cards c JOIN vaults v ON v.id = c.vault_id WHERE instr(c.payload, ${sql(`"${id}"`)}) > 0 ORDER BY c.updated_at LIMIT 1`,
+    ),
+  );
 }
 
 // ---- API ----
@@ -624,6 +650,7 @@ export async function seed() {
   await call(DEMO, `/cards/${launch}/comments`, { body: 'Mia offered. I\'ll confirm on Monday.' });
 
   trashedAttachments(DEMO.id, family.id, personal);
+  heldAttachments();
 
   // Drafts, left as if typed on another device: one in the journal box when it shows #travel, and a reply under
   // Kyoto to Sam's open question. Each shows in its box until sent or emptied.

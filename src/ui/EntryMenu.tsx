@@ -24,6 +24,7 @@ import { textToDoc, type FileInfo } from '../domain/content';
 import { useFileActions } from './files';
 import { cardPath, sheetState } from './paths';
 import { useToast } from './Toast';
+import { DriveLinkItems } from './driveLink';
 import { googleSearchUrl, googleTranslateUrl, openOutside } from './translate';
 import { useUndo } from './useUndo';
 
@@ -211,15 +212,18 @@ export function WordItems({ words, vaultId, onClose }: { words: string; vaultId?
 export const photoAt = (target: EventTarget | null): string | null =>
   (target instanceof Element ? target.closest<HTMLElement>('[data-photo-id]')?.dataset.photoId : null) || null;
 
-/** A photo right-clicked: copy it, to paste as a picture. */
+/** A photo right-clicked: copy it, to paste as a picture, or share it by its Google Drive link. */
 export function PhotoItems({ id, onClose }: { id: string; onClose: () => void }) {
   const copyPhoto = useCopyPhoto();
   return (
-    <div className="style-menu__group">
-      <Item icon="copy" onClick={() => (onClose(), copyPhoto(id))}>
-        Copy photo
-      </Item>
-    </div>
+    <>
+      <div className="style-menu__group">
+        <Item icon="copy" onClick={() => (onClose(), copyPhoto(id))}>
+          Copy photo
+        </Item>
+      </div>
+      <DriveLinkItems id={id} noun="photo" onClose={onClose} />
+    </>
   );
 }
 
@@ -230,15 +234,18 @@ export function videoAt(target: EventTarget | null): FileInfo | null {
   return id ? { id, name: el.dataset.videoName || 'Video', mime: el.dataset.videoMime || null, size: null } : null;
 }
 
-/** A video right-clicked: download it, as itself. */
+/** A video right-clicked: download it, as itself, or share it by its Google Drive link. */
 export function VideoItems({ video, onClose }: { video: FileInfo; onClose: () => void }) {
   const act = useFileActions();
   return (
-    <div className="style-menu__group">
-      <Item icon="download" onClick={() => (onClose(), void act(video, true))}>
-        Download video
-      </Item>
-    </div>
+    <>
+      <div className="style-menu__group">
+        <Item icon="download" onClick={() => (onClose(), void act(video, true))}>
+          Download video
+        </Item>
+      </div>
+      <DriveLinkItems id={video.id} noun="video" onClose={onClose} />
+    </>
   );
 }
 

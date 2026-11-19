@@ -19,6 +19,7 @@ import { MOD } from '../Shortcuts';
 import { Item } from '../EntryMenu';
 import { libraryPath, mediaShownIn, PHOTOS_PATH } from '../paths';
 import { ScrollRail } from '../ScrollRail';
+import { DriveLinkItems } from '../driveLink';
 import { useInView } from '../useInView';
 import { HoverPlay, VideoMark, VideoStill } from '../video';
 import { HeldMenu, menuAt, useEntryActions, useLibrary } from './library';
@@ -308,22 +309,25 @@ export function PhotosPage() {
           onShow={() => entry.show(all[menu.at].card)}
           onClose={() => setMenu(null)}
           lead={
-            <div className="style-menu__group">
-              {all[menu.at].video ? (
-                <Item icon="download" onClick={() => (setMenu(null), void act.download([all[menu.at]]))}>
-                  Download video
-                </Item>
-              ) : (
-                <Item icon="copy" onClick={() => (setMenu(null), copyPhoto(all[menu.at].id))}>
-                  Copy photo
-                </Item>
-              )}
-              {viewing === null && (
-                <Item icon="check" onClick={() => (setMenu(null), pick(all[menu.at].id))}>
-                  {picked.has(all[menu.at].id) ? 'Unselect' : 'Select'}
-                </Item>
-              )}
-            </div>
+            <>
+              <div className="style-menu__group">
+                {all[menu.at].video ? (
+                  <Item icon="download" onClick={() => (setMenu(null), void act.download([all[menu.at]]))}>
+                    Download video
+                  </Item>
+                ) : (
+                  <Item icon="copy" onClick={() => (setMenu(null), copyPhoto(all[menu.at].id))}>
+                    Copy photo
+                  </Item>
+                )}
+                {viewing === null && (
+                  <Item icon="check" onClick={() => (setMenu(null), pick(all[menu.at].id))}>
+                    {picked.has(all[menu.at].id) ? 'Unselect' : 'Select'}
+                  </Item>
+                )}
+              </div>
+              <DriveLinkItems id={all[menu.at].video?.id ?? all[menu.at].id} noun={all[menu.at].video ? 'video' : 'photo'} onClose={() => setMenu(null)} />
+            </>
           }
         />
       )}

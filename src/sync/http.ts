@@ -237,6 +237,42 @@ export async function deleteAttachment(id: string): Promise<DeleteResult> {
   return error === 'in_use' ? 'in_use' : error === 'drive_not_connected' ? 'needs_drive' : 'error';
 }
 
+/** Whether a photo, video or file is shared by its Google Drive link, the link if so, and whether this account may share it. */
+export interface DriveLink {
+  url: string | null;
+  can: boolean;
+}
+
+export const fetchDriveLink = (id: string) => request<DriveLink>(`/attachments/${encodeURIComponent(id)}/link`);
+
+/**
+ * How sharing one by its Drive link went: the link; Drive refused (a Workspace that forbids links for anyone); one
+ * not in a Drive (the demo's); one not uploaded yet, as far as the server knows; Drive not connected; or anything else.
+ */
+export type ShareLinkResult = { url: string } | { error: 'drive_refused' | 'not_in_drive' | 'not_uploaded' | 'needs_drive' | 'failed' };
+
+/** Lets anyone with its Google Drive link open a photo, video or file, and answers with the link. */
+export async function shareDriveLink(id: string): Promise<ShareLinkResult> {
+  const res = await rawRequest(`/attachments/${encodeURIComponent(id)}/link`, { method: 'POST' }).catch(() => null);
+  const body = ((await res?.json().catch(() => ({}))) ?? {}) as { url?: string; error?: string };
+  if (res?.ok && body.url) return { url: body.url };
+  const error =
+    res?.status === 404
+      ? 'not_uploaded'
+      : body.error === 'drive_not_connected'
+        ? 'needs_drive'
+        : body.error === 'drive_refused' || body.error === 'not_in_drive'
+          ? body.error
+          : 'failed';
+  return { error };
+}
+
+/** Stops anyone opening it by its Drive link. */
+export async function stopDriveLink(id: string): Promise<boolean> {
+  const res = await rawRequest(`/attachments/${encodeURIComponent(id)}/link`, { method: 'DELETE' }).catch(() => null);
+  return !!res?.ok;
+}
+
 export interface VaultPeople {
   members: { user_id: string; name: string; email: string; role: 'owner' | 'editor' | 'viewer' }[];
   invites: { email: string; role: 'editor' | 'viewer' }[];

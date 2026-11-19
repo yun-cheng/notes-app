@@ -940,6 +940,25 @@ body:has(.batch) .toast-slot { bottom: calc(var(--tabbar) + env(safe-area-inset-
 .viewer__thumb:hover, .viewer__thumb:focus-visible { opacity: 0.85; }
 .viewer__thumb.is-current { opacity: 1; border-color: #fff; }
 .viewer__thumb img { display: block; height: 60px; width: auto; max-width: 120px; object-fit: contain; }
+.viewer__caption { position: fixed; z-index: 1; top: calc(14px + env(safe-area-inset-top)); left: 12px; display: flex; align-items: center; gap: 6px; max-width: calc(50vw - 84px); height: 32px; padding: 0 10px 0 12px; border: 0; border-radius: 999px; background: rgb(255 255 255 / 14%); color: #fff; font: inherit; font-size: 13px; white-space: nowrap; cursor: pointer; }
+.viewer__caption:hover { background: rgb(255 255 255 / 24%); }
+.viewer__caption-title { overflow: hidden; text-overflow: ellipsis; font-weight: 600; }
+.viewer__caption-day { flex: none; color: rgb(255 255 255 / 70%); }
+.viewer__caption svg { flex: none; }
+/* On a phone the caption takes the top beside ×, and Fit goes under it. */
+@media (max-width: 599px) { .viewer__caption { max-width: calc(100vw - 80px); } .viewer:has(.viewer__caption) .viewer__fit { top: calc(56px + env(safe-area-inset-top)); } }
+
+/* The Photos page: every photo whole, placed by `layoutPhotos` in rows that fill the width. */
+.page:has(> .photos) { max-width: 1200px; }
+.photos { padding-bottom: 32px; }
+.photos__count { color: var(--muted); margin: -6px 0 4px; font-size: 14px; }
+.photos__canvas { position: relative; }
+.photos__day { position: absolute; box-sizing: border-box; margin: 0; padding-top: 16px; line-height: 20px; overflow: hidden; font-size: 15px; font-weight: 600; white-space: nowrap; text-overflow: ellipsis; }
+.photo-tile { position: absolute; display: grid; place-items: center; padding: 0; overflow: hidden; border: 0; border-radius: 4px; background: var(--sunken); color: var(--muted); cursor: zoom-in; }
+.photo-tile img { display: block; width: 100%; height: 100%; object-fit: cover; transition: opacity 0.15s; }
+.photo-tile:hover img { opacity: 0.88; }
+.photo-tile:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+@media (max-width: 599px) { .photo-tile { border-radius: 2px; } .photos__day { padding-top: 13px; font-size: 14px; } }
 .link-card--rich { align-items: stretch; padding: 8px; max-width: min(100%, 440px); }
 .link-card__image { width: 64px; height: 64px; flex: none; border-radius: 8px; object-fit: cover; background: var(--sunken); }
 .link-card__title { font-size: 14px; font-weight: 600; line-height: 1.3; display: -webkit-box; -webkit-box-orient: vertical; -webkit-line-clamp: 2; overflow: hidden; }

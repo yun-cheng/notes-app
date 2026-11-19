@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState } from 'react';
+import { useEffect, useRef, useState, type ReactNode } from 'react';
 import { linkUrls, photoIds, siteName } from '../domain/content';
 import type { Card } from '../domain/types';
 import { useCards } from '../state/CardsContext';
@@ -8,6 +8,7 @@ import { previewFor, useDisplayPrefs } from './displayPrefs';
 import { Icon } from './Icon';
 import { useLinkPreview } from './useLinkPreview';
 import { useBackdropClose } from './useBackdrop';
+import { useInView } from './useInView';
 
 const MAX_PHOTOS = 4;
 const MAX_LINKS = 3;
@@ -107,9 +108,10 @@ export function LinkCard({ url, preview: allowed, compact = false }: { url: stri
 /**
  * Photos full size, one at a time, with arrows and keys to move between them, and, for more than one, a row of them
  * all along the bottom, the one shown marked and kept in sight, any of them pressed to show it. Each zooms with the
- * wheel or a pinch (`usePhotoZoom`).
+ * wheel or a pinch (`usePhotoZoom`). `caption` puts something about the photo shown above the row: on the Photos
+ * page, its entry.
  */
-export function PhotoViewer({ ids, start, onClose }: { ids: string[]; start: number; onClose: () => void }) {
+export function PhotoViewer({ ids, start, onClose, caption }: { ids: string[]; start: number; onClose: () => void; caption?: (at: number) => ReactNode }) {
   const backdrop = useBackdropClose(onClose);
   const [at, setAt] = useState(start);
   const { url, state } = usePhotoUrl(ids[at]);
@@ -144,6 +146,7 @@ export function PhotoViewer({ ids, start, onClose }: { ids: string[]; start: num
           {Math.round(zoom.zoom.scale * 100)}% · Fit
         </button>
       )}
+      {caption?.(at)}
       {ids.length > 1 && (
         <>
           <button type="button" className="viewer__nav viewer__nav--prev" aria-label="Previous photo" onClick={() => step(-1)}>
@@ -169,10 +172,13 @@ export function PhotoViewer({ ids, start, onClose }: { ids: string[]; start: num
   );
 }
 
-/** One photo in the viewer's bottom row, whole, at the row's height; the one shown scrolls into the middle of the row. */
+/**
+ * One photo in the viewer's bottom row, whole, at the row's height; the one shown scrolls into the middle of the row.
+ * It loads once it's near sight in the row, which can hold every photo there is.
+ */
 function StripThumb({ id, label, current, onPick }: { id: string; label: string; current: boolean; onPick: () => void }) {
-  const { url } = usePhotoUrl(id);
   const ref = useRef<HTMLButtonElement>(null);
+  const seen = useInView(ref, '0px 400px', true);
   useEffect(() => {
     const el = ref.current;
     const row = el?.parentElement;
@@ -183,7 +189,12 @@ function StripThumb({ id, label, current, onPick }: { id: string; label: string;
   }, [current]);
   return (
     <button ref={ref} type="button" className={`viewer__thumb${current ? ' is-current' : ''}`} aria-label={label} aria-current={current || undefined} onClick={onPick}>
-      {url ? <img src={url} alt="" draggable={false} /> : <Icon name="image" size={16} />}
+      {seen || current ? <StripImage id={id} /> : <Icon name="image" size={16} />}
     </button>
   );
+}
+
+function StripImage({ id }: { id: string }) {
+  const { url } = usePhotoUrl(id);
+  return url ? <img src={url} alt="" draggable={false} /> : <Icon name="image" size={16} />;
 }

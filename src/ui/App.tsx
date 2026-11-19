@@ -22,6 +22,7 @@ import { TrashPage } from './pages/trash';
 import { SearchPage } from './pages/views';
 import { CalendarPage } from './pages/calendar';
 import { TimelinePage } from './pages/timeline';
+import { PhotosPage } from './pages/photos';
 import { CommandPalette } from './CommandPalette';
 import { FilterPanel, useFilterPath, useJournalFilter } from './FilterPanel';
 import { NotHere } from './NotHere';
@@ -208,6 +209,7 @@ function SignedInApp() {
           <Route path="upcoming" element={<Navigate to={journalPath({ status: 'upcoming' })} replace />} />
           <Route path="calendar" element={<CalendarPage />} />
           <Route path="timeline" element={<TimelinePage />} />
+          <Route path="photos" element={<PhotosPage />} />
           {/* Templates were a page of their own until they became a journal filter. */}
           <Route path="templates" element={<Navigate to={journalPath({ template: true })} replace />} />
           <Route path="journal" element={<JournalPage />}>

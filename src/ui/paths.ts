@@ -39,6 +39,21 @@ export function historyPath(filter: StreamFilter): string {
   return query ? `/history?${query}` : '/history';
 }
 
+/** Every photo in the journal's entries, by the day each was written. */
+export const PHOTOS_PATH = '/photos';
+
+/**
+ * The Photos page, narrowed by the journal's filters. Its entries are those with photos, not archived and not
+ * templates, newest first, so the order, the board and Contains don't apply to it.
+ */
+export function photosPath(filter: StreamFilter): string {
+  const query = filterParams(photosFilter(filter)).toString();
+  return query ? `${PHOTOS_PATH}?${query}` : PHOTOS_PATH;
+}
+
+/** The parts of a filter the Photos page takes. */
+export const photosFilter = (filter: StreamFilter): StreamFilter => ({ ...filter, sort: undefined, board: undefined, has: undefined, archived: undefined, template: undefined });
+
 /** The pages showing todos by their dates. */
 export type DatedPage = '/calendar' | '/timeline';
 export const isDatedPage = (pathname: string): pathname is DatedPage => pathname === '/calendar' || pathname === '/timeline';

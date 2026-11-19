@@ -3,7 +3,7 @@
  * sign-in: folders and tags, tag groups with colors (a Priority to sort by and show as a board, and a many-choice
  * Topics), todos for the board by todo state, notes with headings, lists, checklists, quotes, code, web links and links to each other, todos
  * overdue, due today at a time, upcoming, undated, repeating, waiting, done and archived, entries tinted, set to view
- * only or with their own preview style, photos of every shape (served by the dev server from scripts/demoPhotos), a private and encrypted Diary vault, a vault shared with Sam and one Sam
+ * only or with their own preview style, photos of every shape, one on a card's back page (served by the dev server from scripts/demoPhotos), a private and encrypted Diary vault, a vault shared with Sam and one Sam
  * shares to view, a card also in another vault, a note Sam shares, a public link, comments open and resolved, and
  * version history from more than one device. Two entries carry nearly all of it at once, to see how a full one looks:
  * a launch plan note and a moving todo.
@@ -298,7 +298,7 @@ export async function seed() {
     pages: [doc(p(text('Thank you very much', ['bold'])), p('arigatō gozaimasu')), doc(p(text('When to say it', ['bold'])), p('To shop staff, hosts and anyone who helps. Among friends, just arigatō.'))],
   });
   note('demo-card-excuse', at(8, 21, 41), doc(p('すみません'), p('More: ', web('Etiquette in Japan', 'https://en.wikipedia.org/wiki/Etiquette_in_Japan'))), [travel], '', personal, { pages: [doc(p(text('Excuse me / sorry', ['bold'])), p('sumimasen: to get attention, or to apologise'))] });
-  note('demo-card-where', at(8, 21, 42), doc(p('駅はどこですか？'), photo('station', 'Kyoto Station platform')), [travel], '', personal, { pages: [doc(p(text('Where is the station?', ['bold'])), p('eki wa doko desu ka'))] });
+  note('demo-card-where', at(8, 21, 42), doc(p('駅はどこですか？'), photo('station', 'Kyoto Station platform')), [travel], '', personal, { pages: [doc(p(text('Where is the station?', ['bold'])), p('eki wa doko desu ka'), photo('map', 'The way from the hotel'))] });
   // Five photos of every shape (4:3, a 3:1 panorama, 3:4, square, 16:9): one more than a bubble shows, so the last
   // says +1.
   note(

@@ -1,6 +1,6 @@
 /**
  * Draws the demo's photos (scripts/demoPhotos/*.jpg) as SVG scenes in shapes a camera or phone gives: 3:4 and 4:3,
- * 3:1 panorama, square, 9:16, 16:9, 3:2 and 4:5. Run `node scripts/demoPhotos/draw.mjs` from the repo root; on a
+ * 3:1 panorama, square, 9:16, 16:9, 3:2 and 4:5. Run `node scripts/demoPhotos/draw.mjs [name…]` from the repo root; on a
  * Mac it turns them into JPEGs with sips, elsewhere it leaves the SVGs to convert.
  */
 import { execFileSync } from 'node:child_process';
@@ -62,12 +62,16 @@ scenes.lake = svg(1200, 800, g('s', [[0, '#8ec5e8'], [1, '#e6f2f8']]) + g('l', [
 // Family on the beach, 1000x1250 (4:5).
 scenes['beach-family'] = svg(1000, 1250, g('s', [[0, '#ffd9a8'], [1, '#ffb27a']]),
   `<rect width="1000" height="700" fill="url(#s)"/><rect y="700" width="1000" height="200" fill="#4f93b8"/><rect y="900" width="1000" height="350" fill="#e9cf9a"/>${[[300, 1, '#c84b3c'], [480, 0.8, '#3f7f5f'], [640, 1.1, '#3a5a9c'], [780, 0.6, '#d9962b']].map(([x, s, c]) => `<g transform="translate(${x} ${980 - 260 * s}) scale(${s})"><circle cx="0" cy="0" r="40" fill="#5b3a2a"/><rect x="-45" y="45" width="90" height="170" rx="30" fill="${c}"/><rect x="-35" y="210" width="25" height="110" fill="#5b3a2a"/><rect x="10" y="210" width="25" height="110" fill="#5b3a2a"/></g>`).join('')}<circle cx="170" cy="220" r="80" fill="#fff1c9"/>`);
+// A route sketched on paper, hotel to station, 1200x800 (3:2): on the back of a card, not its front.
+scenes.map = svg(1200, 800, '', `<rect width="1200" height="800" fill="#f6f0e1"/>${Array.from({ length: 7 }, (_, i) => `<line x1="${120 + i * 160}" y1="0" x2="${100 + i * 170}" y2="800" stroke="#e2d8c2" stroke-width="22"/>`).join('')}${Array.from({ length: 4 }, (_, i) => `<line x1="0" y1="${130 + i * 180}" x2="1200" y2="${110 + i * 190}" stroke="#e2d8c2" stroke-width="22"/>`).join('')}<path d="M0 560 Q300 520 600 600 T1200 540" stroke="#8fc1e3" stroke-width="40" fill="none"/><path d="M190 180 L190 330 L520 330 L520 470 L900 470 L900 640" stroke="#d2401f" stroke-width="10" stroke-dasharray="26 16" fill="none" stroke-linecap="round"/><rect x="150" y="130" width="80" height="60" fill="#3a5a9c"/><text x="190" y="110" font-family="Marker Felt, Comic Sans MS, sans-serif" font-size="40" fill="#333" text-anchor="middle">hotel</text><rect x="820" y="640" width="200" height="80" fill="#2e6e3e"/><text x="920" y="770" font-family="Hiragino Sans, sans-serif" font-size="44" fill="#333" text-anchor="middle">京都駅</text><path d="M1080 120 L1080 220 M1050 160 L1080 120 L1110 160" stroke="#333" stroke-width="6" fill="none"/><text x="1080" y="260" font-family="Marker Felt, sans-serif" font-size="34" fill="#333" text-anchor="middle">N</text><text x="560" y="300" font-family="Marker Felt, Comic Sans MS, sans-serif" font-size="34" fill="#d2401f">12 min walk</text>`);
 
-for (const [name, s] of Object.entries(scenes)) {
+// `node draw.mjs map` draws only those named.
+const only = process.argv.slice(2);
+for (const [name, s] of Object.entries(scenes).filter(([n]) => !only.length || only.includes(n))) {
   const file = `${dir}${name}.svg`;
   writeFileSync(file, s);
   if (process.platform !== 'darwin') continue;
   execFileSync('sips', ['-s', 'format', 'jpeg', '-s', 'formatOptions', '72', file, '--out', `${dir}${name}.jpg`], { stdio: 'ignore' });
   rmSync(file);
 }
-console.log(Object.keys(scenes).join(' '));
+console.log((only.length ? only : Object.keys(scenes)).join(' '));

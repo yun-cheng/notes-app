@@ -33,8 +33,8 @@ export function useUploadShare(id: string): number | null {
 export function VideoMark({ duration }: { duration?: number | null }) {
   return (
     <span className="video-mark" aria-hidden="true">
-      <Icon name="play" size={12} />
       {duration ? clipLength(duration) : null}
+      <Icon name="play" size={12} />
     </span>
   );
 }

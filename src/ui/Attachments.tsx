@@ -135,7 +135,7 @@ export function PhotoViewer({ ids, start, onClose }: { ids: string[]; start: num
   return (
     <div ref={zoom.area} className={`dialog-backdrop viewer${ids.length > 1 ? ' viewer--strip' : ''}`} role="dialog" aria-label="Photo" {...backdrop}>
       {url ? (
-        <img className="viewer__img" src={url} alt={`Photo ${at + 1} of ${ids.length}`} title="Scroll or pinch to zoom, drag to look around, double-click to fit" {...zoom.image} />
+        <img className="viewer__img" src={url} alt={`Photo ${at + 1} of ${ids.length}`} {...zoom.image} />
       ) : (
         <p className="viewer__note">{state === 'loading' ? 'Loading photo…' : 'This photo isn’t available yet.'}</p>
       )}

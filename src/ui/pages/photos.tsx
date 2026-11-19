@@ -20,7 +20,7 @@ import { Item } from '../EntryMenu';
 import { libraryPath, mediaShownIn, PHOTOS_PATH } from '../paths';
 import { ScrollRail } from '../ScrollRail';
 import { useInView } from '../useInView';
-import { VideoMark, VideoStill } from '../video';
+import { HoverPlay, VideoMark, VideoStill } from '../video';
 import { HeldMenu, menuAt, useEntryActions, useLibrary } from './library';
 
 /**
@@ -349,6 +349,8 @@ function Tile({ item, at, box, picked, selecting, onShape, onOpen, onPick, onMen
   const seen = useInView(ref, '600px 0px');
   const press = useLongPress(() => onPick(false));
   const title = displayTitle(item.card) || 'Untitled';
+  // A mouse resting on a video plays it, muted; a finger's touch doesn't.
+  const [hover, setHover] = useState(false);
   return (
     <div ref={ref} className={`photo-tile${picked ? ' is-picked' : ''}`} data-rail-at={at} style={{ left: box.x, top: box.y, width: box.w, height: box.h }}>
       <button
@@ -363,8 +365,11 @@ function Tile({ item, at, box, picked, selecting, onShape, onOpen, onPick, onMen
         // Shift keeps the browser's menu, to save the photo, say. A long press on a touch screen picks instead.
         onContextMenu={(e: MouseEvent) => (press.touch() ? e.preventDefault() : menuAt(onMenu)(e))}
         {...press.handlers}
+        onPointerEnter={(e) => e.pointerType === 'mouse' && setHover(true)}
+        onPointerLeave={() => setHover(false)}
       >
         {seen && (item.video ? <VideoStill file={item.video} onShape={(r) => onShape(item.id, r)} /> : <TileImage id={item.id} onShape={(r) => onShape(item.id, r)} />)}
+        {seen && item.video && <HoverPlay file={item.video} on={hover} />}
         {item.video && <VideoMark duration={item.video.duration} />}
       </button>
       <button

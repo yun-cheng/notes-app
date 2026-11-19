@@ -84,6 +84,41 @@ export function VideoStill({ file, onShape, lazy = false }: { file: FileInfo; on
   );
 }
 
+/** How long the pointer rests on a video before it plays, so moving across the page doesn't start each one it passes. */
+const HOVER_MS = 200;
+
+/**
+ * A video playing over its still while the pointer rests on it, muted and over and over, as a photo library previews
+ * one: fetched only then, and shown once it plays, so the still stays until it does. Not where motion is turned down.
+ */
+export function HoverPlay({ file, on }: { file: FileInfo; on: boolean }) {
+  const [going, setGoing] = useState(false);
+  const [playing, setPlaying] = useState(false);
+  useEffect(() => {
+    setGoing(false);
+    setPlaying(false);
+    if (!on || window.matchMedia('(prefers-reduced-motion: reduce)').matches) return;
+    const wait = setTimeout(() => setGoing(true), HOVER_MS);
+    return () => clearTimeout(wait);
+  }, [on]);
+  const { address } = useVideoAddress(going ? file.id : '');
+  if (!going || !address) return null;
+  return (
+    <video
+      className={`hover-play${playing ? ' is-playing' : ''}`}
+      src={address}
+      muted
+      loop
+      autoPlay
+      playsInline
+      disablePictureInPicture
+      tabIndex={-1}
+      aria-hidden="true"
+      onPlaying={() => setPlaying(true)}
+    />
+  );
+}
+
 /**
  * A video playing where it is, with the browser's own controls, its still showing until it starts. Under it, its name,
  * size and kind, and a button to download it; while it goes up from this device, how far it's got.

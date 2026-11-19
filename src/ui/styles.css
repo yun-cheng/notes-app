@@ -1007,6 +1007,9 @@ body:has(.batch) .toast-slot { bottom: calc(var(--tabbar) + env(safe-area-inset-
 .viewer__thumb { position: relative; }
 .trash-held__thumb.thumb--video { position: relative; cursor: pointer; }
 .video-still { pointer-events: none; }
+/* Playing over its still while pointed at (`HoverPlay`), shown once it plays. */
+.photo-tile .hover-play { position: absolute; inset: 0; opacity: 0; pointer-events: none; transition: opacity 0.15s; }
+.photo-tile .hover-play.is-playing { opacity: 1; }
 .video-player { display: flex; flex-direction: column; max-width: 100%; overflow: hidden; border: 1px solid var(--line); border-radius: 12px; background: var(--surface); line-height: normal; }
 .video-player__video, .video-player__note { display: block; width: 100%; max-height: 70dvh; background: #000; }
 .video-player__video:not([style*="aspect-ratio"]) { aspect-ratio: 16 / 9; }

@@ -1,7 +1,7 @@
 import { Extension, wrappingInputRule, type Editor as TiptapEditor, type Range } from '@tiptap/core';
 import { TaskItem, TaskList } from '@tiptap/extension-list';
 import { Plugin } from '@tiptap/pm/state';
-import { ScrollJump } from './ScrollJump';
+import { ScrollJump, toEnd } from './ScrollJump';
 import { Decoration, DecorationSet } from '@tiptap/pm/view';
 import { EditorContent, useEditor } from '@tiptap/react';
 import { StarterKit } from '@tiptap/starter-kit';
@@ -142,7 +142,7 @@ export function JournalBox({ filter }: { filter: StreamFilter }) {
       if (result.saved) {
         editor.commands.setContent(start, { emitUpdate: false });
         drafts.set('journal', draftKey, null);
-        if (!f.sort) requestAnimationFrame(() => window.scrollTo({ top: document.documentElement.scrollHeight, behavior: 'instant' }));
+        if (!f.sort) requestAnimationFrame(() => toEnd('bottom'));
       }
     } catch (err) {
       console.error('Saving failed', err);

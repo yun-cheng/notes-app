@@ -4,6 +4,15 @@ import { Icon } from './Icon';
 /** How far from its end the page must be before the button to jump back there shows. */
 const AWAY = 400;
 
+/** Heard by a long stream drawn away from its end by a jump from the rail (`Stream`): it draws its end again. */
+export const STREAM_END = 'notes-app:stream-end';
+
+/** Goes straight to the top or the bottom of the page, without scrolling through everything on the way. */
+export function toEnd(to: 'top' | 'bottom') {
+  window.dispatchEvent(new Event(STREAM_END));
+  window.scrollTo({ top: to === 'top' ? 0 : document.documentElement.scrollHeight, behavior: 'instant' });
+}
+
 const distanceTo = (end: 'top' | 'bottom') =>
   end === 'top' ? window.scrollY : document.documentElement.scrollHeight - window.scrollY - window.innerHeight;
 
@@ -36,8 +45,7 @@ export function ScrollJump({ to }: { to: 'top' | 'bottom' }) {
 
   if (!away) return null;
   const label = to === 'top' ? 'Scroll to top' : 'Scroll to bottom';
-  // Straight there, without scrolling through everything on the way.
-  const jump = () => window.scrollTo({ top: to === 'top' ? 0 : document.documentElement.scrollHeight, behavior: 'instant' });
+  const jump = () => toEnd(to);
   return (
     // Not taking focus, so a half-written entry keeps its cursor.
     <button type="button" className="scroll-jump" aria-label={label} title={label} onMouseDown={(e) => e.preventDefault()} onClick={jump}>

@@ -778,6 +778,43 @@ body:has(.composer:focus-within) .journal-dock { --dock-gap: 8px; --dock-margin:
   border: 1px solid var(--line); box-shadow: 0 2px 10px rgb(0 0 0 / 10%); cursor: pointer;
 }
 .scroll-jump:hover { color: var(--text); background: var(--sunken); }
+/*
+ * The rail down the right of a long page (`ScrollRail`), as a photo library has: years or months down it, a thumb at
+ * where the page is, and the month or day pointed at or dragged to. With a mouse on a wide screen it's always there,
+ * in the scroll bar's place. On a touch screen or a narrow one, only the thumb shows, as a handle, while the page
+ * scrolls; the marks show while it's held.
+ */
+.scroll-rail { position: fixed; right: 0; z-index: 5; width: 44px; cursor: pointer; touch-action: none; user-select: none; -webkit-user-select: none; }
+.scroll-rail__label, .scroll-rail__dot, .scroll-rail__point, .scroll-rail__bubble { position: absolute; pointer-events: none; }
+.scroll-rail__label { right: 10px; font-size: 11px; font-weight: 600; line-height: 1; color: var(--muted); white-space: nowrap; }
+.scroll-rail__dot { right: 18px; width: 4px; height: 4px; margin-top: -2px; border-radius: 50%; background: var(--line); }
+.scroll-rail__point { right: 4px; width: 32px; height: 1px; background: var(--muted); }
+.scroll-rail__thumb { position: absolute; right: 4px; width: 32px; height: 3px; margin-top: -1px; border-radius: 2px; background: var(--accent); cursor: grab; }
+.scroll-rail__grip { display: none; }
+.scroll-rail__bubble {
+  right: 46px; transform: translateY(-50%); padding: 4px 10px; border-radius: 999px;
+  background: var(--text); color: var(--bg); font-size: 12px; font-weight: 600; white-space: nowrap; box-shadow: 0 2px 8px rgb(0 0 0 / 18%);
+}
+.is-scrubbing, .is-scrubbing * { cursor: grabbing !important; user-select: none !important; -webkit-user-select: none !important; }
+@media (pointer: fine) and (min-width: 860px) { html:has(.scroll-rail) { scrollbar-width: none; } }
+@media (pointer: coarse), (max-width: 859px) {
+  .scroll-rail { pointer-events: none; }
+  .scroll-rail__label, .scroll-rail__dot { opacity: 0; transition: opacity 0.2s; }
+  .scroll-rail.is-dragging .scroll-rail__label, .scroll-rail.is-dragging .scroll-rail__dot { opacity: 1; }
+  .scroll-rail__label { right: 40px; padding: 2px 6px; border-radius: 999px; background: var(--surface); box-shadow: 0 1px 4px rgb(0 0 0 / 12%); }
+  .scroll-rail__dot { right: 34px; }
+  .scroll-rail__point { display: none; }
+  .scroll-rail__thumb {
+    right: 0; width: 32px; height: 44px; margin-top: -22px; border-radius: 22px 0 0 22px; pointer-events: auto;
+    display: flex; flex-direction: column; align-items: center; justify-content: center;
+    background: var(--surface); color: var(--muted); border: 1px solid var(--line); border-right: 0; box-shadow: 0 2px 10px rgb(0 0 0 / 14%);
+    visibility: hidden; opacity: 0; transition: opacity 0.25s, visibility 0.25s;
+  }
+  .scroll-rail.is-awake .scroll-rail__thumb, .scroll-rail.is-dragging .scroll-rail__thumb { visibility: visible; opacity: 1; transition: none; }
+  .scroll-rail__grip { display: contents; }
+  .scroll-rail__bubble { right: 40px; }
+  .scroll-rail.is-dragging .scroll-rail__label { opacity: 0.85; }
+}
 .composer:focus-within { border-color: var(--accent); }
 .composer__editor { flex: 1; min-width: 0; max-height: 40dvh; overflow-y: auto; }
 .composer__prose { min-height: 36px; padding: 7px 0; outline: none; line-height: 1.4; overflow-wrap: anywhere; }

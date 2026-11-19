@@ -1,0 +1,84 @@
+import { describe, expect, it } from 'vitest';
+import { drawnRange, railItem, railLabel, railMarks, railScale, readingLine, scrollFor, stretchFor } from './rail';
+
+const name = (key: string) => (key ? `#${key}` : 'None');
+const labels = (keys: string[], height = 1000) => railMarks(keys, height, name, 'en-US').filter((m) => m.label).map((m) => [m.label, m.at]);
+
+describe('the rail beside a long page', () => {
+  it('tells items apart by year, month or day when they are under days, else by what groups them', () => {
+    expect(railScale(['2024-03-01', '2026-11-19'])).toBe('year');
+    expect(railScale(['2026-10-30', '', '2026-11-19'])).toBe('month');
+    expect(railScale(['2026-11-18', '2026-11-19'])).toBe('day');
+    expect(railScale(['2026-11-19', 'tag-1'])).toBe('name');
+  });
+
+  it('labels where each year starts, with a dot for each month, in the order the page shows them', () => {
+    const keys = ['2024-12-30', '2025-01-02', '2025-01-03', '2025-03-01', '2026-11-19'];
+    expect(labels(keys)).toEqual([
+      ['2024', 0],
+      ['2025', 0.2],
+      ['2026', 0.8],
+    ]);
+    expect(railMarks(keys, 1000, name).filter((m) => !m.label).map((m) => m.at)).toEqual([0.6]);
+    // Newest first, the same.
+    expect(labels([...keys].reverse()).map(([l]) => l)).toEqual(['2026', '2025', '2024']);
+  });
+
+  it('labels months within a year, and a stretch with no day by name', () => {
+    expect(labels(['2026-10-30', '2026-11-01', '', ''])).toEqual([
+      ['Oct', 0],
+      ['Nov', 0.25],
+      ['None', 0.5],
+    ]);
+    // Days after the stretch with none go on from the last day.
+    expect(labels(['2026-10-30', '', '2026-10-31', '2026-11-02']).map(([l]) => l)).toEqual(['Oct', 'None', 'Nov']);
+  });
+
+  it('leaves out labels too near the one above, and dots too near anything', () => {
+    const keys = ['2020-01-01', '2021-01-01', ...Array(8).fill('2025-06-01'), ...Array(90).fill('2026-01-01')];
+    // 1% of 1000 pixels is 10, and 2%, 20: less than a label needs.
+    expect(labels(keys).map(([l]) => l)).toEqual(['2020', '2026']);
+    expect(labels(keys, 5000).map(([l]) => l)).toEqual(['2020', '2021', '2025', '2026']);
+    expect(railMarks([], 1000, name)).toEqual([]);
+  });
+
+  it('names a place by its month among years, else as the page does', () => {
+    expect(railLabel('2025-03-04', 'year', name, 'en-US')).toBe('Mar 2025');
+    expect(railLabel('2025-03-04', 'month', name)).toBe('#2025-03-04');
+    expect(railLabel('', 'year', name)).toBe('None');
+  });
+
+  it('finds the item at a place on it, and how far into it', () => {
+    expect(railItem(0, 4)).toEqual({ index: 0, into: 0 });
+    expect(railItem(0.6, 4)).toEqual({ index: 2, into: expect.closeTo(0.4) });
+    expect(railItem(1, 4)).toEqual({ index: 3, into: 1 });
+    expect(railItem(-1, 4).index).toBe(0);
+  });
+
+  it('reads the page from the top of the view at its top to the foot of it at its end, and back', () => {
+    expect(readingLine(0, 1000, 60, 500)).toBe(60);
+    expect(readingLine(1000, 1000, 60, 500)).toBe(560);
+    expect(readingLine(500, 1000, 60, 500)).toBe(310);
+    expect(readingLine(0, 0, 60, 500)).toBe(60);
+    // Scrolled so the line meets a place: it reads there again.
+    const s = scrollFor(2000, 3000, 60, 500);
+    expect(s + readingLine(s, 3000, 60, 500)).toBeCloseTo(2000);
+    expect(scrollFor(10, 3000, 60, 500)).toBe(0);
+    expect(scrollFor(99_999, 3000, 60, 500)).toBe(3000);
+  });
+
+  it('draws a stretch of a long stream, from the end it opens at or around a place jumped to', () => {
+    expect(drawnRange(1000, true, { skip: 0, count: 150 })).toEqual({ from: 850, to: 1000 });
+    expect(drawnRange(1000, false, { skip: 0, count: 150 })).toEqual({ from: 0, to: 150 });
+    expect(drawnRange(100, true, { skip: 0, count: 150 })).toEqual({ from: 0, to: 100 });
+
+    const start = { skip: 0, count: 150 };
+    expect(stretchFor(1000, true, start, 900, 150)).toBe(start);
+    // In a chat, the oldest are at the top: 10 is 989 from the bottom.
+    const old = stretchFor(1000, true, start, 10, 150);
+    expect(drawnRange(1000, true, old)).toEqual({ from: 0, to: 150 });
+    const middle = stretchFor(1000, false, start, 500, 150);
+    expect(drawnRange(1000, false, middle)).toEqual({ from: 425, to: 575 });
+    expect(stretchFor(1000, false, middle, 990, 150)).toEqual({ skip: 850, count: 150 });
+  });
+});

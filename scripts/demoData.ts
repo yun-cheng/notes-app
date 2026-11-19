@@ -6,7 +6,7 @@
  * only or with their own preview style, photos of every shape, one on a card's back page (served by the dev server from scripts/demoPhotos),
  * files attached (a PDF, a CSV, and a text file on the publicly linked recipe, from scripts/demoFiles), a private and encrypted Diary vault, a vault shared with Sam and one Sam
  * shares to view, a card also in another vault, a note Sam shares, a public link, comments open and resolved, and
- * version history from more than one device. Two entries carry nearly all of it at once, to see how a full one looks:
+ * version history from more than one device, and entries going back three years. Two entries carry nearly all of it at once, to see how a full one looks:
  * a launch plan note and a moving todo.
  * Run with `npm run demo` while `npm run dev:api` is running. Running it again puts the demo's own cards back as they
  * were, dated around today, and keeps anything else in the accounts.
@@ -495,6 +495,15 @@ export async function seed() {
     personal,
     { template: true, color: 'blue' },
   );
+  // Older entries, back three years, a few with photos: the rail beside the journal, Photos and the Trash has years to show.
+  note('demo-note-back-garden', at(64, 18, 20), doc(p('First tomatoes from the garden. Too many to eat, so sauce on Sunday.'), photo('garden', 'Tomatoes on the vine')), [home]);
+  note('demo-note-back-books', at(130, 21, 5), doc(p('Finished the lighthouse book. Next: something short.')), [reading]);
+  note('demo-note-back-snow', at(330, 22, 40), doc(p('First snow on our street. Walked home the long way.'), photo('snow', 'Snow on the street at night')));
+  note('demo-note-back-cake', at(410, 19, 0), doc(p('Five candles for Ava. She blew them out in one go.'), photo('cake', 'The birthday cake')), [home]);
+  note('demo-note-back-job', at(560, 9, 15), lines('First day at the new job. Desk by the window.'), [work]);
+  note('demo-note-back-run', at(700, 7, 30), lines('Ran 5 km without stopping, the first time.'));
+  note('demo-note-back-move', at(820, 20, 45), lines('Moved into the flat. Boxes everywhere, but the light is lovely.'), [home]);
+  note('demo-note-back-start', at(1000, 21, 0), lines('Starting a journal. One line a day, more when there is more.'));
   // Put away: out of the journal, still in search and under the Archived chip.
   note('demo-note-old-flat', at(9, 20, 0), doc(p('Old flat'), bullets('Meter reading: 4821', 'Deposit back in 30 days')), [home], 'Old flat', personal, { archived: true });
 

@@ -16,6 +16,7 @@ import { canSharePhotos, usePhotoActions } from '../photoActions';
 import { LONG_PRESS_MS } from '../selection';
 import { MOD } from '../Shortcuts';
 import { Item } from '../EntryMenu';
+import { ScrollRail } from '../ScrollRail';
 import { useInView } from '../useInView';
 import { countLine, HeldMenu, menuAt, useEntryActions, useLibrary } from './library';
 
@@ -64,6 +65,7 @@ export function PhotosPage() {
   const today = useToday();
   const { filter, days } = useLibrary(photoDays);
   const all = useMemo(() => days.flatMap((d) => d.items), [days]);
+  const railKeys = useMemo(() => all.map((i) => i.day), [all]);
   const [viewing, setViewing] = useState<number | null>(null);
   const [filtering, setFiltering] = useState(false);
   const entry = useEntryActions();
@@ -253,6 +255,7 @@ export function PhotosPage() {
                       <Tile
                         key={item.id}
                         item={item}
+                        at={first + i}
                         box={layout.tiles[d][i]}
                         picked={picked.has(item.id)}
                         selecting={selecting}
@@ -266,6 +269,7 @@ export function PhotosPage() {
                 );
               })}
           </div>
+          <ScrollRail keys={railKeys} name={(day) => relativeDay(day, today)} root={canvas} />
         </div>
       )}
       {viewing !== null && (
@@ -303,13 +307,13 @@ export function PhotosPage() {
  * picked (with Shift, everything from the last one). Its check, Cmd/Ctrl-click or a long press on a touch screen
  * picks it. A right-click with a mouse opens its menu.
  */
-function Tile({ item, box, picked, selecting, onShape, onOpen, onPick, onMenu }: { item: PhotoItem; box: Box; picked: boolean; selecting: boolean; onShape: (id: string, ratio: number) => void; onOpen: () => void; onPick: (range: boolean) => void; onMenu: (at: Point) => void }) {
+function Tile({ item, at, box, picked, selecting, onShape, onOpen, onPick, onMenu }: { item: PhotoItem; at: number; box: Box; picked: boolean; selecting: boolean; onShape: (id: string, ratio: number) => void; onOpen: () => void; onPick: (range: boolean) => void; onMenu: (at: Point) => void }) {
   const ref = useRef<HTMLDivElement>(null);
   const seen = useInView(ref, '600px 0px');
   const press = useLongPress(() => onPick(false));
   const title = displayTitle(item.card) || 'Untitled';
   return (
-    <div ref={ref} className={`photo-tile${picked ? ' is-picked' : ''}`} style={{ left: box.x, top: box.y, width: box.w, height: box.h }}>
+    <div ref={ref} className={`photo-tile${picked ? ' is-picked' : ''}`} data-rail-at={at} style={{ left: box.x, top: box.y, width: box.w, height: box.h }}>
       <button
         type="button"
         className="photo-tile__open"

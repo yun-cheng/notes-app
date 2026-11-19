@@ -15,6 +15,7 @@ import { FilterBar, FilterSheet, useJournalFilter } from '../FilterPanel';
 import { Icon } from '../Icon';
 import { cardPath, sheetState } from '../paths';
 import { useShowInJournal } from '../showInJournal';
+import { ScrollRail } from '../ScrollRail';
 import { useInView } from '../useInView';
 
 /**
@@ -117,6 +118,10 @@ function HeldList<T extends { id: string }>({ title, days, filtered, count, empt
   const entry = useEntryActions();
   const [menuFor, setMenuFor] = useState<{ item: DayItem<T>; at: Point } | null>(null);
   const all = days.flatMap((d) => d.items);
+  const keys = useMemo(() => days.flatMap((d) => d.items.map(() => d.day)), [days]);
+  const list = useRef<HTMLDivElement>(null);
+  // Each one's place among them all, for the rail.
+  let place = 0;
   return (
     <Page
       viewOnly={false}
@@ -132,14 +137,14 @@ function HeldList<T extends { id: string }>({ title, days, filtered, count, empt
       {!all.length ? (
         <Empty>{filtered ? emptyFiltered : empty}</Empty>
       ) : (
-        <div className="held">
+        <div className="held" ref={list}>
           <p className="photos__count">{count}</p>
           {days.map(({ day, items }) => (
             <section key={day} className="held__day" aria-label={relativeDay(day, today)}>
               <h2 className="held__head">{relativeDay(day, today)}</h2>
               <ul className="held__items">
                 {items.map((item) => (
-                  <li key={`${item.card.id} ${item.id}`} className="held__item" onContextMenu={menuAt((at) => setMenuFor({ item, at }))}>
+                  <li key={`${item.card.id} ${item.id}`} className="held__item" data-rail-at={place++} onContextMenu={menuAt((at) => setMenuFor({ item, at }))}>
                     {render(item)}
                     <button type="button" className="held__entry" title="Open the entry" onClick={() => entry.open(item.card)}>
                       <span>{displayTitle(item.card) || 'Untitled'}</span>
@@ -150,6 +155,7 @@ function HeldList<T extends { id: string }>({ title, days, filtered, count, empt
               </ul>
             </section>
           ))}
+          <ScrollRail keys={keys} name={(day) => relativeDay(day, today)} root={list} />
         </div>
       )}
       {menuFor && (

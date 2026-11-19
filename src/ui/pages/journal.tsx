@@ -9,7 +9,9 @@ import { isFiltered, parseFilter, sortGroup, streamItems, type StreamFilter, typ
 import { EMPTY_DOC, type JSONNode, type NoteCard, type TodoCard } from '../../domain/types';
 import { useCards, useToday } from '../../state/CardsContext';
 import { setViewOnly, useInTrash, usePermissions, useViewOnly } from '../viewOnly';
-import { ScrollJump } from '../ScrollJump';
+import { ScrollJump, STREAM_END } from '../ScrollJump';
+import { ScrollRail } from '../ScrollRail';
+import { drawnRange, stretchFor, type DrawnStretch } from '../../domain/rail';
 import { Comments } from '../Comments';
 import { ReactionsRow } from '../Reactions';
 import { Backlinks, Empty, Page, TagChips, TagPicker, TitleField, useDeleteCard, VaultField } from '../components';
@@ -294,7 +296,8 @@ export function Stream({ items, empty, sort }: { items: StreamItem[]; empty: str
   const selection = useSelection();
   const root = useRef<HTMLDivElement>(null);
   const box = useBoxSelect(root, selection);
-  const { shown, more } = useShownItems(items, chat, reach);
+  const { shown, first, before, after, reveal } = useShownItems(items, chat, reach);
+  const keys = useMemo(() => items.map((i) => i.day), [items]);
   // In the orders grouped by the day written, a day's badge opens the date picker at that day.
   const pickable = sort === 'written' || sort === 'newest';
   const [pickFrom, setPickFrom] = useState<string | null>(null);
@@ -302,6 +305,8 @@ export function Stream({ items, empty, sort }: { items: StreamItem[]; empty: str
 
   // Each day's entries sit together under its badge, which stays pinned under the title bar while they scroll past.
   const days: { day: string; items: StreamItem[] }[] = [];
+  // Each entry's place in the whole stream, for the rail.
+  let at = first;
   for (const item of shown) {
     const last = days.at(-1);
     if (last && last.day === item.day) last.items.push(item);
@@ -310,7 +315,7 @@ export function Stream({ items, empty, sort }: { items: StreamItem[]; empty: str
   return (
     <div ref={root} className={`stream${chat ? '' : ' stream--top'}${selection?.selecting ? ' stream--selecting' : ''}`}>
       {items.length === 0 && <Empty>{empty}</Empty>}
-      {chat && more}
+      {before}
       {days.map(({ day, items: dayItems }) => (
         <section key={`day:${day}`} className="stream__group" aria-label={label(day)}>
           {pickable ? (
@@ -322,7 +327,7 @@ export function Stream({ items, empty, sort }: { items: StreamItem[]; empty: str
           )}
           {dayItems.map((item) => (
             <div key={item.card.id} className="stream__item">
-              <div className="stream__entry" data-entry-id={item.card.id}>
+              <div className="stream__entry" data-entry-id={item.card.id} data-rail-at={at++}>
                 {selection && <PickCircle id={item.card.id} />}
                 <EntryBubble card={item.card} at={item.at} />
                 <Attachments card={item.card} />
@@ -331,8 +336,9 @@ export function Stream({ items, empty, sort }: { items: StreamItem[]; empty: str
           ))}
         </section>
       ))}
-      {!chat && more}
+      {after}
       {box}
+      <ScrollRail keys={keys} name={label} root={root} reveal={reveal} />
       {pickFrom && (
         <DatesDialog
           when={pickFrom}
@@ -353,42 +359,76 @@ const STREAM_PAGE = 150;
 /**
  * The entries to draw: the newest ones in a chat (the end nearest the box), the first ones in other orders, and more as
  * the reader scrolls toward the rest. Drawing thousands of bubbles at once makes every change to any entry slow.
- * `more` is a button for the next ones, which also asks for them itself when it comes near the screen. `reach` is
- * the index of one that must be drawn from the start.
+ * `before` and `after` are buttons for the ones above and below what's drawn, which also ask for them themselves when
+ * they come near the screen. `reach` is the index of one that must be drawn from the start. `reveal` draws a stretch
+ * around one far off instead, for the rail (`ScrollRail`); going to the stream's end (`toEnd`) draws that again.
  */
 function useShownItems(items: StreamItem[], chat: boolean, reach = -1) {
+  const n = items.length;
   // Far enough to draw the one at `reach`, an entry gone to.
-  const [count, setCount] = useState(() => (reach < 0 ? STREAM_PAGE : Math.max(STREAM_PAGE, chat ? items.length - reach : reach + 1)));
-  const marker = useRef<HTMLButtonElement>(null);
-  // Drawing older entries above what's on screen would push it down: keep it where it was.
+  const [drawn, setDrawn] = useState<DrawnStretch>(() => ({ skip: 0, count: reach < 0 ? STREAM_PAGE : Math.max(STREAM_PAGE, chat ? n - reach : reach + 1) }));
+  const { from, to } = drawnRange(n, chat, drawn);
+  const top = useRef<HTMLButtonElement>(null);
+  const foot = useRef<HTMLButtonElement>(null);
+  // Drawing entries above what's on screen would push it down: keep it where it was.
   const keep = useRef<number | null>(null);
-  const hidden = Math.max(0, items.length - count);
-  const showMore = () => {
-    if (chat) keep.current = document.documentElement.scrollHeight - window.scrollY;
-    setCount((n) => n + STREAM_PAGE);
+  // Just jumped: the buttons, drawn a moment before the page moves there, may seem near.
+  const jumped = useRef(0);
+  const ending = useRef(false);
+  const latest = useRef(drawn);
+  latest.current = drawn;
+
+  const showMore = (above: boolean) => {
+    if (above) keep.current = document.documentElement.scrollHeight - window.scrollY;
+    // The end away from where the stream opens grows its count; the other end takes from what's skipped.
+    setDrawn((d) => (above === chat ? { ...d, count: d.count + STREAM_PAGE } : { skip: Math.max(0, d.skip - STREAM_PAGE), count: d.count + Math.min(STREAM_PAGE, d.skip) }));
   };
 
   useEffect(() => {
-    const el = marker.current;
-    if (!el || !hidden) return;
-    const watch = new IntersectionObserver(([entry]) => entry.isIntersecting && showMore(), { rootMargin: '1200px 0px' });
-    watch.observe(el);
+    const watch = new IntersectionObserver(
+      (seen) => {
+        if (Date.now() - jumped.current < 500) return;
+        for (const entry of seen) if (entry.isIntersecting) showMore(entry.target === top.current);
+      },
+      { rootMargin: '1200px 0px' },
+    );
+    if (top.current) watch.observe(top.current);
+    if (foot.current) watch.observe(foot.current);
     return () => watch.disconnect();
-  }, [hidden, chat, count]);
+  }, [from, to, n, chat]);
 
   useLayoutEffect(() => {
+    if (ending.current) {
+      ending.current = false;
+      keep.current = null;
+      window.scrollTo(0, chat ? document.documentElement.scrollHeight : 0);
+    }
     if (keep.current === null) return;
     window.scrollTo(0, document.documentElement.scrollHeight - keep.current);
     keep.current = null;
-  }, [count]);
+  }, [from, to]);
 
-  const shown = !hidden ? items : chat ? items.slice(hidden) : items.slice(0, count);
-  const more = hidden > 0 && (
-    <button ref={marker} type="button" className="btn btn--quiet stream__more" onClick={showMore}>
-      {chat ? 'Show earlier entries' : 'Show more entries'}
+  useEffect(() => {
+    const onEnd = () => {
+      if (!latest.current.skip) return;
+      ending.current = true;
+      setDrawn({ skip: 0, count: STREAM_PAGE });
+    };
+    window.addEventListener(STREAM_END, onEnd);
+    return () => window.removeEventListener(STREAM_END, onEnd);
+  }, []);
+
+  const reveal = (index: number) => {
+    jumped.current = Date.now();
+    setDrawn((d) => stretchFor(items.length, chat, d, index, STREAM_PAGE));
+  };
+
+  const button = (above: boolean) => (
+    <button ref={above ? top : foot} type="button" className="btn btn--quiet stream__more" onClick={() => showMore(above)}>
+      {above ? (chat ? 'Show earlier entries' : 'Show the entries above') : chat ? 'Show later entries' : 'Show more entries'}
     </button>
   );
-  return { shown, more };
+  return { shown: items.slice(from, to), first: from, before: from > 0 && button(true), after: to < n && button(false), reveal };
 }
 
 /** The circle beside an entry that picks it: shown on hover, and always while picking. */

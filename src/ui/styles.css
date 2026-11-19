@@ -900,7 +900,7 @@ body:has(.batch) .toast-slot { bottom: calc(var(--tabbar) + env(safe-area-inset-
 .attachments__photos { display: flex; flex-wrap: wrap; gap: 4px; }
 /* Each photo whole, never cropped: a row the same height, each at its own shape, a very wide one fitted in with bands. */
 .thumb { position: relative; padding: 0; overflow: hidden; border: 1px solid var(--line); border-radius: 12px; background: var(--sunken); line-height: 0; cursor: zoom-in; }
-.thumb img { display: block; width: auto; height: 180px; max-width: min(320px, 70vw); object-fit: contain; }
+.thumb img { display: block; width: auto; min-width: 96px; height: 180px; max-width: min(320px, 70vw); object-fit: contain; }
 .thumb__empty { display: grid; place-items: center; width: 180px; height: 180px; color: var(--muted); }
 .thumb__more { position: absolute; inset: 0; display: grid; place-items: center; background: rgb(0 0 0 / 45%); color: #fff; font-weight: 700; font-size: 18px; }
 .link-card { display: flex; align-items: center; gap: 10px; max-width: 100%; padding: 7px 12px 7px 9px; border: 1px solid var(--line); border-radius: 12px; background: var(--surface); color: var(--text); text-decoration: none; }

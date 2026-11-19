@@ -299,7 +299,7 @@ function StripThumb({ id, video, label, current, onPick }: { id: string; video?:
   return (
     <button ref={ref} type="button" className={`viewer__thumb${current ? ' is-current' : ''}`} aria-label={label} aria-current={current || undefined} onClick={onPick}>
       {seen || current ? video ? <VideoStill file={video} /> : <StripImage id={id} /> : <Icon name={video ? 'video' : 'image'} size={16} />}
-      {video && <VideoMark />}
+      {video && <VideoMark duration={video.duration} />}
     </button>
   );
 }

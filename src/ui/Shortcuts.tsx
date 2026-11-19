@@ -45,7 +45,7 @@ const GROUPS: { title: string; keys: [string, string][] }[] = [
       ['[] or TODO', 'Start a todo'],
       ['#', 'Tag'],
       ['@', 'Due date, time (@3pm) or repeat (@weekly)'],
-      ['/', 'Lists, headings, photos and more'],
+      ['/', 'Lists, headings, photos, files and more'],
     ],
   },
   {

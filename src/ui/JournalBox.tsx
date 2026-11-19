@@ -20,6 +20,7 @@ import { clipboardProps, titleResolver } from './editor/clipboardStyle';
 import { ClipboardChoices } from './editor/clipboardChoices';
 import { useEditorMenu } from './editor/editorMenu';
 import { CodeHighlight } from './editor/codeHighlight';
+import { FileBlock } from './editor/file';
 import { Photo } from './editor/photo';
 import { usePhotoInput } from './editor/photoInput';
 import { commonSlashItems, slashBlock, typeahead, useTypeaheadMenu, type MenuItem } from './editor/suggest';
@@ -142,7 +143,7 @@ export function JournalBox({ filter }: { filter: StreamFilter }) {
       { id: 'tag', label: 'Tag', hint: '#', icon: 'tag', words: 'tag file folder', run: replace('#') },
       { id: 'due', label: 'Due date', hint: '@', icon: 'calendar', words: 'due date when deadline', run: replace('@') },
       { id: 'diary', label: 'Diary', hint: '#diary', icon: 'diary', words: 'diary journal private', run: replace('#diary ') },
-      ...commonSlashItems(photoInput.pick),
+      ...commonSlashItems(photoInput.pick, photoInput.pickFile),
       { id: 'heading', label: 'Heading', hint: '#', words: 'heading title', run: slashBlock((e) => e.chain().focus().toggleHeading({ level: 2 }).run()) },
     ];
     return all.filter((i) => matches(`${i.label} ${i.words}`, query));
@@ -197,6 +198,7 @@ export function JournalBox({ filter }: { filter: StreamFilter }) {
         placeholder: ({ editor: e }) => (e.isActive('taskItem') ? 'Todo · @ for a due date, time or repeat' : latest.current.diary ? 'Write in the diary' : 'Write a note · [] todo · #tag · / for more'),
       }),
       Photo,
+      FileBlock,
       CodeHighlight,
       TaskList,
       ClipboardChoices,
@@ -292,6 +294,9 @@ export function JournalBox({ filter }: { filter: StreamFilter }) {
         {textMenu.view}
         <button type="button" className="composer__kind" aria-label="Add a photo" title="Add a photo" onMouseDown={(e) => e.preventDefault()} onClick={photoInput.pick}>
           <Icon name="image" size={20} />
+        </button>
+        <button type="button" className="composer__kind" aria-label="Attach a file" title="Attach a file" onMouseDown={(e) => e.preventDefault()} onClick={photoInput.pickFile}>
+          <Icon name="attach" size={20} />
         </button>
         <button type="submit" className="composer__send" aria-label="Save" disabled={empty || saving}>
           <Icon name="send" size={20} />

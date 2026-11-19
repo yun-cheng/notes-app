@@ -1,6 +1,6 @@
 import type { Context, Hono } from 'hono';
 import { openCommentCounts } from './comments';
-import { cardPages, photoIds, walk } from '../src/domain/content';
+import { cardPages, fileAttachments, photoIds, walk } from '../src/domain/content';
 import { DAY, isTimeKey } from '../src/domain/dates';
 import { parsePayload } from '../src/domain/payload';
 import type { CardPayload } from '../src/domain/types';
@@ -10,6 +10,7 @@ import { randomToken } from './auth';
 import type { AppEnv, Database, Statement } from './db';
 import { isEmail } from './members';
 import { downloadFile, DriveFailed, DriveNotConnected, type GoogleFetch } from './drive';
+import { attachmentHeaders } from './photos';
 
 export type ShareRole = 'view' | 'comment' | 'edit';
 const ROLES: ShareRole[] = ['view', 'comment', 'edit'];
@@ -112,26 +113,34 @@ export function publicRoutes(app: Hono<AppEnv>, googleFetch: GoogleFetch, now: (
     });
   });
 
-  /** A photo in a publicly linked card, and only one that card actually contains. */
-  app.get('/public/:token/photos/:photo', async (c) => {
-    const at = now();
-    const card = await publicCard(c.env.DB, c.req.param('token'), at);
-    const photo = c.req.param('photo');
-    if (!card || ![card.payload.content, ...cardPages(card.payload)].flatMap(photoIds).includes(photo)) return c.json({ error: 'Not found' }, 404);
-    const row = await c.env.DB.prepare(`SELECT owner_id, drive_file_id, mime FROM attachments WHERE id = ?`)
-      .bind(photo)
-      .first<{ owner_id: string; drive_file_id: string; mime: string }>();
-    const { GOOGLE_CLIENT_ID: clientId, GOOGLE_CLIENT_SECRET: clientSecret } = c.env;
-    if (!row || !clientId || !clientSecret) return c.json({ error: 'Not found' }, 404);
-    try {
-      const config = { clientId, clientSecret, redirectUri: '', fetch: googleFetch };
-      const file = await downloadFile(c.env.DB, config, row.owner_id, row.drive_file_id, at);
-      return new Response(file.body, { headers: { 'content-type': row.mime, 'cache-control': 'public, max-age=3600' } });
-    } catch (err) {
-      if (err instanceof DriveNotConnected || err instanceof DriveFailed) return c.json({ error: 'Not available' }, 404);
-      throw err;
-    }
-  });
+  /**
+   * A photo or file in a publicly linked card, and only one that card actually contains. A file only downloads, as it
+   * does for members.
+   */
+  const attachment = (kind: 'photos' | 'files') =>
+    app.get(`/public/:token/${kind}/:id`, async (c) => {
+      const at = now();
+      const card = await publicCard(c.env.DB, c.req.param('token'), at);
+      const id = c.req.param('id');
+      const docs = card ? [card.payload.content, ...cardPages(card.payload)] : [];
+      const ids = kind === 'photos' ? docs.flatMap(photoIds) : docs.flatMap(fileAttachments).map((f) => f.id);
+      if (!card || !ids.includes(id)) return c.json({ error: 'Not found' }, 404);
+      const row = await c.env.DB.prepare(`SELECT owner_id, drive_file_id, mime FROM attachments WHERE id = ?`)
+        .bind(id)
+        .first<{ owner_id: string; drive_file_id: string; mime: string }>();
+      const { GOOGLE_CLIENT_ID: clientId, GOOGLE_CLIENT_SECRET: clientSecret } = c.env;
+      if (!row || !clientId || !clientSecret) return c.json({ error: 'Not found' }, 404);
+      try {
+        const config = { clientId, clientSecret, redirectUri: '', fetch: googleFetch };
+        const file = await downloadFile(c.env.DB, config, row.owner_id, row.drive_file_id, at);
+        return new Response(file.body, { headers: attachmentHeaders(row.mime, 'public, max-age=3600') });
+      } catch (err) {
+        if (err instanceof DriveNotConnected || err instanceof DriveFailed) return c.json({ error: 'Not available' }, 404);
+        throw err;
+      }
+    });
+  attachment('photos');
+  attachment('files');
 }
 
 /** Sharing one card with people, with everyone in a vault, or with anyone who has a link. */

@@ -103,7 +103,7 @@ export function useEntryShortcuts(selection: Selection, filter: StreamFilter, en
         return;
       }
       // Read now: the clipboard can't be read once this event is over.
-      const forwarded: ForwardedPaste = { text: data.getData('text/plain'), html: data.getData('text/html'), files: [...data.files].filter((file) => file.type.startsWith('image/')) };
+      const forwarded: ForwardedPaste = { text: data.getData('text/plain'), html: data.getData('text/html'), files: [...data.files] };
       if (!forwarded.text.trim() && !forwarded.html && !forwarded.files.length) return;
       // After the box shows again, if picking had hidden it.
       requestAnimationFrame(() => window.dispatchEvent(new CustomEvent<ForwardedPaste>(BOX_PASTE, { detail: forwarded })));

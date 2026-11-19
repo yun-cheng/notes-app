@@ -11,6 +11,16 @@ export interface PhotoState {
 }
 
 const RETRY_MS = 60_000;
+/** The largest file the server takes (MAX_FILE_BYTES there). */
+export const MAX_FILE_BYTES = 25 * 1024 * 1024;
+
+/** A file's size for people: "820 KB", "3.4 MB". */
+export function fileSize(bytes: number): string {
+  if (bytes < 1024) return `${bytes} B`;
+  if (bytes < 1024 * 1024) return `${Math.round(bytes / 1024)} KB`;
+  const mb = bytes / 1024 / 1024;
+  return `${mb < 10 ? mb.toFixed(1) : Math.round(mb)} MB`;
+}
 
 /**
  * Photos are saved on the device first and uploaded in the background, so adding one works
@@ -53,7 +63,23 @@ export class PhotoService {
     return id;
   }
 
-  /** The photo itself, from this device or else the server. Null if the server doesn't have it yet. */
+  /**
+   * Saves a file of any kind for a card in `vaultId`, as it is, and returns what its block keeps. Throws, saying why,
+   * for one too big to upload.
+   */
+  async addFile(file: File, vaultId: string): Promise<{ id: string; name: string; mime: string; size: number }> {
+    if (file.size > MAX_FILE_BYTES) throw new Error(`${file.name || 'That file'} is ${fileSize(file.size)}. Files can be up to ${fileSize(MAX_FILE_BYTES)}.`);
+    if (!file.size) throw new Error(`${file.name || 'That file'} is empty.`);
+    const id = this.newId();
+    const name = file.name || 'Untitled';
+    const mime = file.type || 'application/octet-stream';
+    await this.store.putPhoto({ id, vaultId, file: { name }, blob: file, mime, width: null, height: null, uploaded: 0, addedAt: this.now() });
+    this.publish({ pending: this.state.pending + 1 });
+    void this.upload();
+    return { id, name, mime, size: file.size };
+  }
+
+  /** The photo or file itself, from this device or else the server. Null if the server doesn't have it yet. */
   async blob(id: string): Promise<Blob | null> {
     const local = await this.store.getPhoto(id);
     if (local) return local.blob;
@@ -62,7 +88,7 @@ export class PhotoService {
     return blob;
   }
 
-  /** An object URL for showing the photo, shared by every view of it. */
+  /** An object URL for showing the photo, or opening the file, shared by every view of it. */
   url(id: string): Promise<string | null> {
     let url = this.urls.get(id);
     if (!url) {

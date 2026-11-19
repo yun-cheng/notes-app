@@ -155,6 +155,9 @@ export function previewParts(content: JSONNode, titleOf?: (id: string, label: st
       case 'photo':
         if (full) line(`${prefix}[Photo${node.attrs?.alt ? `: ${String(node.attrs.alt)}` : ''}]`);
         return;
+      case 'file':
+        if (full) line(`${prefix}[File: ${String(node.attrs?.name || 'Untitled')}]`);
+        return;
       case 'horizontalRule':
         if (full) line(`${prefix}———`);
         return;
@@ -335,8 +338,32 @@ export function photoIds(content: JSONNode): string[] {
   return ids;
 }
 
-/** A document with no words and no photos. */
-export const isEmptyDoc = (doc: JSONNode) => plainText(doc) === '' && photoIds(doc).length === 0;
+/** A file attached in the body: its ID, and the name, type and size in bytes it was added with. */
+export interface FileInfo {
+  id: string;
+  name: string;
+  mime: string | null;
+  size: number | null;
+}
+
+/** Files attached in the body, in order. */
+export function fileAttachments(content: JSONNode): FileInfo[] {
+  const files: FileInfo[] = [];
+  walk(content, (n) => {
+    const a = n.attrs;
+    if (n.type !== 'file' || typeof a?.id !== 'string') return;
+    files.push({
+      id: a.id,
+      name: typeof a.name === 'string' && a.name ? a.name : 'Untitled',
+      mime: typeof a.mime === 'string' && a.mime ? a.mime : null,
+      size: typeof a.size === 'number' && a.size >= 0 ? a.size : null,
+    });
+  });
+  return files;
+}
+
+/** A document with no words, no photos and no files. */
+export const isEmptyDoc = (doc: JSONNode) => plainText(doc) === '' && photoIds(doc).length === 0 && fileAttachments(doc).length === 0;
 
 type Paged = Pick<Card, 'type' | 'pages' | 'back'>;
 export const isDocNode = (d: unknown): d is JSONNode => typeof d === 'object' && d !== null && (d as JSONNode).type === 'doc';
@@ -377,7 +404,7 @@ export function withoutPage(card: Paged, i: number) {
 /** A card with one more page at the end, after its last page that has something on it. */
 export const withNewPage = (card: Paged, doc: JSONNode) => pagesPatch(card, [...(pagesPatch(card, storedPages(card)).pages ?? []), doc]);
 
-/** A note or todo the user opened but never wrote anything in. A photo counts as something. */
+/** A note or todo the user opened but never wrote anything in. A photo or a file counts as something. */
 export function isBlank(card: Card): boolean {
   if (card.type === 'tag') return false;
   // A stack is something, even before it's named.

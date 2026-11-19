@@ -1,11 +1,12 @@
 import { useEffect, useRef, useState, type ReactNode } from 'react';
-import { linkUrls, photoIds, siteName } from '../domain/content';
+import { fileAttachments, linkUrls, photoIds, siteName } from '../domain/content';
 import type { Card } from '../domain/types';
 import { useCards } from '../state/CardsContext';
 import { usePhotoUrl } from './editor/photo';
 import { usePhotoZoom } from './photoZoom';
 import { previewFor, useDisplayPrefs } from './displayPrefs';
 import type { Point } from './EntryMenu';
+import { FileChip } from './files';
 import { Icon } from './Icon';
 import { useLinkPreview } from './useLinkPreview';
 import { useBackdropClose } from './useBackdrop';
@@ -15,9 +16,9 @@ const MAX_PHOTOS = 4;
 const MAX_LINKS = 3;
 
 /**
- * An entry's photos and web links, shown under its bubble: photos large, as thumbnails or as a count; links as
- * cards, as one line each or not at all (they stay links in the text). The entry's own style, from its style
- * menu, wins over the device's setting.
+ * An entry's photos, files and web links, shown under its bubble: photos large, as thumbnails or as a count; files
+ * as chips that open them; links as cards, as one line each or not at all (they stay links in the text). The entry's
+ * own style, from its style menu, wins over the device's setting.
  */
 export function Attachments({ card }: { card: Card }) {
   const { vaults } = useCards();
@@ -27,9 +28,10 @@ export function Attachments({ card }: { card: Card }) {
   const vault = vaults.find((v) => v.id === card.vaultId);
   const previews = !!vault && !vault.encryption;
   const photos = photoIds(card.content);
+  const files = fileAttachments(card.content);
   const links = prefs.links === 'off' ? [] : linkUrls(card.content);
   const [viewing, setViewing] = useState<number | null>(null);
-  if (!photos.length && !links.length) return null;
+  if (!photos.length && !files.length && !links.length) return null;
   const extra = photos.length - MAX_PHOTOS;
 
   return (
@@ -50,6 +52,9 @@ export function Attachments({ card }: { card: Card }) {
           ))}
         </div>
       )}
+      {files.map((file) => (
+        <FileChip key={file.id} file={file} />
+      ))}
       {links.slice(0, MAX_LINKS).map((url) => (
         <LinkCard key={url} url={url} preview={previews} compact={prefs.links === 'compact'} />
       ))}

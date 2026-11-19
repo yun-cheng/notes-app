@@ -1,6 +1,8 @@
-/** A photo kept on this device: one added here waiting to upload, or one fetched to show. */
+/** A photo, or a file attached as it is, kept on this device: one added here waiting to upload, or one fetched to show. */
 export interface PhotoRecord {
   id: string;
+  /** Set for a file of any kind, kept as it is, rather than a photo. */
+  file?: { name: string };
   /** The vault it was added in. Empty for a photo fetched from the server. */
   vaultId: string;
   blob: Blob;

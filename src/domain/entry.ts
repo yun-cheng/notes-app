@@ -1,5 +1,5 @@
 import { addDays, isDateKey, parseDateKey, parseTime } from './dates';
-import { inlineText, photoIds, textToDoc } from './content';
+import { fileAttachments, inlineText, photoIds, textToDoc } from './content';
 import { firstDue, parseRepeat } from './repeat';
 import type { JSONNode, Repeat } from './types';
 
@@ -161,7 +161,7 @@ function stripBlocks(blocks: JSONNode[], pattern: RegExp, take: (word: string) =
 }
 
 const isEmptyBlock = (b: JSONNode) => b.type === 'paragraph' && !inlineText(b).trim() && !(b.content ?? []).some((n) => n.type !== 'text');
-const hasSubstance = (blocks: JSONNode[]) => blocks.some((b) => inlineText(b).trim() || photoIds(b).length || b.type === 'horizontalRule');
+const hasSubstance = (blocks: JSONNode[]) => blocks.some((b) => inlineText(b).trim() || photoIds(b).length || fileAttachments(b).length || b.type === 'horizontalRule');
 
 /** Task items in a list, nested ones flattened after their parent, each without its nested lists. */
 function taskItems(list: JSONNode): JSONNode[] {
@@ -215,7 +215,7 @@ export function entriesFromDoc(doc: JSONNode, today: string): Entry[] {
  * One entry from its blocks, the same for typed text and the journal box. `#todo` makes it a todo and `#diary` files
  * it in the diary; other `#tags` (with `shared` ones, from a last line of only tags) file it; on a todo, `@` words
  * set its due date, time and repeat. All of them leave the text. A todo is named by its first line, and the rest, or
- * a photo, is its details. Null when nothing is left.
+ * a photo or a file, is its details. Null when nothing is left.
  */
 function entryFrom(blocks: JSONNode[], todo: boolean, done: boolean, shared: string[], today: string): Entry | null {
   let diary = false;

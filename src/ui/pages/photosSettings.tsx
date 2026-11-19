@@ -7,16 +7,16 @@ import { Section } from '../components';
 import { useToast } from '../Toast';
 
 const RESULT: Record<string, string> = {
-  connected: 'Google Drive is connected. Waiting photos will upload now.',
+  connected: 'Google Drive is connected. Waiting photos and files will upload now.',
   denied: 'Google Drive was not connected.',
   expired: 'That took too long. Try connecting Google Drive again.',
   failed: "Google Drive couldn't be connected. Try again.",
 };
 
-/** How the sentence about waiting photos ends, for each reason they wait. */
+/** How the sentence about waiting photos and files ends, for each reason they wait. */
 const WHY: Record<NonNullable<PhotoProblem>, string> = {
   needs_drive: ' until Google Drive is connected.',
-  not_configured: ' until photo storage is set up on the server.',
+  not_configured: ' until storage is set up on the server.',
   offline: ' until you are back online.',
   expired: ' until you sign in again.',
   error: '. Some uploads failed and will be retried.',
@@ -61,17 +61,17 @@ export function PhotosSection() {
     }
   };
 
-  const waiting = pending ? `${pending} ${pending === 1 ? 'photo is' : 'photos are'} waiting to upload` : '';
+  const waiting = pending ? `${pending} ${pending === 1 ? 'photo or file is' : 'photos and files are'} waiting to upload` : '';
   const why = problem ? WHY[problem] : '.';
 
   return (
-    <Section title="Photos">
+    <Section title="Photos and files">
       <p className="prose-note">
-        Photos are saved on this device first, then uploaded to a folder called “Notes app photos” in the Google Drive of the vault's owner. The app can
+        Photos and attached files (up to 25 MB each) are saved on this device first, then uploaded to a folder called “Notes app photos” in the Google Drive of the vault's owner. The app can
         only see files it created there.
       </p>
       {offline && <p className="prose-note vault-gap">Connect to the internet to see whether Google Drive is connected.</p>}
-      {drive && !drive.configured && <p className="prose-note vault-gap">Photo storage isn't set up on the server yet, so photos stay on the device that added them for now.</p>}
+      {drive && !drive.configured && <p className="prose-note vault-gap">Photo and file storage isn't set up on the server yet, so they stay on the device that added them for now.</p>}
       {drive?.configured && (
         <div className="button-row vault-gap">
           {drive.connected ? (

@@ -71,6 +71,15 @@ describe('photos', () => {
   });
 });
 
+describe('files', () => {
+  it('reads and writes a file reference, by its name', () => {
+    const doc = fromMarkdown('Tickets\n[Itinerary.pdf](attachment:file-12345678)');
+    expect(doc.content!.map((n) => n.type)).toEqual(['paragraph', 'file']);
+    expect(doc.content![1].attrs).toEqual({ id: 'file-12345678', name: 'Itinerary.pdf', mime: null, size: null });
+    expect(toMarkdown(doc, plain)).toBe('Tickets\n\n[Itinerary.pdf](attachment:file-12345678)');
+  });
+});
+
 describe('checklists', () => {
   const md = '- [ ] Passport\n- [x] Charger\n  - [ ] Adapter\n- [ ]';
   const doc = fromMarkdown(md);

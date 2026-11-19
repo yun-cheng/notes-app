@@ -49,7 +49,7 @@ function renderInline(nodes: JSONNode[] | undefined, title: TitleResolver, plain
 
 const indent = (text: string, by: string) => text.split('\n').map((l, i) => (i && l ? by + l : l)).join('\n');
 
-/** A block as plain text: lines and list markers kept, formatting, quote marks, photos and rules left out. */
+/** A block as plain text: lines and list markers kept, formatting, quote marks, photos, files and rules left out. */
 function plainBlock(node: JSONNode, title: TitleResolver): string {
   switch (node.type) {
     case 'bulletList':
@@ -65,6 +65,7 @@ function plainBlock(node: JSONNode, title: TitleResolver): string {
     case 'codeBlock':
       return (node.content ?? []).map((t) => t.text ?? '').join('');
     case 'photo':
+    case 'file':
     case 'horizontalRule':
       return '';
     default:
@@ -112,6 +113,8 @@ function renderBlock(node: JSONNode, title: TitleResolver): string {
     }
     case 'photo':
       return `![${String(node.attrs?.alt || 'Photo').replace(/[[\]]/g, '')}](attachment:${String(node.attrs?.id ?? '')})`;
+    case 'file':
+      return `[${String(node.attrs?.name || 'File').replace(/[[\]]/g, '')}](attachment:${String(node.attrs?.id ?? '')})`;
     case 'horizontalRule':
       return '---';
     default:

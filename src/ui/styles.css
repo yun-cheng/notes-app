@@ -919,6 +919,22 @@ body:has(.batch) .toast-slot { bottom: calc(var(--tabbar) + env(safe-area-inset-
 .link-card--compact .link-card__title { font-size: 13px; font-weight: 500; color: var(--text); -webkit-line-clamp: 1; line-clamp: 1; overflow-wrap: anywhere; }
 .link-card--compact .link-card__site { flex: none; font-size: 12px; font-weight: 400; color: var(--muted); }
 .attachments__more { color: var(--muted); font-size: 12px; padding-left: 4px; }
+.file-chip { display: inline-flex; align-items: stretch; max-width: min(100%, 360px); border: 1px solid var(--line); border-radius: 12px; background: var(--surface); color: var(--text); overflow: hidden; }
+.file-chip:hover { border-color: var(--muted); }
+.file-chip button { border: 0; background: none; color: inherit; font: inherit; cursor: pointer; }
+.file-chip__open { display: flex; align-items: center; gap: 10px; min-width: 0; padding: 6px 4px 6px 8px; text-align: left; }
+.file-chip__icon { display: grid; place-items: center; width: 28px; height: 28px; flex: none; border-radius: 8px; background: var(--sunken); color: var(--muted); }
+.file-chip__text { display: flex; flex-direction: column; min-width: 0; line-height: 1.3; }
+.file-chip__name { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-size: 14px; font-weight: 600; }
+.file-chip__detail { color: var(--muted); font-size: 12px; }
+.file-chip__save { display: grid; place-items: center; flex: none; width: 36px; color: var(--muted) !important; border-radius: 0 11px 11px 0; }
+.file-chip__save:hover, .file-chip__open:hover .file-chip__name { color: var(--text) !important; }
+.file-chip button:focus-visible { outline: 2px solid var(--accent); outline-offset: -2px; border-radius: 10px; }
+.file-block { margin: 0.6em 0; line-height: normal; }
+.file-block.is-selected .file-chip { outline: 2px solid var(--accent); outline-offset: 2px; }
+.composer__prose .file-block { margin: 6px 0; }
+.public-file a { font-weight: 600; }
+.public-file__size { color: var(--muted); font-size: 0.9em; }
 .viewer { place-items: center; background: rgb(0 0 0 / 88%); z-index: 60; }
 .viewer__img { max-width: calc(100vw - 32px); max-height: calc(100dvh - 96px); object-fit: contain; border-radius: 6px; }
 .viewer { overflow: hidden; }

@@ -8,6 +8,7 @@ import { CodeHighlight } from '../editor/codeHighlight';
 import { Hidden } from '../editor/hidden';
 import { formatDay, formatTime } from '../../domain/dates';
 import type { JSONNode } from '../../domain/types';
+import { fileSize } from '../../photos/service';
 import { fetchPublicCard, type PublicCard } from '../../sync/http';
 
 /** Links in a public card lead nowhere: what they point to isn't shared. */
@@ -34,10 +35,31 @@ function publicPhoto(token: string) {
   });
 }
 
+/** A file in a public card: its name, downloading it. */
+function publicFile(token: string) {
+  return Node.create({
+    name: 'file',
+    group: 'block',
+    atom: true,
+    addAttributes: () => ({ id: { default: null }, name: { default: null }, mime: { default: null }, size: { default: null } }),
+    renderHTML: ({ node }) => {
+      const name = String(node.attrs.name || 'File');
+      const size = typeof node.attrs.size === 'number' ? ` · ${fileSize(node.attrs.size)}` : '';
+      return [
+        'p',
+        { class: 'public-file' },
+        '📎 ',
+        ['a', { href: `/api/public/${encodeURIComponent(token)}/files/${encodeURIComponent(String(node.attrs.id))}`, download: name }, name],
+        ['span', { class: 'public-file__size' }, size],
+      ];
+    },
+  });
+}
+
 function Body({ content, token }: { content: JSONNode; token: string }) {
   const editor = useEditor({
     editable: false,
-    extensions: [StarterKit.configure({ heading: { levels: [1, 2, 3] }, link: { openOnClick: true } }), TaskList, TaskItem.configure({ nested: true }), PublicLink, publicPhoto(token), CodeHighlight, Hidden],
+    extensions: [StarterKit.configure({ heading: { levels: [1, 2, 3] }, link: { openOnClick: true } }), TaskList, TaskItem.configure({ nested: true }), PublicLink, publicPhoto(token), publicFile(token), CodeHighlight, Hidden],
     content,
     editorProps: { attributes: { class: 'prose prose--readonly' } },
   });

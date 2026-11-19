@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import { SyncAuthExpired, SyncOffline } from '../sync/engine';
-import { PhotoService } from './service';
+import { fileSize, MAX_FILE_BYTES, PhotoService } from './service';
 import { MemoryPhotoStore, type PhotoRecord, type PhotoTransport, type UploadResult } from './types';
 
 function fixture(answers: (UploadResult | 'offline' | 'expired')[] = []) {
@@ -28,6 +28,22 @@ function fixture(answers: (UploadResult | 'offline' | 'expired')[] = []) {
 const image = () => new Blob([new Uint8Array([1, 2, 3])], { type: 'image/jpeg' });
 
 describe('PhotoService', () => {
+  it('keeps a file as it is, under its name, and uploads it with the photos', async () => {
+    const { photos, store, uploads } = fixture();
+    const pdf = new File([new Uint8Array([37, 80, 68, 70])], 'Itinerary.pdf', { type: 'application/pdf' });
+    expect(await photos.addFile(pdf, 'v1')).toEqual({ id: 'photo-0001', name: 'Itinerary.pdf', mime: 'application/pdf', size: 4 });
+    const kept = await store.getPhoto('photo-0001');
+    expect(kept).toMatchObject({ vaultId: 'v1', file: { name: 'Itinerary.pdf' }, mime: 'application/pdf', blob: pdf });
+    await photos.upload();
+    expect(uploads).toEqual(['photo-0001']);
+    expect((await photos.addFile(new File([], 'notes.txt'), 'v1').catch((e: Error) => e.message))).toBe('notes.txt is empty.');
+    const huge = new File([new Uint8Array(1)], 'movie.mov');
+    Object.defineProperty(huge, 'size', { value: MAX_FILE_BYTES + 1 });
+    expect((await photos.addFile(huge, 'v1').catch((e: Error) => e.message))).toBe('movie.mov is 25 MB. Files can be up to 25 MB.');
+  });
+  it('says how big a file is', () => {
+    expect([fileSize(512), fileSize(2048), fileSize(3.45 * 1024 * 1024), fileSize(12.6 * 1024 * 1024)]).toEqual(['512 B', '2 KB', '3.5 MB', '13 MB']);
+  });
   it('saves locally, returns an ID at once, and uploads in the background', async () => {
     const { photos, store, uploads } = fixture();
     const id = await photos.add(image(), 'v1');

@@ -90,6 +90,7 @@ describe('public links', () => {
     const forever = again.links[0].token;
     expect((await call(`/api/public/${forever}`)).status).toBe(200);
     expect((await call(`/api/public/${forever}/photos/not-in-card`)).status).toBe(404);
+    expect((await call(`/api/public/${forever}/files/not-in-card`)).status).toBe(404);
     await send(ann.cookie, 'DELETE', `/api/cards/a1/links/${forever}`);
     expect((await call(`/api/public/${forever}`)).status).toBe(404);
     expect((await call('/api/public/made-up')).status).toBe(404);

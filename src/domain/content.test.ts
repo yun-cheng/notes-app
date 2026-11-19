@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { cardPages, checklistProgress, CODE_CLOSE, CODE_OPEN, displayTitle, hasPhoto, HIDE_CLOSE, HIDE_OPEN, isBlank, isImageUrl, leadLine, linkedCardIds, linkUrls, photoIds, plainText, previewLines, previewParts, siteName, splitLinks, storedPages, textToDoc, translationPage, pagesHaveTranslation, withNewPage, withoutLeadLine, withoutPage, withPage, wordsToDoc } from './content';
+import { cardPages, checklistProgress, fileAttachments, CODE_CLOSE, CODE_OPEN, displayTitle, hasPhoto, HIDE_CLOSE, HIDE_OPEN, isBlank, isImageUrl, leadLine, linkedCardIds, linkUrls, photoIds, plainText, previewLines, previewParts, siteName, splitLinks, storedPages, textToDoc, translationPage, pagesHaveTranslation, withNewPage, withoutLeadLine, withoutPage, withPage, wordsToDoc } from './content';
 import { doc, link, note, p, tag, text } from './testFixtures';
 import type { JSONNode } from './types';
 
@@ -114,6 +114,21 @@ describe('photos', () => {
     expect(photoIds(withPhoto.content)).toEqual(['p-12345678']);
     expect(isBlank(withPhoto)).toBe(false);
     expect(isBlank(note('m', ''))).toBe(true);
+  });
+});
+
+describe('files', () => {
+  it('lists files with what they were added with, and counts one as content', () => {
+    const withFile = note('n', '', {
+      content: doc(p(text('Tickets')), { type: 'file', attrs: { id: 'f-1', name: 'Itinerary.pdf', mime: 'application/pdf', size: 2048 } }, { type: 'file', attrs: { id: 'f-2' } }),
+    });
+    expect(fileAttachments(withFile.content)).toEqual([
+      { id: 'f-1', name: 'Itinerary.pdf', mime: 'application/pdf', size: 2048 },
+      { id: 'f-2', name: 'Untitled', mime: null, size: null },
+    ]);
+    expect(isBlank(note('m', '', { content: doc({ type: 'file', attrs: { id: 'f-3', name: 'a.txt' } }) }))).toBe(false);
+    expect(previewLines(withFile.content)).toEqual(['Tickets']);
+    expect(previewLines(withFile.content, undefined, true)).toEqual(['Tickets', '[File: Itinerary.pdf]', '[File: Untitled]']);
   });
 });
 

@@ -65,6 +65,7 @@ function block(node: JSONNode, title: TitleResolver): string {
     case 'horizontalRule':
       return '<hr>';
     case 'photo':
+    case 'file':
       return '';
     default:
       return node.content ? inline(node.content, title) : '';

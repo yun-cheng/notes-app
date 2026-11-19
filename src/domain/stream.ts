@@ -1,5 +1,5 @@
 import type { CardIndex } from './cardIndex';
-import { hasPhoto, linkUrls } from './content';
+import { fileAttachments, hasPhoto, linkUrls } from './content';
 import { addDays, isDateKey, parseDateKey, relativeDay, toDateKey } from './dates';
 import { isStack } from './stacks';
 import { rankIn, type TagGroup } from './tagGroups';
@@ -26,8 +26,8 @@ export type TodoStatus = 'open' | 'done' | 'today' | 'upcoming' | 'undated' | 'w
 /** A preset, one day (a date key), or a range of days written `from..to` (`2026-11-03..2026-11-09`). */
 export type When = 'today' | 'week' | 'month' | string;
 
-/** Entries holding something besides text: web links or photos. */
-export type Contains = 'link' | 'photo';
+/** Entries holding something besides text: web links, photos or files. */
+export type Contains = 'link' | 'photo' | 'file';
 
 /**
  * Oldest first like a chat (the default), newest first, most recently edited last, by due date, or by an ordered
@@ -60,7 +60,7 @@ const TYPES: EntryType[] = ['note', 'todo', 'stack'];
 const STATUSES: TodoStatus[] = ['open', 'done', 'today', 'upcoming', 'undated', 'waiting'];
 const WHENS = ['today', 'week', 'month'];
 const SORTS: BaseSort[] = ['written', 'newest', 'edited', 'due'];
-const CONTAINS: Contains[] = ['link', 'photo'];
+const CONTAINS: Contains[] = ['link', 'photo', 'file'];
 
 export function parseFilter(params: URLSearchParams): StreamFilter {
   const pick = <T extends string>(key: string, allowed: readonly string[]) => {
@@ -203,7 +203,7 @@ function rangeLabel([from, to]: [string, string], today: string, locale?: string
   return new Intl.DateTimeFormat(locale, opts).formatRange(parseDateKey(from), parseDateKey(to));
 }
 
-export const CONTAINS_LABEL: Record<Contains, string> = { link: 'With links', photo: 'With photos' };
+export const CONTAINS_LABEL: Record<Contains, string> = { link: 'With links', photo: 'With photos', file: 'With files' };
 export const SORT_LABEL: Record<BaseSort, string> = { written: 'Oldest first', newest: 'Newest first', edited: 'Recently edited', due: 'Due date' };
 export const STATUS_LABEL: Record<TodoStatus, string> = { open: 'Open', done: 'Done', today: 'Due today', upcoming: 'Upcoming', undated: 'No date', waiting: 'Waiting' };
 export const TYPE_LABEL: Record<EntryType, string> = { note: 'Notes', todo: 'Todos', stack: 'Stacks' };
@@ -258,7 +258,7 @@ export function entryMatcher(filter: StreamFilter, today: string, sharedInto?: S
     (!tagId || card.tags.includes(tagId)) &&
     (!vaultId || card.vaultId === vaultId || !!sharedInto?.get(card.id)?.includes(vaultId)) &&
     (!status || (card.type === 'todo' && matchesStatus(card, status, today))) &&
-    (!has || (has === 'link' ? linkUrls(card.content).length > 0 : hasPhoto(card.content))) &&
+    (!has || (has === 'link' ? linkUrls(card.content).length > 0 : has === 'file' ? fileAttachments(card.content).length > 0 : hasPhoto(card.content))) &&
     (!archived || !!card.archived) &&
     (!template || !!card.template) &&
     day >= from &&

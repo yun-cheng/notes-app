@@ -5,6 +5,7 @@ import { setup } from './testHarness';
 /** Enough of Google's token endpoint and the Drive API to run the photo routes against. */
 function fakeGoogle() {
   const files = new Map<string, { bytes: Uint8Array; parent: string }>();
+  const names = new Map<string, string>();
   const calls: string[] = [];
   let refreshes = 0;
   let revoked = false;
@@ -43,18 +44,21 @@ function fakeGoogle() {
     if (url.startsWith('https://www.googleapis.com/upload/drive/v3/files')) {
       const raw = new Uint8Array(init.body as ArrayBuffer);
       const text = new TextDecoder('latin1').decode(raw);
-      const parent = JSON.parse(text.match(/\{"name"[^\r\n]*?\]\}/)![0]).parents[0] as string;
-      const start = text.indexOf('\r\n\r\n', text.indexOf('content-type: image')) + 4;
+      const meta = JSON.parse(text.match(/\{"name"[^\r\n]*?\]\}/)![0]) as { name: string; parents: string[] };
+      const parent = meta.parents[0];
+      // The second part's body: after the metadata part's blank line, then its own.
+      const start = text.indexOf('\r\n\r\n', text.indexOf('\r\n\r\n') + 4) + 4;
       const end = text.lastIndexOf('\r\n--');
       const id = `file-${files.size + 1}`;
       files.set(id, { bytes: raw.slice(start, end), parent });
+      names.set(id, meta.name);
       return json({ id });
     }
     const m = url.match(/drive\/v3\/files\/([^?]+)\?alt=media/);
     if (m && files.has(m[1])) return new Response(files.get(m[1])!.bytes.slice().buffer);
     return json({ error: 'not found' }, 404);
   };
-  return { fetcher, files, calls, deleted, revoke: () => (revoked = true), refreshes: () => refreshes, signInAs: (address: string) => (email = address) };
+  return { fetcher, files, names, calls, deleted, revoke: () => (revoked = true), refreshes: () => refreshes, signInAs: (address: string) => (email = address) };
 }
 
 async function connected(secret = 'shh') {
@@ -131,6 +135,27 @@ describe('photos in Google Drive', () => {
     expect((await t.call('/api/attachments/photo-0001', {}, ben.cookie)).status).toBe(404);
     t.db.raw.exec(`INSERT INTO vault_members (vault_id, user_id, role) VALUES ('${t.ann.vault}', '${ben.user.id}', 'viewer')`);
     expect((await t.call('/api/attachments/photo-0001', {}, ben.cookie)).status).toBe(200);
+  });
+  it('keeps a file of any kind under its name, and sends it back only as a download', async () => {
+    const t = await connected();
+    const page = new TextEncoder().encode('<script>alert(1)</script>');
+    const put = (id: string, mime: string, body: Uint8Array, name = 'a/b\u0001.html') =>
+      t.call(`/api/attachments/${id}?vault=${t.ann.vault}&kind=file&name=${encodeURIComponent(name)}`, { method: 'PUT', body: body.slice().buffer, headers: { 'content-type': mime } }, t.ann.cookie);
+    expect((await put('file-0001', 'text/html', page)).status).toBe(201);
+    expect(t.names.get('file-1')).toBe('file-0001 a b.html');
+    const got = await t.call('/api/attachments/file-0001', {}, t.ann.cookie);
+    expect(got.headers.get('content-type')).toBe('text/html');
+    expect(got.headers.get('content-disposition')).toBe('attachment');
+    expect(got.headers.get('content-security-policy')).toBe('sandbox');
+    expect(got.headers.get('x-content-type-options')).toBe('nosniff');
+    expect(new Uint8Array(await got.arrayBuffer())).toEqual(page);
+    // A photo still shows as itself.
+    await upload(t, 'photo-0001', t.ann.cookie, t.ann.vault);
+    expect((await t.call('/api/attachments/photo-0001', {}, t.ann.cookie)).headers.get('content-disposition')).toBeNull();
+    // A file can be bigger than a photo, to a point; without the flag, the photo rules hold.
+    expect((await put('file-0002', 'application/pdf', new Uint8Array(11 * 1024 * 1024))).status).toBe(201);
+    expect((await put('file-0003', 'application/pdf', new Uint8Array(26 * 1024 * 1024))).status).toBe(413);
+    expect((await put('file-0004', 'not a type', page)).status).toBe(400);
   });
   it('rejects bad uploads', async () => {
     const t = await connected();

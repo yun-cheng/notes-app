@@ -153,6 +153,10 @@ export const disconnectDrive = () => request<unknown>('/drive', { method: 'DELET
 export const photoTransport: PhotoTransport = {
   async upload(photo) {
     const query = new URLSearchParams({ vault: photo.vaultId });
+    if (photo.file) {
+      query.set('kind', 'file');
+      query.set('name', photo.file.name);
+    }
     if (photo.width) query.set('w', String(photo.width));
     if (photo.height) query.set('h', String(photo.height));
     const res = await rawRequest(`/attachments/${encodeURIComponent(photo.id)}?${query}`, { method: 'PUT', body: photo.blob, headers: { 'content-type': photo.mime } });

@@ -2,6 +2,7 @@ import { useRef, type RefObject } from 'react';
 import { useNavigate } from 'react-router';
 import type { Editor as TiptapEditor } from '@tiptap/react';
 import type { EditorView } from '@tiptap/pm/view';
+import type { JSONNode } from '../../domain/types';
 import { picturesInHtml } from '../../photos/pasted';
 import { useCards } from '../../state/CardsContext';
 import { SyncOffline } from '../../sync/engine';
@@ -9,7 +10,7 @@ import { fetchWebPicture } from '../../sync/http';
 import { clipboardPrefs } from '../clipboardPrefs';
 import { useToast } from '../Toast';
 
-const images = (files: Iterable<File> | undefined | null) => [...(files ?? [])].filter((f) => f.type.startsWith('image/'));
+const isPicture = (f: File) => f.type.startsWith('image/') && f.type !== 'image/svg+xml';
 
 /** A picture pasted as an address: a `data:` one is read here, a web one fetched by the server. */
 async function pictureAt(src: string): Promise<Blob> {
@@ -22,29 +23,36 @@ async function pictureAt(src: string): Promise<Blob> {
   }
 }
 
+/** Something to add: a photo, or a file of another kind kept as it is. Saving it gives the block for the text. */
+type Adding = () => Promise<JSONNode>;
+
 /**
- * Photos added to an editor: pasted, dropped where they land, or picked from the device. Each is saved on the
- * device first, in the vault `vaultId()` names, and goes in the text at once. A picture copied from a web page or
- * an app often comes as just its address in HTML, with no file; it's fetched and added like a pasted file. Pictures
- * among copied words follow the words when the paste keeps formatting. `editorProps` goes to `useEditor`, `input`
- * somewhere on the page, and `pick` opens the picker.
+ * Photos and files added to an editor: pasted, dropped where they land, or picked from the device. A picture is a
+ * photo; a file of any other kind (a PDF, a spreadsheet) is attached as it is. Each is saved on the device first, in
+ * the vault `vaultId()` names, and goes in the text at once. A picture copied from a web page or an app often comes as
+ * just its address in HTML, with no file; it's fetched and added like a pasted file. Pictures among copied words
+ * follow the words when the paste keeps formatting. `editorProps` goes to `useEditor`, `input` somewhere on the page,
+ * `pick` opens the photo picker and `pickFile` the file picker.
  */
 export function usePhotoInput(editor: RefObject<TiptapEditor | null>, vaultId: () => string | undefined) {
   const { photos } = useCards();
   const toast = useToast();
   const navigate = useNavigate();
   const picker = useRef<HTMLInputElement>(null);
+  const filePicker = useRef<HTMLInputElement>(null);
+  const photo = (picture: () => Promise<Blob>): Adding => async () => ({ type: 'photo', attrs: { id: await photos.add(await picture(), vaultId()!) } });
 
-  /** Adds each picture in turn, in order: at the cursor, or from `at` on. */
-  const addAll = async (pictures: (() => Promise<Blob>)[], at?: number) => {
+  /** Adds each in turn, in order: at the cursor, or from `at` on. */
+  const addAll = async (adding: Adding[], at?: number) => {
     let pos = at;
     let added = 0;
-    for (const picture of pictures) {
+    let files = 0;
+    for (const add of adding) {
       try {
-        const id = await photos.add(await picture(), vaultId()!);
+        const node = await add();
         const ed = editor.current;
         if (!ed || ed.isDestroyed) return;
-        const node = { type: 'photo', attrs: { id } };
+        if (node.type === 'file') files++;
         // At the start of a line with words on it, the picture goes before the line rather than splitting it.
         const { $from, empty } = ed.state.selection;
         if (pos === undefined && empty && $from.depth === 1 && $from.parentOffset === 0 && $from.parent.content.size) pos = $from.before();
@@ -58,18 +66,24 @@ export function usePhotoInput(editor: RefObject<TiptapEditor | null>, vaultId: (
         pos = end;
         added++;
       } catch (err) {
-        toast(err instanceof Error ? err.message : "That photo couldn't be added.");
+        toast(err instanceof Error ? err.message : "That couldn't be added.");
       }
     }
     if (!added) return;
-    // A photo shows here at once either way; said when it can't go on to the server, so other devices won't have it.
+    // It shows here at once either way; said when it can't go on to the server, so other devices won't have it.
     await photos.upload();
     const { problem } = photos.getState();
-    const these = added > 1 ? 'These photos stay' : 'This photo stays';
+    const what = files === added ? ['file', 'files'] : files ? ['attachment', 'attachments'] : ['photo', 'photos'];
+    const these = added > 1 ? `These ${what[1]} stay` : `This ${what[0]} stays`;
     if (problem === 'needs_drive') toast(`${these} on this device until Google Drive is connected.`, { action: { label: 'Settings', run: () => void navigate('/settings') } });
-    else if (problem === 'not_configured') toast(`${these} on this device for now: photo storage isn't set up on the server yet.`);
+    else if (problem === 'not_configured') toast(`${these} on this device for now: storage isn't set up on the server yet.`);
   };
-  const add = (files: File[], at?: number) => addAll(images(files).map((file) => async () => file), at);
+  /** Pictures as photos, and any other file as it is, in the order given. */
+  const add = (files: File[], at?: number) =>
+    addAll(
+      files.map((file) => (isPicture(file) ? photo(async () => file) : async () => ({ type: 'file', attrs: await photos.addFile(file, vaultId()!) }))),
+      at,
+    );
 
   // The editor keeps the props it was made with, so they reach the newest functions through this.
   const latest = useRef({ add, addAll });
@@ -77,7 +91,7 @@ export function usePhotoInput(editor: RefObject<TiptapEditor | null>, vaultId: (
 
   const editorProps = useRef({
     handlePaste: (view: EditorView, event: ClipboardEvent) => {
-      const files = images(event.clipboardData?.files);
+      const files = [...(event.clipboardData?.files ?? [])];
       if (files.length) {
         void latest.current.add(files);
         return true;
@@ -85,7 +99,7 @@ export function usePhotoInput(editor: RefObject<TiptapEditor | null>, vaultId: (
       const html = event.clipboardData?.getData('text/html');
       const found = html ? picturesInHtml(html) : null;
       if (!found?.sources.length) return false;
-      const pictures = found.sources.map((src) => () => pictureAt(src));
+      const pictures = found.sources.map((src) => photo(() => pictureAt(src)));
       if (found.alone) {
         void latest.current.addAll(pictures);
         return true;
@@ -96,7 +110,7 @@ export function usePhotoInput(editor: RefObject<TiptapEditor | null>, vaultId: (
       return false;
     },
     handleDrop: (view: EditorView, event: DragEvent, _slice: unknown, moved: boolean) => {
-      const files = images(event.dataTransfer?.files);
+      const files = [...(event.dataTransfer?.files ?? [])];
       if (moved || !files.length) return false;
       event.preventDefault();
       void latest.current.add(files, view.posAtCoords({ left: event.clientX, top: event.clientY })?.pos);
@@ -118,5 +132,29 @@ export function usePhotoInput(editor: RefObject<TiptapEditor | null>, vaultId: (
       }}
     />
   );
-  return { add, pick: () => picker.current?.click(), input, editorProps };
+  const fileInput = (
+    <input
+      ref={filePicker}
+      type="file"
+      multiple
+      hidden
+      onChange={(e) => {
+        const files = [...(e.target.files ?? [])];
+        e.target.value = '';
+        void add(files);
+      }}
+    />
+  );
+  return {
+    add,
+    pick: () => picker.current?.click(),
+    pickFile: () => filePicker.current?.click(),
+    input: (
+      <>
+        {input}
+        {fileInput}
+      </>
+    ),
+    editorProps,
+  };
 }

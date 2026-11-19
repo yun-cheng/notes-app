@@ -56,6 +56,8 @@ const LIST_ITEM = /^(\s*)([-*+]|\d+[.)])\s+(.*)$/;
 const TASK_BOX = /^\[([ xX])\](?:\s+|$)/;
 /** A photo already in the app, as the Markdown export writes it. */
 const PHOTO = /^!\[([^\]]*)\]\(attachment:([\w-]{8,64})\)$/;
+/** A file already in the app, as the Markdown export writes it. Its type and size aren't in the line. */
+const FILE = /^\[([^\]]*)\]\(attachment:([\w-]{8,64})\)$/;
 const indentOf = (line: string) => line.match(/^\s*/)![0].replace(/\t/g, '  ').length;
 
 function blocks(lines: string[], resolve: LinkResolver): JSONNode[] {
@@ -95,6 +97,13 @@ function blocks(lines: string[], resolve: LinkResolver): JSONNode[] {
       continue;
     }
 
+    const file = trimmed.match(FILE);
+    if (file) {
+      out.push({ type: 'file', attrs: { id: file[2], name: file[1] || 'File', mime: null, size: null } });
+      i++;
+      continue;
+    }
+
     if (/^([-*_])(\s*\1){2,}$/.test(trimmed)) {
       out.push({ type: 'horizontalRule' });
       i++;
@@ -130,7 +139,7 @@ function blocksOrEmpty(lines: string[], resolve: LinkResolver): JSONNode[] {
 
 function startsBlock(line: string): boolean {
   const t = line.trim();
-  return /^(```|~~~|#{1,6}\s|>)/.test(t) || PHOTO.test(t) || LIST_ITEM.test(line) || /^([-*_])(\s*\1){2,}$/.test(t);
+  return /^(```|~~~|#{1,6}\s|>)/.test(t) || PHOTO.test(t) || FILE.test(t) || LIST_ITEM.test(line) || /^([-*_])(\s*\1){2,}$/.test(t);
 }
 
 /** A list and everything indented under its items, which may include nested lists. */

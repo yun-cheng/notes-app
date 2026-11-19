@@ -10,6 +10,7 @@ import { ClipboardChoices } from './clipboardChoices';
 import { useEditorMenu } from './editorMenu';
 import { CodeHighlight } from './codeHighlight';
 import { Hidden } from './hidden';
+import { FileBlock } from './file';
 import { Photo } from './photo';
 
 /** A card body shown with its formatting but not editable. Give it a `key` to show a different body. */
@@ -21,7 +22,7 @@ export function ReadOnlyDoc({ content }: { content: JSONNode }) {
   const textMenu = useEditorMenu({ paste: () => undefined });
   const editor = useEditor({
     editable: false,
-    extensions: [StarterKit.configure({ heading: { levels: [1, 2, 3] } }), TaskList, TaskItem.configure({ nested: true }), CardLink.configure({ suggestion: { char: '[[', items: () => [] } }), Photo, CodeHighlight, Hidden, ClipboardChoices],
+    extensions: [StarterKit.configure({ heading: { levels: [1, 2, 3] } }), TaskList, TaskItem.configure({ nested: true }), CardLink.configure({ suggestion: { char: '[[', items: () => [] } }), Photo, FileBlock, CodeHighlight, Hidden, ClipboardChoices],
     content,
     editorProps: { attributes: { class: 'prose prose--readonly' }, handleDOMEvents: { ...clipboard.handleDOMEvents, contextmenu: (view, event) => textMenu.contextmenu(view, event) }, clipboardTextSerializer: clipboard.clipboardTextSerializer },
   });

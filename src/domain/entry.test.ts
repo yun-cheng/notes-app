@@ -151,6 +151,10 @@ describe('entriesFromDoc', () => {
     const photo = { type: 'photo', attrs: { id: 'p-1' } };
     expect(entriesFromDoc(docOf(photo), TODAY)).toMatchObject([{ kind: 'note', content: docOf(photo) }]);
   });
+  it('keeps a file-only entry', () => {
+    const file = { type: 'file', attrs: { id: 'f-1', name: 'a.pdf', mime: 'application/pdf', size: 3 } };
+    expect(entriesFromDoc(docOf(file), TODAY)).toMatchObject([{ kind: 'note', content: docOf(file) }]);
+  });
 });
 
 describe('parseDue', () => {

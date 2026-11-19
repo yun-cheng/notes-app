@@ -796,7 +796,10 @@ body:has(.composer:focus-within) .journal-dock { --dock-gap: 8px; --dock-margin:
   background: var(--text); color: var(--bg); font-size: 12px; font-weight: 600; white-space: nowrap; box-shadow: 0 2px 8px rgb(0 0 0 / 18%);
 }
 .is-scrubbing, .is-scrubbing * { cursor: grabbing !important; user-select: none !important; -webkit-user-select: none !important; }
-@media (pointer: fine) and (min-width: 860px) { html:has(.scroll-rail) { scrollbar-width: none; } }
+/* With a mouse the rail stands in for the scroll bar, in its room (`--scrollbar-room`, measured in `ScrollRail`), so
+   the page is as wide with the rail as without: else a page that lays out by its width (Photos) could grow shorter for
+   the room the scroll bar gave up, lose the rail for being too short, get the scroll bar back, and flash between them. */
+@media (pointer: fine) and (min-width: 860px) { html:has(.scroll-rail) { scrollbar-width: none; padding-right: var(--scrollbar-room, 0px); } }
 @media (pointer: coarse), (max-width: 859px) {
   .scroll-rail { pointer-events: none; }
   .scroll-rail__label, .scroll-rail__dot { opacity: 0; transition: opacity 0.2s; }

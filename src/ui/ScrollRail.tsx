@@ -45,6 +45,19 @@ function viewBounds(): { top: number; height: number } {
   return { top, height: Math.max(0, bottom - top) };
 }
 
+/**
+ * How wide a scroll bar is here: 0 where it lies over the page (a trackpad on a Mac), else the room it takes, which the
+ * page keeps while the rail hides it (`styles.css`).
+ */
+function keepScrollbarRoom() {
+  const probe = document.createElement('div');
+  probe.style.cssText = 'position: absolute; top: -9999px; width: 100px; height: 100px; overflow: scroll; visibility: hidden';
+  document.body.append(probe);
+  const room = probe.offsetWidth - probe.clientWidth;
+  probe.remove();
+  document.documentElement.style.setProperty('--scrollbar-room', `${room}px`);
+}
+
 function measure(root: HTMLElement, n: number): Place {
   const { top, height } = viewBounds();
   const scrollable = document.documentElement.scrollHeight - window.innerHeight;
@@ -111,6 +124,7 @@ export function ScrollRail({ keys, name, root, reveal }: Props) {
       clearTimeout(sleep);
       sleep = setTimeout(() => setAwake(false), AWAKE_MS);
     };
+    keepScrollbarRoom();
     update();
     window.addEventListener('scroll', onScroll, { passive: true });
     window.addEventListener('resize', update);

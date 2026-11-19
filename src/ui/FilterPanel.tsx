@@ -24,7 +24,7 @@ import { useCards, useToday } from '../state/CardsContext';
 import { DatesDialog } from './DatesDialog';
 import { colorClass } from './EntryStyle';
 import { Icon, type IconName } from './Icon';
-import { ARCHIVE_PATH, datedPath, historyPath, isDatedPage, journalPath, PHOTOS_PATH, photosFilter, photosPath, TRASH_PATH, trashFilter, trashPath, type DatedPage } from './paths';
+import { ARCHIVE_PATH, datedPath, FILES_PATH, historyPath, isDatedPage, isLibraryPage, journalPath, libraryFilter, libraryPath, LINKS_PATH, PHOTOS_PATH, TRASH_PATH, trashFilter, trashPath, type DatedPage, type LibraryPage } from './paths';
 import { usePopover } from './usePopover';
 import { useBackdropClose } from './useBackdrop';
 
@@ -39,7 +39,7 @@ export function useJournalFilter(): StreamFilter {
   if (isDatedPage(pathname)) return datedFilter(parseFilter(params)) ?? {};
   if (pathname === ARCHIVE_PATH) return { ...parseFilter(params), archived: true };
   if (pathname === TRASH_PATH) return trashFilter(parseFilter(params));
-  if (pathname === PHOTOS_PATH) return photosFilter(parseFilter(params));
+  if (isLibraryPage(pathname)) return libraryFilter(parseFilter(params));
   return pathname === '/journal' || pathname === '/history' ? parseFilter(params) : {};
 }
 
@@ -57,7 +57,7 @@ export function useFilterPath(): (filter: StreamFilter) => string {
     };
   }
   if (pathname === TRASH_PATH) return trashPath;
-  if (pathname === PHOTOS_PATH) return photosPath;
+  if (isLibraryPage(pathname)) return (filter) => libraryPath(pathname, filter);
   return pathname === '/history' ? historyPath : journalPath;
 }
 
@@ -103,8 +103,8 @@ export function FilterBar({ filter }: { filter: StreamFilter }) {
   // On the Archive, Archived is the page, not a filter on it.
   const onArchive = pathname === ARCHIVE_PATH;
   const onTrash = pathname === TRASH_PATH;
-  // Every entry on the Photos page has a photo, and templates aren't on it.
-  const onPhotos = pathname === PHOTOS_PATH;
+  // Every entry on the Photos, Links or Files page holds one, and templates aren't on it.
+  const onLibrary = isLibraryPage(pathname);
   const [picking, setPicking] = useState(false);
   const parts = filterParts(filter);
   const without = (part: FilterPart) => parts.find((p) => p.part === part)!.without;
@@ -158,7 +158,7 @@ export function FilterBar({ filter }: { filter: StreamFilter }) {
           more={{ label: 'Pick dates…', run: () => setPicking(true) }}
         />
       )}
-      {!dated && !onPhotos && (
+      {!dated && !onLibrary && (
         <FilterMenu
           name="Contains"
           value={filter.has && CONTAINS_LABEL[filter.has]}
@@ -180,7 +180,7 @@ export function FilterBar({ filter }: { filter: StreamFilter }) {
           </Link>
         ))}
       {/* Templates are entries too, kept apart: the journal swaps to them, filtered by the rest as usual. */}
-      {!dated && !onArchive && !onTrash && !onPhotos &&
+      {!dated && !onArchive && !onTrash && !onLibrary &&
         (filter.template ? (
           <span className="chip filter-chip is-set">
             <span className="filter-chip__value">Templates</span>
@@ -363,8 +363,11 @@ export function FilterPanel({ onPick }: { onPick?: () => void }) {
   const onArchive = pathname === ARCHIVE_PATH;
   const onHistory = pathname === '/history';
   const onDated = isDatedPage(pathname);
-  const onPhotos = pathname === PHOTOS_PATH;
+  const onLibrary = isLibraryPage(pathname);
   const path = useFilterPath();
+  // From another page it keeps the filter; on the page, its own link takes the filter off.
+  const libraryLink = (page: LibraryPage) => libraryPath(page, pathname === page ? {} : filter);
+  const libraryActive = (page: LibraryPage) => pathname === page && !filter.tagId && !filter.vaultId;
   // Going to the calendar or the timeline keeps what of the filter suits them; on it, its link takes the filter off,
   // as Journal's does, and keeps the month or weeks in sight.
   const [params] = useSearchParams();
@@ -403,12 +406,14 @@ export function FilterPanel({ onPick }: { onPick?: () => void }) {
     <div className="filters">
       <nav aria-label="Journal">
         {/* Journal is the one in use unless a tag or vault here is: the title bar shows the other filters, Templates too. */}
-        {link('all', 'Journal', journalPath(onHistory || onDated || onPhotos ? { ...filter, archived: undefined } : { sort: filter.sort, board: filter.board }), onJournal && !filter.tagId && !filter.vaultId, 'notes')}
-        {link('history', 'History', historyPath(onJournal || onDated || onArchive || onPhotos ? filter : { sort: filter.sort }), onHistory, 'history')}
+        {link('all', 'Journal', journalPath(onHistory || onDated || onLibrary ? { ...filter, archived: undefined } : { sort: filter.sort, board: filter.board }), onJournal && !filter.tagId && !filter.vaultId, 'notes')}
+        {link('history', 'History', historyPath(onJournal || onDated || onArchive || onLibrary ? filter : { sort: filter.sort }), onHistory, 'history')}
         {link('calendar', 'Calendar', datedLink('/calendar'), datedActive('/calendar'), 'calendar')}
         {link('timeline', 'Timeline', datedLink('/timeline'), datedActive('/timeline'), 'timeline')}
         {/* From the journal, the history or the calendar, it keeps the filter; on it, its link takes the filter off. */}
-        {link('photos', 'Photos', photosPath(onPhotos ? {} : filter), onPhotos && !filter.tagId && !filter.vaultId, 'image')}
+        {link('photos', 'Photos', libraryLink(PHOTOS_PATH), libraryActive(PHOTOS_PATH), 'image')}
+        {link('links', 'Links', libraryLink(LINKS_PATH), libraryActive(LINKS_PATH), 'link')}
+        {link('files', 'Files', libraryLink(FILES_PATH), libraryActive(FILES_PATH), 'file')}
         {/* Put away, and thrown away: each a page of its own, out of the journal. */}
         {link('archive', 'Archive', journalPath({ sort: filter.sort, archived: true }), onArchive && !filter.tagId && !filter.vaultId, 'archive', archivedCount || undefined)}
         {link('trash', 'Trash', TRASH_PATH, pathname === TRASH_PATH && !filter.tagId && !filter.vaultId, 'trash', index.trash.length || undefined)}

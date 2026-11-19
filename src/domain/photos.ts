@@ -1,48 +1,22 @@
-import { photoIds, storedPages } from './content';
-import { toDateKey } from './dates';
+import { photoIds } from './content';
+import { entryDays, onEveryPage, type DayItem, type ItemDay } from './library';
 import type { Card } from './types';
 
 /** A photo on the Photos page: the entry it's in, and the day that entry was written. */
-export interface PhotoItem {
-  id: string;
-  card: Card;
-  day: string;
-}
+export type PhotoItem = DayItem<{ id: string }>;
 
 /** The photos written on one day, newest entry first. */
-export interface PhotoDay {
-  day: string;
-  items: PhotoItem[];
-}
+export type PhotoDay = ItemDay<{ id: string }>;
 
 /** An entry's photos, on its front and on its other pages, in order, each once. */
-export function cardPhotoIds(card: Card): string[] {
-  if (card.type === 'tag') return [];
-  return [...new Set([card.content, ...storedPages(card)].flatMap(photoIds))];
-}
+export const cardPhotoIds = (card: Card): string[] => onEveryPage(card, (page) => photoIds(page).map((id) => ({ id }))).map((p) => p.id);
 
 /**
  * Every photo in `cards` (the entries already narrowed to those to show), newest entry first and an entry's own in
  * the order they're in it, by the day the entry was written. A photo in two entries, as a copy of a template leaves
  * it, shows once, with the newer.
  */
-export function photoDays(cards: readonly Card[]): PhotoDay[] {
-  const seen = new Set<string>();
-  const days: PhotoDay[] = [];
-  const sorted = [...cards].sort((a, b) => b.createdAt - a.createdAt || (a.id < b.id ? -1 : 1));
-  for (const card of sorted) {
-    const ids = cardPhotoIds(card).filter((id) => !seen.has(id));
-    if (!ids.length) continue;
-    const day = toDateKey(new Date(card.createdAt));
-    let last = days.at(-1);
-    if (last?.day !== day) days.push((last = { day, items: [] }));
-    for (const id of ids) {
-      seen.add(id);
-      last.items.push({ id, card, day });
-    }
-  }
-  return days;
-}
+export const photoDays = (cards: readonly Card[]): PhotoDay[] => entryDays(cards, (card) => cardPhotoIds(card).map((id) => ({ id })), true);
 
 /** Where a photo or a day's heading sits in the Photos page's layout, in pixels from its top left. */
 export interface Box {

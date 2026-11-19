@@ -39,20 +39,27 @@ export function historyPath(filter: StreamFilter): string {
   return query ? `/history?${query}` : '/history';
 }
 
-/** Every photo in the journal's entries, by the day each was written. */
+/** Every photo in the journal's entries, by the day each was written; `LINKS_PATH` and `FILES_PATH` are its links and files. */
 export const PHOTOS_PATH = '/photos';
+export const LINKS_PATH = '/links';
+export const FILES_PATH = '/files';
+
+/** The pages listing what the journal's entries hold: its photos, its links and its files. */
+export type LibraryPage = typeof PHOTOS_PATH | typeof LINKS_PATH | typeof FILES_PATH;
+export const isLibraryPage = (pathname: string): pathname is LibraryPage => pathname === PHOTOS_PATH || pathname === LINKS_PATH || pathname === FILES_PATH;
 
 /**
- * The Photos page, narrowed by the journal's filters. Its entries are those with photos, not archived and not
- * templates, newest first, so the order, the board and Contains don't apply to it.
+ * The Photos, Links or Files page, narrowed by the journal's filters. Its entries are those holding what it lists,
+ * not archived and not templates, newest first, so the order, the board and Contains don't apply to it.
  */
-export function photosPath(filter: StreamFilter): string {
-  const query = filterParams(photosFilter(filter)).toString();
-  return query ? `${PHOTOS_PATH}?${query}` : PHOTOS_PATH;
+export function libraryPath(page: LibraryPage, filter: StreamFilter): string {
+  const query = filterParams(libraryFilter(filter)).toString();
+  return query ? `${page}?${query}` : page;
 }
+export const photosPath = (filter: StreamFilter) => libraryPath(PHOTOS_PATH, filter);
 
-/** The parts of a filter the Photos page takes. */
-export const photosFilter = (filter: StreamFilter): StreamFilter => ({ ...filter, sort: undefined, board: undefined, has: undefined, archived: undefined, template: undefined });
+/** The parts of a filter the Photos, Links and Files pages take. */
+export const libraryFilter = (filter: StreamFilter): StreamFilter => ({ ...filter, sort: undefined, board: undefined, has: undefined, archived: undefined, template: undefined });
 
 /** The pages showing todos by their dates. */
 export type DatedPage = '/calendar' | '/timeline';

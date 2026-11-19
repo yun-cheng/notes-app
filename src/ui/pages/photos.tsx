@@ -1,20 +1,17 @@
-import { useEffect, useMemo, useRef, useState, type MouseEvent } from 'react';
-import { createPortal } from 'react-dom';
-import { useLocation, useNavigate } from 'react-router';
+import { useEffect, useMemo, useRef, useState } from 'react';
 import { displayTitle } from '../../domain/content';
 import { relativeDay } from '../../domain/dates';
 import { layoutPhotos, photoDays, type Box, type PhotoItem } from '../../domain/photos';
-import { entryMatcher, filterParams, isFiltered } from '../../domain/stream';
-import { useCards, useToday } from '../../state/CardsContext';
+import { isFiltered } from '../../domain/stream';
+import { useToday } from '../../state/CardsContext';
 import { PhotoViewer } from '../Attachments';
 import { Empty, Page } from '../components';
-import { ContextMenu, Item, Shield, type Point } from '../EntryMenu';
+import type { Point } from '../EntryMenu';
 import { usePhotoUrl } from '../editor/photo';
-import { FilterBar, FilterSheet, useJournalFilter } from '../FilterPanel';
+import { FilterBar, FilterSheet } from '../FilterPanel';
 import { Icon } from '../Icon';
-import { cardPath, sheetState } from '../paths';
-import { useShowInJournal } from '../showInJournal';
 import { useInView } from '../useInView';
+import { countLine, HeldMenu, menuAt, useEntryActions, useLibrary } from './library';
 
 /**
  * Each photo's width over its height, once it's been shown, kept on this device so the page lays out at once next
@@ -54,27 +51,17 @@ const sizes = (width: number) =>
  * The journal's filters narrow it: one tag's photos, one vault's, or those in todos. Photos load as they come near.
  */
 export function PhotosPage() {
-  const { index, sharedInto } = useCards();
   const today = useToday();
-  const filter = useJournalFilter();
-  const key = filterParams(filter).toString();
-  const days = useMemo(() => {
-    const keep = entryMatcher(filter, today, sharedInto);
-    return photoDays(index.live.filter((c) => (c.type === 'note' || c.type === 'todo') && !c.archived && !c.template && keep(c)));
-    // The filter by what it says, not which object it is.
-  }, [index, key, today, sharedInto]);
+  const { filter, days } = useLibrary(photoDays);
   const all = useMemo(() => days.flatMap((d) => d.items), [days]);
   const [viewing, setViewing] = useState<number | null>(null);
   const [filtering, setFiltering] = useState(false);
-  const navigate = useNavigate();
-  const location = useLocation();
-  const entries = new Set(all.map((i) => i.card.id)).size;
-  const showInJournal = useShowInJournal();
+  const entry = useEntryActions();
   // A photo right-clicked, in the grid or full screen: its entry, to open or go to.
   const [menu, setMenu] = useState<{ at: number; point: Point } | null>(null);
   const openEntry = (item: PhotoItem) => {
     setViewing(null);
-    void navigate(cardPath(item.card), { state: sheetState(location, item.card) });
+    entry.open(item.card);
   };
 
   // The width to fill, and a count of shapes learned, each a new layout.
@@ -135,7 +122,7 @@ export function PhotosPage() {
       ) : (
         <div className="photos">
           <p className="photos__count">
-            {all.length === 1 ? '1 photo' : `${all.length} photos`}, in {entries === 1 ? '1 entry' : `${entries} entries`}
+            {countLine(all, 'photo', 'photos')}
           </p>
           <div className="photos__canvas" ref={canvas} style={{ height: layout?.height }}>
             {layout &&
@@ -167,50 +154,18 @@ export function PhotosPage() {
       {viewing !== null && (
         <PhotoViewer ids={all.map((i) => i.id)} start={viewing} onClose={() => setViewing(null)} caption={caption} onMenu={(at, point) => setMenu({ at, point })} />
       )}
-      {menu &&
-        all[menu.at] &&
-        createPortal(
-          <Shield>
-            <PhotoMenu
-              item={all[menu.at]}
-              at={menu.point}
-              onOpen={() => openEntry(all[menu.at])}
-              onShow={() => showInJournal(all[menu.at].card)}
-              onClose={() => setMenu(null)}
-            />
-          </Shield>,
-          document.body,
-        )}
+      {menu && all[menu.at] && (
+        <HeldMenu
+          card={all[menu.at].card}
+          day={all[menu.at].day}
+          at={menu.point}
+          label="Photo"
+          onOpen={() => openEntry(all[menu.at])}
+          onShow={() => entry.show(all[menu.at].card)}
+          onClose={() => setMenu(null)}
+        />
+      )}
     </Page>
-  );
-}
-
-/**
- * A photo's menu, on a right-click: its entry named, opened over the page or gone to in the journal. (A click shows
- * the photo full screen, so the menu doesn't offer it.)
- */
-function PhotoMenu({ item, at, onOpen, onShow, onClose }: { item: PhotoItem; at: Point; onOpen: () => void; onShow: () => void; onClose: () => void }) {
-  const today = useToday();
-  const run = (work: () => void) => () => {
-    onClose();
-    work();
-  };
-  return (
-    <ContextMenu at={at} label="Photo" onClose={onClose}>
-      <span className="context-menu__head">
-        <span className="context-menu__head-title">{displayTitle(item.card) || 'Untitled'}</span>
-        <span>{relativeDay(item.day, today)}</span>
-      </span>
-      <div className="style-menu__group">
-        <Item icon="open" onClick={run(onOpen)}>
-          Open entry
-        </Item>
-        <Item icon="notes" onClick={run(onShow)}>
-          Show in journal
-        </Item>
-      </div>
-      <span className="context-menu__note">Shift-right-click for the browser's menu</span>
-    </ContextMenu>
   );
 }
 
@@ -226,12 +181,8 @@ function Tile({ item, box, onShape, onOpen, onMenu }: { item: PhotoItem; box: Bo
       style={{ left: box.x, top: box.y, width: box.w, height: box.h }}
       aria-label={`Photo in ${displayTitle(item.card) || 'Untitled'}`}
       onClick={onOpen}
-      onContextMenu={(e: MouseEvent) => {
-        // Shift keeps the browser's menu, to save the photo, say.
-        if (e.shiftKey) return;
-        e.preventDefault();
-        onMenu({ x: e.clientX, y: e.clientY });
-      }}
+      // Shift keeps the browser's menu, to save the photo, say.
+      onContextMenu={menuAt(onMenu)}
     >
       {seen && <TileImage id={item.id} onShape={(r) => onShape(item.id, r)} />}
     </button>

@@ -13,7 +13,7 @@ import { useNewNote } from './components';
 import { LINK_STYLES, PHOTO_STYLES, setDisplayPrefs, type LinkStyle, type PhotoStyle } from './displayPrefs';
 import { useFilterPath, useJournalFilter } from './FilterPanel';
 import { Icon, type IconName } from './Icon';
-import { ARCHIVE_PATH, cardPath, historyPath, journalPath, photosPath, sheetState, TRASH_PATH } from './paths';
+import { ARCHIVE_PATH, cardPath, FILES_PATH, historyPath, journalPath, libraryPath, LINKS_PATH, photosPath, sheetState, TRASH_PATH } from './paths';
 import { MOD, REDO_KEYS } from './Shortcuts';
 import { useToast } from './Toast';
 import { useSaveEntries } from './useSaveEntry';
@@ -84,6 +84,8 @@ export function CommandPalette({ onClose, onShortcuts }: { onClose: () => void; 
       { id: 'go-calendar', group: 'Go to', label: 'Calendar', icon: 'calendar', keywords: 'month day date', run: go('/calendar') },
       { id: 'go-timeline', group: 'Go to', label: 'Timeline', icon: 'timeline', keywords: 'gantt start due span weeks plan', run: go('/timeline') },
       { id: 'go-photos', group: 'Go to', label: 'Photos', icon: 'image', keywords: 'pictures images gallery library album', run: go(photosPath(current)) },
+      { id: 'go-links', group: 'Go to', label: 'Links', icon: 'link', keywords: 'web pages urls addresses bookmarks sites', run: go(libraryPath(LINKS_PATH, current)) },
+      { id: 'go-files', group: 'Go to', label: 'Files', icon: 'file', keywords: 'attachments documents pdf downloads', run: go(libraryPath(FILES_PATH, current)) },
       { id: 'go-archive', group: 'Go to', label: 'Archive', icon: 'archive', keywords: 'archived put away hidden old', run: go(ARCHIVE_PATH) },
       { id: 'go-trash', group: 'Go to', label: 'Trash', icon: 'trash', keywords: 'deleted removed restore bin', run: go(TRASH_PATH) },
       { id: 'go-templates', group: 'Go to', label: 'Templates', icon: 'template', keywords: 'template copy reuse checklist', run: go(journalPath({ template: true })) },

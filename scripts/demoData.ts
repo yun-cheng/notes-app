@@ -4,7 +4,7 @@
  * Topics), todos for the board by todo state, notes with headings, lists, checklists, quotes, code, web links and links to each other, todos
  * overdue, due today at a time, upcoming, undated, repeating, waiting, done and archived, entries tinted, set to view
  * only or with their own preview style, photos of every shape, one on a card's back page (served by the dev server from scripts/demoPhotos),
- * files attached (a PDF, a CSV, and a text file on the publicly linked recipe, from scripts/demoFiles), videos with their stills (one in the coast trip, one on the recipe, one in the Trash), a private and encrypted Diary vault, a vault shared with Sam and one Sam
+ * files attached (a PDF, a CSV, and a text file on the publicly linked recipe, from scripts/demoFiles), videos with their stills (one in the coast trip, one on the recipe, one in the Trash), voice messages (one transcribed, one not yet, one in the Diary, which isn't sent to be), a private and encrypted Diary vault, a vault shared with Sam and one Sam
  * shares to view, a card also in another vault, a note Sam shares, a public link, comments open and resolved, and
  * version history from more than one device, and entries going back three years. Two entries carry nearly all of it at once, to see how a full one looks:
  * a launch plan note and a moving todo.
@@ -12,7 +12,7 @@
  * were, dated around today, and keeps anything else in the accounts.
  */
 import { execFileSync } from 'node:child_process';
-import { mkdirSync, readdirSync, statSync, writeFileSync } from 'node:fs';
+import { mkdirSync, readdirSync, readFileSync, statSync, writeFileSync } from 'node:fs';
 import { createVaultKey, encryptPayload, unlockWithPin } from '../src/crypto/vaultKeys';
 import { addDays, toDateKey } from '../src/domain/dates';
 import { hashPin } from '../src/domain/pin';
@@ -139,7 +139,7 @@ function trashedAttachments(owner: string, family: string, personal: string) {
 }
 
 /** What the demo's files are, by their ending. */
-const DEMO_MIME: Record<string, string> = { jpg: 'image/jpeg', mp4: 'video/mp4', pdf: 'application/pdf', csv: 'text/csv', txt: 'text/plain' };
+const DEMO_MIME: Record<string, string> = { jpg: 'image/jpeg', mp4: 'video/mp4', m4a: 'audio/mp4', pdf: 'application/pdf', csv: 'text/csv', txt: 'text/plain' };
 
 /**
  * The demo's other photos, videos and files have a record too, as each would once uploaded, with no Drive file, so
@@ -149,7 +149,7 @@ const DEMO_MIME: Record<string, string> = { jpg: 'image/jpeg', mp4: 'video/mp4',
 function heldAttachments() {
   const found = (dir: string, prefix: string) =>
     readdirSync(dir)
-      .filter((f) => !f.endsWith('.mjs'))
+      .filter((f) => !f.endsWith('.mjs') && !f.endsWith('.json'))
       .map((f) => {
         const dot = f.lastIndexOf('.');
         return { id: `${prefix}${f.slice(0, dot)}`, mime: DEMO_MIME[f.slice(dot + 1)] ?? 'application/octet-stream', size: statSync(`${dir}/${f}`).size, name: prefix === 'demo-file-' && !f.includes('-poster.') ? f : null };
@@ -318,6 +318,27 @@ export async function seed() {
     attrs: { id: `demo-file-${name}`, name: `${name}.mp4`, mime: 'video/mp4', size: statSync(`scripts/demoFiles/${name}.mp4`).size, poster: `demo-file-${name}-poster`, width, height, duration: 6 },
   });
 
+  /**
+   * A voice message from scripts/demoFiles (`voices.mjs`), likewise, with its length and loudness as a device finds
+   * them when one is added, and its transcript, timed by sentence, when `transcribed`, as the server gives it.
+   */
+  const voices = JSON.parse(readFileSync('scripts/demoFiles/voices.json', 'utf8')) as Record<string, { duration: number; peaks: number[]; cues: { start: number; text: string }[] }>;
+  const voice = (name: string, transcribed: boolean): JSONNode => {
+    const { duration, peaks, cues } = voices[name];
+    return {
+      type: 'file',
+      attrs: {
+        id: `demo-file-${name}`,
+        name: `${name}.m4a`,
+        mime: 'audio/mp4',
+        size: statSync(`scripts/demoFiles/${name}.m4a`).size,
+        duration,
+        peaks,
+        ...(transcribed ? { transcript: cues.map((c) => c.text).join(' '), language: 'en', cues } : {}),
+      },
+    };
+  };
+
   // Folders are pinned tags; the rest are plain tags, some with a color.
   const work = tag('demo-tag-work', 'Work', true, 'Anything for the day job.', 'blue');
   const home = tag('demo-tag-home', 'Home', true, '', 'green');
@@ -387,7 +408,8 @@ export async function seed() {
   // Edited later from the phone: its history has two versions.
   note('demo-note-standup', at(7, 10, 15), doc(h('Standup'), bullets('Shipped the search fix', 'Reviewing the export PR', 'Blocked on design for onboarding')), [work]);
   note('demo-note-book', at(6, 22, 40), doc(p(text('Thinking, Fast and Slow', ['italic'])), quote('Nothing in life is as important as you think it is, while you are thinking about it.'), p('Chapter 3 next.')), [reading]);
-  note('demo-note-idea-app', at(5, 8, 5), lines('App idea: a plant watering reminder that reads the weather forecast and skips rainy days.'), [ideas, low], '', personal, { color: 'yellow' });
+  // A voice message not transcribed yet: Transcribe under it.
+  note('demo-note-idea-app', at(5, 8, 5), doc(p('App idea: a plant watering reminder that reads the weather forecast and skips rainy days.'), voice('idea-voice', false)), [ideas, low], '', personal, { color: 'yellow' });
   note('demo-note-curry', at(5, 19, 30), doc(p(text('Weeknight curry', ['bold'])), photo('curry', 'A bowl of curry'), bullets('1 onion, 2 garlic cloves, ginger', '2 tbsp curry paste', '1 can coconut milk', 'Chickpeas and spinach'), p('Simmer 20 minutes. Rice on the side.'), video('simmer', 540, 540), file('spice-list', 'txt', 'text/plain')), [recipes], 'Curry');
   note('demo-note-zh', at(4, 12, 20), lines('今天天氣很好，午餐去吃了牛肉麵。', '下次要試試隔壁的水餃店。'));
   note('demo-note-1on1', at(4, 15, 0), doc(p('1:1 with Mia'), bullets('Wants to lead the API migration', 'Conference budget: yes, up to two people', 'Follow up on hiring plan')), [work, medium]);
@@ -522,6 +544,8 @@ export async function seed() {
   });
   note('demo-note-today-1', ago(95), lines('Call the dentist about Thursday'));
   note('demo-note-today-2', ago(40), lines('Buy oat milk, bananas and coffee beans'), [home]);
+  // A voice message alone, transcribed: its words play along, and search finds them ("dry cleaning").
+  note('demo-note-voice', ago(20), doc(voice('errands-voice', true)), [home]);
   note('demo-note-secret', at(2, 23, 0), lines('Gift budget this year: 300. Don\'t tell anyone.'), [], '', diaryVault);
   // Templates, on their own page, to start new entries from: their checklists come unticked, and {date} is the day.
   note('demo-template-packing', at(9, 9, 30), doc(checklist(['Passport', false], ['Chargers', false], ['Toothbrush', false], ['Rain jacket', false], ['Snacks', false])), [travel], 'Packing list', personal, { template: true });
@@ -569,7 +593,8 @@ export async function seed() {
   todo('demo-todo-passport', 'Renew passport', addDays(today, -20), { done: at(8, 12, 0), tags: [travel], archived: true });
 
   // Diary entries are notes in the Diary vault, which needs the PIN.
-  note('demo-diary-3', at(3, 22, 0), lines('Quiet day. Long walk by the river after work.'), [], '', diaryVault);
+  // A voice message in the private Diary: it plays, but its sound never goes to the server to be transcribed.
+  note('demo-diary-3', at(3, 22, 0), doc(p('Quiet day.'), voice('diary-voice', false)), [], '', diaryVault);
   note('demo-diary-2', at(2, 22, 0), lines('Tried the curry recipe. Too much ginger, but good.'), [], '', diaryVault);
   note('demo-diary-1', at(1, 22, 0), doc(p('Design review went well.'), p('Grateful for:'), bullets('Sunny weather', 'A good book', 'Dinner with Sam')), [], '', diaryVault);
 

@@ -9,7 +9,7 @@ import { VitePWA } from 'vite-plugin-pwa';
  * `npm run demo` made on the local server, alongside any accounts it is already signed in to, and the demo's
  * photos and files are served from scripts/demoPhotos and scripts/demoFiles.
  */
-const DEMO_FILE_TYPES: Record<string, string> = { pdf: 'application/pdf', csv: 'text/csv', txt: 'text/plain', mp4: 'video/mp4', jpg: 'image/jpeg' };
+const DEMO_FILE_TYPES: Record<string, string> = { pdf: 'application/pdf', csv: 'text/csv', txt: 'text/plain', mp4: 'video/mp4', m4a: 'audio/mp4', jpg: 'image/jpeg' };
 
 function demoSignIn(): Plugin {
   return {
@@ -49,7 +49,7 @@ function demoSignIn(): Plugin {
       // video a range at a time when its player asks, and a video's still (`demo-file-<name>-poster`) as a photo.
       server.middlewares.use((req, res, next) => {
         const name = /^\/api\/(?:attachments|public\/[^/]+\/(?:files|photos))\/demo-file-([a-z-]+)$/.exec(req.url?.split('?')[0] ?? '')?.[1];
-        const file = name && readdirSync('scripts/demoFiles').find((f) => f.startsWith(`${name}.`) && !f.endsWith('.mjs'));
+        const file = name && readdirSync('scripts/demoFiles').find((f) => f.startsWith(`${name}.`) && !f.endsWith('.mjs') && !f.endsWith('.json'));
         if (req.method !== 'GET' || !file) return next();
         const type = DEMO_FILE_TYPES[file.split('.').pop()!] ?? 'application/octet-stream';
         res.setHeader('content-type', type);

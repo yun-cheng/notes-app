@@ -5,6 +5,7 @@ import { usePermissions } from './viewOnly';
 import { SyncOffline } from '../sync/engine';
 import { addComment, deleteComment, fetchComments, resolveComment, type CardComment } from '../sync/http';
 import { useToast } from './Toast';
+import { loadDraft, saveDraft } from './commentDrafts';
 
 function when(at: number) {
   return new Date(at).toLocaleString(undefined, { dateStyle: 'medium', timeStyle: 'short' });
@@ -18,7 +19,13 @@ export function Comments({ card }: { card: Card }) {
   const can = may(card);
   const [comments, setComments] = useState<CardComment[] | null>(null);
   const [offline, setOffline] = useState(false);
-  const [draft, setDraft] = useState('');
+  // Kept on the device as it's written, per entry: a sheet that moves to another entry reads that one's.
+  const [kept, setKept] = useState(() => ({ card: card.id, text: loadDraft(accountId, card.id) }));
+  const draft = kept.card === card.id ? kept.text : loadDraft(accountId, card.id);
+  const setDraft = (text: string) => {
+    setKept({ card: card.id, text });
+    saveDraft(accountId, card.id, text);
+  };
   const [showResolved, setShowResolved] = useState(false);
   const synced = card.seq > 0;
 
@@ -41,7 +48,12 @@ export function Comments({ card }: { card: Card }) {
 
   const submit = async (e: FormEvent) => {
     e.preventDefault();
-    if (draft.trim() && (await run(() => addComment(card.id, draft.trim())))) setDraft('');
+    const cardId = card.id;
+    if (draft.trim() && (await run(() => addComment(cardId, draft.trim())))) {
+      // The entry shown may have changed while it was sending: drop the sent one's draft, not the one now shown.
+      saveDraft(accountId, cardId, '');
+      setKept((k) => (k.card === cardId ? { card: cardId, text: '' } : k));
+    }
   };
 
   // On a card only its owner sees, comments would be clutter. They appear once others can see it, or once there are some.

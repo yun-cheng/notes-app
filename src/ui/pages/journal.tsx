@@ -993,7 +993,7 @@ function StackEntry({ stack, at }: { stack: NoteCard; at: number }) {
 }
 
 /**
- * An open stack's entries, in its order, each as in the stream. They're dragged up and down to change the order (a
+ * An open stack's entries, in its order, each as in the stream, with its photos and link previews under it. They're dragged up and down to change the order (a
  * mouse from anywhere on one, a finger from its grip), or moved with the arrow keys on the grip. While one is
  * dragged it moves among the others to where it would land, faded, and stays there when dropped: the new order shows
  * at once, before it's saved. Each change can be undone; taking one out is in its menu.
@@ -1061,6 +1061,7 @@ function StackCards({ stack, members }: { stack: NoteCard; members: Entry[] }) {
             </button>
           )}
           <EntryBubble card={card} at={card.createdAt} />
+          <Attachments card={card} />
         </div>
       ))}
       {members.length === 0 && <p className="stack__empty">Nothing in this stack yet. Pick it with entries, then Stack, to put them in.</p>}

@@ -1,12 +1,13 @@
 import { useEffect, useState } from 'react';
 import { useNavigate } from 'react-router';
 import { fetchDriveLink, shareDriveLink, stopDriveLink, type DriveLink, type ShareLinkResult } from '../sync/http';
+import type { Vault } from '../domain/types';
 import { writeClipboard } from './entryActions';
 import { Item } from './EntryMenu';
 import { useToast } from './Toast';
 import { openOutside } from './translate';
 
-/** What's known of each one's Drive link this visit, so a menu opened again shows it at once. */
+/** What's known of each one's Drive link this visit, so a menu opened again, or a chip's button, shows it at once. */
 const known = new Map<string, DriveLink>();
 
 /**
@@ -26,7 +27,30 @@ function copyComing(text: Promise<string>): Promise<boolean> {
   return text.then(writeClipboard, () => false);
 }
 
-type Noun = 'photo' | 'video' | 'file';
+export type Noun = 'photo' | 'video' | 'file';
+
+/**
+ * Shares one by its Drive link and copies the link, saying how it went: from a right-click menu or a file chip's
+ * button. One already shared, as far as this visit knows, has its link copied again.
+ */
+export function useShareLink() {
+  const toast = useToast();
+  const navigate = useNavigate();
+  return (id: string, noun: Noun, link: DriveLink | null = known.get(id) ?? null) => {
+    const result: Promise<ShareLinkResult> = link?.url ? Promise.resolve({ url: link.url }) : shareDriveLink(id);
+    const copied = copyComing(result.then((r) => ('url' in r ? r.url : Promise.reject(new Error(r.error)))));
+    void Promise.all([result, copied]).then(([r, ok]) => {
+      if ('error' in r) return toast(problem(r.error, noun), r.error === 'needs_drive' ? { action: { label: 'Settings', run: () => void navigate('/settings') } } : undefined);
+      known.set(id, { url: r.url, can: link?.can ?? true });
+      const open = { label: 'Open', run: () => openOutside(r.url) };
+      const shared = link?.url ? 'Copied its public link' : 'Shared publicly on Google Drive, and copied its link';
+      toast(ok ? `${shared}. Anyone with it can open this ${noun}.` : `Shared publicly on Google Drive, but the link couldn't be copied here.`, { action: open });
+    });
+  };
+}
+
+/** Whether this account may share what's in a vault by link: one it can change, and not private (encrypted). */
+export const canShareIn = (vault: Vault | undefined) => !!vault && vault.role !== 'viewer' && !vault.encryption;
 
 /**
  * A photo, video or file right-clicked anywhere: Share via public link shares it from the vault owner's Google Drive, so
@@ -38,7 +62,7 @@ type Noun = 'photo' | 'video' | 'file';
 export function DriveLinkItems({ id, noun, onClose }: { id: string; noun: Noun; onClose: () => void }) {
   const [link, setLink] = useState<DriveLink | null>(() => known.get(id) ?? null);
   const toast = useToast();
-  const navigate = useNavigate();
+  const share = useShareLink();
   useEffect(() => {
     let live = true;
     fetchDriveLink(id).then(
@@ -58,15 +82,7 @@ export function DriveLinkItems({ id, noun, onClose }: { id: string; noun: Noun; 
 
   const copy = () => {
     onClose();
-    const result: Promise<ShareLinkResult> = link?.url ? Promise.resolve({ url: link.url }) : shareDriveLink(id);
-    const copied = copyComing(result.then((r) => ('url' in r ? r.url : Promise.reject(new Error(r.error)))));
-    void Promise.all([result, copied]).then(([r, ok]) => {
-      if ('error' in r) return toast(problem(r.error, noun), r.error === 'needs_drive' ? { action: { label: 'Settings', run: () => void navigate('/settings') } } : undefined);
-      known.set(id, { url: r.url, can: link?.can ?? true });
-      const open = { label: 'Open', run: () => openOutside(r.url) };
-      const shared = link?.url ? 'Copied its public link' : 'Shared publicly on Google Drive, and copied its link';
-      toast(ok ? `${shared}. Anyone with it can open this ${noun}.` : `Shared publicly on Google Drive, but the link couldn't be copied here.`, { action: open });
-    });
+    share(id, noun, link);
   };
 
   const stop = () => {

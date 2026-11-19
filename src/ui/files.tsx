@@ -1,7 +1,8 @@
-import type { MouseEvent } from 'react';
+import { createContext, useContext, type MouseEvent } from 'react';
 import type { FileInfo } from '../domain/content';
 import { fileSize } from '../photos/service';
 import { useCards } from '../state/CardsContext';
+import { canShareIn, useShareLink } from './driveLink';
 import { Icon } from './Icon';
 import { useToast } from './Toast';
 
@@ -55,12 +56,20 @@ export function useFileActions() {
   };
 }
 
+/** The vault of the entry an editor shows, for its file chips, which can't be told it themselves. */
+export const FileVault = createContext<string | undefined>(undefined);
+
 /**
  * A file attached to an entry, as a chip: its kind, name and size. Pressing it opens the file, or downloads one the
- * browser can't show; the arrow always downloads.
+ * browser can't show; the arrow always downloads, and the share button beside it shares it by a public Google Drive
+ * link and copies the link, for one who can change its vault, unless that's private (encrypted).
  */
-export function FileChip({ file }: { file: FileInfo }) {
+export function FileChip({ file, vaultId }: { file: FileInfo; vaultId?: string }) {
   const act = useFileActions();
+  const { vaults } = useCards();
+  const inVault = useContext(FileVault);
+  const sharable = canShareIn(vaults.find((v) => v.id === (vaultId ?? inVault)));
+  const share = useShareLink();
   const stop = (e: MouseEvent) => e.stopPropagation();
   const detail = [file.size !== null ? fileSize(file.size) : null, fileKind(file.name)].filter(Boolean).join(' · ');
   return (
@@ -74,6 +83,11 @@ export function FileChip({ file }: { file: FileInfo }) {
           <span className="file-chip__detail">{detail}</span>
         </span>
       </button>
+      {sharable && (
+        <button type="button" className="file-chip__save" aria-label={`Share ${file.name} via a public link`} title="Share via public link (anyone with it can open it)" onClick={(e) => (stop(e), share(file.id, 'file'))}>
+          <Icon name="share" size={16} />
+        </button>
+      )}
       <button type="button" className="file-chip__save" aria-label={`Download ${file.name}`} title="Download" onClick={(e) => (stop(e), void act(file, true))}>
         <Icon name="download" size={16} />
       </button>

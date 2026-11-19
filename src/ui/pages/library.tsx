@@ -227,7 +227,7 @@ export function FilesPage() {
       emptyFiltered="No files here match. Take a filter off above, or pick another."
       render={(item) => (
         <span className="held__thing">
-          <FileChip file={item} />
+          <FileChip file={item} vaultId={item.card.vaultId} />
         </span>
       )}
       menuLabel="File"

@@ -84,7 +84,7 @@ export function Attachments({ card }: { card: Card }) {
         </div>
       )}
       {files.map((file) => (
-        <FileChip key={file.id} file={file} />
+        <FileChip key={file.id} file={file} vaultId={card.vaultId} />
       ))}
       {links.slice(0, MAX_LINKS).map((url) => (
         <LinkCard key={url} url={url} preview={previews} compact={prefs.links === 'compact'} />

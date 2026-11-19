@@ -1,5 +1,6 @@
 import { useEffect, useRef, useState } from 'react';
 import { createPortal } from 'react-dom';
+import { FileVault } from '../files';
 import { Extension } from '@tiptap/core';
 import { EditorContent, useEditor, type Editor as TiptapEditor } from '@tiptap/react';
 import { TaskItem, TaskList } from '@tiptap/extension-list';
@@ -413,7 +414,9 @@ export function Editor({ content, onChange, placeholder, selfId, vaultId, editab
           ? createPortal(<Toolbar editor={editor} onPhoto={photoInput.pick} onFile={photoInput.pickFile} history={!historyHost} />, toolbarHost)
           : <Toolbar editor={editor} onPhoto={photoInput.pick} onFile={photoInput.pickFile} history={!historyHost} />)}
       {editor && editable && historyHost && createPortal(<HistoryButtons editor={editor} />, historyHost)}
-      <EditorContent editor={editor} />
+      <FileVault.Provider value={vaultId}>
+        <EditorContent editor={editor} />
+      </FileVault.Provider>
       {textMenu.view}
       {slash.view}
       {photoInput.input}

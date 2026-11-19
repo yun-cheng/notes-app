@@ -898,9 +898,10 @@ body:has(.batch) .toast-slot { bottom: calc(var(--tabbar) + env(safe-area-inset-
 .attachments { display: flex; flex-direction: column; align-items: flex-start; gap: 4px; max-width: min(85%, 560px); margin-top: 4px; }
 .attachments { width: fit-content; }
 .attachments__photos { display: flex; flex-wrap: wrap; gap: 4px; }
-.thumb { position: relative; width: 112px; height: 112px; padding: 0; overflow: hidden; border: 1px solid var(--line); border-radius: 12px; background: var(--sunken); cursor: zoom-in; }
-.thumb img { width: 100%; height: 100%; object-fit: cover; display: block; }
-.thumb__empty { display: grid; place-items: center; width: 100%; height: 100%; color: var(--muted); }
+/* Each photo whole, never cropped: a row the same height, each at its own shape, a very wide one fitted in with bands. */
+.thumb { position: relative; padding: 0; overflow: hidden; border: 1px solid var(--line); border-radius: 12px; background: var(--sunken); line-height: 0; cursor: zoom-in; }
+.thumb img { display: block; width: auto; height: 180px; max-width: min(320px, 70vw); object-fit: contain; }
+.thumb__empty { display: grid; place-items: center; width: 180px; height: 180px; color: var(--muted); }
 .thumb__more { position: absolute; inset: 0; display: grid; place-items: center; background: rgb(0 0 0 / 45%); color: #fff; font-weight: 700; font-size: 18px; }
 .link-card { display: flex; align-items: center; gap: 10px; max-width: 100%; padding: 7px 12px 7px 9px; border: 1px solid var(--line); border-radius: 12px; background: var(--surface); color: var(--text); text-decoration: none; }
 .link-card:hover { border-color: var(--muted); }
@@ -908,10 +909,10 @@ body:has(.batch) .toast-slot { bottom: calc(var(--tabbar) + env(safe-area-inset-
 .link-card__text { display: flex; flex-direction: column; min-width: 0; }
 .link-card__site { font-size: 13px; font-weight: 600; }
 .link-card__path { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; color: var(--muted); font-size: 12px; }
-.attachments__photos--large .thumb { width: 200px; height: 200px; }
-.attachments__photos--large .thumb:only-child { width: auto; height: auto; max-width: min(100%, 380px); }
-.attachments__photos--large .thumb:only-child img { height: auto; max-height: 420px; }
-.attachments__photos--large .thumb:only-child .thumb__empty { width: 200px; height: 200px; }
+.attachments__photos--large .thumb img { height: 280px; max-width: min(440px, 80vw); }
+.attachments__photos--large .thumb:only-child { max-width: 100%; }
+.attachments__photos--large .thumb:only-child img { height: auto; max-width: 100%; max-height: 480px; }
+.attachments__photos--large .thumb__empty { width: 280px; height: 280px; }
 .attachments__count { display: inline-flex; align-items: center; gap: 6px; padding: 4px 10px; border: 1px solid var(--line); border-radius: 999px; background: var(--surface); color: var(--muted); font: inherit; font-size: 13px; cursor: zoom-in; }
 .attachments__count:hover { color: var(--text); border-color: var(--muted); }
 .link-card--compact { gap: 6px; padding: 3px 10px; border-radius: 999px; font-size: 13px; color: var(--muted); }
@@ -1108,6 +1109,9 @@ button.reaction:hover { border-color: var(--muted); color: var(--text); }
 .board__card .bubble { max-width: none; width: 100%; min-width: 0; border-radius: 12px; cursor: pointer; }
 @media (pointer: fine) { .board__card .bubble { user-select: none; -webkit-user-select: none; } }
 .board__card .attachments { max-width: 100%; }
+/* Within a column, where a card is about 270px wide. */
+.board__card .thumb img, .board__card .attachments__photos--large .thumb img { height: 130px; max-width: 256px; }
+.board__card .attachments__photos--large .thumb:only-child img { height: auto; max-width: 256px; max-height: 340px; }
 .board__card:hover { background: none; }
 .board__grip {
   position: absolute; z-index: 2; top: 50%; left: -4px; transform: translateY(-50%); display: grid; place-items: center; width: 18px; height: 30px;

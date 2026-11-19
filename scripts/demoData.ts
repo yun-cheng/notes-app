@@ -628,8 +628,9 @@ export async function seed() {
         title: 'Next book',
         tags: [],
         createdAt: at(3, 19, 0),
-        content: doc(p('November: ', text('Klara and the Sun', ['italic'])), p('Meet at the café on the 28th.')),
-        // A vault you can only view: its reactions show, and none can be added.
+        content: doc(p('November: ', text('Klara and the Sun', ['italic'])), p('Meet at the café on the 28th.'), file('reading-list', 'txt', 'text/plain')),
+        // A vault you can only view: its reactions show, and none can be added, and its file opens and downloads but
+        // has no share button, as only those who can change a vault share from it.
         reactions: { '📚': [SAM.id] },
       }),
     ],

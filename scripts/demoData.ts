@@ -143,7 +143,7 @@ const DEMO_MIME: Record<string, string> = { jpg: 'image/jpeg', mp4: 'video/mp4',
 
 /**
  * The demo's other photos, videos and files have a record too, as each would once uploaded, with no Drive file, so
- * a right-click on one offers Copy Drive link as for a real one, and says the demo's aren't in a Google Drive. Each
+ * a right-click on one offers Share via public link as for a real one, and says the demo's aren't in a Google Drive. Each
  * goes with the first entry the server can read that holds it (none in the encrypted Diary); the Trash's are kept.
  */
 function heldAttachments() {

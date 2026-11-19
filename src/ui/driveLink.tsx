@@ -29,8 +29,9 @@ function copyComing(text: Promise<string>): Promise<boolean> {
 type Noun = 'photo' | 'video' | 'file';
 
 /**
- * A photo, video or file right-clicked anywhere: Copy Drive link shares it from the vault owner's Google Drive, so
- * anyone with the link can open it there, and copies the link; once it's shared, Stop sharing on Drive takes that back.
+ * A photo, video or file right-clicked anywhere: Share via public link shares it from the vault owner's Google Drive, so
+ * anyone with the link can open it there, and copies the link. The name says it's public, as Drive's "anyone with the
+ * link" is. Once it's shared, Copy public link copies it again and Stop sharing link takes it back.
  * For those who can change its vault, unless the vault is private (encrypted); one who only views it gets the link
  * if it's shared already.
  */
@@ -45,7 +46,7 @@ export function DriveLinkItems({ id, noun, onClose }: { id: string; noun: Noun; 
         known.set(id, got);
         if (live) setLink(got);
       },
-      // Offline, or gone: Copy Drive link stays, and says so if pressed.
+      // Offline, or gone: Share via public link stays, and says so if pressed.
       () => undefined,
     );
     return () => {
@@ -63,7 +64,8 @@ export function DriveLinkItems({ id, noun, onClose }: { id: string; noun: Noun; 
       if ('error' in r) return toast(problem(r.error, noun), r.error === 'needs_drive' ? { action: { label: 'Settings', run: () => void navigate('/settings') } } : undefined);
       known.set(id, { url: r.url, can: link?.can ?? true });
       const open = { label: 'Open', run: () => openOutside(r.url) };
-      toast(ok ? `Copied its Google Drive link. Anyone with it can open this ${noun}.` : `Shared on Google Drive, but the link couldn't be copied here.`, { action: open });
+      const shared = link?.url ? 'Copied its public link' : 'Shared publicly on Google Drive, and copied its link';
+      toast(ok ? `${shared}. Anyone with it can open this ${noun}.` : `Shared publicly on Google Drive, but the link couldn't be copied here.`, { action: open });
     });
   };
 
@@ -71,18 +73,18 @@ export function DriveLinkItems({ id, noun, onClose }: { id: string; noun: Noun; 
     onClose();
     void stopDriveLink(id).then((ok) => {
       if (ok) known.set(id, { url: null, can: true });
-      toast(ok ? `Stopped sharing. Its Drive link no longer opens this ${noun}.` : "Couldn't stop sharing it. Check the connection and try again.");
+      toast(ok ? `Stopped sharing. Its public link no longer opens this ${noun}.` : "Couldn't stop sharing it. Check the connection and try again.");
     });
   };
 
   return (
     <div className="style-menu__group">
       <Item icon="share" onClick={copy}>
-        Copy Drive link
+        {link?.url ? 'Copy public link' : 'Share via public link'}
       </Item>
       {link?.url && link.can && (
         <Item icon="lock" onClick={stop}>
-          Stop sharing on Drive
+          Stop sharing link
         </Item>
       )}
     </div>

@@ -1,5 +1,6 @@
 import { Node } from '@tiptap/core';
 import { NodeViewWrapper, ReactNodeViewRenderer, type ReactNodeViewProps } from '@tiptap/react';
+import { withEditorMenu } from './nodeMenu';
 import { fileAttachments } from '../../domain/content';
 import type { JSONNode } from '../../domain/types';
 import { FileChip } from '../files';
@@ -57,6 +58,6 @@ export const FileBlock = Node.create({
   },
 
   addNodeView() {
-    return ReactNodeViewRenderer(FileView);
+    return withEditorMenu(ReactNodeViewRenderer(FileView));
   },
 });

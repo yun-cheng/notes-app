@@ -7,6 +7,7 @@ import type { NoteCard, TodoCard } from '../domain/types';
 import { useCards } from '../state/CardsContext';
 import { useEntryViewOnly } from './BubbleTools';
 import { entries, useEntryActions, writeClipboard } from './entryActions';
+import { useCopyPhoto } from './copyPhoto';
 import { ColorSwatches } from './EntryStyle';
 import { Icon, type IconName } from './Icon';
 import { useSelection } from './selection';
@@ -55,19 +56,21 @@ export interface MenuExtras {
 
 /**
  * An entry's menu: from a right-click on its bubble, or the menu key or Shift+F10 on it. A right-click on text selected in
- * the bubble gets a menu for those words instead (`TextMenu`), and one on a link a menu to open it or copy its
- * address (`LinkItems`). With Shift it gets the browser's own menu. On a touch screen a long press keeps picking the
+ * the bubble gets a menu for those words instead (`TextMenu`), one on a link a menu to open it or copy its
+ * address (`LinkItems`), and one on a photo a menu to copy it (`PhotoItems`). With Shift it gets the browser's own menu. On a touch screen a long press keeps picking the
  * entry; its sheet has every action.
  */
 export function useEntryMenu(card: Entry, extras: MenuExtras = {}) {
   const [at, setAt] = useState<Point | null>(null);
   const [words, setWords] = useState<{ text: string; end: ChipAnchor } | null>(null);
   const [link, setLink] = useState<string | null>(null);
+  const [photo, setPhoto] = useState<string | null>(null);
   const [sharing, setSharing] = useState(false);
 
   const onContextMenu = (e: ReactMouseEvent<HTMLElement>) => {
     if (e.shiftKey || (e.target instanceof Element && e.target.closest('input, textarea, select'))) return;
     setLink(e.target instanceof Element ? (e.target.closest<HTMLAnchorElement>('a[href]')?.href ?? null) : null);
+    setPhoto(photoAt(e.target));
     const picked = window.getSelection();
     // Taken now: the menu takes the focus, and with it the selection.
     const selected = picked && !picked.isCollapsed && e.currentTarget.contains(picked.anchorNode) ? picked.toString().trim() : '';
@@ -86,7 +89,11 @@ export function useEntryMenu(card: Entry, extras: MenuExtras = {}) {
       {at &&
         createPortal(
           <Shield>
-            {link ? (
+            {photo ? (
+              <ContextMenu at={at} label="Photo" onClose={() => setAt(null)}>
+                <PhotoItems id={photo} onClose={() => setAt(null)} />
+              </ContextMenu>
+            ) : link ? (
               <ContextMenu at={at} label="Link" onClose={() => setAt(null)}>
                 <LinkItems href={link} onClose={() => setAt(null)} />
               </ContextMenu>
@@ -196,6 +203,22 @@ export function WordItems({ words, vaultId, onClose }: { words: string; vaultId?
         </Item>
       </div>
     </>
+  );
+}
+
+/** The photo a right-click landed on, by the ID its thumbnail or block carries; null for anything else. */
+export const photoAt = (target: EventTarget | null): string | null =>
+  (target instanceof Element ? target.closest<HTMLElement>('[data-photo-id]')?.dataset.photoId : null) || null;
+
+/** A photo right-clicked: copy it, to paste as a picture. */
+export function PhotoItems({ id, onClose }: { id: string; onClose: () => void }) {
+  const copyPhoto = useCopyPhoto();
+  return (
+    <div className="style-menu__group">
+      <Item icon="copy" onClick={() => (onClose(), copyPhoto(id))}>
+        Copy photo
+      </Item>
+    </div>
   );
 }
 

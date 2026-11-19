@@ -1,12 +1,13 @@
 import { useEffect, useRef, useState, type ReactNode } from 'react';
+import { createPortal } from 'react-dom';
 import { fileAttachments, linkUrls, photoIds, siteName } from '../domain/content';
 import type { Card } from '../domain/types';
 import { useCards } from '../state/CardsContext';
 import { usePhotoUrl } from './editor/photo';
 import { usePhotoZoom } from './photoZoom';
 import { previewFor, useDisplayPrefs } from './displayPrefs';
-import type { Point } from './EntryMenu';
 import { FileChip } from './files';
+import { ContextMenu, PhotoItems, Shield, type Point } from './EntryMenu';
 import { Icon } from './Icon';
 import { useLinkPreview } from './useLinkPreview';
 import { useBackdropClose } from './useBackdrop';
@@ -17,7 +18,8 @@ const MAX_PHOTOS = 4;
 const MAX_LINKS = 3;
 
 /**
- * An entry's photos, files and web links, shown under its bubble: photos large, as thumbnails or as a count; files
+ * An entry's photos, files and web links, shown under its bubble: photos large, as thumbnails or as a count (a
+ * right-click on one copies it); files
  * as chips that open them; links as cards, as one line each or not at all (they stay links in the text). The entry's
  * own style, from its style menu, wins over the device's setting.
  */
@@ -32,6 +34,8 @@ export function Attachments({ card }: { card: Card }) {
   const files = fileAttachments(card.content);
   const links = prefs.links === 'off' ? [] : linkUrls(card.content);
   const [viewing, setViewing] = useState<number | null>(null);
+  // A photo right-clicked: a menu to copy it. (The entry's own menu is the bubble's, beside these.)
+  const [photoMenu, setPhotoMenu] = useState<{ id: string; at: Point } | null>(null);
   if (!photos.length && !files.length && !links.length) return null;
   const extra = photos.length - MAX_PHOTOS;
 
@@ -46,7 +50,20 @@ export function Attachments({ card }: { card: Card }) {
       {photos.length > 0 && prefs.photos !== 'off' && (
         <div className={`attachments__photos${prefs.photos === 'large' ? ' attachments__photos--large' : ''}`}>
           {photos.slice(0, MAX_PHOTOS).map((id, i) => (
-            <button key={id} type="button" className="thumb" aria-label={`Open photo ${i + 1} of ${photos.length}`} onClick={() => setViewing(i)}>
+            <button
+              key={id}
+              type="button"
+              className="thumb"
+              data-photo-id={id}
+              aria-label={`Open photo ${i + 1} of ${photos.length}`}
+              onClick={() => setViewing(i)}
+              onContextMenu={(e) => {
+                // Shift keeps the browser's menu.
+                if (e.shiftKey) return;
+                e.preventDefault();
+                setPhotoMenu({ id, at: { x: e.clientX, y: e.clientY } });
+              }}
+            >
               <Thumb id={id} />
               {i === MAX_PHOTOS - 1 && extra > 0 && <span className="thumb__more">+{extra}</span>}
             </button>
@@ -61,6 +78,7 @@ export function Attachments({ card }: { card: Card }) {
       ))}
       {links.length > MAX_LINKS && <span className="attachments__more">and {links.length - MAX_LINKS} more links</span>}
       {viewing !== null && <PhotoViewer ids={photos} start={viewing} onClose={() => setViewing(null)} />}
+      {photoMenu && <PhotoMenu id={photoMenu.id} at={photoMenu.at} onClose={() => setPhotoMenu(null)} />}
     </div>
   );
 }
@@ -118,8 +136,9 @@ export function LinkCard({ url, preview: allowed, compact = false, address = fal
 /**
  * Photos full size, one at a time, with arrows and keys to move between them, and, for more than one, a row of them
  * all along the bottom, the one shown marked and kept in sight, any of them pressed to show it. Each zooms with the
- * wheel or a pinch (`usePhotoZoom`), and Cmd+C (Ctrl+C) copies the one shown. `caption` puts something about the photo shown above the row, and `onMenu`
- * opens a menu for it on a right-click: on the Photos page, its entry and what to do with it.
+ * wheel or a pinch (`usePhotoZoom`), and Cmd+C (Ctrl+C) copies the one shown. `caption` puts something about the
+ * photo shown above the row. A right-click opens a menu to copy the photo, or `onMenu`'s instead: on the Photos
+ * page, its entry and what to do with it, as well.
  */
 export function PhotoViewer({ ids, start, onClose, caption, onMenu }: { ids: string[]; start: number; onClose: () => void; caption?: (at: number) => ReactNode; onMenu?: (at: number, point: Point) => void }) {
   const backdrop = useBackdropClose(onClose);
@@ -128,6 +147,7 @@ export function PhotoViewer({ ids, start, onClose, caption, onMenu }: { ids: str
   const step = (d: number) => setAt((i) => (i + d + ids.length) % ids.length);
   const zoom = usePhotoZoom(ids[at]);
   const copyPhoto = useCopyPhoto();
+  const [menu, setMenu] = useState<Point | null>(null);
 
   useEffect(() => {
     const onKey = (e: KeyboardEvent) => {
@@ -161,15 +181,16 @@ export function PhotoViewer({ ids, start, onClose, caption, onMenu }: { ids: str
           src={url}
           alt={`Photo ${at + 1} of ${ids.length}`}
           {...zoom.image}
-          onContextMenu={
-            onMenu &&
-            ((e) => {
-              // Shift keeps the browser's menu, to save the photo, say.
-              if (e.shiftKey) return;
-              e.preventDefault();
-              onMenu(at, { x: e.clientX, y: e.clientY });
-            })
-          }
+          onContextMenu={(e) => {
+            // Shift keeps the browser's menu, to save the photo, say.
+            if (e.shiftKey) return;
+            e.preventDefault();
+            // Not the entry's menu, for the bubble the viewer opened from.
+            e.stopPropagation();
+            const point = { x: e.clientX, y: e.clientY };
+            if (onMenu) onMenu(at, point);
+            else setMenu(point);
+          }}
         />
       ) : (
         <p className="viewer__note">{state === 'loading' ? 'Loading photo…' : 'This photo isn’t available yet.'}</p>
@@ -201,7 +222,20 @@ export function PhotoViewer({ ids, start, onClose, caption, onMenu }: { ids: str
       <button type="button" className="viewer__close" aria-label="Close" onClick={onClose}>
         ×
       </button>
+      {menu && <PhotoMenu id={ids[at]} at={menu} onClose={() => setMenu(null)} />}
     </div>
+  );
+}
+
+/** A photo's own menu, on a right-click: copy it. */
+function PhotoMenu({ id, at, onClose }: { id: string; at: Point; onClose: () => void }) {
+  return createPortal(
+    <Shield>
+      <ContextMenu at={at} label="Photo" onClose={onClose}>
+        <PhotoItems id={id} onClose={onClose} />
+      </ContextMenu>
+    </Shield>,
+    document.body,
   );
 }
 

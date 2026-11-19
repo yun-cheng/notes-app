@@ -1,5 +1,6 @@
 import { Node } from '@tiptap/core';
 import { NodeViewWrapper, ReactNodeViewRenderer, type ReactNodeViewProps } from '@tiptap/react';
+import { withEditorMenu } from './nodeMenu';
 import { useEffect, useState } from 'react';
 import { useCards } from '../../state/CardsContext';
 
@@ -41,7 +42,7 @@ function PhotoView({ node, selected }: ReactNodeViewProps) {
   const alt = typeof node.attrs.alt === 'string' ? node.attrs.alt : '';
   const { url, state } = usePhotoUrl(id);
   return (
-    <NodeViewWrapper as="figure" className={`photo${selected ? ' is-selected' : ''}`} data-drag-handle>
+    <NodeViewWrapper as="figure" className={`photo${selected ? ' is-selected' : ''}`} data-photo-id={id} data-drag-handle>
       {url ? (
         <img src={url} alt={alt || 'Photo'} draggable={false} />
       ) : (
@@ -81,6 +82,6 @@ export const Photo = Node.create({
   },
 
   addNodeView() {
-    return ReactNodeViewRenderer(PhotoView);
+    return withEditorMenu(ReactNodeViewRenderer(PhotoView));
   },
 });

@@ -2,7 +2,7 @@ import { useState, type ReactNode } from 'react';
 import { createPortal } from 'react-dom';
 import { AllSelection, TextSelection } from '@tiptap/pm/state';
 import type { EditorView } from '@tiptap/pm/view';
-import { ContextMenu, Item, LinkItems, Shield, WordItems, type Point } from '../EntryMenu';
+import { ContextMenu, Item, LinkItems, photoAt, PhotoItems, Shield, WordItems, type Point } from '../EntryMenu';
 import { MOD } from '../Shortcuts';
 import { useToast } from '../Toast';
 import type { Pasted } from './clipboardStyle';
@@ -12,6 +12,7 @@ interface MenuState {
   view: EditorView;
   words: string;
   href: string | null;
+  photo: string | null;
 }
 
 interface EditorMenuOptions {
@@ -27,7 +28,7 @@ interface EditorMenuOptions {
  * The app's own menu for a right-click in an editor's text (an open entry, the writing box, a version in history),
  * in place of the browser's: Cut, Copy and Paste, going the way Cmd+X, Cmd+C and Cmd+V do (in the Copy & paste
  * styles, with their chip); Select all; and, with words selected, the same as words selected in a bubble (a new
- * note from them, Google), and for a link, opening it or copying its address. A right-click outside what's selected
+ * note from them, Google), for a link, opening it or copying its address, and for a photo, copying it. A right-click outside what's selected
  * puts the cursor there first, as the browser does. Shift with the right-click still gives the browser's menu.
  */
 export function useEditorMenu({ paste, addFiles, vaultId }: EditorMenuOptions) {
@@ -62,6 +63,7 @@ export function useEditorMenu({ paste, addFiles, vaultId }: EditorMenuOptions) {
       view,
       words: sel.empty ? '' : view.state.doc.textBetween(sel.from, sel.to, '\n', ' ').trim(),
       href: target?.closest<HTMLAnchorElement>('a[href]')?.href ?? null,
+      photo: photoAt(target),
     });
     return true;
   };
@@ -106,6 +108,7 @@ export function useEditorMenu({ paste, addFiles, vaultId }: EditorMenuOptions) {
     view = createPortal(
       <Shield>
         <ContextMenu at={menu.at} label="Text" onClose={close}>
+          {menu.photo && <PhotoItems id={menu.photo} onClose={close} />}
           {menu.href && <LinkItems href={menu.href} onClose={close} />}
           <div className="style-menu__group">
             {editable && menu.words && (

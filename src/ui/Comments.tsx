@@ -1,11 +1,10 @@
-import { useEffect, useState, type FormEvent } from 'react';
+import { useEffect, useRef, useState, type FormEvent } from 'react';
 import type { Card } from '../domain/types';
 import { useCards } from '../state/CardsContext';
 import { usePermissions } from './viewOnly';
 import { SyncOffline } from '../sync/engine';
 import { addComment, deleteComment, fetchComments, resolveComment, type CardComment } from '../sync/http';
 import { useToast } from './Toast';
-import { loadDraft, saveDraft } from './drafts';
 
 function when(at: number) {
   return new Date(at).toLocaleString(undefined, { dateStyle: 'medium', timeStyle: 'short' });
@@ -13,25 +12,38 @@ function when(at: number) {
 
 /** Comments live on the server only, so they need a connection. A card never synced has none yet. */
 export function Comments({ card }: { card: Card }) {
-  const { vaults, accountId, engine } = useCards();
+  const { vaults, accountId, engine, drafts } = useCards();
   const may = usePermissions();
   const toast = useToast();
   const can = may(card);
   const [comments, setComments] = useState<CardComment[] | null>(null);
   const [offline, setOffline] = useState(false);
-  // Kept on the device as it's written, per entry: a sheet that moves to another entry reads that one's.
+  // Kept as it's written, per entry, and on the account's other devices: a sheet that moves to another entry reads that one's.
   const stored = (id: string) => {
-    const text = loadDraft('comment', accountId, id);
+    const text = drafts.get('comment', id);
     return typeof text === 'string' ? text : '';
   };
   const [kept, setKept] = useState(() => ({ card: card.id, text: stored(card.id) }));
   const draft = kept.card === card.id ? kept.text : stored(card.id);
   const setDraft = (text: string) => {
     setKept({ card: card.id, text });
-    saveDraft('comment', accountId, card.id, text.trim() ? text : null);
+    drafts.set('comment', card.id, text.trim() ? text : null);
   };
   const [showResolved, setShowResolved] = useState(false);
   const synced = card.seq > 0;
+
+  // One from another device shows, unless something is being written here.
+  const box = useRef<HTMLTextAreaElement>(null);
+  useEffect(
+    () =>
+      drafts.subscribe((kind, key) => {
+        if (kind !== 'comment' || key !== card.id) return;
+        if (document.activeElement === box.current && box.current?.value.trim()) return;
+        const text = drafts.get('comment', key);
+        setKept({ card: key, text: typeof text === 'string' ? text : '' });
+      }),
+    [drafts, card.id],
+  );
 
   useEffect(() => {
     if (!synced) return;
@@ -55,7 +67,7 @@ export function Comments({ card }: { card: Card }) {
     const cardId = card.id;
     if (draft.trim() && (await run(() => addComment(cardId, draft.trim())))) {
       // The entry shown may have changed while it was sending: drop the sent one's draft, not the one now shown.
-      saveDraft('comment', accountId, cardId, null);
+      drafts.set('comment', cardId, null);
       setKept((k) => (k.card === cardId ? { card: cardId, text: '' } : k));
     }
   };
@@ -98,7 +110,7 @@ export function Comments({ card }: { card: Card }) {
       )}
       {can.comment && (
         <form className="comment-form" onSubmit={(e) => void submit(e)}>
-          <textarea className="text-input" rows={2} value={draft} maxLength={5000} placeholder="Add a comment" aria-label="Add a comment" onChange={(e) => setDraft(e.target.value)} />
+          <textarea ref={box} className="text-input" rows={2} value={draft} maxLength={5000} placeholder="Add a comment" aria-label="Add a comment" onChange={(e) => setDraft(e.target.value)} />
           <button type="submit" className="btn" disabled={!draft.trim()}>
             Comment
           </button>

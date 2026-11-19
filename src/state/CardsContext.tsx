@@ -9,14 +9,14 @@ import { localStorageJournal } from '../storage/journal';
 import { CardRepository } from '../storage/repository';
 import { SyncEngine, type SyncStatus } from '../sync/engine';
 import type { CommentCount, SharedCard, VaultShare } from '../sync/protocol';
-import { deleteAttachment, httpTransport, listAttachments, markAttachments, photoTransport } from '../sync/http';
+import { deleteAttachment, fetchDrafts, httpTransport, listAttachments, markAttachments, photoTransport, sendDrafts } from '../sync/http';
 import { AttachmentKeeper } from '../photos/keeper';
 import { preparePhoto } from '../photos/prepare';
 import { PhotoService, type PhotoState } from '../photos/service';
 import { Keyring } from '../crypto/keyring';
 import { unlockWithPin } from '../crypto/vaultKeys';
 import { forgetTranslations, keepTranslationsIn } from '../ui/translate';
-import { forgetDrafts } from '../ui/drafts';
+import { Drafts, forgetDrafts } from './drafts';
 import { finishEncrypting } from './encrypting';
 import { Unsynced } from './unsynced';
 
@@ -75,6 +75,7 @@ function openAccount(accountId: string) {
       (id) => photos.forget(id),
     ),
     unsynced: new Unsynced(),
+    drafts: new Drafts(accountId, { fetch: fetchDrafts, send: sendDrafts }),
   };
 }
 
@@ -90,6 +91,8 @@ interface CardsValue {
   keyring: Keyring;
   /** Cards with changes not yet sent to the server. */
   unsynced: Unsynced;
+  /** What's written in the journal box or a comment box but not yet sent, following the account between devices. */
+  drafts: Drafts;
   accountId: string;
   /** Cards shared with this account from outside its vaults, by card ID. */
   shared: ReadonlyMap<string, SharedCard>;
@@ -104,7 +107,7 @@ interface CardsValue {
 const CardsContext = createContext<CardsValue | null>(null);
 
 export function CardsProvider({ accountId, children }: { accountId: string; children: ReactNode }) {
-  const [{ store, repo, engine, locks, photos, attachments, keyring, unsynced }] = useState(() => openAccount(accountId));
+  const [{ store, repo, engine, locks, photos, attachments, keyring, unsynced, drafts }] = useState(() => openAccount(accountId));
   // This account's translations, kept on this device.
   useEffect(() => {
     void keepTranslationsIn(store);
@@ -122,8 +125,8 @@ export function CardsProvider({ accountId, children }: { accountId: string; chil
   const [commentCounts, setCommentCounts] = useState<ReadonlyMap<string, number>>(new Map());
   // The same object until something in it changes, since every entry on screen reads it.
   const value = useMemo<CardsValue | null>(
-    () => (index && vaults ? { index, repo, engine, vaults, locks, locked, photos, attachments, keyring, unsynced, accountId, shared, sharedInto, commentCounts } : null),
-    [index, repo, engine, vaults, locks, locked, photos, attachments, keyring, unsynced, accountId, shared, sharedInto, commentCounts],
+    () => (index && vaults ? { index, repo, engine, vaults, locks, locked, photos, attachments, keyring, unsynced, drafts, accountId, shared, sharedInto, commentCounts } : null),
+    [index, repo, engine, vaults, locks, locked, photos, attachments, keyring, unsynced, drafts, accountId, shared, sharedInto, commentCounts],
   );
 
   // After a sync that left nothing to send, photos and files no entry holds go to the Trash, and those 30 days
@@ -151,6 +154,24 @@ export function CardsProvider({ accountId, children }: { accountId: string; chil
       if (state === 'idle' && !pending && lastSyncedAt) void attachments.sweep();
     });
   }, [attachments, engine, repo]);
+
+  // Drafts are sent and fetched after each sync, as the journal comes from other devices then too; and sent as the
+  // app is left, rather than a moment later.
+  useEffect(() => {
+    let last: number | null = null;
+    const stop = engine.subscribe(() => {
+      const { state, lastSyncedAt } = engine.getStatus();
+      if (state !== 'idle' || !lastSyncedAt || lastSyncedAt === last) return;
+      last = lastSyncedAt;
+      void drafts.sync().catch(() => undefined);
+    });
+    const leaving = () => document.visibilityState === 'hidden' && void drafts.send().catch(() => undefined);
+    document.addEventListener('visibilitychange', leaving);
+    return () => {
+      stop();
+      document.removeEventListener('visibilitychange', leaving);
+    };
+  }, [engine, drafts]);
 
   // An entry moved into an encrypted vault, or whose vault became one, keeps no translation in the clear here.
   useEffect(() => {

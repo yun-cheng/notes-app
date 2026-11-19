@@ -4,7 +4,7 @@ import type { StoredAttachment } from '../domain/attachments';
 import type { CardRecord, JSONNode, Vault } from '../domain/types';
 import type { PhotoTransport } from '../photos/types';
 import { SyncAuthExpired, SyncOffline, type SyncTransport } from './engine';
-import type { Account, AccountSummary, ConfigResponse, ConnectedApp, LinkPreview, PullResponse, PushResponse, RecentVersionsResponse, ServerTranslation, SessionInfo, SharedResponse, SignedInAccounts, VersionResponse, VersionsResponse } from './protocol';
+import type { Account, AccountSummary, ConfigResponse, DraftChange, DraftsResponse, ConnectedApp, LinkPreview, PullResponse, PushResponse, RecentVersionsResponse, ServerTranslation, SessionInfo, SharedResponse, SignedInAccounts, VersionResponse, VersionsResponse } from './protocol';
 
 let requestAccount: string | null = null;
 
@@ -238,6 +238,11 @@ export interface CardComment {
   created_at: number;
   resolved_at: number | null;
 }
+
+/** The account's drafts changed on the server after `since` (all of them from 0). */
+export const fetchDrafts = (since: number) => request<DraftsResponse>(`/drafts?since=${since}`);
+/** Sends drafts as they're typed, or null for one sent or emptied. */
+export const sendDrafts = async (drafts: DraftChange[]) => void (await request<unknown>('/drafts', { method: 'PUT', body: JSON.stringify({ drafts }) }));
 
 export const fetchComments = async (cardId: string) => (await request<{ comments: CardComment[] }>(`${cardPath(cardId)}/comments`)).comments;
 export const addComment = async (cardId: string, body: string) =>

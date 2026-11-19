@@ -603,6 +603,21 @@ export async function seed() {
 
   trashedAttachments(DEMO.id, family.id, personal);
 
+  // Drafts, left as if typed on another device: one in the journal box when it shows #travel, and a reply under
+  // Kyoto to Sam's open question. Each shows in its box until sent or emptied.
+  const paragraph = (text: string) => ({ type: 'doc', content: [{ type: 'paragraph', content: [{ type: 'text', text }] }] });
+  await call(
+    DEMO,
+    '/drafts',
+    {
+      drafts: [
+        { kind: 'journal', key: '/journal?tag=demo-tag-travel', value: paragraph('Look up rail passes for the Kyoto trip') },
+        { kind: 'comment', key: kyoto, value: "Not yet. I'm choosing between two near the" },
+      ],
+    },
+    'PUT',
+  );
+
   writeFileSync(SESSION_FILE, JSON.stringify({ token: DEMO.token, user: { id: DEMO.id, email: DEMO.email, name: DEMO.name } }));
   return { cards: mine.length + 3, pin: DEMO_PIN, recoveryKey, diaryOpen: !!diaryKey };
 }

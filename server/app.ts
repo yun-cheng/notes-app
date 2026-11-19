@@ -30,6 +30,7 @@ import { reminderRoutes } from './reminders';
 import { createVault, listVaults, updateVault, type VaultUpdate } from './vaults';
 import { getVersion, listRecentVersions, listVersions, sealVersions, type Device } from './versions';
 import { translateRoutes } from './translate';
+import { draftRoutes } from './drafts';
 import { imageRoutes, unfurlRoutes, type WebFetch } from './unfurl';
 
 type Env = AppEnv;
@@ -350,6 +351,7 @@ export function createApp({
   commentRoutes(app, now);
   pairingSessionRoutes(app, now);
   reminderRoutes(app, now);
+  draftRoutes(app, now);
 
   app.onError((err, c) => {
     console.error(err);

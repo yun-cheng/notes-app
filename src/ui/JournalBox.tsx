@@ -29,7 +29,6 @@ import { LockPanel } from './LockPanel';
 import { useToast } from './Toast';
 import { BOX_PASTE, type ForwardedPaste } from './useEntryShortcuts';
 import { journalDefaults, useSaveEntries } from './useSaveEntry';
-import { loadDraft, saveDraft } from './drafts';
 import { journalPath } from './paths';
 
 /** Enter saves on a computer. On a phone, Return makes a new line and the button saves. */
@@ -86,7 +85,7 @@ const matches = (words: string, query: string) => words.toLowerCase().includes(q
  * vault, a todo when it shows todos (due today when it shows what's due today), and the day it shows.
  */
 export function JournalBox({ filter }: { filter: StreamFilter }) {
-  const { index, vaults, accountId, locked } = useCards();
+  const { index, vaults, accountId, locked, drafts } = useCards();
   const today = useToday();
   const toast = useToast();
   const { saveEntries } = useSaveEntries();
@@ -103,20 +102,21 @@ export function JournalBox({ filter }: { filter: StreamFilter }) {
   const photoVault = filter.vaultId ?? mainVault(vaults, accountId)?.id;
   const latest = useRef({ index, today, photoVault, diary, filter, saving, vaults });
   latest.current = { index, today, photoVault, diary, filter, saving, vaults };
-  // What's written is kept as it's typed, one draft for each view of the journal, as the box is new in each.
+  // What's written is kept as it's typed, one draft for each view of the journal, as the box is new in each, and
+  // follows the account to its other devices.
   const draftKey = journalPath({ ...filter, sort: undefined });
   const keepDraft = (doc: JSONNode) => {
     const { filter: f, today: day, vaults: vs } = latest.current;
     const entries = entriesFromDoc(doc, day);
-    if (!entries.length) return saveDraft('journal', accountId, draftKey, null);
+    if (!entries.length) return drafts.set('journal', draftKey, null);
     // One bound for an encrypted vault stays out of storage: the device keeps those entries only encrypted.
     const diaryOf = diaryVault(vs, accountId)?.id;
     const home = f.vaultId ?? mainVault(vs, accountId)?.id;
     const encrypted = entries.some((e) => vs.find((v) => v.id === (e.diary && diaryOf ? diaryOf : home))?.encryption);
-    saveDraft('journal', accountId, draftKey, doc, encrypted);
+    drafts.set('journal', draftKey, doc, encrypted);
   };
   const [draft] = useState(() => {
-    const kept = loadDraft('journal', accountId, draftKey) as JSONNode | undefined;
+    const kept = drafts.get('journal', draftKey) as JSONNode | undefined;
     return kept?.type === 'doc' ? kept : undefined;
   });
   const editorRef = useRef<TiptapEditor | null>(null);
@@ -141,7 +141,7 @@ export function JournalBox({ filter }: { filter: StreamFilter }) {
       setUnlock(result.saved ? null : (result.unlock ?? null));
       if (result.saved) {
         editor.commands.setContent(start, { emitUpdate: false });
-        saveDraft('journal', accountId, draftKey, null);
+        drafts.set('journal', draftKey, null);
         if (!f.sort) requestAnimationFrame(() => window.scrollTo({ top: document.documentElement.scrollHeight, behavior: 'instant' }));
       }
     } catch (err) {
@@ -274,6 +274,17 @@ export function JournalBox({ filter }: { filter: StreamFilter }) {
     window.addEventListener(BOX_PASTE, take);
     return () => window.removeEventListener(BOX_PASTE, take);
   }, [editor]);
+
+  // A draft from another device shows here, unless something is being written here: the last to reach the server wins.
+  useEffect(() => {
+    if (!editor) return;
+    return drafts.subscribe((kind, key) => {
+      if (kind !== 'journal' || key !== draftKey || editor.isDestroyed) return;
+      if (editor.isFocused && entriesFromDoc(editor.getJSON() as JSONNode, latest.current.today).length) return;
+      const kept = drafts.get('journal', draftKey) as JSONNode | undefined;
+      editor.commands.setContent(kept?.type === 'doc' ? kept : start, { emitUpdate: false });
+    });
+  }, [editor, drafts, draftKey, start]);
 
   // After unlocking, back to the box to save again.
   const unlocked = !!unlock && !locked.has(unlock);

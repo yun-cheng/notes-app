@@ -152,3 +152,25 @@ export interface LinkPreview {
   image?: string;
   site?: string;
 }
+
+/** The boxes whose drafts are kept for an account: the journal box, one for each view, and a comment box, one for each entry. */
+export const DRAFT_KINDS = ['journal', 'comment'] as const;
+export type DraftKind = (typeof DRAFT_KINDS)[number];
+
+/** A draft as a device sends it (`PUT /api/drafts`): `value` is the draft, or null once it's sent or emptied. */
+export interface DraftChange {
+  kind: DraftKind;
+  key: string;
+  value: unknown;
+}
+
+/** A draft as the server gives it back, with when it arrived there, by the server's clock. */
+export interface ServerDraft extends DraftChange {
+  at: number;
+}
+
+/** `GET /api/drafts?since=`: those changed after `since`, and the time to ask from next. */
+export interface DraftsResponse {
+  drafts: ServerDraft[];
+  at: number;
+}

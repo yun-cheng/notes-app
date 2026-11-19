@@ -1,10 +1,11 @@
 import type { Database } from './db';
+import { DRAFT_DAYS } from './drafts';
 import { utcDay } from './translate';
 
 /**
  * Removes what has expired and can never be used again: sessions, one-time sign-in and pairing codes, Drive
  * connection attempts, AI app grants whose refresh token ran out (with their access tokens), the record of
- * reminders sent a week ago, and translation counts for days gone by. Run once a day.
+ * reminders sent a week ago, translation counts for days gone by, and drafts left 30 days. Run once a day.
  * Public links are left: their page says when one has expired.
  */
 export async function removeExpired(db: Database, now: number): Promise<void> {
@@ -19,5 +20,6 @@ export async function removeExpired(db: Database, now: number): Promise<void> {
     db.prepare(`DELETE FROM reminders_sent WHERE sent_at < ?`).bind(now - 7 * 86_400_000),
     // Only today's count limits anything; yesterday's is kept for a day, in case of clocks near midnight.
     db.prepare(`DELETE FROM translation_counts WHERE day < ?`).bind(utcDay(now - 86_400_000)),
+    db.prepare(`DELETE FROM drafts WHERE updated_at < ?`).bind(now - DRAFT_DAYS * 86_400_000),
   ]);
 }

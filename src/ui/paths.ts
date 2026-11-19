@@ -69,8 +69,11 @@ export function mediaShownIn(params: URLSearchParams): MediaShown {
   return show === 'photos' || show === 'videos' ? show : undefined;
 }
 
-/** The parts of a filter the Photos, Links and Files pages take. */
-export const libraryFilter = (filter: StreamFilter): StreamFilter => ({ ...filter, sort: undefined, board: undefined, has: undefined, archived: undefined, template: undefined });
+/**
+ * The parts of a filter the Photos, Links and Files pages take: not the type or a todo status (2026-11-20), as nobody
+ * looks for a photo, link or file by the kind of entry it's in, nor the order, the board, Contains or Templates.
+ */
+export const libraryFilter = (filter: StreamFilter): StreamFilter => ({ ...filter, type: undefined, status: undefined, sort: undefined, board: undefined, has: undefined, archived: undefined, template: undefined });
 
 /** The pages showing todos by their dates. */
 export type DatedPage = '/calendar' | '/timeline';

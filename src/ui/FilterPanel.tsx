@@ -91,8 +91,9 @@ const CONTAINS_CHOICE: Record<Contains, string> = { link: 'Links', photo: 'Photo
  * its choice, like "Due today", with an × that takes it off. On the history, Archived narrows it to archived
  * entries' changes (the journal's archived entries are the Archive, a page of their own). A tag or vault picked in
  * the sidebar shows here too, with its ×, and Clear all takes every filter off when there are several. The order is
- * kept throughout. On the calendar and the timeline, which show todos with dates, only Todos is offered. `lead` goes
- * first, a page's own switch, as Photos' All, Photos and Videos.
+ * kept throughout. On the calendar and the timeline, which show todos with dates, only Todos is offered; on Photos, Links
+ * and Files neither the switch nor Todos is (`libraryFilter`). `lead` goes first, a page's own switch, as Photos' All,
+ * Photos and Videos.
  */
 export function FilterBar({ filter, lead }: { filter: StreamFilter; lead?: ReactNode }) {
   const { index, vaults } = useCards();
@@ -105,7 +106,8 @@ export function FilterBar({ filter, lead }: { filter: StreamFilter; lead?: React
   // On the Archive, Archived is the page, not a filter on it.
   const onArchive = pathname === ARCHIVE_PATH;
   const onTrash = pathname === TRASH_PATH;
-  // Every entry on the Photos, Links or Files page holds one, and templates aren't on it.
+  // Every entry on the Photos, Links or Files page holds one, and templates aren't on it. Nor are the type and the
+  // todo status: a photo, link or file isn't looked for by the kind of entry it's in.
   const onLibrary = isLibraryPage(pathname);
   const [picking, setPicking] = useState(false);
   const parts = filterParts(filter);
@@ -127,7 +129,7 @@ export function FilterBar({ filter, lead }: { filter: StreamFilter; lead?: React
   return (
     <div className="filter-bar" role="group" aria-label="Filters">
       {lead}
-      {!dated && (
+      {!dated && !onLibrary && (
         // Both, notes or todos, a switch rather than a menu: one press, and all three always in sight.
         <span className="segmented filter-switch" role="group" aria-label="Type">
           {([undefined, 'note', 'todo', 'stack'] as const).map((t) => (
@@ -142,13 +144,15 @@ export function FilterBar({ filter, lead }: { filter: StreamFilter; lead?: React
           ))}
         </span>
       )}
-      <FilterMenu
-        name="Todos"
-        value={filter.status && STATUS_LABEL[filter.status]}
-        clear={filter.status ? path(without('status')) : undefined}
-        // Every todo on the calendar has a date.
-        options={STATUSES.filter((s) => !dated || s !== 'undated').map((s) => option('status', s, STATUS_LABEL[s], { type: 'todo' }))}
-      />
+      {!onLibrary && (
+        <FilterMenu
+          name="Todos"
+          value={filter.status && STATUS_LABEL[filter.status]}
+          clear={filter.status ? path(without('status')) : undefined}
+          // Every todo on the calendar has a date.
+          options={STATUSES.filter((s) => !dated || s !== 'undated').map((s) => option('status', s, STATUS_LABEL[s], { type: 'todo' }))}
+        />
+      )}
       {!dated && (
         <FilterMenu
           name="Written"

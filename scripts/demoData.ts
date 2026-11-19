@@ -440,7 +440,7 @@ export async function seed() {
     },
   );
   // The busiest todo: due at a time after a start date, high priority, a checklist with nested steps, links back to
-  // an archived note and a web page, a door code kept hidden, a second page, a tint and a reaction.
+  // an archived note and a web page, a door code kept hidden, a second page with the lease attached, a tint and a reaction.
   todo(move, 'Move into the new flat', addDays(today, 2), {
     tags: [home, high, travel],
     when: at(4, 20, 0),
@@ -456,7 +456,8 @@ export async function seed() {
       list('orderedList', nested('Load the van', list('bulletList', 'Heavy boxes first', 'Plants last, in the cab')), 'Meter readings at both places', 'Photos of the empty rooms'),
       p('Movers: ', web('checklist ideas', 'https://en.wikipedia.org/wiki/Relocation_(personal)'), ', and ', text('tip the crew', ['bold']), '.'),
     ),
-    pages: [doc(h('Change the address'), checklist(['Bank', true], ['Doctor', false], ['Work payroll', false], ['Post office redirect', false]))],
+    // The lease, attached on the back page: a todo's file, and one on a page behind the front, for the Files page.
+    pages: [doc(h('Change the address'), checklist(['Bank', true], ['Doctor', false], ['Work payroll', false], ['Post office redirect', false]), file('lease', 'pdf', 'application/pdf'))],
   });
   note('demo-note-today-1', ago(95), lines('Call the dentist about Thursday'));
   note('demo-note-today-2', ago(40), lines('Buy oat milk, bananas and coffee beans'), [home]);

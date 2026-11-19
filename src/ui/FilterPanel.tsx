@@ -57,7 +57,8 @@ export function useFilterPath(): (filter: StreamFilter) => string {
     };
   }
   if (pathname === TRASH_PATH) return trashPath;
-  if (isLibraryPage(pathname)) return (filter) => libraryPath(pathname, filter);
+  // On Photos, showing only photos or only videos stays as the filter changes.
+  if (isLibraryPage(pathname)) return (filter) => libraryPath(pathname, filter, params);
   return pathname === '/history' ? historyPath : journalPath;
 }
 

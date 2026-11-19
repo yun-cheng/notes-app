@@ -1093,6 +1093,12 @@ body:has(.batch) .toast-slot { bottom: calc(var(--tabbar) + env(safe-area-inset-
 .photos__picked { display: inline-flex; align-items: center; gap: 4px; }
 .photos__unpick { margin-left: -8px; font-size: 24px; font-weight: 400; line-height: 1; }
 .photos__picked { white-space: nowrap; }
+/* All, Photos or Videos, in the title bar: as high as the buttons beside it, and narrower on a phone. */
+.segmented.photos__show { flex: none; }
+.segmented.photos__show button { min-height: 30px; padding: 0 12px; }
+@media (max-width: 419px) { .segmented.photos__show button { padding: 0 6px; font-size: 13px; } }
+/* On a phone it needs the room of the demo tag and the sync cloud, as picking photos does. */
+@media (max-width: 599px) { .page__head:has(.photos__show) > :is(.demo-tag, .sync-menu) { display: none; } }
 /* While picking on a phone, the count and what to do with them take the title bar. */
 @media (max-width: 599px) { .page__head:has(.photos__picked) > :is(.demo-tag, .sync-menu, .account-button) { display: none; } }
 @media (max-width: 599px) { .photo-tile { border-radius: 2px; } .photos__day { padding-top: 13px; font-size: 14px; } .photo-tile .photos__check { top: 4px; left: 4px; } }

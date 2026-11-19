@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { cardPhotoIds, layoutPhotos, photoDays, photoFileNames } from './photos';
+import { cardPhotoIds, layoutPhotos, mediaShowing, photoDays, photoFileNames } from './photos';
 import { doc, note, p, tag, text, todo } from './testFixtures';
 import type { JSONNode } from './types';
 
@@ -43,6 +43,29 @@ describe('photoDays', () => {
     const first = note('first', '', { createdAt: at('2026-11-01'), content: doc(photo('same')) });
     const copy = note('copy', '', { createdAt: at('2026-11-05'), content: doc(photo('same')) });
     expect(photoDays([first, copy])).toEqual([{ day: '2026-11-05', items: [{ id: 'same', card: copy, day: '2026-11-05' }] }]);
+  });
+
+  it('shows only the photos, or only the videos, leaving out a day with none', () => {
+    const video = (id: string) => ({ type: 'file', attrs: { id, name: `${id}.mp4`, mime: 'video/mp4', duration: 4 } });
+    const days = photoDays([
+      note('both', '', { createdAt: at('2026-11-12'), content: doc(photo('a'), video('v')) }),
+      note('photo', '', { createdAt: at('2026-11-10'), content: doc(photo('b')) }),
+      note('video', '', { createdAt: at('2026-11-08'), content: doc(video('w')) }),
+    ]);
+    const shown = (show: 'photos' | 'videos' | undefined) => mediaShowing(days, show).map((d) => [d.day, d.items.map((i) => i.id)]);
+    expect(shown(undefined)).toEqual([
+      ['2026-11-12', ['a', 'v']],
+      ['2026-11-10', ['b']],
+      ['2026-11-08', ['w']],
+    ]);
+    expect(shown('photos')).toEqual([
+      ['2026-11-12', ['a']],
+      ['2026-11-10', ['b']],
+    ]);
+    expect(shown('videos')).toEqual([
+      ['2026-11-12', ['v']],
+      ['2026-11-08', ['w']],
+    ]);
   });
 });
 

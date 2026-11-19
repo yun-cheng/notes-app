@@ -21,6 +21,18 @@ export const cardMedia = (card: Card): Media[] => onEveryPage(card, mediaItems);
  */
 export const photoDays = (cards: readonly Card[]): PhotoDay[] => entryDays(cards, cardMedia, true);
 
+/** Which of them the Photos page shows: both, or only photos or only videos (its switch, `?show=` in the address). */
+export type MediaShown = 'photos' | 'videos' | undefined;
+
+/** The days' photos, or their videos, as `show` says, leaving out a day with none. */
+export function mediaShowing(days: readonly PhotoDay[], show: MediaShown): readonly PhotoDay[] {
+  if (!show) return days;
+  return days.flatMap((d) => {
+    const items = d.items.filter((i) => !!i.video === (show === 'videos'));
+    return items.length ? [{ day: d.day, items }] : [];
+  });
+}
+
 /** Where a photo or a day's heading sits in the Photos page's layout, in pixels from its top left. */
 export interface Box {
   x: number;

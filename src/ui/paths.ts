@@ -1,4 +1,5 @@
 import type { Location } from 'react-router';
+import type { MediaShown } from '../domain/photos';
 import { filterParams, type StreamFilter } from '../domain/stream';
 import type { Card } from '../domain/types';
 
@@ -50,13 +51,23 @@ export const isLibraryPage = (pathname: string): pathname is LibraryPage => path
 
 /**
  * The Photos, Links or Files page, narrowed by the journal's filters. Its entries are those holding what it lists,
- * not archived and not templates, newest first, so the order, the board and Contains don't apply to it.
+ * not archived and not templates, newest first, so the order, the board and Contains don't apply to it. On Photos,
+ * whether it shows only photos or only videos, from `own` (the address it's on) or `show`.
  */
-export function libraryPath(page: LibraryPage, filter: StreamFilter): string {
-  const query = filterParams(libraryFilter(filter)).toString();
+export function libraryPath(page: LibraryPage, filter: StreamFilter, own?: URLSearchParams, show?: MediaShown): string {
+  const params = filterParams(libraryFilter(filter));
+  const media = page === PHOTOS_PATH ? (show ?? (own ? mediaShownIn(own) : undefined)) : undefined;
+  if (media) params.set('show', media);
+  const query = params.toString();
   return query ? `${page}?${query}` : page;
 }
 export const photosPath = (filter: StreamFilter) => libraryPath(PHOTOS_PATH, filter);
+
+/** Whether the Photos page's address says to show only photos or only videos. */
+export function mediaShownIn(params: URLSearchParams): MediaShown {
+  const show = params.get('show');
+  return show === 'photos' || show === 'videos' ? show : undefined;
+}
 
 /** The parts of a filter the Photos, Links and Files pages take. */
 export const libraryFilter = (filter: StreamFilter): StreamFilter => ({ ...filter, sort: undefined, board: undefined, has: undefined, archived: undefined, template: undefined });

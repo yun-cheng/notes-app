@@ -2,7 +2,8 @@ import { useEffect, useMemo, useRef, useState, type MouseEvent, type PointerEven
 import { rangeBetween } from '../../domain/batch';
 import { displayTitle } from '../../domain/content';
 import { relativeDay } from '../../domain/dates';
-import { layoutPhotos, photoDays, type Box, type PhotoItem } from '../../domain/photos';
+import { useNavigate, useSearchParams } from 'react-router';
+import { layoutPhotos, mediaShowing, photoDays, type Box, type MediaShown, type PhotoItem } from '../../domain/photos';
 import { isFiltered } from '../../domain/stream';
 import { useToday } from '../../state/CardsContext';
 import { mediaCount, PhotoViewer, videosIn } from '../Attachments';
@@ -16,6 +17,7 @@ import { canSharePhotos, usePhotoActions } from '../photoActions';
 import { LONG_PRESS_MS } from '../selection';
 import { MOD } from '../Shortcuts';
 import { Item } from '../EntryMenu';
+import { libraryPath, mediaShownIn, PHOTOS_PATH } from '../paths';
 import { ScrollRail } from '../ScrollRail';
 import { useInView } from '../useInView';
 import { VideoMark, VideoStill } from '../video';
@@ -56,7 +58,8 @@ const sizes = (width: number) =>
  * Every photo and video in the journal, newest first (a video marked with its length, playing full screen), under the day its entry was written, laid out as a photo library does:
  * whole, in rows of about one height that fill the width, a day with a few beside the day before (`layoutPhotos`).
  * A photo opens full screen, where all of them page past in turn, each naming its entry, which opens from there.
- * The journal's filters narrow it: one tag's photos, one vault's, or those in todos. Photos load as they come near.
+ * The journal's filters narrow it: one tag's photos, one vault's, or those in todos; the switch in its title bar, to
+ * photos alone or videos alone. Photos load as they come near.
  *
  * Photos are picked as in a photo library: by the check on each (or on a day, for all of it), Cmd/Ctrl-click, a long
  * press on a touch screen, or Cmd/Ctrl+A for all; then a click picks, and Shift picks everything from the last one.
@@ -64,7 +67,11 @@ const sizes = (width: number) =>
  */
 export function PhotosPage() {
   const today = useToday();
-  const { filter, days } = useLibrary(photoDays);
+  const { filter, days: found } = useLibrary(photoDays);
+  const [params] = useSearchParams();
+  const navigate = useNavigate();
+  const show = mediaShownIn(params);
+  const days = useMemo(() => mediaShowing(found, show), [found, show]);
   const all = useMemo(() => days.flatMap((d) => d.items), [days]);
   const railKeys = useMemo(() => all.map((i) => i.day), [all]);
   const [viewing, setViewing] = useState<number | null>(null);
@@ -214,18 +221,25 @@ export function PhotosPage() {
             </button>
           </>
         ) : (
-          <button type="button" className={`icon-btn only-mobile${filter.tagId || filter.vaultId ? ' is-active' : ''}`} aria-label="Tags and vaults" title="Tags and vaults" onClick={() => setFiltering(true)}>
-            <Icon name="filter" />
-          </button>
+          <>
+            <span className="segmented photos__show" role="group" aria-label="Show">
+              {SHOWN.map(([value, label]) => (
+                <button key={label} type="button" aria-pressed={show === value} onClick={() => void navigate(libraryPath(PHOTOS_PATH, filter, undefined, value))}>
+                  {label}
+                </button>
+              ))}
+            </span>
+            <button type="button" className={`icon-btn only-mobile${filter.tagId || filter.vaultId ? ' is-active' : ''}`} aria-label="Tags and vaults" title="Tags and vaults" onClick={() => setFiltering(true)}>
+              <Icon name="filter" />
+            </button>
+          </>
         )
       }
       below={<FilterBar filter={filter} />}
     >
       {filtering && <FilterSheet onClose={() => setFiltering(false)} />}
       {!all.length ? (
-        <Empty>
-          {isFiltered(filter) ? 'No photos or videos here match. Take a filter off above, or pick another.' : 'No photos or videos yet. Add one to an entry with its photo button, or paste or drop one in.'}
-        </Empty>
+        <Empty>{emptyText(show, isFiltered(filter))}</Empty>
       ) : (
         <div className={`photos${selecting ? ' is-selecting' : ''}`}>
           <p className="photos__count">
@@ -314,6 +328,18 @@ export function PhotosPage() {
  * picked (with Shift, everything from the last one). Its check, Cmd/Ctrl-click or a long press on a touch screen
  * picks it. A right-click with a mouse opens its menu.
  */
+/** The switch in the title bar: everything, or photos alone, or videos alone. */
+const SHOWN: [MediaShown, string][] = [
+  [undefined, 'All'],
+  ['photos', 'Photos'],
+  ['videos', 'Videos'],
+];
+
+function emptyText(show: MediaShown, filtered: boolean): string {
+  if (show) return `No ${show} here${filtered ? ' match' : ''}. Pick All above to see everything${filtered ? ', or take a filter off' : ''}.`;
+  return filtered ? 'No photos or videos here match. Take a filter off above, or pick another.' : 'No photos or videos yet. Add one to an entry with its photo button, or paste or drop one in.';
+}
+
 function Tile({ item, at, box, picked, selecting, onShape, onOpen, onPick, onMenu }: { item: PhotoItem; at: number; box: Box; picked: boolean; selecting: boolean; onShape: (id: string, ratio: number) => void; onOpen: () => void; onPick: (range: boolean) => void; onMenu: (at: Point) => void }) {
   const ref = useRef<HTMLDivElement>(null);
   const seen = useInView(ref, '600px 0px');

@@ -3,7 +3,7 @@
  * sign-in: folders and tags, tag groups with colors (a Priority to sort by and show as a board, and a many-choice
  * Topics), todos for the board by todo state, notes with headings, lists, checklists, quotes, code, web links and links to each other, todos
  * overdue, due today at a time, upcoming, undated, repeating, waiting, done and archived, entries tinted, set to view
- * only or with their own preview style, a private and encrypted Diary vault, a vault shared with Sam and one Sam
+ * only or with their own preview style, photos of every shape (served by the dev server from scripts/demoPhotos), a private and encrypted Diary vault, a vault shared with Sam and one Sam
  * shares to view, a card also in another vault, a note Sam shares, a public link, comments open and resolved, and
  * version history from more than one device. Two entries carry nearly all of it at once, to see how a full one looks:
  * a launch plan note and a moving todo.
@@ -249,6 +249,8 @@ export async function seed() {
   };
   const link = (id: string, label: string): JSONNode => ({ type: 'cardLink', attrs: { id, label } });
   const web = (label: string, href: string): JSONNode => ({ type: 'text', text: label, marks: [{ type: 'link', attrs: { href } }] });
+  /** A photo from scripts/demoPhotos, which the dev server serves in place of Google Drive (vite.config.ts). */
+  const photo = (name: string, alt: string): JSONNode => ({ type: 'photo', attrs: { id: `demo-photo-${name}`, alt } });
 
   // Folders are pinned tags; the rest are plain tags, some with a color.
   const work = tag('demo-tag-work', 'Work', true, 'Anything for the day job.', 'blue');
@@ -282,6 +284,7 @@ export async function seed() {
       steps('Fushimi Inari early, before the crowds', 'Arashiyama bamboo grove', 'Nishiki market for lunch', 'Philosopher\'s Path at sunset'),
       p('Pack using the ', link(packing, 'Packing list'), '.'),
       p('Shrine guide: ', web('Fushimi Inari-taisha', 'https://en.wikipedia.org/wiki/Fushimi_Inari-taisha')),
+      photo('torii', 'Torii gates at Fushimi Inari'),
     ),
     [travel],
     'Kyoto trip',
@@ -294,19 +297,39 @@ export async function seed() {
   note('demo-card-thanks', at(8, 21, 40), lines('ありがとうございます'), [travel], '', personal, {
     pages: [doc(p(text('Thank you very much', ['bold'])), p('arigatō gozaimasu')), doc(p(text('When to say it', ['bold'])), p('To shop staff, hosts and anyone who helps. Among friends, just arigatō.'))],
   });
-  note('demo-card-excuse', at(8, 21, 41), lines('すみません'), [travel], '', personal, { pages: [doc(p(text('Excuse me / sorry', ['bold'])), p('sumimasen: to get attention, or to apologise'))] });
-  note('demo-card-where', at(8, 21, 42), lines('駅はどこですか？'), [travel], '', personal, { pages: [doc(p(text('Where is the station?', ['bold'])), p('eki wa doko desu ka'))] });
+  note('demo-card-excuse', at(8, 21, 41), doc(p('すみません'), p('More: ', web('Etiquette in Japan', 'https://en.wikipedia.org/wiki/Etiquette_in_Japan'))), [travel], '', personal, { pages: [doc(p(text('Excuse me / sorry', ['bold'])), p('sumimasen: to get attention, or to apologise'))] });
+  note('demo-card-where', at(8, 21, 42), doc(p('駅はどこですか？'), photo('station', 'Kyoto Station platform')), [travel], '', personal, { pages: [doc(p(text('Where is the station?', ['bold'])), p('eki wa doko desu ka'))] });
+  // Five photos of every shape (4:3, a 3:1 panorama, 3:4, square, 16:9): one more than a bubble shows, so the last
+  // says +1.
+  note(
+    'demo-note-coast',
+    at(6, 18, 0),
+    doc(
+      p('Weekend at the coast. Low tide at 4, and the pier lit up after dark.'),
+      photo('coast-sunset', 'Sunset over the sea'),
+      photo('coast-panorama', 'The beach end to end'),
+      photo('coast-lighthouse', 'The lighthouse'),
+      photo('coast-umbrella', 'Our umbrella from the dunes'),
+      photo('coast-pier', 'The pier at night'),
+    ),
+    [travel],
+  );
   // The wifi password is kept from being changed by mistake, and hidden until pressed.
   note('demo-note-wifi', at(7, 9, 2), doc(p('Guest wifi: Lemon-Tree, password ', text('sunflower-42', ['hidden']))), [home], '', personal, { viewOnly: true });
   // Edited later from the phone: its history has two versions.
   note('demo-note-standup', at(7, 10, 15), doc(h('Standup'), bullets('Shipped the search fix', 'Reviewing the export PR', 'Blocked on design for onboarding')), [work]);
   note('demo-note-book', at(6, 22, 40), doc(p(text('Thinking, Fast and Slow', ['italic'])), quote('Nothing in life is as important as you think it is, while you are thinking about it.'), p('Chapter 3 next.')), [reading]);
   note('demo-note-idea-app', at(5, 8, 5), lines('App idea: a plant watering reminder that reads the weather forecast and skips rainy days.'), [ideas, low], '', personal, { color: 'yellow' });
-  note('demo-note-curry', at(5, 19, 30), doc(p(text('Weeknight curry', ['bold'])), bullets('1 onion, 2 garlic cloves, ginger', '2 tbsp curry paste', '1 can coconut milk', 'Chickpeas and spinach'), p('Simmer 20 minutes. Rice on the side.')), [recipes], 'Curry');
+  note('demo-note-curry', at(5, 19, 30), doc(p(text('Weeknight curry', ['bold'])), photo('curry', 'A bowl of curry'), bullets('1 onion, 2 garlic cloves, ginger', '2 tbsp curry paste', '1 can coconut milk', 'Chickpeas and spinach'), p('Simmer 20 minutes. Rice on the side.')), [recipes], 'Curry');
   note('demo-note-zh', at(4, 12, 20), lines('今天天氣很好，午餐去吃了牛肉麵。', '下次要試試隔壁的水餃店。'));
   note('demo-note-1on1', at(4, 15, 0), doc(p('1:1 with Mia'), bullets('Wants to lead the API migration', 'Conference budget: yes, up to two people', 'Follow up on hiring plan')), [work, medium]);
   note('demo-note-quote', at(3, 7, 45), lines('"The best time to plant a tree was 20 years ago. The second best time is now."'), [ideas], '', personal, { color: 'purple' });
-  note('demo-note-gift', at(3, 20, 10), doc(p('Gift ideas for Mom'), bullets('Pottery class', 'The new cookbook she mentioned', 'Framed photo from the beach trip')), [home]);
+  // Its photo shows as a count, by its own preview style.
+  note('demo-note-gift', at(3, 20, 10), doc(p('Gift ideas for Mom'), bullets('Pottery class', 'The new cookbook she mentioned', 'Framed photo from the beach trip'), photo('beach-family', 'All of us on the beach')), [home], '', personal, {
+    preview: { photos: 'off' },
+  });
+  // One wide photo, large by its own preview style.
+  note('demo-note-night', at(2, 22, 30), doc(p('Night walk along the river. The skyline from the bridge.'), photo('skyline', 'The skyline at dusk')), [], '', personal, { preview: { photos: 'large' } });
   note('demo-note-short', at(2, 13, 33), lines('Parking: level 3, spot C14'));
   // Its links show one line each, whatever the device's setting.
   note(
@@ -386,6 +409,7 @@ export async function seed() {
         'Week 3: roll out to 10%, then 50%',
         'Week 4: everyone',
       ),
+      photo('whiteboard', 'The launch board'),
       h('Before launch'),
       checklist(['Load test the sync server', true], ['Security review', true], ['Help center articles', false], ['Press kit', false], ['Status page ready', false]),
       quote('Make it work, make it right, make it fast. In that order.'),
@@ -459,7 +483,7 @@ export async function seed() {
     tags: [work, medium],
     waiting: true,
     start: addDays(today, -3),
-    content: doc(p('Waiting on the designs from Lee.'), checklist(['Wireframes', true], ['Copy review', true], ['Handoff to engineering', false])),
+    content: doc(p('Waiting on the designs from Lee.'), photo('wireframe', 'Sketch of the first screen'), checklist(['Wireframes', true], ['Copy review', true], ['Handoff to engineering', false])),
   });
   todo('demo-todo-migration', 'Plan the API migration', addDays(today, 10), { tags: [work, medium], when: at(2, 9, 30), start: addDays(today, 4) });
   todo('demo-todo-slides', 'Send the conference slides', addDays(today, -3), { done: at(3, 17, 0), tags: [work] });
@@ -473,7 +497,7 @@ export async function seed() {
   // A shared vault with Sam: notes from both of you.
   note('demo-family-groceries', at(2, 17, 0), doc(p('Shared shopping list'), checklist(['Rice', true], ['Eggs', false], ['Dish soap', false])), [], '', family.id);
   // Reactions: Sam's and yours together on one, Sam's alone on the other; a press puts yours on or takes it off.
-  note('demo-family-trip', at(1, 9, 30), lines('Summer trip: beach or mountains? Vote below.'), [], 'Summer trip', family.id, {
+  note('demo-family-trip', at(1, 9, 30), doc(p('Summer trip: beach or mountains? Vote below.'), photo('lake', 'The lake by the cabins')), [], 'Summer trip', family.id, {
     reactions: { '🏔️': [SAM.id, DEMO.id], '🏖️': [SAM.id] },
   });
 

@@ -6,7 +6,8 @@ import { VitePWA } from 'vite-plugin-pwa';
 
 /**
  * Only in `npm run dev`, never in a build: /demo signs this browser in to the demo account that
- * `npm run demo` made on the local server, alongside any accounts it is already signed in to.
+ * `npm run demo` made on the local server, alongside any accounts it is already signed in to, and the demo's
+ * photos are served from scripts/demoPhotos.
  */
 function demoSignIn(): Plugin {
   return {
@@ -31,6 +32,16 @@ function demoSignIn(): Plugin {
         res.setHeader('set-cookie', `session=${tokens.join('.')}; Path=/api; HttpOnly; SameSite=Strict; Max-Age=${30 * 86_400}`);
         res.setHeader('content-type', 'application/json');
         res.end('{}');
+      });
+      // The demo's photos (`demo-photo-<name>` in its entries) come from scripts/demoPhotos rather than a Google Drive,
+      // for the app and for a public link alike; every other photo goes on to the API.
+      server.middlewares.use((req, res, next) => {
+        const name = /^\/api\/(?:attachments|public\/[^/]+\/photos)\/demo-photo-([a-z-]+)$/.exec(req.url?.split('?')[0] ?? '')?.[1];
+        const file = name && `scripts/demoPhotos/${name}.jpg`;
+        if (req.method !== 'GET' || !file || !existsSync(file)) return next();
+        res.setHeader('content-type', 'image/jpeg');
+        res.setHeader('cache-control', 'private, max-age=31536000, immutable');
+        res.end(readFileSync(file));
       });
       server.middlewares.use('/demo', (_req, res) => {
         res.setHeader('content-type', 'text/html; charset=utf-8');

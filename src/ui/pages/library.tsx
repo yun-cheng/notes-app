@@ -53,9 +53,10 @@ export function countLine(items: readonly { card: Card }[], one: string, many: s
 
 /**
  * A right-click menu for something an entry holds (a photo, a link or a file): its entry and day named at the top,
- * then Open entry (over the page) and Show in journal, and after them what `children` offers for the thing itself.
+ * then Open entry (over the page) and Show in journal, and after them what `children` offers for the thing itself;
+ * `lead` goes before them instead, as a photo's Copy photo does.
  */
-export function HeldMenu({ card, day, at, onOpen, onShow, onClose, label, children }: { card: Card; day: string; at: Point; onOpen: () => void; onShow: () => void; onClose: () => void; label: string; children?: ReactNode }) {
+export function HeldMenu({ card, day, at, onOpen, onShow, onClose, label, lead, children }: { card: Card; day: string; at: Point; onOpen: () => void; onShow: () => void; onClose: () => void; label: string; lead?: ReactNode; children?: ReactNode }) {
   const today = useToday();
   const run = (work: () => void) => () => {
     onClose();
@@ -68,6 +69,7 @@ export function HeldMenu({ card, day, at, onOpen, onShow, onClose, label, childr
           <span className="context-menu__head-title">{displayTitle(card) || 'Untitled'}</span>
           <span>{relativeDay(day, today)}</span>
         </span>
+        {lead}
         <div className="style-menu__group">
           <Item icon="open" onClick={run(onOpen)}>
             Open entry

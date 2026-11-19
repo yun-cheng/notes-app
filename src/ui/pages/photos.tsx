@@ -166,13 +166,14 @@ export function PhotosPage() {
           onOpen={() => openEntry(all[menu.at])}
           onShow={() => entry.show(all[menu.at].card)}
           onClose={() => setMenu(null)}
-        >
-          <div className="style-menu__group">
-            <Item icon="copy" onClick={() => (setMenu(null), copyPhoto(all[menu.at].id))}>
-              Copy photo
-            </Item>
-          </div>
-        </HeldMenu>
+          lead={
+            <div className="style-menu__group">
+              <Item icon="copy" onClick={() => (setMenu(null), copyPhoto(all[menu.at].id))}>
+                Copy photo
+              </Item>
+            </div>
+          }
+        />
       )}
     </Page>
   );

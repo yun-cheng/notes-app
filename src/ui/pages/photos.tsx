@@ -58,8 +58,8 @@ const sizes = (width: number) =>
  * Every photo and video in the journal, newest first (a video marked with its length, playing full screen), under the day its entry was written, laid out as a photo library does:
  * whole, in rows of about one height that fill the width, a day with a few beside the day before (`layoutPhotos`).
  * A photo opens full screen, where all of them page past in turn, each naming its entry, which opens from there.
- * The journal's filters narrow it: one tag's photos, one vault's, or those in todos; the switch in its title bar, to
- * photos alone or videos alone. Photos load as they come near.
+ * The journal's filters narrow it: one tag's photos, one vault's, or those in todos; a switch first in the filter row,
+ * to photos alone or videos alone. Photos load as they come near.
  *
  * Photos are picked as in a photo library: by the check on each (or on a day, for all of it), Cmd/Ctrl-click, a long
  * press on a touch screen, or Cmd/Ctrl+A for all; then a click picks, and Shift picks everything from the last one.
@@ -221,21 +221,25 @@ export function PhotosPage() {
             </button>
           </>
         ) : (
-          <>
-            <span className="segmented photos__show" role="group" aria-label="Show">
+          <button type="button" className={`icon-btn only-mobile${filter.tagId || filter.vaultId ? ' is-active' : ''}`} aria-label="Tags and vaults" title="Tags and vaults" onClick={() => setFiltering(true)}>
+            <Icon name="filter" />
+          </button>
+        )
+      }
+      below={
+        <FilterBar
+          filter={filter}
+          lead={
+            <span className="segmented filter-switch" role="group" aria-label="Show">
               {SHOWN.map(([value, label]) => (
                 <button key={label} type="button" aria-pressed={show === value} onClick={() => void navigate(libraryPath(PHOTOS_PATH, filter, undefined, value))}>
                   {label}
                 </button>
               ))}
             </span>
-            <button type="button" className={`icon-btn only-mobile${filter.tagId || filter.vaultId ? ' is-active' : ''}`} aria-label="Tags and vaults" title="Tags and vaults" onClick={() => setFiltering(true)}>
-              <Icon name="filter" />
-            </button>
-          </>
-        )
+          }
+        />
       }
-      below={<FilterBar filter={filter} />}
     >
       {filtering && <FilterSheet onClose={() => setFiltering(false)} />}
       {!all.length ? (
@@ -328,7 +332,7 @@ export function PhotosPage() {
  * picked (with Shift, everything from the last one). Its check, Cmd/Ctrl-click or a long press on a touch screen
  * picks it. A right-click with a mouse opens its menu.
  */
-/** The switch in the title bar: everything, or photos alone, or videos alone. */
+/** The switch first in the filter row: everything, or photos alone, or videos alone. */
 const SHOWN: [MediaShown, string][] = [
   [undefined, 'All'],
   ['photos', 'Photos'],

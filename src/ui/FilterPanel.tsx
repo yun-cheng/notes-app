@@ -91,9 +91,10 @@ const CONTAINS_CHOICE: Record<Contains, string> = { link: 'Links', photo: 'Photo
  * its choice, like "Due today", with an × that takes it off. On the history, Archived narrows it to archived
  * entries' changes (the journal's archived entries are the Archive, a page of their own). A tag or vault picked in
  * the sidebar shows here too, with its ×, and Clear all takes every filter off when there are several. The order is
- * kept throughout. On the calendar and the timeline, which show todos with dates, only Todos is offered.
+ * kept throughout. On the calendar and the timeline, which show todos with dates, only Todos is offered. `lead` goes
+ * first, a page's own switch, as Photos' All, Photos and Videos.
  */
-export function FilterBar({ filter }: { filter: StreamFilter }) {
+export function FilterBar({ filter, lead }: { filter: StreamFilter; lead?: ReactNode }) {
   const { index, vaults } = useCards();
   const today = useToday();
   const path = useFilterPath();
@@ -125,6 +126,7 @@ export function FilterBar({ filter }: { filter: StreamFilter }) {
 
   return (
     <div className="filter-bar" role="group" aria-label="Filters">
+      {lead}
       {!dated && (
         // Both, notes or todos, a switch rather than a menu: one press, and all three always in sight.
         <span className="segmented filter-switch" role="group" aria-label="Type">

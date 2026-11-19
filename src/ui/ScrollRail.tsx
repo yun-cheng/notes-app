@@ -177,7 +177,11 @@ export function ScrollRail({ keys, name, root, reveal }: Props) {
     e.preventDefault();
     e.stopPropagation();
     held.current = { id: e.pointerId, y: e.clientY, from: onThumb ? place.at : (e.clientY - place.top) / place.height };
-    (e.currentTarget as HTMLElement).setPointerCapture(e.pointerId);
+    try {
+      (e.currentTarget as HTMLElement).setPointerCapture(e.pointerId);
+    } catch {
+      // A pointer gone already (lifted at once) has nothing to capture; the drag ends with it.
+    }
     const to = along(e.clientY);
     setDrag(to);
     go(to);

@@ -64,8 +64,10 @@ function plainBlock(node: JSONNode, title: TitleResolver): string {
       return plainBlocks(node.content, title);
     case 'codeBlock':
       return (node.content ?? []).map((t) => t.text ?? '').join('');
-    case 'photo':
     case 'file':
+      // A voice message copies as its words.
+      return typeof node.attrs?.transcript === 'string' ? node.attrs.transcript : '';
+    case 'photo':
     case 'horizontalRule':
       return '';
     default:
@@ -113,8 +115,12 @@ function renderBlock(node: JSONNode, title: TitleResolver): string {
     }
     case 'photo':
       return `![${String(node.attrs?.alt || 'Photo').replace(/[[\]]/g, '')}](attachment:${String(node.attrs?.id ?? '')})`;
-    case 'file':
-      return `[${String(node.attrs?.name || 'File').replace(/[[\]]/g, '')}](attachment:${String(node.attrs?.id ?? '')})`;
+    case 'file': {
+      const link = `[${String(node.attrs?.name || 'File').replace(/[[\]]/g, '')}](attachment:${String(node.attrs?.id ?? '')})`;
+      // A voice message's words follow it, quoted.
+      const words = typeof node.attrs?.transcript === 'string' ? node.attrs.transcript.trim() : '';
+      return words ? `${link}\n\n> ${words.replace(/\n+/g, ' ')}` : link;
+    }
     case 'horizontalRule':
       return '---';
     default:

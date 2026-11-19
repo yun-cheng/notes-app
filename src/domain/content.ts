@@ -24,6 +24,8 @@ export function plainText(content: JSONNode, titleOf?: (id: string, label: strin
       parts.push(titleOf ? titleOf(String(n.attrs?.id), label) : label);
     }
     else if (n.type === 'hardBreak') parts.push(' ');
+    // A voice message's words are the entry's words too, to be found by.
+    else if (n.type === 'file' && typeof n.attrs?.transcript === 'string') parts.push(` ${n.attrs.transcript} `);
     n.content?.forEach(visit);
     if (n.content && n.type !== 'doc') parts.push(' ');
   };
@@ -155,9 +157,13 @@ export function previewParts(content: JSONNode, titleOf?: (id: string, label: st
       case 'photo':
         if (full) line(`${prefix}[Photo${node.attrs?.alt ? `: ${String(node.attrs.alt)}` : ''}]`);
         return;
-      case 'file':
-        if (full) line(`${prefix}[${String(node.attrs?.mime ?? '').startsWith('video/') ? 'Video' : 'File'}: ${String(node.attrs?.name || 'Untitled')}]`);
+      case 'file': {
+        if (!full) return;
+        const mime = String(node.attrs?.mime ?? '');
+        line(`${prefix}[${mime.startsWith('video/') ? 'Video' : mime.startsWith('audio/') ? 'Voice' : 'File'}: ${String(node.attrs?.name || 'Untitled')}]`);
+        if (typeof node.attrs?.transcript === 'string' && node.attrs.transcript) line(`${prefix}“${node.attrs.transcript}”`);
         return;
+      }
       case 'horizontalRule':
         if (full) line(`${prefix}———`);
         return;
@@ -352,6 +358,18 @@ export interface FileInfo {
   width?: number | null;
   height?: number | null;
   duration?: number | null;
+  /** A voice message's (any sound's) words, once transcribed, with the language heard and when each stretch starts. */
+  transcript?: string | null;
+  language?: string | null;
+  cues?: Cue[];
+  /** How loud a sound is along its length, as bars from 0 to 100, to draw it by. */
+  peaks?: number[];
+}
+
+/** A stretch of a transcript, and when in the sound it starts, in seconds. */
+export interface Cue {
+  start: number;
+  text: string;
 }
 
 const positive = (v: unknown) => (typeof v === 'number' && Number.isFinite(v) && v > 0 ? v : null);
@@ -374,6 +392,18 @@ export function fileAttachments(content: JSONNode): FileInfo[] {
       file.height = positive(a.height);
       file.duration = positive(a.duration);
     }
+    if (isAudio(file)) {
+      file.duration = positive(a.duration);
+      file.transcript = typeof a.transcript === 'string' ? a.transcript : null;
+      file.language = typeof a.language === 'string' && a.language ? a.language : null;
+      file.cues = Array.isArray(a.cues)
+        ? a.cues.flatMap((c: unknown) => {
+            const cue = c as Partial<Cue> | null;
+            return typeof cue?.start === 'number' && Number.isFinite(cue.start) && cue.start >= 0 && typeof cue.text === 'string' ? [{ start: cue.start, text: cue.text }] : [];
+          })
+        : [];
+      file.peaks = Array.isArray(a.peaks) ? a.peaks.filter((p: unknown): p is number => typeof p === 'number' && Number.isFinite(p)).map((p: number) => Math.max(0, Math.min(100, p))) : [];
+    }
     files.push(file);
   });
   return files;
@@ -381,6 +411,9 @@ export function fileAttachments(content: JSONNode): FileInfo[] {
 
 /** Whether an attached file is a video, to play where it is and show among the photos. */
 export const isVideo = (file: Pick<FileInfo, 'mime'>) => !!file.mime && file.mime.startsWith('video/');
+
+/** Whether an attached file is a sound, a voice message most often: it plays where it is, with its transcript. */
+export const isAudio = (file: Pick<FileInfo, 'mime'>) => !!file.mime && file.mime.startsWith('audio/');
 
 /** The attachment ID of the still shown for a video before it plays: kept beside it, as a photo. */
 export const posterId = (videoId: string) => `${videoId}-poster`;

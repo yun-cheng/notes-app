@@ -64,8 +64,10 @@ function block(node: JSONNode, title: TitleResolver): string {
       return `<pre><code>${escapeHTML((node.content ?? []).map((t) => t.text ?? '').join(''))}</code></pre>`;
     case 'horizontalRule':
       return '<hr>';
-    case 'photo':
     case 'file':
+      // A voice message copies as its words, quoted.
+      return typeof node.attrs?.transcript === 'string' && node.attrs.transcript ? `<blockquote>${escapeHTML(node.attrs.transcript)}</blockquote>` : '';
+    case 'photo':
       return '';
     default:
       return node.content ? inline(node.content, title) : '';

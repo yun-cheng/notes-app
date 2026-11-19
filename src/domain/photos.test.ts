@@ -1,5 +1,6 @@
 import { describe, expect, it } from 'vitest';
-import { cardPhotoIds, layoutPhotos, photoDays } from './photos';
+import { dropPhotos, withoutPhotos } from './content';
+import { cardPhotoIds, layoutPhotos, photoDays, photoFileNames } from './photos';
 import { doc, note, p, tag, text, todo } from './testFixtures';
 import type { JSONNode } from './types';
 
@@ -71,5 +72,51 @@ describe('layoutPhotos', () => {
   it('fits a photo wider than the page to its width', () => {
     const { tiles } = layoutPhotos([[10]], o);
     expect(tiles[0][0]).toEqual({ x: 0, y: 40, w: 1000, h: 100 });
+  });
+});
+
+describe('withoutPhotos', () => {
+  it('takes photos out of the front and the other pages, wherever they are', () => {
+    const card = note('n', '', {
+      content: doc(photo('a'), p(text('hi')), { type: 'bulletList', content: [{ type: 'listItem', content: [photo('b')] }] }),
+      pages: [doc(p(text('back')), photo('c')), doc(photo('a'))],
+    });
+    const patch = withoutPhotos(card, new Set(['a', 'b']))!;
+    expect(patch.content).toEqual(doc(p(text('hi')), { type: 'bulletList', content: [{ type: 'listItem', content: [{ type: 'paragraph' }] }] }));
+    // The last page held only the photo, so it goes.
+    expect(patch.pages).toEqual([doc(p(text('back')), photo('c'))]);
+  });
+
+  it('leaves what holds none of them alone', () => {
+    const body = doc(photo('a'));
+    expect(dropPhotos(body, new Set(['z']))).toBe(body);
+    expect(withoutPhotos(note('n', '', { content: body }), new Set(['z']))).toBeNull();
+    expect(withoutPhotos(tag('t', 'Trips'), new Set(['a']))).toBeNull();
+    // A front left with nothing keeps an empty line; the pages aren't touched.
+    expect(withoutPhotos(note('n', '', { content: body }), new Set(['a']))).toEqual({ content: doc({ type: 'paragraph' }) });
+  });
+});
+
+describe('photoFileNames', () => {
+  it('names each by its day and entry, numbered when a name comes twice', () => {
+    expect(
+      photoFileNames([
+        { day: '2026-11-19', title: 'Lisbon: day 2', mime: 'image/jpeg' },
+        { day: '2026-11-19', title: 'Lisbon: day 2', mime: 'image/jpeg' },
+        { day: '2026-11-18', title: '', mime: 'image/png' },
+        { day: '2026-11-18', title: 'a/b', mime: 'application/octet-stream' },
+        { day: '2026-11-17', title: 'Night walk along the river. The skyline from the bridge.', mime: 'image/jpeg' },
+        { day: '2026-11-17', title: 'Everything we packed for the long weekend away at the coast', mime: 'image/jpeg' },
+        { day: '2026-11-11', title: '駅はどこですか？', mime: 'image/webp' },
+      ]),
+    ).toEqual([
+      '2026-11-19 Lisbon day 2.jpg',
+      '2026-11-19 Lisbon day 2 2.jpg',
+      '2026-11-18.png',
+      '2026-11-18 a b.jpg',
+      '2026-11-17 Night walk along the river.jpg',
+      '2026-11-17 Everything we packed for the long.jpg',
+      '2026-11-11 駅はどこですか.webp',
+    ]);
   });
 });

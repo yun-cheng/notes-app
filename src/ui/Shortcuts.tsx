@@ -64,6 +64,16 @@ const GROUPS: { title: string; keys: [string, string][] }[] = [
       ['Esc', 'Close it'],
     ],
   },
+  {
+    title: 'The Photos page',
+    keys: [
+      [`${MOD}A`, 'Pick every photo'],
+      [`${MOD}-click`, 'Pick a photo, or unpick it'],
+      ['Shift-click', 'Pick every photo from the last one picked'],
+      [`${MOD}C`, 'Copy the one photo picked'],
+      ['Esc', 'Stop picking'],
+    ],
+  },
 ];
 
 /** Every keyboard shortcut, opened with `?` or from the command box. */

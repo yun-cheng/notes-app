@@ -78,7 +78,7 @@ export function useSelectionState(order: string[]): Selection {
   return selection;
 }
 
-const LONG_PRESS_MS = 450;
+export const LONG_PRESS_MS = 450;
 
 const BUBBLES = '[data-entry-id] > [role="article"]';
 

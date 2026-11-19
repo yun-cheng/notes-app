@@ -123,3 +123,34 @@ export function layoutPhotos(days: readonly (readonly number[])[], o: LayoutOpti
   });
   return { tiles, heads, height: y };
 }
+
+const EXTENSIONS: Record<string, string> = {
+  'image/jpeg': 'jpg',
+  'image/png': 'png',
+  'image/webp': 'webp',
+  'image/gif': 'gif',
+  'image/avif': 'avif',
+  'image/heic': 'heic',
+  'image/heif': 'heif',
+};
+
+/**
+ * Names for photos saved from the Photos page, each its entry's day and title (its first sentence, kept short),
+ * "2026-11-19 Lisbon.jpg", numbered when a name comes twice, "2026-11-19 Lisbon 2.jpg". What a file name can't hold
+ * is left out.
+ */
+export function photoFileNames(photos: readonly { day: string; title: string; mime: string }[]): string[] {
+  const used = new Set<string>();
+  return photos.map(({ day, title, mime }) => {
+    // The title's first sentence, to a word at most 40 letters in, without the stop it ends with.
+    let words = title.replace(/[\\/:*?"<>|\u0000-\u001f]+/g, ' ').replace(/\s+/g, ' ').trim().split(/(?<=[.!?。！？])\s/)[0];
+    if (words.length > 40) words = words.slice(0, words.lastIndexOf(' ', 40) > 0 ? words.lastIndexOf(' ', 40) : 40);
+    words = words.replace(/[\s.,;:!?。、！？]+$/u, '');
+    const base = words ? `${day} ${words}` : day;
+    const ext = EXTENSIONS[mime] ?? 'jpg';
+    let name = `${base}.${ext}`;
+    for (let n = 2; used.has(name.toLowerCase()); n++) name = `${base} ${n}.${ext}`;
+    used.add(name.toLowerCase());
+    return name;
+  });
+}

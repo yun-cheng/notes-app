@@ -1,4 +1,7 @@
 import { useEffect, useLayoutEffect, useRef, useState, type KeyboardEvent as ReactKeyboardEvent, type MouseEvent as ReactMouseEvent, type ReactNode } from 'react';
+import { endOf, offerWordStyles, styledWords } from './bubbleWords';
+import type { ChipAnchor } from './clipboardChoice';
+import { clipboardPrefs } from './clipboardPrefs';
 import { createPortal } from 'react-dom';
 import type { NoteCard, TodoCard } from '../domain/types';
 import { useCards } from '../state/CardsContext';
@@ -57,7 +60,7 @@ export interface MenuExtras {
  */
 export function useEntryMenu(card: Entry, extras: MenuExtras = {}) {
   const [at, setAt] = useState<Point | null>(null);
-  const [words, setWords] = useState<string | null>(null);
+  const [words, setWords] = useState<{ text: string; end: ChipAnchor } | null>(null);
   const [sharing, setSharing] = useState(false);
 
   const onContextMenu = (e: ReactMouseEvent<HTMLElement>) => {
@@ -65,7 +68,7 @@ export function useEntryMenu(card: Entry, extras: MenuExtras = {}) {
     const picked = window.getSelection();
     // Taken now: the menu takes the focus, and with it the selection.
     const selected = picked && !picked.isCollapsed && e.currentTarget.contains(picked.anchorNode) ? picked.toString().trim() : '';
-    setWords(selected || null);
+    setWords(selected ? { text: selected, end: endOf(picked!.getRangeAt(0).cloneRange()) } : null);
     e.preventDefault();
     // The menu key, or Shift+F10, gives no point: the menu opens at the bubble's corner instead.
     if (!e.clientX && !e.clientY) {
@@ -81,7 +84,7 @@ export function useEntryMenu(card: Entry, extras: MenuExtras = {}) {
         createPortal(
           <Shield>
             {words ? (
-              <TextMenu card={card} words={words} at={at} onClose={() => setAt(null)} />
+              <TextMenu card={card} words={words.text} end={words.end} at={at} onClose={() => setAt(null)} />
             ) : (
               <EntryMenu card={card} at={at} extras={extras} onShare={() => setSharing(true)} onClose={() => setAt(null)} />
             )}
@@ -119,7 +122,7 @@ const quoted = (words: string) => {
  * open a new tab, and send the words there), or start a new note with them, in the same vault as the entry where
  * this account may write there. Shift with the right-click still gives the browser's own menu.
  */
-function TextMenu({ card, words, at, onClose }: { card: Entry; words: string; at: Point; onClose: () => void }) {
+function TextMenu({ card, words, end, at, onClose }: { card: Entry; words: string; end: ChipAnchor; at: Point; onClose: () => void }) {
   const { repo } = useCards();
   const may = usePermissions();
   const viewOnly = useViewOnly();
@@ -131,7 +134,13 @@ function TextMenu({ card, words, at, onClose }: { card: Entry; words: string; at
     onClose();
     void work();
   };
-  const copy = async () => toast((await writeClipboard(words)) ? 'Copied' : "Couldn't copy here.");
+  // In the Copy setting's style, with the chip under where the words end.
+  const copy = async () => {
+    const style = clipboardPrefs().copy;
+    const { text, html } = styledWords(words, style);
+    if (await writeClipboard(text, undefined, html)) offerWordStyles(words, style, end);
+    else toast("Couldn't copy here.");
+  };
   const newNote = async () => {
     const action = repo.action();
     const note = await repo.createNote({ content: textToDoc(words), vaultId: may(card).edit ? card.vaultId : undefined });

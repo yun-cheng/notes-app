@@ -231,6 +231,35 @@ export function textToDoc(text: string): JSONNode {
   };
 }
 
+/**
+ * Words selected in a bubble, as a document to copy them by: its lines as paragraphs, with addresses as links, and
+ * lines starting with the bubble's list markers (`• `, `1. `, `☐ `, `☑ `) as items of a list of that kind, one after
+ * another in one list. The bubble shows nesting as room, not spaces, so the lists are flat.
+ */
+export function wordsToDoc(text: string): JSONNode {
+  const blocks: JSONNode[] = [];
+  const item = (rest: string, checked?: boolean): JSONNode => ({
+    type: checked === undefined ? 'listItem' : 'taskItem',
+    ...(checked === undefined ? {} : { attrs: { checked } }),
+    content: [rest ? { type: 'paragraph', content: inlineWithLinks(rest) } : { type: 'paragraph' }],
+  });
+  for (const raw of text.replace(/\r\n?/g, '\n').replace(/^\n+|\n+$/g, '').split('\n')) {
+    const line = raw.trimStart();
+    const marker = /^(?:(•)|(\d+)\.|(☐)|(☑)) /.exec(line);
+    const last = blocks[blocks.length - 1];
+    if (!marker) {
+      blocks.push(raw ? { type: 'paragraph', content: inlineWithLinks(raw) } : { type: 'paragraph' });
+      continue;
+    }
+    const rest = line.slice(marker[0].length);
+    const kind = marker[1] ? 'bulletList' : marker[2] ? 'orderedList' : 'taskList';
+    const node = kind === 'taskList' ? item(rest, !!marker[4]) : item(rest);
+    if (last?.type === kind) last.content!.push(node);
+    else blocks.push({ type: kind, ...(kind === 'orderedList' ? { attrs: { start: Number(marker[2]) } } : {}), content: [node] });
+  }
+  return { type: 'doc', content: blocks };
+}
+
 /** The words of a translation, one per line: its pieces (a title, then the lines of each part), blanks left out. */
 const translationText = (pieces: string[]) => pieces.filter((p) => p.trim()).join('\n');
 

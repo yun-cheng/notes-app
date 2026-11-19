@@ -8,6 +8,9 @@ export interface ClipboardChoice {
   options: { label: string; current: boolean; run: () => void }[];
 }
 
+/** What a chip is shown by: an element, or a spot such as the end of words selected. */
+export type ChipAnchor = Pick<Element, 'getBoundingClientRect' | 'isConnected'>;
+
 /** How long a copy's chip stays when it isn't opened or pointed at, like the toast it replaced. */
 export const COPY_CHIP_MS = 10_000;
 
@@ -61,9 +64,10 @@ export const closeChoiceNear = () => shown?.();
  * it's level with the bubble's top, where its copy button is, so it covers none of the entry, or inside its corner
  * under that button where there's no room beside it; by a button it's under it and right-aligned with it, or above
  * it where there's no room below. It goes after a while unless it's opened or pointed at, on a press anywhere else,
- * on Escape, or once the anchor is gone. One at a time.
+ * on Escape, or once the anchor is gone. After words (`side: 'after'`) it's just under where they end, or over it.
+ * One at a time.
  */
-export function showChoiceNear(anchor: Element, choice: ClipboardChoice, side: 'right' | 'below' = 'below') {
+export function showChoiceNear(anchor: ChipAnchor, choice: ClipboardChoice, side: 'right' | 'after' | 'below' = 'below') {
   closeChoiceNear();
   let open = false;
   let hovered = false;
@@ -79,7 +83,8 @@ export function showChoiceNear(anchor: Element, choice: ClipboardChoice, side: '
       host.style.top = `${Math.max(8, Math.min(y, window.innerHeight - h - 8))}px`;
       host.style.left = `${Math.max(8, Math.min(x, window.innerWidth - w - 8))}px`;
     };
-    if (side === 'right' && r.right + 8 + w <= window.innerWidth - 8) fits(r.right + 8, r.top);
+    if (side === 'after') fits(r.right - 6, r.bottom + 4 + h <= window.innerHeight - 8 ? r.bottom + 4 : r.top - h - 4);
+    else if (side === 'right' && r.right + 8 + w <= window.innerWidth - 8) fits(r.right + 8, r.top);
     else if (side === 'right') fits(r.right - w - 6, r.top + 30);
     else fits(r.right - w, r.bottom + 6 + h <= window.innerHeight - 8 ? r.bottom + 6 : r.top - h - 6);
     host.style.visibility = r.bottom < 0 || r.top > window.innerHeight ? 'hidden' : '';

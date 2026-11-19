@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { cardPages, checklistProgress, CODE_CLOSE, CODE_OPEN, displayTitle, hasPhoto, HIDE_CLOSE, HIDE_OPEN, isBlank, isImageUrl, leadLine, linkedCardIds, linkUrls, photoIds, plainText, previewLines, previewParts, siteName, splitLinks, storedPages, textToDoc, translationPage, pagesHaveTranslation, withNewPage, withoutLeadLine, withoutPage, withPage } from './content';
+import { cardPages, checklistProgress, CODE_CLOSE, CODE_OPEN, displayTitle, hasPhoto, HIDE_CLOSE, HIDE_OPEN, isBlank, isImageUrl, leadLine, linkedCardIds, linkUrls, photoIds, plainText, previewLines, previewParts, siteName, splitLinks, storedPages, textToDoc, translationPage, pagesHaveTranslation, withNewPage, withoutLeadLine, withoutPage, withPage, wordsToDoc } from './content';
 import { doc, link, note, p, tag, text } from './testFixtures';
 import type { JSONNode } from './types';
 
@@ -221,6 +221,15 @@ describe('a translation as a page', () => {
     expect(pagesHaveTranslation(pages, ['Excuse me', 'Thank you'])).toBe(false);
     expect(pagesHaveTranslation([], ['Thanks'])).toBe(false);
     expect(pagesHaveTranslation(pages, [''])).toBe(false);
+  });
+  it('reads words selected in a bubble as paragraphs and flat lists, with addresses as links', () => {
+    const words = wordsToDoc('Packing\n• Socks\n• Hat see https://x.test\n1. One\n2. Two\n☐ Open\n☑ Done\n\nEnd');
+    expect(words.content!.map((b) => b.type)).toEqual(['paragraph', 'bulletList', 'orderedList', 'taskList', 'paragraph', 'paragraph']);
+    expect(words.content![1].content).toHaveLength(2);
+    expect(words.content![1].content![1].content![0].content![1].marks![0]).toMatchObject({ type: 'link', attrs: { href: 'https://x.test' } });
+    expect(words.content![2].attrs).toEqual({ start: 1 });
+    expect(words.content![3].content!.map((i) => i.attrs?.checked)).toEqual([false, true]);
+    expect(wordsToDoc('just words').content).toEqual([{ type: 'paragraph', content: [{ type: 'text', text: 'just words' }] }]);
   });
 });
 

@@ -12,6 +12,9 @@ function fakeGoogle() {
   let email = 'ann@gmail.com';
   let folders = 0;
   const deleted: string[] = [];
+  // Files anyone may open by their link, and whether the account's Workspace forbids that.
+  const shared = new Set<string>();
+  let refuseSharing = false;
   // Resumable uploads: what each session has so far, and whether Drive has dropped it.
   const sessions = new Map<string, { name: string; parent: string; size: number; bytes: number[]; dropped?: boolean }>();
   const json = (body: unknown, status = 200) => new Response(JSON.stringify(body), { status, headers: { 'content-type': 'application/json' } });
@@ -79,6 +82,19 @@ function fakeGoogle() {
       names.set(id, meta.name);
       return json({ id });
     }
+    const perm = url.match(/drive\/v3\/files\/([^/?]+)\/permissions(?:\/(\w+))?/);
+    if (perm) {
+      if (!files.has(perm[1])) return json({ error: 'not found' }, 404);
+      if (init.method === 'POST') {
+        if (refuseSharing) return json({ error: { reason: 'publishOutNotPermitted' } }, 403);
+        expect(JSON.parse(String(init.body))).toEqual({ role: 'reader', type: 'anyone' });
+        shared.add(perm[1]);
+        return json({ id: 'anyoneWithLink' });
+      }
+      if (init.method === 'DELETE' && perm[2] === 'anyoneWithLink') return shared.delete(perm[1]) ? new Response(null, { status: 204 }) : json({ error: 'not found' }, 404);
+    }
+    const viewLink = url.match(/drive\/v3\/files\/([^/?]+)\?fields=webViewLink$/);
+    if (viewLink && files.has(viewLink[1])) return json({ webViewLink: `https://drive.google.com/file/d/${viewLink[1]}/view?usp=drivesdk` });
     const m = url.match(/drive\/v3\/files\/([^?]+)\?alt=media/);
     if (m && files.has(m[1])) {
       const bytes = files.get(m[1])!.bytes;
@@ -90,7 +106,7 @@ function fakeGoogle() {
     }
     return json({ error: 'not found' }, 404);
   };
-  return { fetcher, files, names, calls, deleted, sessions, revoke: () => (revoked = true), refreshes: () => refreshes, signInAs: (address: string) => (email = address) };
+  return { fetcher, files, names, calls, deleted, sessions, shared, refuseSharing: () => (refuseSharing = true), revoke: () => (revoked = true), refreshes: () => refreshes, signInAs: (address: string) => (email = address) };
 }
 
 async function connected(secret = 'shh') {
@@ -361,5 +377,62 @@ describe('photos and files in the Trash', () => {
     expect((await t.call('/api/attachments/demo-photo-x', { method: 'DELETE' }, t.ann.cookie)).status).toBe(200);
     expect(t.calls.some((c) => c.startsWith('DELETE'))).toBe(false);
     expect((await list(t, t.ann.cookie)).map((a) => a.id)).toEqual(['photo-0001']);
+  });
+});
+
+describe('photos, videos and files shared by their Google Drive link', () => {
+  type LinkState = { url: string | null; can: boolean };
+  const state = async (t: Awaited<ReturnType<typeof connected>>, cookie: string) => (await (await t.call('/api/attachments/photo-0001/link', {}, cookie)).json()) as LinkState;
+  const share = (t: Awaited<ReturnType<typeof connected>>, cookie: string, id = 'photo-0001') => t.call(`/api/attachments/${id}/link`, { method: 'POST' }, cookie);
+  const stop = (t: Awaited<ReturnType<typeof connected>>, cookie: string) => t.call('/api/attachments/photo-0001/link', { method: 'DELETE' }, cookie);
+
+  it('shares one by link, says so to its vault, and stops', async () => {
+    const t = await connected();
+    await upload(t, 'photo-0001', t.ann.cookie, t.ann.vault);
+    expect(await state(t, t.ann.cookie)).toEqual({ url: null, can: true });
+    const res = await share(t, t.ann.cookie);
+    const link = 'https://drive.google.com/file/d/file-1/view?usp=drivesdk';
+    expect(await res.json()).toEqual({ url: link });
+    expect(t.shared.has('file-1')).toBe(true);
+    // Again is fine, with the same link.
+    expect(await (await share(t, t.ann.cookie)).json()).toEqual({ url: link });
+    expect(await state(t, t.ann.cookie)).toEqual({ url: link, can: true });
+    expect((await stop(t, t.ann.cookie)).status).toBe(200);
+    expect(t.shared.size).toBe(0);
+    expect(await state(t, t.ann.cookie)).toEqual({ url: null, can: true });
+    // Stopped already, or by hand in Drive: still fine.
+    expect((await stop(t, t.ann.cookie)).status).toBe(200);
+  });
+
+  it("lets only those who can change its vault share it, and never from a private vault", async () => {
+    const t = await connected();
+    const ben = await t.signIn('ben');
+    await upload(t, 'photo-0001', t.ann.cookie, t.ann.vault);
+    expect((await t.call('/api/attachments/photo-0001/link', {}, ben.cookie)).status).toBe(404);
+    expect((await share(t, ben.cookie)).status).toBe(404);
+    t.db.raw.exec(`INSERT INTO vault_members (vault_id, user_id, role) VALUES ('${t.ann.vault}', '${ben.user.id}', 'viewer')`);
+    await share(t, t.ann.cookie);
+    // A viewer sees the link, as anyone with it may, but can't share or stop it.
+    expect(await state(t, ben.cookie)).toEqual({ url: expect.stringContaining('file-1'), can: false });
+    expect((await share(t, ben.cookie)).status).toBe(404);
+    expect((await stop(t, ben.cookie)).status).toBe(404);
+    expect(t.shared.size).toBe(1);
+    t.db.raw.exec(`UPDATE vaults SET encryption = '{}' WHERE id = '${t.ann.vault}'`);
+    expect((await state(t, t.ann.cookie)).can).toBe(false);
+    expect((await share(t, t.ann.cookie)).status).toBe(404);
+  });
+
+  it("says when Drive won't share it, and that the demo's have no Drive link", async () => {
+    const t = await connected();
+    await upload(t, 'photo-0001', t.ann.cookie, t.ann.vault);
+    t.refuseSharing();
+    const refused = await share(t, t.ann.cookie);
+    expect([refused.status, await refused.json()]).toEqual([403, { error: 'drive_refused' }]);
+    expect((await state(t, t.ann.cookie)).url).toBeNull();
+    t.db.raw.exec(
+      `INSERT INTO attachments (id, owner_id, vault_id, drive_file_id, mime, size, created_at) VALUES ('demo-photo-x', '${t.ann.user.id}', '${t.ann.vault}', '', 'image/jpeg', 10, 1)`,
+    );
+    const demo = await share(t, t.ann.cookie, 'demo-photo-x');
+    expect([demo.status, await demo.json()]).toEqual([409, { error: 'not_in_drive' }]);
   });
 });

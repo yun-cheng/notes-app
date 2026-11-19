@@ -25,6 +25,8 @@ export interface DriveConfig {
 
 export class DriveNotConnected extends Error {}
 export class DriveFailed extends Error {}
+/** Drive won't let the file be shared by link: the account's Google Workspace forbids it, most likely. */
+export class DriveRefused extends Error {}
 /** Drive no longer has a resumable upload's session (a week old, or lost): it starts again from the first byte. */
 export class UploadExpired extends Error {}
 
@@ -243,4 +245,34 @@ export async function deleteFile(db: Database, config: DriveConfig, userId: stri
   const { token } = await accessToken(db, config, userId, now);
   const res = await config.fetch(`https://www.googleapis.com/drive/v3/files/${encodeURIComponent(fileId)}`, { method: 'DELETE', headers: { authorization: `Bearer ${token}` } });
   if (!res.ok && res.status !== 404 && res.status !== 410) throw new DriveFailed(`Drive delete failed with ${res.status}`);
+}
+
+/**
+ * Lets anyone with the file's Drive link open it, and returns the link. Under drive.file the app may share only the
+ * files it made, which is every one here. Doing it again is fine: Drive keeps one such permission.
+ */
+export async function shareFile(db: Database, config: DriveConfig, userId: string, fileId: string, now: number): Promise<string> {
+  const { token } = await accessToken(db, config, userId, now);
+  const file = `https://www.googleapis.com/drive/v3/files/${encodeURIComponent(fileId)}`;
+  const res = await config.fetch(`${file}/permissions?fields=id`, {
+    method: 'POST',
+    headers: { authorization: `Bearer ${token}`, 'content-type': 'application/json' },
+    body: JSON.stringify({ role: 'reader', type: 'anyone' }),
+  });
+  if (res.status === 403) throw new DriveRefused('Drive would not share the file by link');
+  if (!res.ok) throw new DriveFailed(`Sharing on Drive failed with ${res.status}`);
+  const got = await config.fetch(`${file}?fields=webViewLink`, { headers: { authorization: `Bearer ${token}` } });
+  const body = (await got.json().catch(() => ({}))) as { webViewLink?: string };
+  if (!got.ok || !body.webViewLink?.startsWith('https://')) throw new DriveFailed('Drive gave no link');
+  return body.webViewLink;
+}
+
+/** Stops anyone opening the file by its Drive link. One not shared, or gone, is fine. */
+export async function unshareFile(db: Database, config: DriveConfig, userId: string, fileId: string, now: number): Promise<void> {
+  const { token } = await accessToken(db, config, userId, now);
+  const res = await config.fetch(`https://www.googleapis.com/drive/v3/files/${encodeURIComponent(fileId)}/permissions/anyoneWithLink`, {
+    method: 'DELETE',
+    headers: { authorization: `Bearer ${token}` },
+  });
+  if (!res.ok && res.status !== 404 && res.status !== 410) throw new DriveFailed(`Stopping the Drive link failed with ${res.status}`);
 }

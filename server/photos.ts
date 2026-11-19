@@ -8,11 +8,14 @@ import {
   downloadFile,
   DriveFailed,
   DriveNotConnected,
+  DriveRefused,
   driveStatus,
   finishConnect,
   sendPiece,
+  shareFile,
   startConnect,
   startUpload,
+  unshareFile,
   UploadExpired,
   uploadFile,
   type UploadProgress,
@@ -308,6 +311,69 @@ export function photoRoutes(app: Hono<AppEnv>, fetcher: GoogleFetch, now: () => 
       ),
     ];
     if (statements.length) await c.env.DB.batch(statements);
+    return c.json({ ok: true });
+  });
+
+  /**
+   * Whether a photo, video or file is shared by its Google Drive link, and the link if so, for anyone in its vault;
+   * and whether this account may share it: one who can change the vault, unless the vault is private (encrypted), whose
+   * entries aren't shared or published either.
+   */
+  app.get('/attachments/:id/link', async (c) => {
+    const userId = c.get('user').id;
+    const row = await c.env.DB.prepare(
+      `SELECT a.drive_link, (a.vault_id IN (${EDITABLE}) AND v.encryption IS NULL) AS can FROM attachments a JOIN vaults v ON v.id = a.vault_id
+       WHERE a.id = ? AND a.vault_id IN (SELECT vault_id FROM vault_members WHERE user_id = ?)`,
+    )
+      .bind(userId, c.req.param('id'), userId)
+      .first<{ drive_link: string | null; can: number }>();
+    if (!row) return c.json({ error: 'Not found' }, 404);
+    return c.json({ url: row.drive_link, can: !!row.can });
+  });
+
+  /** One this account may share by link (`GET /attachments/:id/link`), with its Drive file. */
+  const linkable = (c: Context<AppEnv>) =>
+    c.env.DB.prepare(
+      `SELECT a.id, a.owner_id, a.drive_file_id FROM attachments a JOIN vaults v ON v.id = a.vault_id
+       WHERE a.id = ? AND a.vault_id IN (${EDITABLE}) AND v.encryption IS NULL`,
+    )
+      .bind(c.req.param('id'), c.get('user').id)
+      .first<{ id: string; owner_id: string; drive_file_id: string }>();
+
+  /**
+   * Shares a photo, video or file by its Google Drive link, which anyone with it can open, and answers with the link.
+   * The demo's, which aren't in a Drive, have none.
+   */
+  app.post('/attachments/:id/link', async (c) => {
+    const row = await linkable(c);
+    if (!row) return c.json({ error: 'Not found' }, 404);
+    if (!row.drive_file_id) return c.json({ error: 'not_in_drive' }, 409);
+    const config = driveConfig(c, fetcher);
+    if (!config) return c.json({ error: 'photos_not_configured' }, 503);
+    try {
+      const url = await shareFile(c.env.DB, config, row.owner_id, row.drive_file_id, now());
+      await c.env.DB.prepare(`UPDATE attachments SET drive_link = ? WHERE id = ?`).bind(url, row.id).run();
+      return c.json({ url });
+    } catch (err) {
+      if (err instanceof DriveRefused) return c.json({ error: 'drive_refused' }, 403);
+      return driveError(c, err);
+    }
+  });
+
+  /** Stops sharing it: its Drive link opens it for no one but those its Drive lets in. */
+  app.delete('/attachments/:id/link', async (c) => {
+    const row = await linkable(c);
+    if (!row) return c.json({ error: 'Not found' }, 404);
+    if (row.drive_file_id) {
+      const config = driveConfig(c, fetcher);
+      if (!config) return c.json({ error: 'photos_not_configured' }, 503);
+      try {
+        await unshareFile(c.env.DB, config, row.owner_id, row.drive_file_id, now());
+      } catch (err) {
+        return driveError(c, err);
+      }
+    }
+    await c.env.DB.prepare(`UPDATE attachments SET drive_link = NULL WHERE id = ?`).bind(row.id).run();
     return c.json({ ok: true });
   });
 

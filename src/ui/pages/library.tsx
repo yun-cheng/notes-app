@@ -167,8 +167,8 @@ function HeldList<T extends { id: string }>({ title, days, filtered, count, empt
 }
 
 /**
- * Every web link in the journal's entries, as the cards under an entry show them, with the page's title and picture
- * when it can be previewed (not in an encrypted vault). A preview is asked for only as its link comes near the screen.
+ * Every web link in the journal's entries, as the cards under an entry show them but with each one's whole address,
+ * and the page's title and picture when it can be previewed (not in an encrypted vault). A preview is asked for only as its link comes near the screen.
  */
 export function LinksPage() {
   const { days, filter } = useLibrary<LinkInfo>(linkDays);
@@ -195,7 +195,7 @@ function LinkRow({ url, card }: { url: string; card: Card }) {
   const near = useInView(ref, '600px 0px');
   return (
     <span ref={ref} className="held__thing">
-      <LinkCard url={url} preview={near && !!vault && !vault.encryption} />
+      <LinkCard url={url} preview={near && !!vault && !vault.encryption} address />
     </span>
   );
 }

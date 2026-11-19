@@ -71,15 +71,18 @@ function Thumb({ id }: { id: string }) {
 
 /**
  * A link as a card opening in a new tab: the page's own title, description and image when it can be previewed,
- * or else its site and path. The image loads from the page's site, with no referrer.
+ * or else its site and path. The image loads from the page's site, with no referrer. With `address`, its whole
+ * address shows under it in place of the site, as the Links page has it.
  */
-export function LinkCard({ url, preview: allowed, compact = false }: { url: string; preview: boolean; compact?: boolean }) {
+export function LinkCard({ url, preview: allowed, compact = false, address = false }: { url: string; preview: boolean; compact?: boolean; address?: boolean }) {
   const preview = useLinkPreview(url, allowed);
   const [imageFailed, setImageFailed] = useState(false);
   let path = '';
+  let whole = url;
   try {
     const u = new URL(url);
     path = decodeURI(u.pathname + u.search).replace(/\/$/, '');
+    whole = decodeURI(url);
   } catch {
     // Shown as typed.
   }
@@ -104,8 +107,8 @@ export function LinkCard({ url, preview: allowed, compact = false }: { url: stri
       <span className="link-card__text">
         {preview?.title && <span className="link-card__title">{preview.title}</span>}
         {preview?.description && <span className="link-card__desc">{preview.description}</span>}
-        <span className="link-card__site">{preview?.site ?? siteName(url)}</span>
-        {path && !preview?.title && <span className="link-card__path">{path}</span>}
+        {(!address || !preview?.title) && <span className="link-card__site">{preview?.site ?? siteName(url)}</span>}
+        {address ? <span className="link-card__address">{whole}</span> : path && !preview?.title && <span className="link-card__path">{path}</span>}
       </span>
     </a>
   );

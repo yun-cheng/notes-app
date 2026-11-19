@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { linkUrls, photoIds, siteName } from '../domain/content';
 import type { Card } from '../domain/types';
 import { useCards } from '../state/CardsContext';
@@ -103,7 +103,10 @@ export function LinkCard({ url, preview: allowed, compact = false }: { url: stri
   );
 }
 
-/** Photos full size, one at a time, with arrows and keys to move between them. */
+/**
+ * Photos full size, one at a time, with arrows and keys to move between them, and, for more than one, a row of them
+ * all along the bottom, the one shown marked and kept in sight, any of them pressed to show it.
+ */
 export function PhotoViewer({ ids, start, onClose }: { ids: string[]; start: number; onClose: () => void }) {
   const backdrop = useBackdropClose(onClose);
   const [at, setAt] = useState(start);
@@ -124,7 +127,7 @@ export function PhotoViewer({ ids, start, onClose }: { ids: string[]; start: num
   });
 
   return (
-    <div className="dialog-backdrop viewer" role="dialog" aria-label="Photo" {...backdrop}>
+    <div className={`dialog-backdrop viewer${ids.length > 1 ? ' viewer--strip' : ''}`} role="dialog" aria-label="Photo" {...backdrop}>
       {url ? <img className="viewer__img" src={url} alt={`Photo ${at + 1} of ${ids.length}`} /> : <p className="viewer__note">{state === 'loading' ? 'Loading photo…' : 'This photo isn’t available yet.'}</p>}
       {ids.length > 1 && (
         <>
@@ -137,11 +140,35 @@ export function PhotoViewer({ ids, start, onClose }: { ids: string[]; start: num
           <span className="viewer__count">
             {at + 1} / {ids.length}
           </span>
+          <div className="viewer__strip" role="group" aria-label="All photos">
+            {ids.map((id, i) => (
+              <StripThumb key={id} id={id} label={`Photo ${i + 1} of ${ids.length}`} current={i === at} onPick={() => setAt(i)} />
+            ))}
+          </div>
         </>
       )}
       <button type="button" className="viewer__close" aria-label="Close" onClick={onClose}>
         ×
       </button>
     </div>
+  );
+}
+
+/** One photo in the viewer's bottom row, whole, at the row's height; the one shown scrolls into the middle of the row. */
+function StripThumb({ id, label, current, onPick }: { id: string; label: string; current: boolean; onPick: () => void }) {
+  const { url } = usePhotoUrl(id);
+  const ref = useRef<HTMLButtonElement>(null);
+  useEffect(() => {
+    const el = ref.current;
+    const row = el?.parentElement;
+    // The row alone scrolls (it's what the thumbnail is placed in), not the page under the viewer.
+    if (!current || !el || !row) return;
+    const still = window.matchMedia('(prefers-reduced-motion: reduce)').matches;
+    row.scrollTo({ left: el.offsetLeft - (row.clientWidth - el.offsetWidth) / 2, behavior: still ? 'auto' : 'smooth' });
+  }, [current]);
+  return (
+    <button ref={ref} type="button" className={`viewer__thumb${current ? ' is-current' : ''}`} aria-label={label} aria-current={current || undefined} onClick={onPick}>
+      {url ? <img src={url} alt="" draggable={false} /> : <Icon name="image" size={16} />}
+    </button>
   );
 }

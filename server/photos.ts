@@ -1,5 +1,6 @@
 import type { Context, Hono } from 'hono';
 import { SHARED_WITH } from './access';
+import type { StoredAttachment } from '../src/domain/attachments';
 import type { AppEnv } from './db';
 import {
   deleteFile,
@@ -69,27 +70,18 @@ export function drivePublicRoutes(app: Hono<AppEnv>, fetcher: GoogleFetch, now: 
   });
 }
 
-/** A photo or file as the Trash and devices' checks see it (`GET /attachments`). */
-export interface StoredAttachment {
-  id: string;
-  vault_id: string;
-  mime: string;
-  size: number;
-  name: string | null;
-  created_at: number;
-  trashed_at: number | null;
-  trashed_from: string | null;
-}
-
 /** At most this many photos and files trashed or kept in one request. */
 const MAX_STATE_CHANGES = 500;
 /** The vaults the user (the next binding) can change. */
 const EDITABLE = `SELECT vault_id FROM vault_members WHERE user_id = ? AND role IN ('owner', 'editor')`;
 /**
  * Whether a card the server can read holds the attachment, in the journal or the Trash. One in an encrypted vault
- * can't be read here, so devices, which can, decide for those.
+ * can't be read here, so devices, which can, decide for those. Only cards that could: those in a vault of anyone in
+ * the attachment's vault, as a card moves only between vaults its mover is in.
  */
-const IN_A_CARD = `EXISTS (SELECT 1 FROM cards c WHERE instr(c.payload, attachments.id) > 0)`;
+const IN_A_CARD = `EXISTS (SELECT 1 FROM cards c WHERE c.vault_id IN (
+  SELECT theirs.vault_id FROM vault_members ours JOIN vault_members theirs ON theirs.user_id = ours.user_id WHERE ours.vault_id = attachments.vault_id
+) AND instr(c.payload, attachments.id) > 0)`;
 
 interface AttachmentRow {
   id: string;
@@ -209,12 +201,13 @@ export function photoRoutes(app: Hono<AppEnv>, fetcher: GoogleFetch, now: () => 
   app.delete('/attachments/:id', async (c) => {
     const id = c.req.param('id');
     const row = await c.env.DB.prepare(
-      `SELECT owner_id, drive_file_id, ${IN_A_CARD} AS held FROM attachments WHERE id = ? AND trashed_at IS NOT NULL AND vault_id IN (${EDITABLE})`,
+      `SELECT owner_id, drive_file_id, trashed_at, ${IN_A_CARD} AS held FROM attachments WHERE id = ? AND vault_id IN (${EDITABLE})`,
     )
       .bind(id, c.get('user').id)
-      .first<{ owner_id: string; drive_file_id: string; held: number }>();
-    if (!row) return c.json({ error: 'Not in the Trash' }, 404);
-    if (row.held) return c.json({ error: 'in_use' }, 409);
+      .first<{ owner_id: string; drive_file_id: string; trashed_at: number | null; held: number }>();
+    if (!row) return c.json({ error: 'Not found' }, 404);
+    // Put back on another device a moment ago, or held by an entry again.
+    if (row.trashed_at === null || row.held) return c.json({ error: 'in_use' }, 409);
     if (row.drive_file_id) {
       const config = driveConfig(c, fetcher);
       if (!config) return c.json({ error: 'photos_not_configured' }, 503);

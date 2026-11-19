@@ -229,12 +229,30 @@ describe('photos and files in the Trash', () => {
     expect(t.files.size).toBe(1);
   });
 
+  it('counts an entry moved to another of its people\'s vaults, but not a stranger\'s', async () => {
+    const t = await connected();
+    await upload(t, 'photo-0001', t.ann.cookie, t.ann.vault);
+    await upload(t, 'photo-0002', t.ann.cookie, t.ann.vault);
+    const other = (await (await t.call('/api/vaults', { method: 'POST', body: JSON.stringify({ name: 'Work' }) }, t.ann.cookie)).json()) as { id: string };
+    const body = (id: string) => ({ type: 'note', title: '', tags: [], createdAt: 1, content: { type: 'doc', content: [{ type: 'photo', attrs: { id } }] } });
+    await t.push(t.ann.cookie, [card('card-1', other.id, body('photo-0001'))]);
+    // Someone else's card naming it can't hold it: they can't see it.
+    const ben = await t.signIn('ben');
+    await t.push(ben.cookie, [card('card-2', ben.vault, body('photo-0002'))]);
+    await state(t, t.ann.cookie, { trash: [{ id: 'photo-0001' }, { id: 'photo-0002' }] });
+    expect((await list(t, t.ann.cookie)).map((a) => [a.id, !!a.trashed_at])).toEqual([
+      ['photo-0001', false],
+      ['photo-0002', true],
+    ]);
+  });
+
   it('deletes one in the Trash from Drive and the server, and nothing else', async () => {
     const t = await connected();
     await upload(t, 'photo-0001', t.ann.cookie, t.ann.vault);
     await upload(t, 'photo-0002', t.ann.cookie, t.ann.vault);
-    // Not in the Trash yet.
-    expect((await t.call('/api/attachments/photo-0001', { method: 'DELETE' }, t.ann.cookie)).status).toBe(404);
+    // Not in the Trash, as when put back on another device: kept, not taken for gone.
+    expect(await (await t.call('/api/attachments/photo-0001', { method: 'DELETE' }, t.ann.cookie)).json()).toEqual({ error: 'in_use' });
+    expect((await t.call('/api/attachments/photo-9999', { method: 'DELETE' }, t.ann.cookie)).status).toBe(404);
     await state(t, t.ann.cookie, { trash: [{ id: 'photo-0001' }] });
     expect((await t.call('/api/attachments/photo-0001', { method: 'DELETE' }, t.ann.cookie)).status).toBe(200);
     expect([...t.files.keys()]).toEqual(['file-2']);

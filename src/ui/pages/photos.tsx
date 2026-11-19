@@ -1,4 +1,5 @@
-import { useEffect, useMemo, useRef, useState } from 'react';
+import { useEffect, useMemo, useRef, useState, type MouseEvent } from 'react';
+import { createPortal } from 'react-dom';
 import { useLocation, useNavigate } from 'react-router';
 import { displayTitle } from '../../domain/content';
 import { relativeDay } from '../../domain/dates';
@@ -7,10 +8,12 @@ import { entryMatcher, filterParams, isFiltered } from '../../domain/stream';
 import { useCards, useToday } from '../../state/CardsContext';
 import { PhotoViewer } from '../Attachments';
 import { Empty, Page } from '../components';
+import { ContextMenu, Item, Shield, type Point } from '../EntryMenu';
 import { usePhotoUrl } from '../editor/photo';
 import { FilterBar, FilterSheet, useJournalFilter } from '../FilterPanel';
 import { Icon } from '../Icon';
 import { cardPath, sheetState } from '../paths';
+import { useShowInJournal } from '../showInJournal';
 import { useInView } from '../useInView';
 
 /**
@@ -66,6 +69,13 @@ export function PhotosPage() {
   const navigate = useNavigate();
   const location = useLocation();
   const entries = new Set(all.map((i) => i.card.id)).size;
+  const showInJournal = useShowInJournal();
+  // A photo right-clicked, in the grid or full screen: its entry, to open or go to.
+  const [menu, setMenu] = useState<{ at: number; point: Point } | null>(null);
+  const openEntry = (item: PhotoItem) => {
+    setViewing(null);
+    void navigate(cardPath(item.card), { state: sheetState(location, item.card) });
+  };
 
   // The width to fill, and a count of shapes learned, each a new layout.
   const canvas = useRef<HTMLDivElement>(null);
@@ -97,10 +107,7 @@ export function PhotosPage() {
         type="button"
         className="viewer__caption"
         aria-label={`Open the entry: ${title}`}
-        onClick={() => {
-          setViewing(null);
-          void navigate(cardPath(card), { state: sheetState(location, card) });
-        }}
+        onClick={() => openEntry(all[at])}
       >
         <span className="viewer__caption-title">{title}</span>
         <span className="viewer__caption-day">{relativeDay(day, today)}</span>
@@ -140,7 +147,14 @@ export function PhotosPage() {
                       {relativeDay(day, today)}
                     </h2>
                     {items.map((item, i) => (
-                      <Tile key={item.id} item={item} box={layout.tiles[d][i]} onShape={onShape} onOpen={() => setViewing(first + i)} />
+                      <Tile
+                        key={item.id}
+                        item={item}
+                        box={layout.tiles[d][i]}
+                        onShape={onShape}
+                        onOpen={() => setViewing(first + i)}
+                        onMenu={(point) => setMenu({ at: first + i, point })}
+                      />
                     ))}
                   </section>
                 );
@@ -148,13 +162,64 @@ export function PhotosPage() {
           </div>
         </div>
       )}
-      {viewing !== null && <PhotoViewer ids={all.map((i) => i.id)} start={viewing} onClose={() => setViewing(null)} caption={caption} />}
+      {viewing !== null && (
+        <PhotoViewer ids={all.map((i) => i.id)} start={viewing} onClose={() => setViewing(null)} caption={caption} onMenu={(at, point) => setMenu({ at, point })} />
+      )}
+      {menu &&
+        all[menu.at] &&
+        createPortal(
+          <Shield>
+            <PhotoMenu
+              item={all[menu.at]}
+              at={menu.point}
+              onView={viewing === null ? () => setViewing(menu.at) : undefined}
+              onOpen={() => openEntry(all[menu.at])}
+              onShow={() => showInJournal(all[menu.at].card)}
+              onClose={() => setMenu(null)}
+            />
+          </Shield>,
+          document.body,
+        )}
     </Page>
   );
 }
 
-/** A photo in the layout, at its place; it loads once it's near the screen. */
-function Tile({ item, box, onShape, onOpen }: { item: PhotoItem; box: Box; onShape: (id: string, ratio: number) => void; onOpen: () => void }) {
+/**
+ * A photo's menu, on a right-click: its entry named, opened over the page or gone to in the journal, and the photo
+ * full screen when it isn't already.
+ */
+function PhotoMenu({ item, at, onView, onOpen, onShow, onClose }: { item: PhotoItem; at: Point; onView?: () => void; onOpen: () => void; onShow: () => void; onClose: () => void }) {
+  const today = useToday();
+  const run = (work: () => void) => () => {
+    onClose();
+    work();
+  };
+  return (
+    <ContextMenu at={at} label="Photo" onClose={onClose}>
+      <span className="context-menu__head">
+        <span className="context-menu__head-title">{displayTitle(item.card) || 'Untitled'}</span>
+        <span>{relativeDay(item.day, today)}</span>
+      </span>
+      <div className="style-menu__group">
+        {onView && (
+          <Item icon="image" onClick={run(onView)}>
+            View photo
+          </Item>
+        )}
+        <Item icon="open" onClick={run(onOpen)}>
+          Open entry
+        </Item>
+        <Item icon="notes" onClick={run(onShow)}>
+          Show in journal
+        </Item>
+      </div>
+      <span className="context-menu__note">Shift-right-click for the browser's menu</span>
+    </ContextMenu>
+  );
+}
+
+/** A photo in the layout, at its place; it loads once it's near the screen. A right-click opens its menu. */
+function Tile({ item, box, onShape, onOpen, onMenu }: { item: PhotoItem; box: Box; onShape: (id: string, ratio: number) => void; onOpen: () => void; onMenu: (at: Point) => void }) {
   const ref = useRef<HTMLButtonElement>(null);
   const seen = useInView(ref, '600px 0px');
   return (
@@ -165,6 +230,12 @@ function Tile({ item, box, onShape, onOpen }: { item: PhotoItem; box: Box; onSha
       style={{ left: box.x, top: box.y, width: box.w, height: box.h }}
       aria-label={`Photo in ${displayTitle(item.card) || 'Untitled'}`}
       onClick={onOpen}
+      onContextMenu={(e: MouseEvent) => {
+        // Shift keeps the browser's menu, to save the photo, say.
+        if (e.shiftKey) return;
+        e.preventDefault();
+        onMenu({ x: e.clientX, y: e.clientY });
+      }}
     >
       {seen && <TileImage id={item.id} onShape={(r) => onShape(item.id, r)} />}
     </button>

@@ -5,6 +5,7 @@ import { useCards } from '../state/CardsContext';
 import { usePhotoUrl } from './editor/photo';
 import { usePhotoZoom } from './photoZoom';
 import { previewFor, useDisplayPrefs } from './displayPrefs';
+import type { Point } from './EntryMenu';
 import { Icon } from './Icon';
 import { useLinkPreview } from './useLinkPreview';
 import { useBackdropClose } from './useBackdrop';
@@ -108,10 +109,10 @@ export function LinkCard({ url, preview: allowed, compact = false }: { url: stri
 /**
  * Photos full size, one at a time, with arrows and keys to move between them, and, for more than one, a row of them
  * all along the bottom, the one shown marked and kept in sight, any of them pressed to show it. Each zooms with the
- * wheel or a pinch (`usePhotoZoom`). `caption` puts something about the photo shown above the row: on the Photos
- * page, its entry.
+ * wheel or a pinch (`usePhotoZoom`). `caption` puts something about the photo shown above the row, and `onMenu`
+ * opens a menu for it on a right-click: on the Photos page, its entry and what to do with it.
  */
-export function PhotoViewer({ ids, start, onClose, caption }: { ids: string[]; start: number; onClose: () => void; caption?: (at: number) => ReactNode }) {
+export function PhotoViewer({ ids, start, onClose, caption, onMenu }: { ids: string[]; start: number; onClose: () => void; caption?: (at: number) => ReactNode; onMenu?: (at: number, point: Point) => void }) {
   const backdrop = useBackdropClose(onClose);
   const [at, setAt] = useState(start);
   const { url, state } = usePhotoUrl(ids[at]);
@@ -120,6 +121,8 @@ export function PhotoViewer({ ids, start, onClose, caption }: { ids: string[]; s
 
   useEffect(() => {
     const onKey = (e: KeyboardEvent) => {
+      // A menu open over the photo takes the keys: Escape closes it alone.
+      if (document.querySelector('.context-menu')) return;
       if (e.key === 'Escape') {
         e.preventDefault();
         onClose();
@@ -137,7 +140,21 @@ export function PhotoViewer({ ids, start, onClose, caption }: { ids: string[]; s
   return (
     <div ref={zoom.area} className={`dialog-backdrop viewer${ids.length > 1 ? ' viewer--strip' : ''}`} role="dialog" aria-label="Photo" {...backdrop}>
       {url ? (
-        <img className="viewer__img" src={url} alt={`Photo ${at + 1} of ${ids.length}`} {...zoom.image} />
+        <img
+          className="viewer__img"
+          src={url}
+          alt={`Photo ${at + 1} of ${ids.length}`}
+          {...zoom.image}
+          onContextMenu={
+            onMenu &&
+            ((e) => {
+              // Shift keeps the browser's menu, to save the photo, say.
+              if (e.shiftKey) return;
+              e.preventDefault();
+              onMenu(at, { x: e.clientX, y: e.clientY });
+            })
+          }
+        />
       ) : (
         <p className="viewer__note">{state === 'loading' ? 'Loading photo…' : 'This photo isn’t available yet.'}</p>
       )}

@@ -25,7 +25,7 @@ import { JournalBox } from '../JournalBox';
 import { Attachments } from '../Attachments';
 import { colorClass, StyleMenu } from '../EntryStyle';
 import { BatchBar } from '../BatchBar';
-import { SelectionProvider, useBoxSelect, useSelectable, useSelection, useSelectionState } from '../selection';
+import { revealBubble, SelectionProvider, useBoxSelect, useSelectable, useSelection, useSelectionState } from '../selection';
 import { entries, useEntryActions, writeClipboard } from '../entryActions';
 import { useEntryShortcuts } from '../useEntryShortcuts';
 import { BubbleCopy, TypeSwitch, ViewOnlyButton } from '../BubbleTools';
@@ -40,6 +40,7 @@ import { DatesDialog } from '../DatesDialog';
 import { Board, BoardSetup, lastBoard, useBoardKind, useCardDrag, type DragParts } from './board';
 import { foldStacks, isStack, moveInStack, stackEntries, stacksOf } from '../../domain/stacks';
 import { openStacks, useTakeOut } from '../useStacking';
+import type { ShowState } from '../showInJournal';
 import { useSaveAsTemplate, useStartFromTemplate } from '../useTemplates';
 import { googleTranslateUrl, languageName, openOutside, showTranslation, translateEntry, translatesOnDevice, useTranslation } from '../translate';
 import { useBackdropClose } from '../useBackdrop';
@@ -255,16 +256,34 @@ function BoardMenu({ filter }: { filter: StreamFilter }) {
 export function Stream({ items, empty, sort }: { items: StreamItem[]; empty: string; sort: StreamSort }) {
   const today = useToday();
   const chat = sort === 'written';
+  const { index } = useCards();
+  const navigate = useNavigate();
+  const location = useLocation();
+  // An entry to go to (`useShowInJournal`): it, or the stack it's in, is drawn however far back it is.
+  const show = (location.state as ShowState | null)?.show;
+  const holder = show && (items.some((i) => i.card.id === show) ? show : stacksOf(index).get(show));
+  const reach = holder ? items.findIndex((i) => i.card.id === holder) : -1;
 
   // Once, when the first entries show: they can arrive after the page does. The stream remounts when the filter changes.
   const scrolled = useRef(false);
   useLayoutEffect(() => {
     if (scrolled.current || !items.length) return;
     scrolled.current = true;
-    window.scrollTo(0, chat ? document.documentElement.scrollHeight : 0);
+    const el = show && root.current?.querySelector<HTMLElement>(`[data-stack-entry="${CSS.escape(show)}"], [data-entry-id="${CSS.escape(show)}"]`);
+    if (!el) return void window.scrollTo(0, chat ? document.documentElement.scrollHeight : 0);
+    el.scrollIntoView({ block: 'center' });
+    const bubble = el.querySelector<HTMLElement>('[role="article"]');
+    // One too tall for the middle shows from its top, under the title bar.
+    if (bubble) {
+      revealBubble(bubble);
+      bubble.focus({ preventScroll: true });
+    }
+    el.classList.add('is-shown');
+    setTimeout(() => el.classList.remove('is-shown'), 2400);
+    // Shown once: not again on a reload or coming back to the page.
+    void navigate(location.pathname + location.search, { replace: true, state: null });
   }, [items.length, chat]);
 
-  const { index } = useCards();
   const group = sortGroup(sort, index.tagGroups.groups);
   const label = (day: string) => {
     // Sorted by a tag group, a heading is one of its tags.
@@ -275,12 +294,11 @@ export function Stream({ items, empty, sort }: { items: StreamItem[]; empty: str
   const selection = useSelection();
   const root = useRef<HTMLDivElement>(null);
   const box = useBoxSelect(root, selection);
-  const { shown, more } = useShownItems(items, chat);
+  const { shown, more } = useShownItems(items, chat, reach);
   // In the orders grouped by the day written, a day's badge opens the date picker at that day.
   const pickable = sort === 'written' || sort === 'newest';
   const [pickFrom, setPickFrom] = useState<string | null>(null);
   const filter = useJournalFilter();
-  const navigate = useNavigate();
 
   // Each day's entries sit together under its badge, which stays pinned under the title bar while they scroll past.
   const days: { day: string; items: StreamItem[] }[] = [];
@@ -335,10 +353,12 @@ const STREAM_PAGE = 150;
 /**
  * The entries to draw: the newest ones in a chat (the end nearest the box), the first ones in other orders, and more as
  * the reader scrolls toward the rest. Drawing thousands of bubbles at once makes every change to any entry slow.
- * `more` is a button for the next ones, which also asks for them itself when it comes near the screen.
+ * `more` is a button for the next ones, which also asks for them itself when it comes near the screen. `reach` is
+ * the index of one that must be drawn from the start.
  */
-function useShownItems(items: StreamItem[], chat: boolean) {
-  const [count, setCount] = useState(STREAM_PAGE);
+function useShownItems(items: StreamItem[], chat: boolean, reach = -1) {
+  // Far enough to draw the one at `reach`, an entry gone to.
+  const [count, setCount] = useState(() => (reach < 0 ? STREAM_PAGE : Math.max(STREAM_PAGE, chat ? items.length - reach : reach + 1)));
   const marker = useRef<HTMLButtonElement>(null);
   // Drawing older entries above what's on screen would push it down: keep it where it was.
   const keep = useRef<number | null>(null);

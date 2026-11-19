@@ -10,6 +10,7 @@ import { FileChip } from './files';
 import { Icon } from './Icon';
 import { useLinkPreview } from './useLinkPreview';
 import { useBackdropClose } from './useBackdrop';
+import { useCopyPhoto } from './copyPhoto';
 import { useInView } from './useInView';
 
 const MAX_PHOTOS = 4;
@@ -117,7 +118,7 @@ export function LinkCard({ url, preview: allowed, compact = false, address = fal
 /**
  * Photos full size, one at a time, with arrows and keys to move between them, and, for more than one, a row of them
  * all along the bottom, the one shown marked and kept in sight, any of them pressed to show it. Each zooms with the
- * wheel or a pinch (`usePhotoZoom`). `caption` puts something about the photo shown above the row, and `onMenu`
+ * wheel or a pinch (`usePhotoZoom`), and Cmd+C (Ctrl+C) copies the one shown. `caption` puts something about the photo shown above the row, and `onMenu`
  * opens a menu for it on a right-click: on the Photos page, its entry and what to do with it.
  */
 export function PhotoViewer({ ids, start, onClose, caption, onMenu }: { ids: string[]; start: number; onClose: () => void; caption?: (at: number) => ReactNode; onMenu?: (at: number, point: Point) => void }) {
@@ -126,6 +127,7 @@ export function PhotoViewer({ ids, start, onClose, caption, onMenu }: { ids: str
   const { url, state } = usePhotoUrl(ids[at]);
   const step = (d: number) => setAt((i) => (i + d + ids.length) % ids.length);
   const zoom = usePhotoZoom(ids[at]);
+  const copyPhoto = useCopyPhoto();
 
   useEffect(() => {
     const onKey = (e: KeyboardEvent) => {
@@ -139,6 +141,12 @@ export function PhotoViewer({ ids, start, onClose, caption, onMenu }: { ids: str
       else if (e.key === '+' || e.key === '=') zoom.zoomIn();
       else if (e.key === '-') zoom.zoomOut();
       else if (e.key === '0') zoom.fit();
+      else if (e.key === 'c' && (e.metaKey || e.ctrlKey) && !e.shiftKey && !e.altKey && !window.getSelection()?.toString()) {
+        // The photo alone: not the entries picked under the viewer too.
+        e.preventDefault();
+        e.stopPropagation();
+        copyPhoto(ids[at]);
+      }
     };
     // Before the sheet's own Escape handler, so Escape closes only the photo.
     window.addEventListener('keydown', onKey, true);

@@ -10,6 +10,8 @@ import type { Point } from '../EntryMenu';
 import { usePhotoUrl } from '../editor/photo';
 import { FilterBar, FilterSheet } from '../FilterPanel';
 import { Icon } from '../Icon';
+import { useCopyPhoto } from '../copyPhoto';
+import { Item } from '../EntryMenu';
 import { useInView } from '../useInView';
 import { countLine, HeldMenu, menuAt, useEntryActions, useLibrary } from './library';
 
@@ -57,6 +59,7 @@ export function PhotosPage() {
   const [viewing, setViewing] = useState<number | null>(null);
   const [filtering, setFiltering] = useState(false);
   const entry = useEntryActions();
+  const copyPhoto = useCopyPhoto();
   // A photo right-clicked, in the grid or full screen: its entry, to open or go to.
   const [menu, setMenu] = useState<{ at: number; point: Point } | null>(null);
   const openEntry = (item: PhotoItem) => {
@@ -163,7 +166,13 @@ export function PhotosPage() {
           onOpen={() => openEntry(all[menu.at])}
           onShow={() => entry.show(all[menu.at].card)}
           onClose={() => setMenu(null)}
-        />
+        >
+          <div className="style-menu__group">
+            <Item icon="copy" onClick={() => (setMenu(null), copyPhoto(all[menu.at].id))}>
+              Copy photo
+            </Item>
+          </div>
+        </HeldMenu>
       )}
     </Page>
   );

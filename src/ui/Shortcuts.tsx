@@ -55,6 +55,15 @@ const GROUPS: { title: string; keys: [string, string][] }[] = [
       ['Esc', 'Close it'],
     ],
   },
+  {
+    title: 'A photo full screen',
+    keys: [
+      ['← →', 'Previous or next photo'],
+      ['+ − 0', 'Zoom in, zoom out, or fit to the screen'],
+      [`${MOD}C`, 'Copy the photo'],
+      ['Esc', 'Close it'],
+    ],
+  },
 ];
 
 /** Every keyboard shortcut, opened with `?` or from the command box. */

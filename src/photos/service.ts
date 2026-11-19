@@ -107,6 +107,14 @@ export class PhotoService {
     return url;
   }
 
+  /** Forgets a photo or file deleted for good: this device's copy, and any address made to show it. */
+  async forget(id: string): Promise<void> {
+    const url = this.urls.get(id);
+    this.urls.delete(id);
+    void url?.then((u) => u && URL.revokeObjectURL(u), () => undefined);
+    await this.store.deletePhoto(id);
+  }
+
   /** Uploads waiting photos, oldest first. Stops at the first problem that would stop the rest too. */
   upload(): Promise<void> {
     if (this.running) {

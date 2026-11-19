@@ -19,6 +19,8 @@ export interface PhotoStore {
   getPhoto(id: string): Promise<PhotoRecord | undefined>;
   pendingPhotos(): Promise<PhotoRecord[]>;
   markPhotoUploaded(id: string): Promise<void>;
+  /** Drops this device's copy, of one deleted for good. */
+  deletePhoto(id: string): Promise<void>;
 }
 
 export type UploadResult = 'ok' | 'needs_drive' | 'not_configured' | 'rejected';
@@ -50,5 +52,8 @@ export class MemoryPhotoStore implements PhotoStore {
   async markPhotoUploaded(id: string) {
     const photo = this.photos.get(id);
     if (photo) this.photos.set(id, { ...photo, uploaded: 1 });
+  }
+  async deletePhoto(id: string) {
+    this.photos.delete(id);
   }
 }

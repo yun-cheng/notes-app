@@ -699,6 +699,23 @@ a.change__title:hover { color: var(--accent); }
 /* The Trash's tags, after its entries: the stream doesn't stretch to push them to the foot of the page. */
 .stream:has(+ .trash-tags) { flex: none; }
 .trash-tags { padding-bottom: 24px; }
+/* Photos and files taken out of every entry, on the Trash page, before its entries: each as a thumbnail or its chip,
+   where it was, the days left, and Restore or Delete forever. */
+.trash-held { padding-bottom: 8px; }
+.trash-held__note { margin: -4px 0 10px; color: var(--muted); font-size: 13px; }
+.trash-held__items { display: grid; grid-template-columns: repeat(auto-fill, minmax(170px, 1fr)); gap: 14px 12px; margin: 0; padding: 0; list-style: none; }
+.trash-held__item { display: flex; flex-direction: column; gap: 3px; min-width: 0; }
+.trash-held__thumb { display: grid; place-items: center; height: 130px; margin-bottom: 3px; padding: 0; overflow: hidden; border: 0; border-radius: 8px; background: var(--sunken); color: var(--muted); cursor: zoom-in; }
+.trash-held__thumb img { display: block; width: 100%; height: 100%; object-fit: cover; }
+.trash-held__thumb:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+.trash-held__file { display: flex; flex-direction: column; align-items: flex-start; justify-content: flex-end; gap: 2px; padding: 10px 12px; color: var(--text); text-align: left; font: inherit; cursor: pointer; }
+.trash-held__file .file-chip__icon { margin-bottom: auto; }
+.trash-held__file-name { display: -webkit-box; -webkit-box-orient: vertical; -webkit-line-clamp: 2; overflow: hidden; overflow-wrap: anywhere; font-size: 14px; font-weight: 600; line-height: 1.3; }
+.trash-held__file-detail { color: var(--muted); font-size: 12px; }
+.trash-held__from { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-size: 13px; font-weight: 600; }
+.trash-held__left { color: var(--muted); font-size: 12px; }
+.trash-held__actions { display: flex; align-items: center; gap: 4px; margin-top: 4px; }
+@media (max-width: 599px) { .trash-held__items { grid-template-columns: repeat(auto-fill, minmax(140px, 1fr)); } .trash-held__thumb, .trash-held__file { height: 110px; } }
 /* The stream keeps its own place when older entries are drawn above, so the browser's own adjusting stays out of it. */
 .stream { overflow-anchor: none; }
 .stream__more { align-self: center; }

@@ -36,8 +36,9 @@ function fakeGoogle() {
       await new Promise((done) => setTimeout(done, 5));
       return json({ id });
     }
-    const gone = init.method === 'DELETE' && url.match(/drive\/v3\/files\/(folder-\d+)$/);
+    const gone = init.method === 'DELETE' && url.match(/drive\/v3\/files\/([^/?]+)$/);
     if (gone) {
+      if (gone[1].startsWith('file-') && !files.delete(gone[1])) return json({ error: 'not found' }, 404);
       deleted.push(gone[1]);
       return new Response(null, { status: 204 });
     }
@@ -185,5 +186,78 @@ describe('photos in Google Drive', () => {
     const again = (await (await t.call('/api/drive/connect', { method: 'POST' }, t.ann.cookie)).json()) as { url: string };
     const state = new URL(again.url).searchParams.get('state')!;
     expect((await t.call(`/api/drive/callback?code=bad&state=${state}`)).headers.get('location')).toBe('/settings?drive=failed');
+  });
+});
+
+describe('photos and files in the Trash', () => {
+  const state = (t: Awaited<ReturnType<typeof connected>>, cookie: string, body: unknown) =>
+    t.call('/api/attachments/state', { method: 'POST', body: JSON.stringify(body) }, cookie);
+  const list = async (t: Awaited<ReturnType<typeof connected>>, cookie: string) =>
+    ((await (await t.call('/api/attachments', {}, cookie)).json()) as { attachments: { id: string; name: string | null; trashed_at: number | null; trashed_from: string | null }[] }).attachments;
+  const card = (id: string, vault: string, payload: unknown) => ({ id, vault_id: vault, updated_at: 1, deleted: false, seq: 0, payload: JSON.stringify(payload) });
+
+  it('lists them, trashes one no entry holds, and puts it back', async () => {
+    const t = await connected();
+    await upload(t, 'photo-0001', t.ann.cookie, t.ann.vault);
+    await t.call(`/api/attachments/file-0001?vault=${t.ann.vault}&kind=file&name=${encodeURIComponent('Lease.pdf')}`, { method: 'PUT', body: new Uint8Array([1, 2]).buffer, headers: { 'content-type': 'application/pdf' } }, t.ann.cookie);
+    expect((await list(t, t.ann.cookie)).map((a) => [a.id, a.name, a.trashed_at])).toEqual([
+      ['photo-0001', null, null],
+      ['file-0001', 'Lease.pdf', null],
+    ]);
+    expect((await state(t, t.ann.cookie, { trash: [{ id: 'photo-0001', from: 'card-1' }] })).status).toBe(200);
+    const [photo] = await list(t, t.ann.cookie);
+    expect(photo.trashed_at).toBeGreaterThan(0);
+    expect(photo.trashed_from).toBe('card-1');
+    // Trashed again, it keeps when and where from.
+    t.advance(5000);
+    await state(t, t.ann.cookie, { trash: [{ id: 'photo-0001', from: 'card-2' }] });
+    expect((await list(t, t.ann.cookie))[0]).toMatchObject({ trashed_at: photo.trashed_at, trashed_from: 'card-1' });
+    await state(t, t.ann.cookie, { keep: ['photo-0001'] });
+    expect((await list(t, t.ann.cookie))[0]).toMatchObject({ trashed_at: null, trashed_from: null });
+  });
+
+  it("won't trash or delete one an entry it can read holds, in the journal or the Trash", async () => {
+    const t = await connected();
+    await upload(t, 'photo-0001', t.ann.cookie, t.ann.vault);
+    await t.push(t.ann.cookie, [{ ...card('card-1', t.ann.vault, { type: 'note', title: '', tags: [], createdAt: 1, content: { type: 'doc', content: [{ type: 'photo', attrs: { id: 'photo-0001' } }] } }), deleted: true }]);
+    await state(t, t.ann.cookie, { trash: [{ id: 'photo-0001' }] });
+    expect((await list(t, t.ann.cookie))[0].trashed_at).toBeNull();
+    // Sent there before the entry came back, it can't be deleted while the entry holds it.
+    t.db.raw.exec(`UPDATE attachments SET trashed_at = 1 WHERE id = 'photo-0001'`);
+    const res = await t.call('/api/attachments/photo-0001', { method: 'DELETE' }, t.ann.cookie);
+    expect(res.status).toBe(409);
+    expect(t.files.size).toBe(1);
+  });
+
+  it('deletes one in the Trash from Drive and the server, and nothing else', async () => {
+    const t = await connected();
+    await upload(t, 'photo-0001', t.ann.cookie, t.ann.vault);
+    await upload(t, 'photo-0002', t.ann.cookie, t.ann.vault);
+    // Not in the Trash yet.
+    expect((await t.call('/api/attachments/photo-0001', { method: 'DELETE' }, t.ann.cookie)).status).toBe(404);
+    await state(t, t.ann.cookie, { trash: [{ id: 'photo-0001' }] });
+    expect((await t.call('/api/attachments/photo-0001', { method: 'DELETE' }, t.ann.cookie)).status).toBe(200);
+    expect([...t.files.keys()]).toEqual(['file-2']);
+    expect((await list(t, t.ann.cookie)).map((a) => a.id)).toEqual(['photo-0002']);
+    expect((await t.call('/api/attachments/photo-0001', {}, t.ann.cookie)).status).toBe(404);
+  });
+
+  it('forgets one with no Drive file, and leaves those in vaults it may not change alone', async () => {
+    const t = await connected();
+    const ben = await t.signIn('ben');
+    t.db.raw.exec(
+      `INSERT INTO attachments (id, owner_id, vault_id, drive_file_id, mime, size, created_at, trashed_at) VALUES ('demo-photo-x', '${t.ann.user.id}', '${t.ann.vault}', '', 'image/jpeg', 10, 1, 1)`,
+    );
+    t.db.raw.exec(`INSERT INTO vault_members (vault_id, user_id, role) VALUES ('${t.ann.vault}', '${ben.user.id}', 'viewer')`);
+    await upload(t, 'photo-0001', t.ann.cookie, t.ann.vault);
+    await state(t, ben.cookie, { trash: [{ id: 'photo-0001' }], keep: ['demo-photo-x'] });
+    expect((await list(t, ben.cookie)).map((a) => [a.id, !!a.trashed_at])).toEqual([
+      ['demo-photo-x', true],
+      ['photo-0001', false],
+    ]);
+    expect((await t.call('/api/attachments/demo-photo-x', { method: 'DELETE' }, ben.cookie)).status).toBe(404);
+    expect((await t.call('/api/attachments/demo-photo-x', { method: 'DELETE' }, t.ann.cookie)).status).toBe(200);
+    expect(t.calls.some((c) => c.startsWith('DELETE'))).toBe(false);
+    expect((await list(t, t.ann.cookie)).map((a) => a.id)).toEqual(['photo-0001']);
   });
 });

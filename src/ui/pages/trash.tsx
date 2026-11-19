@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState } from 'react';
+import { useEffect, useRef, useState, useSyncExternalStore } from 'react';
 import { displayTitle } from '../../domain/content';
 import { toDateKey } from '../../domain/dates';
 import { entryMatcher, isFiltered, type StreamItem } from '../../domain/stream';
@@ -10,6 +10,7 @@ import { FilterBar, FilterSheet, useJournalFilter } from '../FilterPanel';
 import { Icon } from '../Icon';
 import { SelectionProvider, useSelectionState, type Selection } from '../selection';
 import { MOD } from '../Shortcuts';
+import { TrashedAttachments } from '../TrashedAttachments';
 import { InTrash, useCanRestore } from '../viewOnly';
 import { FloatDock, Stream } from './journal';
 
@@ -23,7 +24,8 @@ const isEntry = (c: Card): c is NoteCard | TodoCard => c.type === 'note' || c.ty
  * A page of its own since 2026-11-18, a list at the foot of Settings before, then a plain list here.
  */
 export function TrashPage() {
-  const { index, sharedInto } = useCards();
+  const { index, sharedInto, attachments } = useCards();
+  const heldThere = !!useSyncExternalStore(attachments.subscribe, attachments.getState).trash?.length;
   const today = useToday();
   const filter = useJournalFilter();
   const canRestore = useCanRestore();
@@ -98,6 +100,8 @@ export function TrashPage() {
           }
           below={<FilterBar filter={filter} />}
         >
+          {/* Photos and files have no tags, kind or date of their own: a vault narrows them, any other filter hides them. */}
+          {!isFiltered({ ...filter, vaultId: undefined }) && <TrashedAttachments vaultId={filter.vaultId} />}
           <Stream
             key={`trash:${JSON.stringify(filter)}`}
             items={items}
@@ -106,7 +110,7 @@ export function TrashPage() {
             empty={
               isFiltered(filter)
                 ? 'Nothing in the Trash matches these filters.'
-                : tags.length
+                : tags.length || heldThere
                   ? 'No entries in the Trash.'
                   : 'The Trash is empty. Entries you move to the Trash wait here until you restore them.'
             }

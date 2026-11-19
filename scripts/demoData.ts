@@ -108,9 +108,31 @@ async function prepareAccounts(people: Person[]) {
       `INSERT OR IGNORE INTO vault_members (vault_id, user_id, role) VALUES (${sql(diary)}, ${sql(u.id)}, 'owner')`,
     );
   }
+  runSql(statements);
+}
+
+/** Runs SQL on the local database. */
+function runSql(statements: string[]) {
   mkdirSync('.wrangler', { recursive: true });
   writeFileSync('.wrangler/demo.sql', statements.join(';\n') + ';\n');
   execFileSync('npx', ['wrangler', 'd1', 'execute', 'notes-app', '--local', '--file', '.wrangler/demo.sql'], { stdio: 'ignore' });
+}
+
+/**
+ * Photos and files taken out of every entry wait in the Trash (`GET /api/attachments`), so the demo has two there,
+ * served by the dev server like its others: a second, crooked shot of the lake, out of the Summer trip a couple of
+ * hours ago, and the Kyoto itinerary's first draft, out of the Kyoto note 27 days ago, so it shows 3 days left. With no
+ * Drive file, deleting one only forgets it. The demo's other photos have no record here, as they never uploaded,
+ * so nothing sends them to the Trash.
+ */
+function trashedAttachments(owner: string, family: string, personal: string) {
+  const row = (id: string, vault: string, mime: string, size: number, added: number, trashed: number, from: string, name: string | null) =>
+    `INSERT INTO attachments (id, owner_id, vault_id, drive_file_id, mime, size, created_at, trashed_at, trashed_from, name) VALUES (${[id, owner, vault, '', mime].map(sql).join(', ')}, ${size}, ${added}, ${trashed}, ${sql(from)}, ${name ? sql(name) : 'NULL'})`;
+  runSql([
+    `DELETE FROM attachments WHERE id LIKE 'demo-%'`,
+    row('demo-photo-lake-retake', family, 'image/jpeg', statSync('scripts/demoPhotos/lake-retake.jpg').size, at(1, 9, 30), ago(150), 'demo-family-trip', null),
+    row('demo-file-itinerary-draft', personal, 'application/pdf', statSync('scripts/demoFiles/itinerary-draft.pdf').size, at(40, 21), at(27, 10), 'demo-note-kyoto', 'itinerary-draft.pdf'),
+  ]);
 }
 
 // ---- API ----
@@ -578,6 +600,8 @@ export async function seed() {
   await call(DEMO, `/cards/${launch}/comments/${risk.comments[0].id}`, { resolved: true }, 'PATCH');
   await call(SAM, `/cards/${launch}/comments`, { body: 'Who writes the help center articles?' });
   await call(DEMO, `/cards/${launch}/comments`, { body: 'Mia offered. I\'ll confirm on Monday.' });
+
+  trashedAttachments(DEMO.id, family.id, personal);
 
   writeFileSync(SESSION_FILE, JSON.stringify({ token: DEMO.token, user: { id: DEMO.id, email: DEMO.email, name: DEMO.name } }));
   return { cards: mine.length + 3, pin: DEMO_PIN, recoveryKey, diaryOpen: !!diaryKey };

@@ -130,6 +130,9 @@ export class DexieStore implements CardStore, PhotoStore, TranslationStore {
   async markPhotoUploaded(id: string) {
     await this.db.photos.update(id, { uploaded: 1 });
   }
+  async deletePhoto(id: string) {
+    await this.db.photos.delete(id);
+  }
   async destroy() {
     await this.db.delete();
   }

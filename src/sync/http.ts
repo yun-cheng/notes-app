@@ -1,5 +1,6 @@
 import { deviceName } from '../domain/device';
 import type { VaultPin } from '../domain/pin';
+import type { StoredAttachment } from '../domain/attachments';
 import type { CardRecord, JSONNode, Vault } from '../domain/types';
 import type { PhotoTransport } from '../photos/types';
 import { SyncAuthExpired, SyncOffline, type SyncTransport } from './engine';
@@ -174,6 +175,25 @@ export const photoTransport: PhotoTransport = {
     throw new Error(`Photo download failed with ${res.status}`);
   },
 };
+
+/** Every photo and file in this account's vaults, as the server keeps them, the Trash's too. */
+export const listAttachments = async () => (await request<{ attachments: StoredAttachment[] }>('/attachments')).attachments;
+
+/** Sends photos and files no entry holds to the Trash, and brings back those held again or put back. */
+export const markAttachments = (change: { trash: { id: string; from: string | null; name: string | null }[]; keep: string[] }) =>
+  request<unknown>('/attachments/state', { method: 'POST', body: JSON.stringify(change) });
+
+/** How deleting one for good went: done, gone already, held by an entry again, or Drive not connected. */
+export type DeleteResult = 'ok' | 'gone' | 'in_use' | 'needs_drive' | 'error';
+
+/** Deletes a photo or file in the Trash for good, from Google Drive too. */
+export async function deleteAttachment(id: string): Promise<DeleteResult> {
+  const res = await rawRequest(`/attachments/${encodeURIComponent(id)}`, { method: 'DELETE' });
+  if (res.ok) return 'ok';
+  if (res.status === 404) return 'gone';
+  const error = ((await res.json().catch(() => ({}))) as { error?: string }).error;
+  return error === 'in_use' ? 'in_use' : error === 'drive_not_connected' ? 'needs_drive' : 'error';
+}
 
 export interface VaultPeople {
   members: { user_id: string; name: string; email: string; role: 'owner' | 'editor' | 'viewer' }[];

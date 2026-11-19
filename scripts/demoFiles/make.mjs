@@ -1,6 +1,6 @@
 /**
  * Writes the demo's attached files, which the dev server serves in place of Google Drive (vite.config.ts): a one-page
- * PDF itinerary, a PDF lease, a CSV budget and a plain-text list. Run `node scripts/demoFiles/make.mjs` from the project folder.
+ * PDF itinerary and its first draft, a PDF lease, a CSV budget and a plain-text list. Run `node scripts/demoFiles/make.mjs` from the project folder.
  */
 import { writeFileSync } from 'node:fs';
 
@@ -51,6 +51,12 @@ writeFileSync(
     '',
     'Booking refs: hotel KY-20417, train JR-5531.',
   ]),
+);
+
+// A first go at the itinerary, taken out of the Kyoto note for the one above; it waits in the Trash.
+writeFileSync(
+  `${here}itinerary-draft.pdf`,
+  pdf('Kyoto, first draft', ['Day 1  Arrive. Hotel?', 'Day 2  Fushimi Inari, Gion', 'Day 3  Arashiyama', '', 'To book: hotel, train.']),
 );
 
 writeFileSync(

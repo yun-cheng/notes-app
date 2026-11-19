@@ -1,5 +1,5 @@
 import Dexie from 'dexie';
-import { createContext, useContext, useEffect, useMemo, useState, useSyncExternalStore, type ReactNode } from 'react';
+import { createContext, useContext, useEffect, useMemo, useRef, useState, useSyncExternalStore, type ReactNode } from 'react';
 import { buildIndex, type CardIndex } from '../domain/cardIndex';
 import { toDateKey } from '../domain/dates';
 import { lockedVaultIds, sortVaults, VaultLocks, type VaultKeyHooks } from '../domain/locks';
@@ -9,7 +9,8 @@ import { localStorageJournal } from '../storage/journal';
 import { CardRepository } from '../storage/repository';
 import { SyncEngine, type SyncStatus } from '../sync/engine';
 import type { CommentCount, SharedCard, VaultShare } from '../sync/protocol';
-import { httpTransport, photoTransport } from '../sync/http';
+import { deleteAttachment, httpTransport, listAttachments, markAttachments, photoTransport } from '../sync/http';
+import { AttachmentKeeper } from '../photos/keeper';
 import { preparePhoto } from '../photos/prepare';
 import { PhotoService, type PhotoState } from '../photos/service';
 import { Keyring } from '../crypto/keyring';
@@ -58,13 +59,19 @@ function openAccount(accountId: string) {
     forget: (id) => keyring.forget(id),
     forgetAll: () => keyring.forgetAll(),
   };
+  const photos = new PhotoService(store, photoTransport, preparePhoto);
   return {
     store,
     repo,
     engine,
     keyring,
     locks: new VaultLocks(undefined, undefined, keys),
-    photos: new PhotoService(store, photoTransport, preparePhoto),
+    photos,
+    attachments: new AttachmentKeeper(
+      { list: listAttachments, mark: markAttachments, remove: deleteAttachment },
+      { get: (key) => repo.getMeta(key), set: (key, value) => repo.setMeta(key, value) },
+      (id) => photos.forget(id),
+    ),
     unsynced: new Unsynced(),
   };
 }
@@ -76,6 +83,8 @@ interface CardsValue {
   vaults: Vault[];
   locks: VaultLocks;
   photos: PhotoService;
+  /** Photos and files no entry holds, in the Trash for 30 days, then deleted from Drive too. */
+  attachments: AttachmentKeeper;
   keyring: Keyring;
   /** Cards with changes not yet sent to the server. */
   unsynced: Unsynced;
@@ -93,7 +102,7 @@ interface CardsValue {
 const CardsContext = createContext<CardsValue | null>(null);
 
 export function CardsProvider({ accountId, children }: { accountId: string; children: ReactNode }) {
-  const [{ store, repo, engine, locks, photos, keyring, unsynced }] = useState(() => openAccount(accountId));
+  const [{ store, repo, engine, locks, photos, attachments, keyring, unsynced }] = useState(() => openAccount(accountId));
   // This account's translations, kept on this device.
   useEffect(() => {
     void keepTranslationsIn(store);
@@ -111,9 +120,32 @@ export function CardsProvider({ accountId, children }: { accountId: string; chil
   const [commentCounts, setCommentCounts] = useState<ReadonlyMap<string, number>>(new Map());
   // The same object until something in it changes, since every entry on screen reads it.
   const value = useMemo<CardsValue | null>(
-    () => (index && vaults ? { index, repo, engine, vaults, locks, locked, photos, keyring, unsynced, accountId, shared, sharedInto, commentCounts } : null),
-    [index, repo, engine, vaults, locks, locked, photos, keyring, unsynced, accountId, shared, sharedInto, commentCounts],
+    () => (index && vaults ? { index, repo, engine, vaults, locks, locked, photos, attachments, keyring, unsynced, accountId, shared, sharedInto, commentCounts } : null),
+    [index, repo, engine, vaults, locks, locked, photos, attachments, keyring, unsynced, accountId, shared, sharedInto, commentCounts],
   );
+
+  // After a sync that left nothing to send, photos and files no entry holds go to the Trash, and those 30 days
+  // there are deleted. Judged against every card readable here; a vault locked here, or one this account can only
+  // view, isn't judged, and nothing is deleted for good while any vault is locked.
+  const sweepView = useRef({ index, vaults, locked });
+  sweepView.current = { index, vaults, locked };
+  useEffect(() => {
+    attachments.watch(() => {
+      const { index: now, vaults: all, locked: shut } = sweepView.current;
+      return {
+        cards: () => now?.byId.values() ?? [],
+        judges: (id) => {
+          const vault = all?.find((v) => v.id === id);
+          return !!vault && (vault.role ?? 'owner') !== 'viewer' && !shut.has(id);
+        },
+        mayDelete: shut.size === 0,
+      };
+    });
+    return engine.subscribe(() => {
+      const { state, pending, lastSyncedAt } = engine.getStatus();
+      if (state === 'idle' && !pending && lastSyncedAt && sweepView.current.index) void attachments.sweep();
+    });
+  }, [attachments, engine]);
 
   // An entry moved into an encrypted vault, or whose vault became one, keeps no translation in the clear here.
   useEffect(() => {

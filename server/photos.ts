@@ -2,6 +2,7 @@ import type { Context, Hono } from 'hono';
 import { SHARED_WITH } from './access';
 import type { AppEnv } from './db';
 import {
+  deleteFile,
   disconnect,
   downloadFile,
   DriveFailed,
@@ -68,6 +69,28 @@ export function drivePublicRoutes(app: Hono<AppEnv>, fetcher: GoogleFetch, now: 
   });
 }
 
+/** A photo or file as the Trash and devices' checks see it (`GET /attachments`). */
+export interface StoredAttachment {
+  id: string;
+  vault_id: string;
+  mime: string;
+  size: number;
+  name: string | null;
+  created_at: number;
+  trashed_at: number | null;
+  trashed_from: string | null;
+}
+
+/** At most this many photos and files trashed or kept in one request. */
+const MAX_STATE_CHANGES = 500;
+/** The vaults the user (the next binding) can change. */
+const EDITABLE = `SELECT vault_id FROM vault_members WHERE user_id = ? AND role IN ('owner', 'editor')`;
+/**
+ * Whether a card the server can read holds the attachment, in the journal or the Trash. One in an encrypted vault
+ * can't be read here, so devices, which can, decide for those.
+ */
+const IN_A_CARD = `EXISTS (SELECT 1 FROM cards c WHERE instr(c.payload, attachments.id) > 0)`;
+
 interface AttachmentRow {
   id: string;
   owner_id: string;
@@ -123,16 +146,86 @@ export function photoRoutes(app: Hono<AppEnv>, fetcher: GoogleFetch, now: () => 
       const at = now();
       const name = file ? driveName(id, c.req.query('name')) : `${id}.${IMAGE_TYPES[mime]}`;
       const fileId = await uploadFile(c.env.DB, config, vault.owner_id, { name, mime, bytes }, at);
+      const fileName = file ? (c.req.query('name') ?? '').replace(/[\u0000-\u001f]/g, '').trim().slice(0, 200) || null : null;
       await c.env.DB.prepare(
-        `INSERT INTO attachments (id, owner_id, vault_id, drive_file_id, mime, size, width, height, created_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
+        `INSERT INTO attachments (id, owner_id, vault_id, drive_file_id, mime, size, width, height, created_at, name) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
          ON CONFLICT(id) DO NOTHING`,
       )
-        .bind(id, vault.owner_id, vaultId, fileId, mime, bytes.byteLength, size('w'), size('h'), at)
+        .bind(id, vault.owner_id, vaultId, fileId, mime, bytes.byteLength, size('w'), size('h'), at, fileName)
         .run();
       return c.json({ id }, 201);
     } catch (err) {
       return driveError(c, err);
     }
+  });
+
+  /**
+   * Every photo and file in this account's vaults: what it is, when it came, and whether it waits in the Trash, since
+   * when and from which entry. Devices compare it with what their entries hold (src/photos/keeper.ts).
+   */
+  app.get('/attachments', async (c) => {
+    const { results } = await c.env.DB.prepare(
+      `SELECT id, vault_id, mime, size, name, created_at, trashed_at, trashed_from FROM attachments
+       WHERE vault_id IN (SELECT vault_id FROM vault_members WHERE user_id = ?) ORDER BY created_at`,
+    )
+      .bind(c.get('user').id)
+      .all<StoredAttachment>();
+    return c.json({ attachments: results });
+  });
+
+  /**
+   * What a device found: `trash`, photos and files no entry holds any more, each with the entry it was last in and a
+   * file's name, if known; `keep`, ones in the Trash that an entry holds again, or put back. Only in vaults this
+   * account can change. One an entry the server can read still holds isn't trashed: a device that hasn't seen the
+   * latest can't send it there.
+   */
+  app.post('/attachments/state', async (c) => {
+    const body = (await c.req.json().catch(() => ({}))) as { trash?: unknown; keep?: unknown };
+    const trash = (Array.isArray(body.trash) ? body.trash : []).filter((t): t is { id: string; from?: unknown; name?: unknown } => typeof t?.id === 'string');
+    const keep = (Array.isArray(body.keep) ? body.keep : []).filter((id): id is string => typeof id === 'string');
+    if (trash.length + keep.length > MAX_STATE_CHANGES) return c.json({ error: 'Too many at once' }, 400);
+    const userId = c.get('user').id;
+    const at = now();
+    const text = (v: unknown, max: number) => (typeof v === 'string' && v.trim() ? v.trim().slice(0, max) : null);
+    const statements = [
+      ...trash.map((t) =>
+        c.env.DB.prepare(
+          `UPDATE attachments SET trashed_at = ?, trashed_from = ?, name = coalesce(name, ?)
+           WHERE id = ? AND trashed_at IS NULL AND vault_id IN (${EDITABLE}) AND NOT ${IN_A_CARD}`,
+        ).bind(at, text(t.from, 64), text(t.name, 200), t.id, userId),
+      ),
+      ...keep.map((id) =>
+        c.env.DB.prepare(`UPDATE attachments SET trashed_at = NULL, trashed_from = NULL WHERE id = ? AND trashed_at IS NOT NULL AND vault_id IN (${EDITABLE})`).bind(id, userId),
+      ),
+    ];
+    if (statements.length) await c.env.DB.batch(statements);
+    return c.json({ ok: true });
+  });
+
+  /**
+   * Deletes a photo or file in the Trash for good: from the owner's Drive, then from the server. Refused for one an
+   * entry the server can read holds again. One with no Drive file (the demo's) is only forgotten.
+   */
+  app.delete('/attachments/:id', async (c) => {
+    const id = c.req.param('id');
+    const row = await c.env.DB.prepare(
+      `SELECT owner_id, drive_file_id, ${IN_A_CARD} AS held FROM attachments WHERE id = ? AND trashed_at IS NOT NULL AND vault_id IN (${EDITABLE})`,
+    )
+      .bind(id, c.get('user').id)
+      .first<{ owner_id: string; drive_file_id: string; held: number }>();
+    if (!row) return c.json({ error: 'Not in the Trash' }, 404);
+    if (row.held) return c.json({ error: 'in_use' }, 409);
+    if (row.drive_file_id) {
+      const config = driveConfig(c, fetcher);
+      if (!config) return c.json({ error: 'photos_not_configured' }, 503);
+      try {
+        await deleteFile(c.env.DB, config, row.owner_id, row.drive_file_id, now());
+      } catch (err) {
+        return driveError(c, err);
+      }
+    }
+    await c.env.DB.prepare(`DELETE FROM attachments WHERE id = ?`).bind(id).run();
+    return c.json({ ok: true });
   });
 
   /** Streams a photo or file from the owner's Drive to any member of its vault. */

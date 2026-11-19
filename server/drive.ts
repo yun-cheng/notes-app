@@ -180,3 +180,10 @@ export async function downloadFile(db: Database, config: DriveConfig, userId: st
   if (!res.ok) throw new DriveFailed(`Drive download failed with ${res.status}`);
   return res;
 }
+
+/** Deletes a file from the owner's Drive for good, not to Drive's own trash. One already gone is fine. */
+export async function deleteFile(db: Database, config: DriveConfig, userId: string, fileId: string, now: number): Promise<void> {
+  const { token } = await accessToken(db, config, userId, now);
+  const res = await config.fetch(`https://www.googleapis.com/drive/v3/files/${encodeURIComponent(fileId)}`, { method: 'DELETE', headers: { authorization: `Bearer ${token}` } });
+  if (!res.ok && res.status !== 404 && res.status !== 410) throw new DriveFailed(`Drive delete failed with ${res.status}`);
+}

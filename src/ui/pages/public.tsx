@@ -35,21 +35,42 @@ function publicPhoto(token: string) {
   });
 }
 
-/** A file in a public card: its name, downloading it. */
+/** A file in a public card: its name, downloading it; a video plays where it is, with its name and a link under it. */
 function publicFile(token: string) {
   return Node.create({
     name: 'file',
     group: 'block',
     atom: true,
-    addAttributes: () => ({ id: { default: null }, name: { default: null }, mime: { default: null }, size: { default: null } }),
+    addAttributes: () => ({ id: { default: null }, name: { default: null }, mime: { default: null }, size: { default: null }, poster: { default: null }, width: { default: null }, height: { default: null } }),
     renderHTML: ({ node }) => {
       const name = String(node.attrs.name || 'File');
       const size = typeof node.attrs.size === 'number' ? ` · ${fileSize(node.attrs.size)}` : '';
+      const href = `/api/public/${encodeURIComponent(token)}/files/${encodeURIComponent(String(node.attrs.id))}`;
+      if (String(node.attrs.mime ?? '').startsWith('video/')) {
+        const { poster, width, height } = node.attrs as { poster: string | null; width: number | null; height: number | null };
+        return [
+          'figure',
+          { class: 'public-video' },
+          [
+            'video',
+            {
+              src: href,
+              controls: '',
+              playsinline: '',
+              preload: 'metadata',
+              ...(poster ? { poster: `/api/public/${encodeURIComponent(token)}/photos/${encodeURIComponent(poster)}` } : {}),
+              // As wide as the page allows, but no wider than its shape lets it be at the tallest it shows.
+              ...(width && height ? { style: `aspect-ratio: ${width} / ${height}; max-width: min(100%, calc(70dvh * ${(width / height).toFixed(4)}))` } : {}),
+            },
+          ],
+          ['figcaption', { class: 'public-file' }, '🎬 ', ['a', { href, download: name }, name], ['span', { class: 'public-file__size' }, size]],
+        ];
+      }
       return [
         'p',
         { class: 'public-file' },
         '📎 ',
-        ['a', { href: `/api/public/${encodeURIComponent(token)}/files/${encodeURIComponent(String(node.attrs.id))}`, download: name }, name],
+        ['a', { href, download: name }, name],
         ['span', { class: 'public-file__size' }, size],
       ];
     },

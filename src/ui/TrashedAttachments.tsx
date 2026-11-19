@@ -1,7 +1,7 @@
 import { useEffect, useState, useSyncExternalStore } from 'react';
 import { permissions } from '../domain/access';
 import { daysLeft, isFile, TRASH_DAYS, type StoredAttachment } from '../domain/attachments';
-import { displayTitle } from '../domain/content';
+import { displayTitle, isPoster, posterId } from '../domain/content';
 import type { JSONNode } from '../domain/types';
 import { useCards } from '../state/CardsContext';
 import { SyncOffline } from '../sync/engine';
@@ -12,9 +12,12 @@ import { fileSize } from '../photos/service';
 import { Icon } from './Icon';
 import { useToast } from './Toast';
 import { useViewOnly, VIEW_ONLY_NOTE } from './viewOnly';
+import { VideoMark } from './video';
+
+const isVideoItem = (a: StoredAttachment) => a.mime.startsWith('video/');
 
 /**
- * Photos and files taken out of every entry, on the Trash page: each with the entry it was in and the days left
+ * Photos, videos and files taken out of every entry, on the Trash page (a video's still goes with it): each with the entry it was in and the days left
  * before it's deleted, from Google Drive too. Restore puts it back at the end of that entry, or in a new note when
  * the entry can't take it; Delete forever, pressed twice, deletes it now. Asks for a fresh check when it opens.
  * `vaultId` narrows it to one vault, as the sidebar's vault does the Trash.
@@ -25,7 +28,8 @@ export function TrashedAttachments({ vaultId }: { vaultId?: string }) {
   const [viewing, setViewing] = useState<number | null>(null);
   useEffect(() => void attachments.sweep(true), [attachments]);
 
-  const shown = (trash ?? []).filter((a) => !vaultId || a.vault_id === vaultId);
+  // A video's still goes where the video goes, so it isn't listed on its own.
+  const shown = (trash ?? []).filter((a) => (!vaultId || a.vault_id === vaultId) && !isPoster(a.id));
   if (!shown.length) return null;
   const photos = shown.filter((a) => !isFile(a));
   const writable = (a: StoredAttachment) => {
@@ -51,7 +55,9 @@ export function TrashedAttachments({ vaultId }: { vaultId?: string }) {
 }
 
 function TrashedItem({ item, writable, onView }: { item: StoredAttachment; writable: boolean; onView: () => void }) {
-  const { index } = useCards();
+  const { index, attachments } = useCards();
+  const { trash } = useSyncExternalStore(attachments.subscribe, attachments.getState);
+  const still = isVideoItem(item) && trash?.some((a) => a.id === posterId(item.id)) ? posterId(item.id) : null;
   const putBack = usePutBack();
   const deleteForever = useDeleteForever();
   const from = item.trashed_from ? index.byId.get(item.trashed_from) : undefined;
@@ -59,7 +65,9 @@ function TrashedItem({ item, writable, onView }: { item: StoredAttachment; writa
   const file = isFile(item);
   return (
     <li className="trash-held__item">
-      {file ? (
+      {still ? (
+        <TrashedVideo item={item} still={still} />
+      ) : file ? (
         <TrashedFile item={item} />
       ) : (
         <button type="button" className="trash-held__thumb" aria-label="Show the photo" onClick={onView}>
@@ -76,7 +84,7 @@ function TrashedItem({ item, writable, onView }: { item: StoredAttachment; writa
             <Icon name="undo" size={16} />
             Restore
           </button>
-          <ConfirmDelete what={file ? 'file' : 'photo'} onDelete={() => void deleteForever(item)} />
+          <ConfirmDelete what={isVideoItem(item) ? 'video' : file ? 'file' : 'photo'} onDelete={() => void deleteForever(item)} />
         </span>
       )}
     </li>
@@ -96,6 +104,18 @@ function TrashedFile({ item }: { item: StoredAttachment }) {
       <span className="trash-held__file-detail">
         {fileSize(file.size)} · {fileKind(file.name)}
       </span>
+    </button>
+  );
+}
+
+/** A video, as its still with its mark, pressed to open it in a tab of its own. */
+function TrashedVideo({ item, still }: { item: StoredAttachment; still: string }) {
+  const act = useFileActions();
+  const name = item.name ?? 'Video';
+  return (
+    <button type="button" className="trash-held__thumb thumb--video" title={`Open ${name}`} onClick={() => void act({ id: item.id, name, mime: item.mime, size: item.size })}>
+      <TrashedPhoto id={still} />
+      <VideoMark />
     </button>
   );
 }
@@ -131,7 +151,11 @@ function usePutBack() {
   const toast = useToast();
   return async (a: StoredAttachment) => {
     if (viewOnly) return toast(VIEW_ONLY_NOTE);
-    const node: JSONNode = isFile(a) ? { type: 'file', attrs: { id: a.id, name: a.name ?? 'Untitled', mime: a.mime, size: a.size } } : { type: 'photo', attrs: { id: a.id } };
+    // A video comes back with its still, if that's in the Trash with it.
+    const still = isVideoItem(a) && attachments.getState().trash?.some((t) => t.id === posterId(a.id)) ? posterId(a.id) : null;
+    const node: JSONNode = isFile(a)
+      ? { type: 'file', attrs: { id: a.id, name: a.name ?? 'Untitled', mime: a.mime, size: a.size, ...(still ? { poster: still } : {}) } }
+      : { type: 'photo', attrs: { id: a.id } };
     const from = a.trashed_from ? index.byId.get(a.trashed_from) : undefined;
     // The entry's own permissions: everything shown in the Trash counts as read only, but the entry isn't in it.
     if (from && from.type !== 'tag' && !from.deleted && permissions(from, vaults, shared).edit) {
@@ -142,6 +166,7 @@ function usePutBack() {
       toast('Put back, in a new note');
     }
     await attachments.restore(a.id);
+    if (still) await attachments.restore(still);
   };
 }
 
@@ -151,9 +176,11 @@ function useDeleteForever() {
   const toast = useToast();
   return async (a: StoredAttachment) => {
     if (viewOnly) return toast(VIEW_ONLY_NOTE);
-    const what = isFile(a) ? 'file' : 'photo';
+    const what = isVideoItem(a) ? 'video' : isFile(a) ? 'file' : 'photo';
     try {
       const result = await attachments.deleteForever(a.id);
+      // Its still with it.
+      if ((result === 'ok' || result === 'gone') && attachments.getState().trash?.some((t) => t.id === posterId(a.id))) await attachments.deleteForever(posterId(a.id)).catch(() => undefined);
       toast(
         result === 'ok' || result === 'gone'
           ? `Deleted the ${what} for good`

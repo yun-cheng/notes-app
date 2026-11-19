@@ -1,6 +1,6 @@
 import { useEffect, useRef, useState, type ReactNode } from 'react';
 import { createPortal } from 'react-dom';
-import { fileAttachments, linkUrls, photoIds, siteName } from '../domain/content';
+import { fileAttachments, isVideo, linkUrls, mediaItems, siteName, type FileInfo, type Media } from '../domain/content';
 import type { Card } from '../domain/types';
 import { useCards } from '../state/CardsContext';
 import { usePhotoUrl } from './editor/photo';
@@ -13,13 +13,25 @@ import { useLinkPreview } from './useLinkPreview';
 import { useBackdropClose } from './useBackdrop';
 import { useCopyPhoto } from './copyPhoto';
 import { useInView } from './useInView';
+import { VideoMark, VideoPlayer, VideoStill } from './video';
+
+/** The videos among photos and videos, by ID, for the viewer to play. */
+export const videosIn = (items: readonly Media[]): ReadonlyMap<string, FileInfo> => new Map(items.flatMap((m) => (m.video ? [[m.id, m.video] as const] : [])));
+
+/** "3 photos", "1 video", "2 photos and 1 video". */
+export function mediaCount(items: readonly Media[]): string {
+  const videos = items.filter((m) => m.video).length;
+  const photos = items.length - videos;
+  const say = (n: number, one: string) => (n === 1 ? `1 ${one}` : `${n} ${one}s`);
+  return photos && videos ? `${say(photos, 'photo')} and ${say(videos, 'video')}` : videos ? say(videos, 'video') : say(photos, 'photo');
+}
 
 const MAX_PHOTOS = 4;
 const MAX_LINKS = 3;
 
 /**
- * An entry's photos, files and web links, shown under its bubble: photos large, as thumbnails or as a count (a
- * right-click on one copies it); files
+ * An entry's photos, videos, files and web links, shown under its bubble: photos and videos large, as thumbnails or
+ * as a count (a right-click on a photo copies it; a video is marked with its length, and plays full screen); files
  * as chips that open them; links as cards, as one line each or not at all (they stay links in the text). The entry's
  * own style, from its style menu, wins over the device's setting.
  */
@@ -30,8 +42,8 @@ export function Attachments({ card }: { card: Card }) {
   // Links in an encrypted vault, or in a card from a vault this account can't see, aren't sent anywhere to preview.
   const vault = vaults.find((v) => v.id === card.vaultId);
   const previews = !!vault && !vault.encryption;
-  const photos = photoIds(card.content);
-  const files = fileAttachments(card.content);
+  const photos = mediaItems(card.content);
+  const files = fileAttachments(card.content).filter((f) => !isVideo(f));
   const links = prefs.links === 'off' ? [] : linkUrls(card.content);
   const [viewing, setViewing] = useState<number | null>(null);
   // A photo right-clicked: a menu to copy it. (The entry's own menu is the bubble's, beside these.)
@@ -43,28 +55,29 @@ export function Attachments({ card }: { card: Card }) {
     <div className="attachments">
       {photos.length > 0 && prefs.photos === 'off' && (
         <button type="button" className="attachments__count" onClick={() => setViewing(0)}>
-          <Icon name="image" size={16} />
-          {photos.length === 1 ? '1 photo' : `${photos.length} photos`}
+          <Icon name={photos.every((m) => m.video) ? 'video' : 'image'} size={16} />
+          {mediaCount(photos)}
         </button>
       )}
       {photos.length > 0 && prefs.photos !== 'off' && (
         <div className={`attachments__photos${prefs.photos === 'large' ? ' attachments__photos--large' : ''}`}>
-          {photos.slice(0, MAX_PHOTOS).map((id, i) => (
+          {photos.slice(0, MAX_PHOTOS).map(({ id, video }, i) => (
             <button
               key={id}
               type="button"
-              className="thumb"
+              className={`thumb${video ? ' thumb--video' : ''}`}
               data-photo-id={id}
-              aria-label={`Open photo ${i + 1} of ${photos.length}`}
+              aria-label={`Open ${video ? 'video' : 'photo'} ${i + 1} of ${photos.length}`}
               onClick={() => setViewing(i)}
               onContextMenu={(e) => {
                 // Shift keeps the browser's menu.
                 if (e.shiftKey) return;
                 e.preventDefault();
-                setPhotoMenu({ id, at: { x: e.clientX, y: e.clientY } });
+                if (!video) setPhotoMenu({ id, at: { x: e.clientX, y: e.clientY } });
               }}
             >
-              <Thumb id={id} />
+              {video ? <VideoStill file={video} lazy /> : <Thumb id={id} />}
+              {video && !(i === MAX_PHOTOS - 1 && extra > 0) && <VideoMark duration={video.duration} />}
               {i === MAX_PHOTOS - 1 && extra > 0 && <span className="thumb__more">+{extra}</span>}
             </button>
           ))}
@@ -77,7 +90,7 @@ export function Attachments({ card }: { card: Card }) {
         <LinkCard key={url} url={url} preview={previews} compact={prefs.links === 'compact'} />
       ))}
       {links.length > MAX_LINKS && <span className="attachments__more">and {links.length - MAX_LINKS} more links</span>}
-      {viewing !== null && <PhotoViewer ids={photos} start={viewing} onClose={() => setViewing(null)} />}
+      {viewing !== null && <PhotoViewer ids={photos.map((m) => m.id)} videos={videosIn(photos)} start={viewing} onClose={() => setViewing(null)} />}
       {photoMenu && <PhotoMenu id={photoMenu.id} at={photoMenu.at} onClose={() => setPhotoMenu(null)} />}
     </div>
   );
@@ -134,16 +147,32 @@ export function LinkCard({ url, preview: allowed, compact = false, address = fal
 }
 
 /**
- * Photos full size, one at a time, with arrows and keys to move between them, and, for more than one, a row of them
+ * Photos and videos full size, one at a time (a video, among `videos`, playing), with arrows and keys to move between them, and, for more than one, a row of them
  * all along the bottom, the one shown marked and kept in sight, any of them pressed to show it. Each zooms with the
  * wheel or a pinch (`usePhotoZoom`), and Cmd+C (Ctrl+C) copies the one shown. `caption` puts something about the
  * photo shown above the row. A right-click opens a menu to copy the photo, or `onMenu`'s instead: on the Photos
  * page, its entry and what to do with it, as well.
  */
-export function PhotoViewer({ ids, start, onClose, caption, onMenu }: { ids: string[]; start: number; onClose: () => void; caption?: (at: number) => ReactNode; onMenu?: (at: number, point: Point) => void }) {
+export function PhotoViewer({
+  ids,
+  videos,
+  start,
+  onClose,
+  caption,
+  onMenu,
+}: {
+  ids: string[];
+  videos?: ReadonlyMap<string, FileInfo>;
+  start: number;
+  onClose: () => void;
+  caption?: (at: number) => ReactNode;
+  onMenu?: (at: number, point: Point) => void;
+}) {
   const backdrop = useBackdropClose(onClose);
   const [at, setAt] = useState(start);
-  const { url, state } = usePhotoUrl(ids[at]);
+  const video = videos?.get(ids[at]);
+  // A video isn't fetched whole: it plays a range at a time.
+  const { url, state } = usePhotoUrl(video ? '' : ids[at]);
   const step = (d: number) => setAt((i) => (i + d + ids.length) % ids.length);
   const zoom = usePhotoZoom(ids[at]);
   const copyPhoto = useCopyPhoto();
@@ -158,6 +187,7 @@ export function PhotoViewer({ ids, start, onClose, caption, onMenu }: { ids: str
         onClose();
       } else if (e.key === 'ArrowRight') step(1);
       else if (e.key === 'ArrowLeft') step(-1);
+      else if (video) return;
       else if (e.key === '+' || e.key === '=') zoom.zoomIn();
       else if (e.key === '-') zoom.zoomOut();
       else if (e.key === '0') zoom.fit();
@@ -174,8 +204,20 @@ export function PhotoViewer({ ids, start, onClose, caption, onMenu }: { ids: str
   });
 
   return (
-    <div ref={zoom.area} className={`dialog-backdrop viewer${ids.length > 1 ? ' viewer--strip' : ''}`} role="dialog" aria-label="Photo" {...backdrop}>
-      {url ? (
+    <div ref={zoom.area} className={`dialog-backdrop viewer${ids.length > 1 ? ' viewer--strip' : ''}`} role="dialog" aria-label={video ? 'Video' : 'Photo'} {...backdrop}>
+      {video ? (
+        <span
+          className="viewer__video"
+          onContextMenu={(e) => {
+            if (e.shiftKey || !onMenu) return;
+            e.preventDefault();
+            e.stopPropagation();
+            onMenu(at, { x: e.clientX, y: e.clientY });
+          }}
+        >
+          <VideoPlayer key={ids[at]} file={video} autoPlay />
+        </span>
+      ) : url ? (
         <img
           className="viewer__img"
           src={url}
@@ -195,7 +237,7 @@ export function PhotoViewer({ ids, start, onClose, caption, onMenu }: { ids: str
       ) : (
         <p className="viewer__note">{state === 'loading' ? 'Loading photo…' : 'This photo isn’t available yet.'}</p>
       )}
-      {zoom.zoom.scale > 1 && (
+      {!video && zoom.zoom.scale > 1 && (
         <button type="button" className="viewer__fit" title="Fit the photo to the screen (0)" onClick={zoom.fit}>
           {Math.round(zoom.zoom.scale * 100)}% · Fit
         </button>
@@ -203,18 +245,18 @@ export function PhotoViewer({ ids, start, onClose, caption, onMenu }: { ids: str
       {caption?.(at)}
       {ids.length > 1 && (
         <>
-          <button type="button" className="viewer__nav viewer__nav--prev" aria-label="Previous photo" onClick={() => step(-1)}>
+          <button type="button" className="viewer__nav viewer__nav--prev" aria-label="Previous" onClick={() => step(-1)}>
             <Icon name="left" />
           </button>
-          <button type="button" className="viewer__nav viewer__nav--next" aria-label="Next photo" onClick={() => step(1)}>
+          <button type="button" className="viewer__nav viewer__nav--next" aria-label="Next" onClick={() => step(1)}>
             <Icon name="right" />
           </button>
           <span className="viewer__count">
             {at + 1} / {ids.length}
           </span>
-          <div className="viewer__strip" role="group" aria-label="All photos">
+          <div className="viewer__strip" role="group" aria-label="All of them">
             {ids.map((id, i) => (
-              <StripThumb key={id} id={id} label={`Photo ${i + 1} of ${ids.length}`} current={i === at} onPick={() => setAt(i)} />
+              <StripThumb key={id} id={id} video={videos?.get(id)} label={`${videos?.has(id) ? 'Video' : 'Photo'} ${i + 1} of ${ids.length}`} current={i === at} onPick={() => setAt(i)} />
             ))}
           </div>
         </>
@@ -243,7 +285,7 @@ function PhotoMenu({ id, at, onClose }: { id: string; at: Point; onClose: () => 
  * One photo in the viewer's bottom row, whole, at the row's height; the one shown scrolls into the middle of the row.
  * It loads once it's near sight in the row, which can hold every photo there is.
  */
-function StripThumb({ id, label, current, onPick }: { id: string; label: string; current: boolean; onPick: () => void }) {
+function StripThumb({ id, video, label, current, onPick }: { id: string; video?: FileInfo; label: string; current: boolean; onPick: () => void }) {
   const ref = useRef<HTMLButtonElement>(null);
   const seen = useInView(ref, '0px 400px', true);
   useEffect(() => {
@@ -256,7 +298,8 @@ function StripThumb({ id, label, current, onPick }: { id: string; label: string;
   }, [current]);
   return (
     <button ref={ref} type="button" className={`viewer__thumb${current ? ' is-current' : ''}`} aria-label={label} aria-current={current || undefined} onClick={onPick}>
-      {seen || current ? <StripImage id={id} /> : <Icon name="image" size={16} />}
+      {seen || current ? video ? <VideoStill file={video} /> : <StripImage id={id} /> : <Icon name={video ? 'video' : 'image'} size={16} />}
+      {video && <VideoMark />}
     </button>
   );
 }

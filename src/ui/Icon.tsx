@@ -65,6 +65,8 @@ const PATHS = {
   grip: 'M9 5h.01M15 5h.01M9 12h.01M15 12h.01M9 19h.01M15 19h.01',
   vault: 'M4 5h16a1 1 0 0 1 1 1v12a1 1 0 0 1-1 1H4a1 1 0 0 1-1-1V6a1 1 0 0 1 1-1ZM12 10a2 2 0 1 0 0 4 2 2 0 0 0 0-4ZM14 12h3M6 19v2M18 19v2',
   smile: 'M21 12a9 9 0 1 1-18 0 9 9 0 0 1 18 0ZM8.5 14.5a4.5 4.5 0 0 0 7 0M9 9.5h.01M15 9.5h.01',
+  play: 'M8 5.5v13l10.5-6.5L8 5.5Z',
+  video: 'M4 6h11a1 1 0 0 1 1 1v10a1 1 0 0 1-1 1H4a1 1 0 0 1-1-1V7a1 1 0 0 1 1-1ZM16 10.5l5-3v9l-5-3',
 } as const;
 
 export type IconName = keyof typeof PATHS;

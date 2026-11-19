@@ -72,6 +72,8 @@ export function usePhotoZoom(key: string) {
     if (!el) return;
     const onWheel = (e: WheelEvent) => {
       const target = e.target instanceof Element ? e.target : null;
+      // A video playing isn't zoomed.
+      if (target?.closest('.video-player')) return;
       // The row of photos scrolls sideways under the wheel instead.
       const row = target?.closest<HTMLElement>('.viewer__strip');
       if (row) {

@@ -5,7 +5,7 @@ import { relativeDay } from '../../domain/dates';
 import { layoutPhotos, photoDays, type Box, type PhotoItem } from '../../domain/photos';
 import { isFiltered } from '../../domain/stream';
 import { useToday } from '../../state/CardsContext';
-import { PhotoViewer } from '../Attachments';
+import { mediaCount, PhotoViewer, videosIn } from '../Attachments';
 import { Empty, Page } from '../components';
 import type { Point } from '../EntryMenu';
 import { usePhotoUrl } from '../editor/photo';
@@ -18,7 +18,8 @@ import { MOD } from '../Shortcuts';
 import { Item } from '../EntryMenu';
 import { ScrollRail } from '../ScrollRail';
 import { useInView } from '../useInView';
-import { countLine, HeldMenu, menuAt, useEntryActions, useLibrary } from './library';
+import { VideoMark, VideoStill } from '../video';
+import { HeldMenu, menuAt, useEntryActions, useLibrary } from './library';
 
 /**
  * Each photo's width over its height, once it's been shown, kept on this device so the page lays out at once next
@@ -52,7 +53,7 @@ const sizes = (width: number) =>
   width < 600 ? { width, row: 120, gap: 3, dayGap: 12, head: 40 } : { width, row: 200, gap: 4, dayGap: 16, head: 44 };
 
 /**
- * Every photo in the journal, newest first, under the day its entry was written, laid out as a photo library does:
+ * Every photo and video in the journal, newest first (a video marked with its length, playing full screen), under the day its entry was written, laid out as a photo library does:
  * whole, in rows of about one height that fill the width, a day with a few beside the day before (`layoutPhotos`).
  * A photo opens full screen, where all of them page past in turn, each naming its entry, which opens from there.
  * The journal's filters narrow it: one tag's photos, one vault's, or those in todos. Photos load as they come near.
@@ -127,7 +128,7 @@ export function PhotosPage() {
       } else if (mod && e.key.toLowerCase() === 'a' && k.order.length) {
         e.preventDefault();
         setPicked(new Set(k.order));
-      } else if (mod && e.key.toLowerCase() === 'c' && k.chosen.length === 1 && !window.getSelection()?.toString()) {
+      } else if (mod && e.key.toLowerCase() === 'c' && k.chosen.length === 1 && !k.chosen[0].video && !window.getSelection()?.toString()) {
         e.preventDefault();
         k.copyPhoto(k.chosen[0].id);
       }
@@ -177,6 +178,8 @@ export function PhotosPage() {
     );
   };
 
+  const entries = new Set(all.map((i) => i.card.id)).size;
+  const videos = useMemo(() => videosIn(all), [all]);
   let n = 0;
   return (
     <Page
@@ -196,7 +199,7 @@ export function PhotosPage() {
       actions={
         selecting ? (
           <>
-            {chosen.length === 1 && (
+            {chosen.length === 1 && !chosen[0].video && (
               <button type="button" className="icon-btn" aria-label="Copy photo" title={`Copy the photo (${MOD}C)`} onClick={() => copyPhoto(chosen[0].id)}>
                 <Icon name="copy" />
               </button>
@@ -220,11 +223,13 @@ export function PhotosPage() {
     >
       {filtering && <FilterSheet onClose={() => setFiltering(false)} />}
       {!all.length ? (
-        <Empty>{isFiltered(filter) ? 'No photos here match. Take a filter off above, or pick another.' : 'No photos yet. Add one to an entry with its photo button, or paste or drop one in.'}</Empty>
+        <Empty>
+          {isFiltered(filter) ? 'No photos or videos here match. Take a filter off above, or pick another.' : 'No photos or videos yet. Add one to an entry with its photo button, or paste or drop one in.'}
+        </Empty>
       ) : (
         <div className={`photos${selecting ? ' is-selecting' : ''}`}>
           <p className="photos__count">
-            {countLine(all, 'photo', 'photos')}
+            {mediaCount(all)}, in {entries === 1 ? '1 entry' : `${entries} entries`}
           </p>
           <div className="photos__canvas" ref={canvas} style={{ height: layout?.height }}>
             {layout &&
@@ -273,22 +278,24 @@ export function PhotosPage() {
         </div>
       )}
       {viewing !== null && (
-        <PhotoViewer ids={all.map((i) => i.id)} start={viewing} onClose={() => setViewing(null)} caption={caption} onMenu={(at, point) => setMenu({ at, point })} />
+        <PhotoViewer ids={order} videos={videos} start={viewing} onClose={() => setViewing(null)} caption={caption} onMenu={(at, point) => setMenu({ at, point })} />
       )}
       {menu && all[menu.at] && (
         <HeldMenu
           card={all[menu.at].card}
           day={all[menu.at].day}
           at={menu.point}
-          label="Photo"
+          label={all[menu.at].video ? 'Video' : 'Photo'}
           onOpen={() => openEntry(all[menu.at])}
           onShow={() => entry.show(all[menu.at].card)}
           onClose={() => setMenu(null)}
           lead={
             <div className="style-menu__group">
-              <Item icon="copy" onClick={() => (setMenu(null), copyPhoto(all[menu.at].id))}>
-                Copy photo
-              </Item>
+              {!all[menu.at].video && (
+                <Item icon="copy" onClick={() => (setMenu(null), copyPhoto(all[menu.at].id))}>
+                  Copy photo
+                </Item>
+              )}
               {viewing === null && (
                 <Item icon="check" onClick={() => (setMenu(null), pick(all[menu.at].id))}>
                   {picked.has(all[menu.at].id) ? 'Unselect' : 'Select'}
@@ -317,7 +324,7 @@ function Tile({ item, at, box, picked, selecting, onShape, onOpen, onPick, onMen
       <button
         type="button"
         className="photo-tile__open"
-        aria-label={`Photo in ${title}`}
+        aria-label={`${item.video ? 'Video' : 'Photo'} in ${title}`}
         onClick={(e) => {
           if (press.fired()) return;
           if (selecting || e.metaKey || e.ctrlKey || e.shiftKey) onPick(e.shiftKey);
@@ -327,14 +334,15 @@ function Tile({ item, at, box, picked, selecting, onShape, onOpen, onPick, onMen
         onContextMenu={(e: MouseEvent) => (press.touch() ? e.preventDefault() : menuAt(onMenu)(e))}
         {...press.handlers}
       >
-        {seen && <TileImage id={item.id} onShape={(r) => onShape(item.id, r)} />}
+        {seen && (item.video ? <VideoStill file={item.video} onShape={(r) => onShape(item.id, r)} /> : <TileImage id={item.id} onShape={(r) => onShape(item.id, r)} />)}
+        {item.video && <VideoMark duration={item.video.duration} />}
       </button>
       <button
         type="button"
         className={`photos__check${picked ? ' is-picked' : ''}`}
         role="checkbox"
         aria-checked={picked}
-        aria-label={`Select the photo in ${title}`}
+        aria-label={`Select the ${item.video ? 'video' : 'photo'} in ${title}`}
         title={picked ? 'Unselect' : 'Select'}
         onClick={(e) => onPick(e.shiftKey)}
       >

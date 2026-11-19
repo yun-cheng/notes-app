@@ -4,6 +4,7 @@ import type { Editor as TiptapEditor } from '@tiptap/react';
 import type { EditorView } from '@tiptap/pm/view';
 import type { JSONNode } from '../../domain/types';
 import { picturesInHtml } from '../../photos/pasted';
+import { isVideoFile } from '../../photos/video';
 import { useCards } from '../../state/CardsContext';
 import { SyncOffline } from '../../sync/engine';
 import { fetchWebPicture } from '../../sync/http';
@@ -27,12 +28,12 @@ async function pictureAt(src: string): Promise<Blob> {
 type Adding = () => Promise<JSONNode>;
 
 /**
- * Photos and files added to an editor: pasted, dropped where they land, or picked from the device. A picture is a
- * photo; a file of any other kind (a PDF, a spreadsheet) is attached as it is. Each is saved on the device first, in
+ * Photos, videos and files added to an editor: pasted, dropped where they land, or picked from the device. A picture
+ * is a photo; a video plays where it is; a file of any other kind (a PDF, a spreadsheet) is attached as it is. Each is saved on the device first, in
  * the vault `vaultId()` names, and goes in the text at once. A picture copied from a web page or an app often comes as
  * just its address in HTML, with no file; it's fetched and added like a pasted file. Pictures among copied words
  * follow the words when the paste keeps formatting. `editorProps` goes to `useEditor`, `input` somewhere on the page,
- * `pick` opens the photo picker and `pickFile` the file picker.
+ * `pick` opens the photo and video picker and `pickFile` the file picker.
  */
 export function usePhotoInput(editor: RefObject<TiptapEditor | null>, vaultId: () => string | undefined) {
   const { photos } = useCards();
@@ -47,12 +48,14 @@ export function usePhotoInput(editor: RefObject<TiptapEditor | null>, vaultId: (
     let pos = at;
     let added = 0;
     let files = 0;
+    let videos = 0;
     for (const add of adding) {
       try {
         const node = await add();
         const ed = editor.current;
         if (!ed || ed.isDestroyed) return;
-        if (node.type === 'file') files++;
+        if (node.type === 'file') files += String(node.attrs?.mime).startsWith('video/') ? 0 : 1;
+        if (String(node.attrs?.mime).startsWith('video/')) videos++;
         // At the start of a line with words on it, the picture goes before the line rather than splitting it.
         const { $from, empty } = ed.state.selection;
         if (pos === undefined && empty && $from.depth === 1 && $from.parentOffset === 0 && $from.parent.content.size) pos = $from.before();
@@ -73,15 +76,21 @@ export function usePhotoInput(editor: RefObject<TiptapEditor | null>, vaultId: (
     // It shows here at once either way; said when it can't go on to the server, so other devices won't have it.
     await photos.upload();
     const { problem } = photos.getState();
-    const what = files === added ? ['file', 'files'] : files ? ['attachment', 'attachments'] : ['photo', 'photos'];
+    const what = files === added ? ['file', 'files'] : videos === added ? ['video', 'videos'] : files || videos ? ['attachment', 'attachments'] : ['photo', 'photos'];
     const these = added > 1 ? `These ${what[1]} stay` : `This ${what[0]} stays`;
     if (problem === 'needs_drive') toast(`${these} on this device until Google Drive is connected.`, { action: { label: 'Settings', run: () => void navigate('/settings') } });
     else if (problem === 'not_configured') toast(`${these} on this device for now: storage isn't set up on the server yet.`);
   };
-  /** Pictures as photos, and any other file as it is, in the order given. */
+  /** Pictures as photos, videos to play where they are, and any other file as it is, in the order given. */
   const add = (files: File[], at?: number) =>
     addAll(
-      files.map((file) => (isPicture(file) ? photo(async () => file) : async () => ({ type: 'file', attrs: await photos.addFile(file, vaultId()!) }))),
+      files.map((file) =>
+        isPicture(file)
+          ? photo(async () => file)
+          : isVideoFile(file)
+            ? async () => ({ type: 'file', attrs: { ...(await photos.addVideo(file, vaultId()!)) } })
+            : async () => ({ type: 'file', attrs: await photos.addFile(file, vaultId()!) }),
+      ),
       at,
     );
 
@@ -122,7 +131,7 @@ export function usePhotoInput(editor: RefObject<TiptapEditor | null>, vaultId: (
     <input
       ref={picker}
       type="file"
-      accept="image/*"
+      accept="image/*,video/*"
       multiple
       hidden
       onChange={(e) => {

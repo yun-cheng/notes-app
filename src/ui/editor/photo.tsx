@@ -6,12 +6,13 @@ import { useCards } from '../../state/CardsContext';
 
 const RETRY_MS = 30_000;
 
-/** An object URL for a photo, retrying while the server doesn't have it yet. */
+/** An object URL for a photo, retrying while the server doesn't have it yet. An empty ID (no photo) finds none. */
 export function usePhotoUrl(id: string): { url: string | null; state: 'loading' | 'ready' | 'waiting' | 'offline' } {
   const { photos } = useCards();
   const [result, setResult] = useState<{ url: string | null; state: 'loading' | 'ready' | 'waiting' | 'offline' }>({ url: null, state: 'loading' });
 
   useEffect(() => {
+    if (!id) return setResult({ url: null, state: 'waiting' });
     let live = true;
     let timer: ReturnType<typeof setTimeout> | null = null;
     const attempt = () => {

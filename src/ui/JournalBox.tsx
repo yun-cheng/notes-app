@@ -323,7 +323,7 @@ export function JournalBox({ filter }: { filter: StreamFilter }) {
         </button>
         <EditorContent editor={editor} className="composer__editor" />
         {textMenu.view}
-        <button type="button" className="composer__kind" aria-label="Add a photo" title="Add a photo" onMouseDown={(e) => e.preventDefault()} onClick={photoInput.pick}>
+        <button type="button" className="composer__kind" aria-label="Add a photo or video" title="Add a photo or video" onMouseDown={(e) => e.preventDefault()} onClick={photoInput.pick}>
           <Icon name="image" size={20} />
         </button>
         <button type="button" className="composer__kind" aria-label="Attach a file" title="Attach a file" onMouseDown={(e) => e.preventDefault()} onClick={photoInput.pickFile}>

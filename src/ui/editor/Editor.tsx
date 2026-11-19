@@ -161,7 +161,7 @@ function Toolbar({ editor, onPhoto, onFile, history }: { editor: TiptapEditor; o
     { label: '“', title: 'Quote', run: () => editor.chain().focus().toggleBlockquote().run(), active: editor.isActive('blockquote') },
     { label: 'Code', title: `Code: words picked in a line, or a code block (${MOD}E for words)`, icon: 'code', run: () => toggleCode(editor), active: editor.isActive('code') || editor.isActive('codeBlock') },
     { label: '[[', title: 'Link to a card', run: () => editor.chain().focus().insertContent('[[').run() },
-    { label: 'Photo', title: 'Add a photo', icon: 'image', run: onPhoto },
+    { label: 'Photo', title: 'Add a photo or video', icon: 'image', run: onPhoto },
     { label: 'File', title: 'Attach a file', icon: 'attach', run: onFile },
   ];
   return (

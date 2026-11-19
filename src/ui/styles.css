@@ -909,8 +909,9 @@ body:has(.batch) .toast-slot { bottom: calc(var(--tabbar) + env(safe-area-inset-
 .link-card__text { display: flex; flex-direction: column; min-width: 0; }
 .link-card__site { font-size: 13px; font-weight: 600; }
 .link-card__path { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; color: var(--muted); font-size: 12px; }
-/* A link's whole address, as the Links page shows it: up to two lines, broken anywhere, the rest cut short. */
-.link-card__address { display: -webkit-box; -webkit-box-orient: vertical; -webkit-line-clamp: 2; line-clamp: 2; overflow: hidden; overflow-wrap: anywhere; margin-top: 2px; color: var(--muted); font-size: 12px; line-height: 1.35; }
+/* A link's whole address, as the Links page shows it: in the color links have in entries, up to two lines, broken anywhere, the rest cut short. */
+.link-card__address { display: -webkit-box; -webkit-box-orient: vertical; -webkit-line-clamp: 2; line-clamp: 2; overflow: hidden; overflow-wrap: anywhere; margin-top: 2px; color: var(--accent); font-size: 12px; line-height: 1.35; }
+.link-card:hover .link-card__address { text-decoration: underline; }
 .attachments__photos--large .thumb img { height: 280px; max-width: min(440px, 80vw); }
 .attachments__photos--large .thumb:only-child { max-width: 100%; }
 .attachments__photos--large .thumb:only-child img { height: auto; max-width: 100%; max-height: 480px; }

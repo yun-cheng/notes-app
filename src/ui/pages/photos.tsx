@@ -85,6 +85,8 @@ export function PhotosPage() {
   useEffect(() => {
     const el = canvas.current;
     if (!el) return;
+    // At once, as well: a page in the background may not hear from the observer until it's shown.
+    setWidth(el.clientWidth);
     const watch = new ResizeObserver(() => setWidth(el.clientWidth));
     watch.observe(el);
     return () => watch.disconnect();

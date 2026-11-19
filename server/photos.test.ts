@@ -12,6 +12,8 @@ function fakeGoogle() {
   let email = 'ann@gmail.com';
   let folders = 0;
   const deleted: string[] = [];
+  // Resumable uploads: what each session has so far, and whether Drive has dropped it.
+  const sessions = new Map<string, { name: string; parent: string; size: number; bytes: number[]; dropped?: boolean }>();
   const json = (body: unknown, status = 200) => new Response(JSON.stringify(body), { status, headers: { 'content-type': 'application/json' } });
   const fetcher = async (url: string, init: RequestInit = {}) => {
     calls.push(`${init.method ?? 'GET'} ${url.split('?')[0]}`);
@@ -42,6 +44,28 @@ function fakeGoogle() {
       deleted.push(gone[1]);
       return new Response(null, { status: 204 });
     }
+    if (url.includes('uploadType=resumable&fields=id')) {
+      const meta = JSON.parse(String(init.body)) as { name: string; parents: string[] };
+      const id = `s${sessions.size + 1}`;
+      sessions.set(id, { name: meta.name, parent: meta.parents[0], size: Number(new Headers(init.headers).get('x-upload-content-length')), bytes: [] });
+      return new Response(null, { status: 200, headers: { location: `https://www.googleapis.com/upload/drive/v3/files?uploadType=resumable&upload_id=${id}` } });
+    }
+    const upload = /upload_id=(\w+)/.exec(url)?.[1];
+    if (upload) {
+      const session = sessions.get(upload);
+      if (!session || session.dropped) return json({ error: 'gone' }, 404);
+      const range = new Headers(init.headers).get('content-range')!;
+      const piece = /^bytes (\d+)-(\d+)\/(\d+)$/.exec(range);
+      if (piece) {
+        if (Number(piece[1]) !== session.bytes.length) return json({ error: 'out of order' }, 400);
+        session.bytes.push(...new Uint8Array(init.body as ArrayBuffer));
+      }
+      if (session.bytes.length < session.size) return new Response(null, { status: 308, headers: session.bytes.length ? { range: `bytes=0-${session.bytes.length - 1}` } : {} });
+      const id = `file-${files.size + 1}`;
+      files.set(id, { bytes: new Uint8Array(session.bytes), parent: session.parent });
+      names.set(id, session.name);
+      return json({ id }, 200);
+    }
     if (url.startsWith('https://www.googleapis.com/upload/drive/v3/files')) {
       const raw = new Uint8Array(init.body as ArrayBuffer);
       const text = new TextDecoder('latin1').decode(raw);
@@ -56,10 +80,17 @@ function fakeGoogle() {
       return json({ id });
     }
     const m = url.match(/drive\/v3\/files\/([^?]+)\?alt=media/);
-    if (m && files.has(m[1])) return new Response(files.get(m[1])!.bytes.slice().buffer);
+    if (m && files.has(m[1])) {
+      const bytes = files.get(m[1])!.bytes;
+      const range = /^bytes=(\d+)-(\d*)$/.exec(new Headers(init.headers).get('range') ?? '');
+      if (!range) return new Response(bytes.slice().buffer, { headers: { 'content-length': String(bytes.length) } });
+      const end = range[2] ? Math.min(Number(range[2]), bytes.length - 1) : bytes.length - 1;
+      const part = bytes.slice(Number(range[1]), end + 1);
+      return new Response(part.buffer, { status: 206, headers: { 'content-length': String(part.length), 'content-range': `bytes ${range[1]}-${end}/${bytes.length}` } });
+    }
     return json({ error: 'not found' }, 404);
   };
-  return { fetcher, files, names, calls, deleted, revoke: () => (revoked = true), refreshes: () => refreshes, signInAs: (address: string) => (email = address) };
+  return { fetcher, files, names, calls, deleted, sessions, revoke: () => (revoked = true), refreshes: () => refreshes, signInAs: (address: string) => (email = address) };
 }
 
 async function connected(secret = 'shh') {
@@ -157,6 +188,58 @@ describe('photos in Google Drive', () => {
     expect((await put('file-0002', 'application/pdf', new Uint8Array(11 * 1024 * 1024))).status).toBe(201);
     expect((await put('file-0003', 'application/pdf', new Uint8Array(26 * 1024 * 1024))).status).toBe(413);
     expect((await put('file-0004', 'not a type', page)).status).toBe(400);
+  });
+  it('takes a big file in pieces, picks it up after a lost connection, and plays a video a range at a time', async () => {
+    const t = await connected();
+    const video = Uint8Array.from({ length: 10 }, (_, i) => i);
+    const start = (query = '') =>
+      t.call(`/api/attachments/video-0001/upload?vault=${t.ann.vault}&kind=file&name=Clip.mp4&size=10&w=1920&h=1080${query}`, { method: 'POST', headers: { 'content-type': 'video/mp4' } }, t.ann.cookie);
+    const piece = (from: number, to: number) =>
+      t.call('/api/attachments/video-0001/upload', { method: 'PUT', body: video.slice(from, to + 1).buffer, headers: { 'content-range': `bytes ${from}-${to}/10` } }, t.ann.cookie);
+    expect(await (await start()).json()).toEqual({ next: 0 });
+    expect(await (await piece(0, 3)).json()).toEqual({ next: 4 });
+    // Asked again, as after a lost connection: Drive says how far it got, and no new session starts.
+    expect(await (await start()).json()).toEqual({ next: 4 });
+    expect(t.sessions.size).toBe(1);
+    expect((await piece(2, 5)).status).toBe(502);
+    expect((await piece(4, 12)).status).toBe(400);
+    const done = await piece(4, 9);
+    expect(done.status).toBe(201);
+    expect(await done.json()).toEqual({ id: 'video-0001' });
+    expect(t.files.get('file-1')!.bytes).toEqual(video);
+    expect(t.names.get('file-1')).toBe('video-0001 Clip.mp4');
+    expect(await (await start()).json()).toEqual({ id: 'video-0001' });
+
+    const part = await t.call('/api/attachments/video-0001', { headers: { range: 'bytes=2-5' } }, t.ann.cookie);
+    expect(part.status).toBe(206);
+    expect(part.headers.get('content-range')).toBe('bytes 2-5/10');
+    expect(part.headers.get('accept-ranges')).toBe('bytes');
+    expect(part.headers.get('content-type')).toBe('video/mp4');
+    expect([...new Uint8Array(await part.arrayBuffer())]).toEqual([2, 3, 4, 5]);
+    const whole = await t.call('/api/attachments/video-0001', {}, t.ann.cookie);
+    expect(whole.status).toBe(200);
+    expect(whole.headers.get('content-length')).toBe('10');
+    const listed = (await (await t.call('/api/attachments', {}, t.ann.cookie)).json()) as { attachments: { id: string; size: number; name: string }[] };
+    expect(listed.attachments).toEqual([expect.objectContaining({ id: 'video-0001', size: 10, name: 'Clip.mp4', mime: 'video/mp4' })]);
+  });
+  it('starts a piece-by-piece upload again once Drive has dropped it, and keeps to its sizes and vaults', async () => {
+    const t = await connected();
+    const start = (size: number, mime = 'video/mp4', vault = t.ann.vault, cookie = t.ann.cookie) =>
+      t.call(`/api/attachments/video-0002/upload?vault=${vault}&kind=file&name=a.mp4&size=${size}`, { method: 'POST', headers: { 'content-type': mime } }, cookie);
+    expect((await start(4)).status).toBe(200);
+    t.sessions.get('s1')!.dropped = true;
+    const lost = await t.call('/api/attachments/video-0002/upload', { method: 'PUT', body: new Uint8Array([1, 2]).buffer, headers: { 'content-range': 'bytes 0-1/4' } }, t.ann.cookie);
+    expect(lost.status).toBe(409);
+    expect(await lost.json()).toEqual({ error: 'upload_expired' });
+    expect(await (await start(4)).json()).toEqual({ next: 0 });
+    expect(t.sessions.size).toBe(2);
+    // Another size for the same ID, too big a file, one that isn't a video over 25 MB, and someone else's vault.
+    expect((await start(5)).status).toBe(409);
+    expect((await start(2 * 1024 ** 3)).status).toBe(413);
+    expect((await t.call(`/api/attachments/file-00003/upload?vault=${t.ann.vault}&kind=file&size=${30 * 1024 ** 2}`, { method: 'POST', headers: { 'content-type': 'application/pdf' } }, t.ann.cookie)).status).toBe(413);
+    const ben = await t.signIn('ben');
+    expect((await start(4, 'video/mp4', t.ann.vault, ben.cookie)).status).toBe(404);
+    expect((await t.call('/api/attachments/video-0002/upload', { method: 'PUT', body: new Uint8Array([1]).buffer, headers: { 'content-range': 'bytes 0-0/4' } }, ben.cookie)).status).toBe(409);
   });
   it('rejects bad uploads', async () => {
     const t = await connected();

@@ -101,6 +101,9 @@ describe('sessions', () => {
     expect(await me(ann.user.id)).toBe('ann');
     expect(await me(both.user.id)).toBe('bob');
     expect(await me('someone-else')).toBe(401);
+    // A video player can't send the header, so a GET may name its account in the address.
+    expect(((await (await call(`/api/me?account=${ann.user.id}`, {}, both.cookie)).json()) as SessionInfo).user.name).toBe('ann');
+    expect((await call('/api/me?account=someone-else', {}, both.cookie)).status).toBe(401);
     const accounts = async (cookie: string) => ((await (await call('/api/auth/accounts', {}, cookie)).json()) as SignedInAccounts).accounts.map((a) => a.name);
     expect(await accounts(both.cookie)).toEqual(['bob', 'ann']);
 

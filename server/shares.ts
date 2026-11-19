@@ -10,7 +10,7 @@ import { randomToken } from './auth';
 import type { AppEnv, Database, Statement } from './db';
 import { isEmail } from './members';
 import { downloadFile, DriveFailed, DriveNotConnected, type GoogleFetch } from './drive';
-import { attachmentHeaders } from './photos';
+import { sendAttachment } from './photos';
 
 export type ShareRole = 'view' | 'comment' | 'edit';
 const ROLES: ShareRole[] = ['view', 'comment', 'edit'];
@@ -115,7 +115,7 @@ export function publicRoutes(app: Hono<AppEnv>, googleFetch: GoogleFetch, now: (
 
   /**
    * A photo or file in a publicly linked card, and only one that card actually contains. A file only downloads, as it
-   * does for members.
+   * does for members; a video plays where it is, as a range at a time.
    */
   const attachment = (kind: 'photos' | 'files') =>
     app.get(`/public/:token/${kind}/:id`, async (c) => {
@@ -123,7 +123,8 @@ export function publicRoutes(app: Hono<AppEnv>, googleFetch: GoogleFetch, now: (
       const card = await publicCard(c.env.DB, c.req.param('token'), at);
       const id = c.req.param('id');
       const docs = card ? [card.payload.content, ...cardPages(card.payload)] : [];
-      const ids = kind === 'photos' ? docs.flatMap(photoIds) : docs.flatMap(fileAttachments).map((f) => f.id);
+      // A video's still is a photo too.
+      const ids = kind === 'photos' ? [...docs.flatMap(photoIds), ...docs.flatMap(fileAttachments).flatMap((f) => (f.poster ? [f.poster] : []))] : docs.flatMap(fileAttachments).map((f) => f.id);
       if (!card || !ids.includes(id)) return c.json({ error: 'Not found' }, 404);
       const row = await c.env.DB.prepare(`SELECT owner_id, drive_file_id, mime FROM attachments WHERE id = ?`)
         .bind(id)
@@ -132,8 +133,8 @@ export function publicRoutes(app: Hono<AppEnv>, googleFetch: GoogleFetch, now: (
       if (!row || !clientId || !clientSecret) return c.json({ error: 'Not found' }, 404);
       try {
         const config = { clientId, clientSecret, redirectUri: '', fetch: googleFetch };
-        const file = await downloadFile(c.env.DB, config, row.owner_id, row.drive_file_id, at);
-        return new Response(file.body, { headers: attachmentHeaders(row.mime, 'public, max-age=3600') });
+        const file = await downloadFile(c.env.DB, config, row.owner_id, row.drive_file_id, at, c.req.header('range'));
+        return sendAttachment(file, row.mime, 'public, max-age=3600');
       } catch (err) {
         if (err instanceof DriveNotConnected || err instanceof DriveFailed) return c.json({ error: 'Not available' }, 404);
         throw err;

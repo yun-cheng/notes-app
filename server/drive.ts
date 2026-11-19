@@ -25,6 +25,8 @@ export interface DriveConfig {
 
 export class DriveNotConnected extends Error {}
 export class DriveFailed extends Error {}
+/** Drive no longer has a resumable upload's session (a week old, or lost): it starts again from the first byte. */
+export class UploadExpired extends Error {}
 
 export async function startConnect(db: Database, config: DriveConfig, userId: string, now: number): Promise<string> {
   const state = randomToken();
@@ -174,9 +176,64 @@ export async function uploadFile(db: Database, config: DriveConfig, userId: stri
   return result.id;
 }
 
-export async function downloadFile(db: Database, config: DriveConfig, userId: string, fileId: string, now: number): Promise<Response> {
+/** Where a resumable upload is: how many bytes Drive has, or, once it has them all, the file's Drive ID. */
+export type UploadProgress = { next: number } | { fileId: string };
+
+/**
+ * Starts a resumable upload of a file `size` bytes long into the user's photos folder, for a big one (a video) sent
+ * in pieces, and returns the session's address to send them to. Only the server keeps it: it's all a piece needs.
+ */
+export async function startUpload(db: Database, config: DriveConfig, userId: string, file: { name: string; mime: string; size: number }, now: number): Promise<string> {
+  const { token, account } = await accessToken(db, config, userId, now);
+  const parent = await folder(db, config, userId, token, account);
+  const res = await config.fetch('https://www.googleapis.com/upload/drive/v3/files?uploadType=resumable&fields=id', {
+    method: 'POST',
+    headers: {
+      authorization: `Bearer ${token}`,
+      'content-type': 'application/json; charset=UTF-8',
+      'x-upload-content-type': file.mime,
+      'x-upload-content-length': String(file.size),
+    },
+    body: JSON.stringify({ name: file.name, parents: [parent] }),
+  });
+  const session = res.headers.get('location');
+  if (!res.ok || !session?.startsWith('https://www.googleapis.com/')) throw new DriveFailed(`Starting a Drive upload failed with ${res.status}`);
+  return session;
+}
+
+/**
+ * Sends the piece of a resumable upload from byte `start` on, or with no bytes asks Drive how far it got. Throws
+ * `UploadExpired` once Drive has dropped the session.
+ */
+export async function sendPiece(
+  db: Database,
+  config: DriveConfig,
+  userId: string,
+  now: number,
+  session: string,
+  total: number,
+  piece: { start: number; bytes: ArrayBuffer } | null,
+): Promise<UploadProgress> {
   const { token } = await accessToken(db, config, userId, now);
-  const res = await config.fetch(`https://www.googleapis.com/drive/v3/files/${encodeURIComponent(fileId)}?alt=media`, { headers: { authorization: `Bearer ${token}` } });
+  const range = piece && piece.bytes.byteLength ? `bytes ${piece.start}-${piece.start + piece.bytes.byteLength - 1}/${total}` : `bytes */${total}`;
+  const res = await config.fetch(session, { method: 'PUT', headers: { authorization: `Bearer ${token}`, 'content-range': range }, body: piece?.bytes.byteLength ? piece.bytes : null });
+  if (res.status === 308) {
+    // "bytes=0-1048575": what it has so far, if anything.
+    const have = /bytes=0-(\d+)/.exec(res.headers.get('range') ?? '');
+    return { next: have ? Number(have[1]) + 1 : 0 };
+  }
+  if (res.status === 404 || res.status === 410) throw new UploadExpired('Drive dropped the upload');
+  const body = (await res.json().catch(() => ({}))) as { id?: string };
+  if (!res.ok || !body.id) throw new DriveFailed(`Drive upload failed with ${res.status}`);
+  return { fileId: body.id };
+}
+
+/** The file's bytes, or with `range` (a request's Range header) just those, as Drive sends them (206). */
+export async function downloadFile(db: Database, config: DriveConfig, userId: string, fileId: string, now: number, range?: string | null): Promise<Response> {
+  const { token } = await accessToken(db, config, userId, now);
+  const headers: Record<string, string> = { authorization: `Bearer ${token}` };
+  if (range && /^bytes=\d*-\d*$/.test(range)) headers.range = range;
+  const res = await config.fetch(`https://www.googleapis.com/drive/v3/files/${encodeURIComponent(fileId)}?alt=media`, { headers });
   if (!res.ok) throw new DriveFailed(`Drive download failed with ${res.status}`);
   return res;
 }

@@ -169,9 +169,12 @@ export function createApp({
     await Promise.all(others.slice(MAX_ACCOUNTS - 1).map((s) => deleteSession(c.env.DB, s.token)));
     writeSessions(c, [token, ...others.map((s) => s.token)]);
   };
-  /** The session for the account the request names, or the first one. */
+  /**
+   * The session for the account the request names, or the first one. A video player can't send a header, so a GET
+   * may name it as `?account=` instead: it only picks among the sessions the cookie already holds.
+   */
   const pickSession = (sessions: BrowserSession[], c: Context<Env>) => {
-    const wanted = c.req.header(ACCOUNT_HEADER);
+    const wanted = c.req.header(ACCOUNT_HEADER) ?? (c.req.method === 'GET' ? c.req.query('account') : undefined);
     return wanted ? sessions.find((s) => s.user.id === wanted) : sessions[0];
   };
 

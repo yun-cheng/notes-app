@@ -7,6 +7,9 @@ export const RAIL_AT = 'data-rail-at';
 
 /** How long the thumb stays on a touch screen after the page stops scrolling. */
 const AWAKE_MS = 1500;
+/** Where the rail is only a handle (`styles.css`): half the handle's height, to keep it all on the rail. */
+const COMPACT = '(pointer: coarse), (max-width: 859px)';
+const HANDLE = 22;
 /** How many frames a jump waits for the item it's going to to be drawn. */
 const TRIES = 20;
 
@@ -31,11 +34,11 @@ interface Place {
   scrollable: number;
 }
 
-/** What's in view, below the title bar and above the writing box or the tab bar. */
+/** What's in view, below the title bar and above the writing box, the button to jump to its end, or the tab bar. */
 function viewBounds(): { top: number; height: number } {
   const top = Math.max(0, document.querySelector('.main .page__head')?.getBoundingClientRect().bottom ?? 0);
   let bottom = window.innerHeight;
-  for (const el of document.querySelectorAll('.journal-dock:not(.is-idle), .tabbar')) {
+  for (const el of document.querySelectorAll('.journal-dock:not(.is-idle), .tabbar, .scroll-jump')) {
     const r = el.getBoundingClientRect();
     if (r.height && r.top > top && r.top < bottom) bottom = r.top;
   }
@@ -89,6 +92,7 @@ export function ScrollRail({ keys, name, root, reveal }: Props) {
   useEffect(() => {
     let frame = 0;
     let sleep: ReturnType<typeof setTimeout> | undefined;
+    let settle: ReturnType<typeof setTimeout> | undefined;
     const update = () => {
       cancelAnimationFrame(frame);
       frame = requestAnimationFrame(() => {
@@ -100,6 +104,9 @@ export function ScrollRail({ keys, name, root, reveal }: Props) {
     };
     const onScroll = () => {
       update();
+      // Again once it stops: the button to jump to the end comes and goes with scrolling, after the rail is measured.
+      clearTimeout(settle);
+      settle = setTimeout(update, 150);
       setAwake(true);
       clearTimeout(sleep);
       sleep = setTimeout(() => setAwake(false), AWAKE_MS);
@@ -113,6 +120,7 @@ export function ScrollRail({ keys, name, root, reveal }: Props) {
     return () => {
       cancelAnimationFrame(frame);
       clearTimeout(sleep);
+      clearTimeout(settle);
       window.removeEventListener('scroll', onScroll);
       window.removeEventListener('resize', update);
       watch.disconnect();
@@ -194,6 +202,7 @@ export function ScrollRail({ keys, name, root, reveal }: Props) {
   const told = drag ?? point;
   const label = told === null ? null : railLabel(keys[railItem(told, n).index], scale, name);
   const y = (at: number) => at * place.height;
+  const edge = window.matchMedia(COMPACT).matches ? Math.min(HANDLE, place.height / 2) : 0;
   return (
     <div
       className={`scroll-rail${drag !== null ? ' is-dragging' : ''}${awake ? ' is-awake' : ''}`}
@@ -215,7 +224,7 @@ export function ScrollRail({ keys, name, root, reveal }: Props) {
         ),
       )}
       {point !== null && drag === null && <span className="scroll-rail__point" style={{ top: y(point) }} />}
-      <span className="scroll-rail__thumb" style={{ top: y(thumb) }} onPointerDown={(e) => start(e, true)}>
+      <span className="scroll-rail__thumb" style={{ top: Math.min(place.height - edge, Math.max(edge, y(thumb))) }} onPointerDown={(e) => start(e, true)}>
         <span className="scroll-rail__grip">
           <Icon name="up" size={12} />
           <Icon name="down" size={12} />

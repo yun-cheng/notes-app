@@ -385,16 +385,26 @@ function useShownItems(items: StreamItem[], chat: boolean, reach = -1) {
   };
 
   useEffect(() => {
+    let later: ReturnType<typeof setTimeout> | undefined;
     const watch = new IntersectionObserver(
       (seen) => {
-        if (Date.now() - jumped.current < 500) return;
-        for (const entry of seen) if (entry.isIntersecting) showMore(entry.target === top.current);
+        const wait = jumped.current + 500 - Date.now();
+        for (const entry of seen) {
+          if (!entry.isIntersecting) continue;
+          // Looked at again once the page has moved, as it's heard of only when it comes near or goes.
+          if (wait > 0) {
+            later = setTimeout(() => (watch.unobserve(entry.target), watch.observe(entry.target)), wait);
+          } else showMore(entry.target === top.current);
+        }
       },
       { rootMargin: '1200px 0px' },
     );
     if (top.current) watch.observe(top.current);
     if (foot.current) watch.observe(foot.current);
-    return () => watch.disconnect();
+    return () => {
+      clearTimeout(later);
+      watch.disconnect();
+    };
   }, [from, to, n, chat]);
 
   useLayoutEffect(() => {

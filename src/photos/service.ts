@@ -121,7 +121,7 @@ export class PhotoService {
         added++;
       }
     }
-    await this.store.putPhoto({ id, vaultId, file: { name }, blob: file, mime, width: facts.width, height: facts.height, uploaded: 0, addedAt: at + 1 });
+    await this.store.putPhoto({ id, vaultId, file: { name }, blob: file, mime, width: facts.width, height: facts.height, duration: facts.duration, uploaded: 0, addedAt: at + 1 });
     this.publish({ pending: this.state.pending + added });
     void this.upload();
     return { id, name, mime, size: file.size, poster, width: facts.width, height: facts.height, duration: facts.duration };

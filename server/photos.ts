@@ -150,16 +150,23 @@ export function photoRoutes(app: Hono<AppEnv>, fetcher: GoogleFetch, now: () => 
       return Number.isInteger(n) && n > 0 && n < 100_000 ? n : null;
     };
     const name = file ? (c.req.query('name') ?? '').replace(/[\u0000-\u001f]/g, '').trim().slice(0, 200) || null : null;
-    return { id, vaultId, ownerId: vault.owner_id, file, mime, name, width: pixels('w'), height: pixels('h'), config };
+    // A video's length in seconds, as the device read it.
+    const seconds = Number(c.req.query('d'));
+    const duration = file && mime.startsWith('video/') && Number.isFinite(seconds) && seconds > 0 && seconds < 1_000_000 ? Math.round(seconds * 1000) / 1000 : null;
+    return { id, vaultId, ownerId: vault.owner_id, file, mime, name, width: pixels('w'), height: pixels('h'), duration, config };
   };
 
   /** Notes an uploaded photo or file, now in Drive. Repeated, the first stays. */
-  const record = (c: Context<AppEnv>, a: { id: string; ownerId: string; vaultId: string; fileId: string; mime: string; size: number; width: number | null; height: number | null; name: string | null }, at: number) =>
+  const record = (
+    c: Context<AppEnv>,
+    a: { id: string; ownerId: string; vaultId: string; fileId: string; mime: string; size: number; width: number | null; height: number | null; duration: number | null; name: string | null },
+    at: number,
+  ) =>
     c.env.DB.prepare(
-      `INSERT INTO attachments (id, owner_id, vault_id, drive_file_id, mime, size, width, height, created_at, name) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+      `INSERT INTO attachments (id, owner_id, vault_id, drive_file_id, mime, size, width, height, duration, created_at, name) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
        ON CONFLICT(id) DO NOTHING`,
     )
-      .bind(a.id, a.ownerId, a.vaultId, a.fileId, a.mime, a.size, a.width, a.height, at, a.name)
+      .bind(a.id, a.ownerId, a.vaultId, a.fileId, a.mime, a.size, a.width, a.height, a.duration, at, a.name)
       .run();
 
   /**
@@ -187,13 +194,13 @@ export function photoRoutes(app: Hono<AppEnv>, fetcher: GoogleFetch, now: () => 
   const uploadRow = (c: Context<AppEnv>, id: string) =>
     c.env.DB.prepare(`SELECT * FROM attachment_uploads WHERE id = ? AND vault_id IN (${EDITABLE})`)
       .bind(id, c.get('user').id)
-      .first<{ id: string; owner_id: string; vault_id: string; session_url: string; mime: string; size: number; name: string | null; width: number | null; height: number | null }>();
+      .first<{ id: string; owner_id: string; vault_id: string; session_url: string; mime: string; size: number; name: string | null; width: number | null; height: number | null; duration: number | null }>();
 
   /** Where an upload stands, from Drive's answer: the next byte to send, or done (the file noted, the session dropped). */
   const progress = async (c: Context<AppEnv>, row: NonNullable<Awaited<ReturnType<typeof uploadRow>>>, got: UploadProgress) => {
     if ('next' in got) return c.json({ next: got.next });
     const at = now();
-    await record(c, { id: row.id, ownerId: row.owner_id, vaultId: row.vault_id, fileId: got.fileId, mime: row.mime, size: row.size, width: row.width, height: row.height, name: row.name }, at);
+    await record(c, { id: row.id, ownerId: row.owner_id, vaultId: row.vault_id, fileId: got.fileId, mime: row.mime, size: row.size, width: row.width, height: row.height, duration: row.duration, name: row.name }, at);
     await c.env.DB.prepare(`DELETE FROM attachment_uploads WHERE id = ?`).bind(row.id).run();
     return c.json({ id: row.id }, 201);
   };
@@ -225,10 +232,10 @@ export function photoRoutes(app: Hono<AppEnv>, fetcher: GoogleFetch, now: () => 
       }
       const session = await startUpload(c.env.DB, config, ownerId, { name: driveName(id, c.req.query('name')), mime, size }, at);
       await c.env.DB.prepare(
-        `INSERT INTO attachment_uploads (id, owner_id, vault_id, session_url, mime, size, name, width, height, created_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+        `INSERT INTO attachment_uploads (id, owner_id, vault_id, session_url, mime, size, name, width, height, duration, created_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
          ON CONFLICT(id) DO UPDATE SET session_url = excluded.session_url, created_at = excluded.created_at`,
       )
-        .bind(id, ownerId, vaultId, session, mime, size, target.name, target.width, target.height, at)
+        .bind(id, ownerId, vaultId, session, mime, size, target.name, target.width, target.height, target.duration, at)
         .run();
       return c.json({ next: 0 });
     } catch (err) {
@@ -267,7 +274,7 @@ export function photoRoutes(app: Hono<AppEnv>, fetcher: GoogleFetch, now: () => 
    */
   app.get('/attachments', async (c) => {
     const { results } = await c.env.DB.prepare(
-      `SELECT id, vault_id, mime, size, name, created_at, trashed_at, trashed_from FROM attachments
+      `SELECT id, vault_id, mime, size, name, width, height, duration, created_at, trashed_at, trashed_from FROM attachments
        WHERE vault_id IN (SELECT vault_id FROM vault_members WHERE user_id = ?) ORDER BY created_at`,
     )
       .bind(c.get('user').id)

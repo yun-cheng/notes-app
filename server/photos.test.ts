@@ -193,7 +193,7 @@ describe('photos in Google Drive', () => {
     const t = await connected();
     const video = Uint8Array.from({ length: 10 }, (_, i) => i);
     const start = (query = '') =>
-      t.call(`/api/attachments/video-0001/upload?vault=${t.ann.vault}&kind=file&name=Clip.mp4&size=10&w=1920&h=1080${query}`, { method: 'POST', headers: { 'content-type': 'video/mp4' } }, t.ann.cookie);
+      t.call(`/api/attachments/video-0001/upload?vault=${t.ann.vault}&kind=file&name=Clip.mp4&size=10&w=1920&h=1080&d=90.5${query}`, { method: 'POST', headers: { 'content-type': 'video/mp4' } }, t.ann.cookie);
     const piece = (from: number, to: number) =>
       t.call('/api/attachments/video-0001/upload', { method: 'PUT', body: video.slice(from, to + 1).buffer, headers: { 'content-range': `bytes ${from}-${to}/10` } }, t.ann.cookie);
     expect(await (await start()).json()).toEqual({ next: 0 });
@@ -220,7 +220,8 @@ describe('photos in Google Drive', () => {
     expect(whole.status).toBe(200);
     expect(whole.headers.get('content-length')).toBe('10');
     const listed = (await (await t.call('/api/attachments', {}, t.ann.cookie)).json()) as { attachments: { id: string; size: number; name: string }[] };
-    expect(listed.attachments).toEqual([expect.objectContaining({ id: 'video-0001', size: 10, name: 'Clip.mp4', mime: 'video/mp4' })]);
+    // With its shape and length, for the Trash and for its block when it's put back.
+    expect(listed.attachments).toEqual([expect.objectContaining({ id: 'video-0001', size: 10, name: 'Clip.mp4', mime: 'video/mp4', width: 1920, height: 1080, duration: 90.5 })]);
   });
   it('starts a piece-by-piece upload again once Drive has dropped it, and keeps to its sizes and vaults', async () => {
     const t = await connected();

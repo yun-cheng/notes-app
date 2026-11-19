@@ -126,13 +126,14 @@ function runSql(statements: string[]) {
  * so nothing sends them to the Trash.
  */
 function trashedAttachments(owner: string, family: string, personal: string) {
-  const row = (id: string, vault: string, mime: string, size: number, added: number, trashed: number, from: string, name: string | null) =>
-    `INSERT INTO attachments (id, owner_id, vault_id, drive_file_id, mime, size, created_at, trashed_at, trashed_from, name) VALUES (${[id, owner, vault, '', mime].map(sql).join(', ')}, ${size}, ${added}, ${trashed}, ${sql(from)}, ${name ? sql(name) : 'NULL'})`;
+  // A video's width, height and length, as the device that added it would have sent them.
+  const row = (id: string, vault: string, mime: string, size: number, added: number, trashed: number, from: string, name: string | null, [w, h, d]: (number | null)[] = [null, null, null]) =>
+    `INSERT INTO attachments (id, owner_id, vault_id, drive_file_id, mime, size, width, height, duration, created_at, trashed_at, trashed_from, name) VALUES (${[id, owner, vault, '', mime].map(sql).join(', ')}, ${size}, ${w ?? 'NULL'}, ${h ?? 'NULL'}, ${d ?? 'NULL'}, ${added}, ${trashed}, ${sql(from)}, ${name ? sql(name) : 'NULL'})`;
   runSql([
     `DELETE FROM attachments WHERE id LIKE 'demo-%'`,
     row('demo-photo-lake-retake', family, 'image/jpeg', statSync('scripts/demoPhotos/lake-retake.jpg').size, at(1, 9, 30), ago(150), 'demo-family-trip', null),
     row('demo-file-itinerary-draft', personal, 'application/pdf', statSync('scripts/demoFiles/itinerary-draft.pdf').size, at(40, 21), at(27, 10), 'demo-note-kyoto', 'itinerary-draft.pdf'),
-    row('demo-file-lake-pan', family, 'video/mp4', statSync('scripts/demoFiles/lake-pan.mp4').size, at(1, 9, 30), ago(140), 'demo-family-trip', 'lake-pan.mp4'),
+    row('demo-file-lake-pan', family, 'video/mp4', statSync('scripts/demoFiles/lake-pan.mp4').size, at(1, 9, 30), ago(140), 'demo-family-trip', 'lake-pan.mp4', [960, 540, 6]),
     row('demo-file-lake-pan-poster', family, 'image/jpeg', statSync('scripts/demoFiles/lake-pan-poster.jpg').size, at(1, 9, 30), ago(140), 'demo-family-trip', null),
   ]);
 }

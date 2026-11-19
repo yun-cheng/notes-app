@@ -201,6 +201,7 @@ export const photoTransport: PhotoTransport = {
     }
     if (photo.width) query.set('w', String(photo.width));
     if (photo.height) query.set('h', String(photo.height));
+    if (photo.duration) query.set('d', String(photo.duration));
     if (photo.file && photo.blob.size > WHOLE_BYTES) return uploadInPieces(photo, query, sent);
     const res = await rawRequest(`/attachments/${encodeURIComponent(photo.id)}?${query}`, { method: 'PUT', body: photo.blob, headers: { 'content-type': photo.mime } });
     return res.ok ? 'ok' : refused(res);

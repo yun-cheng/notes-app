@@ -9,6 +9,8 @@ export interface PhotoRecord {
   mime: string;
   width: number | null;
   height: number | null;
+  /** A video's length in seconds, sent with it so the server can tell it while it's in the Trash. */
+  duration?: number | null;
   /** 0 until the server has it. A number, so IndexedDB can index it. */
   uploaded: 0 | 1;
   addedAt: number;

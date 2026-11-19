@@ -15,6 +15,8 @@ import { useViewOnly, VIEW_ONLY_NOTE } from './viewOnly';
 import { VideoMark } from './video';
 
 const isVideoItem = (a: StoredAttachment) => a.mime.startsWith('video/');
+/** What the server kept of a video's shape and length, for its block when it's put back. */
+const videoFacts = (a: StoredAttachment) => ({ ...(a.width && a.height ? { width: a.width, height: a.height } : {}), ...(a.duration ? { duration: a.duration } : {}) });
 
 /**
  * Photos, videos and files taken out of every entry, on the Trash page (a video's still goes with it): each with the entry it was in and the days left
@@ -115,7 +117,7 @@ function TrashedVideo({ item, still }: { item: StoredAttachment; still: string }
   return (
     <button type="button" className="trash-held__thumb thumb--video" title={`Open ${name}`} onClick={() => void act({ id: item.id, name, mime: item.mime, size: item.size })}>
       <TrashedPhoto id={still} />
-      <VideoMark />
+      <VideoMark duration={item.duration} />
     </button>
   );
 }
@@ -154,7 +156,7 @@ function usePutBack() {
     // A video comes back with its still, if that's in the Trash with it.
     const still = isVideoItem(a) && attachments.getState().trash?.some((t) => t.id === posterId(a.id)) ? posterId(a.id) : null;
     const node: JSONNode = isFile(a)
-      ? { type: 'file', attrs: { id: a.id, name: a.name ?? 'Untitled', mime: a.mime, size: a.size, ...(still ? { poster: still } : {}) } }
+      ? { type: 'file', attrs: { id: a.id, name: a.name ?? 'Untitled', mime: a.mime, size: a.size, ...(still ? { poster: still } : {}), ...(isVideoItem(a) ? videoFacts(a) : {}) } }
       : { type: 'photo', attrs: { id: a.id } };
     const from = a.trashed_from ? index.byId.get(a.trashed_from) : undefined;
     // The entry's own permissions: everything shown in the Trash counts as read only, but the entry isn't in it.

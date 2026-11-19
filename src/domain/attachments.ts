@@ -17,6 +17,10 @@ export interface StoredAttachment {
   size: number;
   /** A file's name; none for a photo, or a file from before names were kept. */
   name: string | null;
+  /** A photo's or video's size in pixels and a video's length in seconds, as the device that added it read them. */
+  width?: number | null;
+  height?: number | null;
+  duration?: number | null;
   created_at: number;
   /** When it was found in no entry, and so went to the Trash. */
   trashed_at: number | null;

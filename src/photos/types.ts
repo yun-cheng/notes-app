@@ -26,9 +26,22 @@ export interface PhotoStore {
 export type UploadResult = 'ok' | 'needs_drive' | 'not_configured' | 'rejected';
 
 export interface PhotoTransport {
-  upload(photo: PhotoRecord): Promise<UploadResult>;
+  /** Sends it; a big file goes in pieces, `sent` told how far along it is, from 0 to 1. */
+  upload(photo: PhotoRecord, sent?: (done: number) => void): Promise<UploadResult>;
   /** The photo, or null if the server doesn't have it yet. */
   download(id: string): Promise<Blob | null>;
+  /** Where a video plays from on the server, a range at a time, rather than fetched whole first. */
+  address?(id: string): string;
+}
+
+/** What a video was found to be when added (`probeVideo`): null for what the browser couldn't tell. */
+export interface VideoFacts {
+  /** A still from it, to show before it plays. */
+  poster: Blob | null;
+  width: number | null;
+  height: number | null;
+  /** Its length, in seconds. */
+  duration: number | null;
 }
 
 export interface PreparedPhoto {

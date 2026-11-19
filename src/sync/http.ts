@@ -2,7 +2,7 @@ import { deviceName } from '../domain/device';
 import type { VaultPin } from '../domain/pin';
 import type { StoredAttachment } from '../domain/attachments';
 import type { CardRecord, JSONNode, Vault } from '../domain/types';
-import type { PhotoTransport } from '../photos/types';
+import type { PhotoRecord, PhotoTransport, UploadResult } from '../photos/types';
 import { SyncAuthExpired, SyncOffline, type SyncTransport } from './engine';
 import type { Account, AccountSummary, ConfigResponse, DraftChange, DraftsResponse, ConnectedApp, LinkPreview, PullResponse, PushResponse, RecentVersionsResponse, ServerTranslation, SessionInfo, SharedResponse, SignedInAccounts, VersionResponse, VersionsResponse } from './protocol';
 
@@ -151,8 +151,49 @@ export const startDriveConnect = async () => (await request<{ url: string }>('/d
 export const disconnectDrive = () => request<unknown>('/drive', { method: 'DELETE' });
 
 
+/** A file bigger than this goes up in pieces, which can pick up where they left off; Drive takes up to 5 MB whole. */
+const WHOLE_BYTES = 5 * 1024 * 1024;
+/** Each piece: a multiple of 256 KB, as Drive wants, small enough for the server to pass on at once. */
+const PIECE_BYTES = 8 * 1024 * 1024;
+
+/** What a refused upload means for the rest: Drive to connect, storage not set up, or this one turned down. */
+async function refused(res: Response): Promise<UploadResult> {
+  const error = ((await res.clone().json().catch(() => ({}))) as { error?: string }).error;
+  if (error === 'drive_not_connected') return 'needs_drive';
+  if (error === 'photos_not_configured') return 'not_configured';
+  if (res.status >= 500) throw new Error(`Upload failed with ${res.status}`);
+  return 'rejected';
+}
+
+/**
+ * A big file, in pieces: the server says where to start (0, or as far as Drive got before), then takes each piece
+ * and says where the next starts, until it has it all. An upload Drive has dropped (a week old) starts again.
+ */
+async function uploadInPieces(photo: PhotoRecord, query: URLSearchParams, sent?: (done: number) => void): Promise<UploadResult> {
+  const id = encodeURIComponent(photo.id);
+  const size = photo.blob.size;
+  query.set('size', String(size));
+  for (let tries = 0; tries < 2; tries++) {
+    let res = await rawRequest(`/attachments/${id}/upload?${query}`, { method: 'POST', headers: { 'content-type': photo.mime } });
+    if (!res.ok) return refused(res);
+    let at = ((await res.json()) as { next?: number; id?: string }).next;
+    while (typeof at === 'number') {
+      sent?.(at / size);
+      const end = Math.min(size, at + PIECE_BYTES);
+      res = await rawRequest(`/attachments/${id}/upload`, { method: 'PUT', body: photo.blob.slice(at, end), headers: { 'content-range': `bytes ${at}-${end - 1}/${size}` } });
+      const body = (await res.clone().json().catch(() => ({}))) as { next?: number; id?: string; error?: string };
+      if (res.status === 409 && body.error === 'upload_expired') break;
+      if (!res.ok) return refused(res);
+      if (body.id) return 'ok';
+      at = body.next;
+    }
+    if (at === undefined) return 'ok';
+  }
+  throw new Error('The upload kept being dropped');
+}
+
 export const photoTransport: PhotoTransport = {
-  async upload(photo) {
+  async upload(photo, sent) {
     const query = new URLSearchParams({ vault: photo.vaultId });
     if (photo.file) {
       query.set('kind', 'file');
@@ -160,19 +201,19 @@ export const photoTransport: PhotoTransport = {
     }
     if (photo.width) query.set('w', String(photo.width));
     if (photo.height) query.set('h', String(photo.height));
+    if (photo.file && photo.blob.size > WHOLE_BYTES) return uploadInPieces(photo, query, sent);
     const res = await rawRequest(`/attachments/${encodeURIComponent(photo.id)}?${query}`, { method: 'PUT', body: photo.blob, headers: { 'content-type': photo.mime } });
-    if (res.ok) return 'ok';
-    const error = ((await res.json().catch(() => ({}))) as { error?: string }).error;
-    if (error === 'drive_not_connected') return 'needs_drive';
-    if (error === 'photos_not_configured') return 'not_configured';
-    if (res.status >= 500) throw new Error(`Photo upload failed with ${res.status}`);
-    return 'rejected';
+    return res.ok ? 'ok' : refused(res);
   },
   async download(id) {
     const res = await rawRequest(`/attachments/${encodeURIComponent(id)}`);
     if (res.ok) return res.blob();
     if (res.status === 404 || res.status === 409 || res.status === 503) return null;
     throw new Error(`Photo download failed with ${res.status}`);
+  },
+  address(id) {
+    // A player can't send the account's header, so it goes in the address.
+    return `/api/attachments/${encodeURIComponent(id)}${requestAccount ? `?account=${encodeURIComponent(requestAccount)}` : ''}`;
   },
 };
 

@@ -12,6 +12,7 @@ import type { CommentCount, SharedCard, VaultShare } from '../sync/protocol';
 import { deleteAttachment, fetchDrafts, httpTransport, listAttachments, markAttachments, photoTransport, sendDrafts } from '../sync/http';
 import { AttachmentKeeper } from '../photos/keeper';
 import { preparePhoto } from '../photos/prepare';
+import { probeVideo } from '../photos/video';
 import { PhotoService, type PhotoState } from '../photos/service';
 import { Keyring } from '../crypto/keyring';
 import { unlockWithPin } from '../crypto/vaultKeys';
@@ -61,7 +62,7 @@ function openAccount(accountId: string) {
     forget: (id) => keyring.forget(id),
     forgetAll: () => keyring.forgetAll(),
   };
-  const photos = new PhotoService(store, photoTransport, preparePhoto);
+  const photos = new PhotoService(store, photoTransport, preparePhoto, undefined, undefined, probeVideo);
   return {
     store,
     repo,

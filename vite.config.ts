@@ -1,4 +1,4 @@
-import { existsSync, readFileSync } from 'node:fs';
+import { existsSync, readdirSync, readFileSync } from 'node:fs';
 import type { Plugin } from 'vite';
 import { defineConfig } from 'vitest/config';
 import react from '@vitejs/plugin-react';
@@ -7,8 +7,10 @@ import { VitePWA } from 'vite-plugin-pwa';
 /**
  * Only in `npm run dev`, never in a build: /demo signs this browser in to the demo account that
  * `npm run demo` made on the local server, alongside any accounts it is already signed in to, and the demo's
- * photos are served from scripts/demoPhotos.
+ * photos and files are served from scripts/demoPhotos and scripts/demoFiles.
  */
+const DEMO_FILE_TYPES: Record<string, string> = { pdf: 'application/pdf', csv: 'text/csv', txt: 'text/plain' };
+
 function demoSignIn(): Plugin {
   return {
     name: 'demo-sign-in',
@@ -42,6 +44,17 @@ function demoSignIn(): Plugin {
         res.setHeader('content-type', 'image/jpeg');
         res.setHeader('cache-control', 'private, max-age=31536000, immutable');
         res.end(readFileSync(file));
+      });
+      // The demo's files (`demo-file-<name>`) likewise, from scripts/demoFiles, sent the way the API sends a file.
+      server.middlewares.use((req, res, next) => {
+        const name = /^\/api\/(?:attachments|public\/[^/]+\/files)\/demo-file-([a-z-]+)$/.exec(req.url?.split('?')[0] ?? '')?.[1];
+        const file = name && readdirSync('scripts/demoFiles').find((f) => f.startsWith(`${name}.`) && !f.endsWith('.mjs'));
+        if (req.method !== 'GET' || !file) return next();
+        res.setHeader('content-type', DEMO_FILE_TYPES[file.split('.').pop()!] ?? 'application/octet-stream');
+        res.setHeader('content-disposition', 'attachment');
+        res.setHeader('content-security-policy', 'sandbox');
+        res.setHeader('x-content-type-options', 'nosniff');
+        res.end(readFileSync(`scripts/demoFiles/${file}`));
       });
       server.middlewares.use('/demo', (_req, res) => {
         res.setHeader('content-type', 'text/html; charset=utf-8');

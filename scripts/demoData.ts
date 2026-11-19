@@ -3,7 +3,8 @@
  * sign-in: folders and tags, tag groups with colors (a Priority to sort by and show as a board, and a many-choice
  * Topics), todos for the board by todo state, notes with headings, lists, checklists, quotes, code, web links and links to each other, todos
  * overdue, due today at a time, upcoming, undated, repeating, waiting, done and archived, entries tinted, set to view
- * only or with their own preview style, photos of every shape, one on a card's back page (served by the dev server from scripts/demoPhotos), a private and encrypted Diary vault, a vault shared with Sam and one Sam
+ * only or with their own preview style, photos of every shape, one on a card's back page (served by the dev server from scripts/demoPhotos),
+ * files attached (a PDF, a CSV, and a text file on the publicly linked recipe, from scripts/demoFiles), a private and encrypted Diary vault, a vault shared with Sam and one Sam
  * shares to view, a card also in another vault, a note Sam shares, a public link, comments open and resolved, and
  * version history from more than one device. Two entries carry nearly all of it at once, to see how a full one looks:
  * a launch plan note and a moving todo.
@@ -11,7 +12,7 @@
  * were, dated around today, and keeps anything else in the accounts.
  */
 import { execFileSync } from 'node:child_process';
-import { mkdirSync, writeFileSync } from 'node:fs';
+import { mkdirSync, statSync, writeFileSync } from 'node:fs';
 import { createVaultKey, encryptPayload, unlockWithPin } from '../src/crypto/vaultKeys';
 import { addDays, toDateKey } from '../src/domain/dates';
 import { hashPin } from '../src/domain/pin';
@@ -251,6 +252,11 @@ export async function seed() {
   const web = (label: string, href: string): JSONNode => ({ type: 'text', text: label, marks: [{ type: 'link', attrs: { href } }] });
   /** A photo from scripts/demoPhotos, which the dev server serves in place of Google Drive (vite.config.ts). */
   const photo = (name: string, alt: string): JSONNode => ({ type: 'photo', attrs: { id: `demo-photo-${name}`, alt } });
+  /** A file from scripts/demoFiles, likewise served by the dev server, with the name, type and size it's shown with. */
+  const file = (name: string, ext: string, mime: string): JSONNode => ({
+    type: 'file',
+    attrs: { id: `demo-file-${name}`, name: `${name}.${ext}`, mime, size: statSync(`scripts/demoFiles/${name}.${ext}`).size },
+  });
 
   // Folders are pinned tags; the rest are plain tags, some with a color.
   const work = tag('demo-tag-work', 'Work', true, 'Anything for the day job.', 'blue');
@@ -285,6 +291,7 @@ export async function seed() {
       p('Pack using the ', link(packing, 'Packing list'), '.'),
       p('Shrine guide: ', web('Fushimi Inari-taisha', 'https://en.wikipedia.org/wiki/Fushimi_Inari-taisha')),
       photo('torii', 'Torii gates at Fushimi Inari'),
+      file('itinerary', 'pdf', 'application/pdf'),
     ),
     [travel],
     'Kyoto trip',
@@ -320,7 +327,7 @@ export async function seed() {
   note('demo-note-standup', at(7, 10, 15), doc(h('Standup'), bullets('Shipped the search fix', 'Reviewing the export PR', 'Blocked on design for onboarding')), [work]);
   note('demo-note-book', at(6, 22, 40), doc(p(text('Thinking, Fast and Slow', ['italic'])), quote('Nothing in life is as important as you think it is, while you are thinking about it.'), p('Chapter 3 next.')), [reading]);
   note('demo-note-idea-app', at(5, 8, 5), lines('App idea: a plant watering reminder that reads the weather forecast and skips rainy days.'), [ideas, low], '', personal, { color: 'yellow' });
-  note('demo-note-curry', at(5, 19, 30), doc(p(text('Weeknight curry', ['bold'])), photo('curry', 'A bowl of curry'), bullets('1 onion, 2 garlic cloves, ginger', '2 tbsp curry paste', '1 can coconut milk', 'Chickpeas and spinach'), p('Simmer 20 minutes. Rice on the side.')), [recipes], 'Curry');
+  note('demo-note-curry', at(5, 19, 30), doc(p(text('Weeknight curry', ['bold'])), photo('curry', 'A bowl of curry'), bullets('1 onion, 2 garlic cloves, ginger', '2 tbsp curry paste', '1 can coconut milk', 'Chickpeas and spinach'), p('Simmer 20 minutes. Rice on the side.'), file('spice-list', 'txt', 'text/plain')), [recipes], 'Curry');
   note('demo-note-zh', at(4, 12, 20), lines('今天天氣很好，午餐去吃了牛肉麵。', '下次要試試隔壁的水餃店。'));
   note('demo-note-1on1', at(4, 15, 0), doc(p('1:1 with Mia'), bullets('Wants to lead the API migration', 'Conference budget: yes, up to two people', 'Follow up on hiring plan')), [work, medium]);
   note('demo-note-quote', at(3, 7, 45), lines('"The best time to plant a tree was 20 years ago. The second best time is now."'), [ideas], '', personal, { color: 'purple' });
@@ -410,6 +417,7 @@ export async function seed() {
         'Week 4: everyone',
       ),
       photo('whiteboard', 'The launch board'),
+      file('launch-budget', 'csv', 'text/csv'),
       h('Before launch'),
       checklist(['Load test the sync server', true], ['Security review', true], ['Help center articles', false], ['Press kit', false], ['Status page ready', false]),
       quote('Make it work, make it right, make it fast. In that order.'),

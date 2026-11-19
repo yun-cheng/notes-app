@@ -3,6 +3,7 @@ import { linkUrls, photoIds, siteName } from '../domain/content';
 import type { Card } from '../domain/types';
 import { useCards } from '../state/CardsContext';
 import { usePhotoUrl } from './editor/photo';
+import { usePhotoZoom } from './photoZoom';
 import { previewFor, useDisplayPrefs } from './displayPrefs';
 import { Icon } from './Icon';
 import { useLinkPreview } from './useLinkPreview';
@@ -105,13 +106,15 @@ export function LinkCard({ url, preview: allowed, compact = false }: { url: stri
 
 /**
  * Photos full size, one at a time, with arrows and keys to move between them, and, for more than one, a row of them
- * all along the bottom, the one shown marked and kept in sight, any of them pressed to show it.
+ * all along the bottom, the one shown marked and kept in sight, any of them pressed to show it. Each zooms with the
+ * wheel or a pinch (`usePhotoZoom`).
  */
 export function PhotoViewer({ ids, start, onClose }: { ids: string[]; start: number; onClose: () => void }) {
   const backdrop = useBackdropClose(onClose);
   const [at, setAt] = useState(start);
   const { url, state } = usePhotoUrl(ids[at]);
   const step = (d: number) => setAt((i) => (i + d + ids.length) % ids.length);
+  const zoom = usePhotoZoom(ids[at]);
 
   useEffect(() => {
     const onKey = (e: KeyboardEvent) => {
@@ -120,6 +123,9 @@ export function PhotoViewer({ ids, start, onClose }: { ids: string[]; start: num
         onClose();
       } else if (e.key === 'ArrowRight') step(1);
       else if (e.key === 'ArrowLeft') step(-1);
+      else if (e.key === '+' || e.key === '=') zoom.zoomIn();
+      else if (e.key === '-') zoom.zoomOut();
+      else if (e.key === '0') zoom.fit();
     };
     // Before the sheet's own Escape handler, so Escape closes only the photo.
     window.addEventListener('keydown', onKey, true);
@@ -127,8 +133,17 @@ export function PhotoViewer({ ids, start, onClose }: { ids: string[]; start: num
   });
 
   return (
-    <div className={`dialog-backdrop viewer${ids.length > 1 ? ' viewer--strip' : ''}`} role="dialog" aria-label="Photo" {...backdrop}>
-      {url ? <img className="viewer__img" src={url} alt={`Photo ${at + 1} of ${ids.length}`} /> : <p className="viewer__note">{state === 'loading' ? 'Loading photo…' : 'This photo isn’t available yet.'}</p>}
+    <div ref={zoom.area} className={`dialog-backdrop viewer${ids.length > 1 ? ' viewer--strip' : ''}`} role="dialog" aria-label="Photo" {...backdrop}>
+      {url ? (
+        <img className="viewer__img" src={url} alt={`Photo ${at + 1} of ${ids.length}`} title="Scroll or pinch to zoom, drag to look around, double-click to fit" {...zoom.image} />
+      ) : (
+        <p className="viewer__note">{state === 'loading' ? 'Loading photo…' : 'This photo isn’t available yet.'}</p>
+      )}
+      {zoom.zoom.scale > 1 && (
+        <button type="button" className="viewer__fit" title="Fit the photo to the screen (0)" onClick={zoom.fit}>
+          {Math.round(zoom.zoom.scale * 100)}% · Fit
+        </button>
+      )}
       {ids.length > 1 && (
         <>
           <button type="button" className="viewer__nav viewer__nav--prev" aria-label="Previous photo" onClick={() => step(-1)}>

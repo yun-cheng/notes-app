@@ -49,5 +49,8 @@ describe('fileDays', () => {
       ['same', 'copy', '2026-11-05'],
       ['own', 'copy', '2026-11-05'],
     ]);
+    // A video shows on the Photos page instead.
+    const clip = note('clip', '', { content: doc({ type: 'file', attrs: { id: 'v', name: 'a.mp4', mime: 'video/mp4' } }) });
+    expect(fileDays([clip])).toEqual([]);
   });
 });

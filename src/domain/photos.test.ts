@@ -28,6 +28,16 @@ describe('photoDays', () => {
       ['m2', 'morning'],
     ]);
   });
+  it('shows videos among the photos, in the order their entry has them, and no other file', () => {
+    const video = { type: 'file', attrs: { id: 'v', name: 'a.mp4', mime: 'video/mp4', duration: 4 } };
+    const pdf = { type: 'file', attrs: { id: 'f', name: 'a.pdf', mime: 'application/pdf' } };
+    const days = photoDays([note('n', '', { createdAt: at('2026-11-12'), content: doc(photo('a'), pdf, video, photo('b')) })]);
+    expect(days[0].items.map((i) => [i.id, i.video?.duration ?? null])).toEqual([
+      ['a', null],
+      ['v', 4],
+      ['b', null],
+    ]);
+  });
 
   it('shows a photo in two entries once, with the newer', () => {
     const first = note('first', '', { createdAt: at('2026-11-01'), content: doc(photo('same')) });

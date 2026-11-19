@@ -156,7 +156,7 @@ export function previewParts(content: JSONNode, titleOf?: (id: string, label: st
         if (full) line(`${prefix}[Photo${node.attrs?.alt ? `: ${String(node.attrs.alt)}` : ''}]`);
         return;
       case 'file':
-        if (full) line(`${prefix}[File: ${String(node.attrs?.name || 'Untitled')}]`);
+        if (full) line(`${prefix}[${String(node.attrs?.mime ?? '').startsWith('video/') ? 'Video' : 'File'}: ${String(node.attrs?.name || 'Untitled')}]`);
         return;
       case 'horizontalRule':
         if (full) line(`${prefix}———`);
@@ -338,13 +338,23 @@ export function photoIds(content: JSONNode): string[] {
   return ids;
 }
 
-/** A file attached in the body: its ID, and the name, type and size in bytes it was added with. */
+/**
+ * A file attached in the body: its ID, and the name, type and size in bytes it was added with. A video also keeps
+ * what it was found to be when added: a still from it (`poster`, a photo's ID), its size in pixels and its length in
+ * seconds, each null when the browser adding it couldn't tell.
+ */
 export interface FileInfo {
   id: string;
   name: string;
   mime: string | null;
   size: number | null;
+  poster?: string | null;
+  width?: number | null;
+  height?: number | null;
+  duration?: number | null;
 }
+
+const positive = (v: unknown) => (typeof v === 'number' && Number.isFinite(v) && v > 0 ? v : null);
 
 /** Files attached in the body, in order. */
 export function fileAttachments(content: JSONNode): FileInfo[] {
@@ -352,14 +362,59 @@ export function fileAttachments(content: JSONNode): FileInfo[] {
   walk(content, (n) => {
     const a = n.attrs;
     if (n.type !== 'file' || typeof a?.id !== 'string') return;
-    files.push({
+    const file: FileInfo = {
       id: a.id,
       name: typeof a.name === 'string' && a.name ? a.name : 'Untitled',
       mime: typeof a.mime === 'string' && a.mime ? a.mime : null,
       size: typeof a.size === 'number' && a.size >= 0 ? a.size : null,
-    });
+    };
+    if (isVideo(file)) {
+      file.poster = typeof a.poster === 'string' && a.poster ? a.poster : null;
+      file.width = positive(a.width);
+      file.height = positive(a.height);
+      file.duration = positive(a.duration);
+    }
+    files.push(file);
   });
   return files;
+}
+
+/** Whether an attached file is a video, to play where it is and show among the photos. */
+export const isVideo = (file: Pick<FileInfo, 'mime'>) => !!file.mime && file.mime.startsWith('video/');
+
+/** The attachment ID of the still shown for a video before it plays: kept beside it, as a photo. */
+export const posterId = (videoId: string) => `${videoId}-poster`;
+
+/** Whether an attachment is a video's still (`posterId`), which goes where its video goes. */
+export const isPoster = (id: string) => id.endsWith('-poster');
+
+/** A photo or a video, as they show together: under an entry, full screen and on the Photos page. */
+export interface Media {
+  id: string;
+  /** Set for a video. */
+  video?: FileInfo;
+}
+
+/** The photos and videos in the body, in order. */
+export function mediaItems(content: JSONNode): Media[] {
+  const items: Media[] = [];
+  walk(content, (n) => {
+    if (n.type === 'photo' && typeof n.attrs?.id === 'string') items.push({ id: n.attrs.id });
+    else if (n.type === 'file') {
+      const [file] = fileAttachments(n);
+      if (file && isVideo(file)) items.push({ id: file.id, video: file });
+    }
+  });
+  return items;
+}
+
+/** A video's length as a player shows it: "0:07", "4:05", "1:02:09". */
+export function clipLength(seconds: number): string {
+  const s = Math.max(0, Math.round(seconds));
+  const two = (n: number) => String(n).padStart(2, '0');
+  const h = Math.floor(s / 3600);
+  const m = Math.floor((s % 3600) / 60);
+  return h ? `${h}:${two(m)}:${two(s % 60)}` : `${m}:${two(s % 60)}`;
 }
 
 /** A document with no words, no photos and no files. */

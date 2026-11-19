@@ -29,6 +29,12 @@ describe('heldBy', () => {
       { id: 'f', name: 'Lease.pdf' },
       { id: 'b', name: null },
     ]);
+    // A video's still goes with it.
+    const clip = note('v', '', { content: doc({ type: 'file', attrs: { id: 'v1', name: 'Clip.mp4', mime: 'video/mp4', poster: 'v1-poster' } }) });
+    expect(heldBy(clip)).toEqual([
+      { id: 'v1', name: 'Clip.mp4' },
+      { id: 'v1-poster', name: null },
+    ]);
   });
 });
 

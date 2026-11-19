@@ -1,22 +1,25 @@
-import { photoIds } from './content';
+import { mediaItems, photoIds, type Media } from './content';
 import { entryDays, onEveryPage, type DayItem, type ItemDay } from './library';
 import type { Card } from './types';
 
-/** A photo on the Photos page: the entry it's in, and the day that entry was written. */
-export type PhotoItem = DayItem<{ id: string }>;
+/** A photo or video on the Photos page: the entry it's in, and the day that entry was written. */
+export type PhotoItem = DayItem<Media>;
 
-/** The photos written on one day, newest entry first. */
-export type PhotoDay = ItemDay<{ id: string }>;
+/** The photos and videos written on one day, newest entry first. */
+export type PhotoDay = ItemDay<Media>;
 
 /** An entry's photos, on its front and on its other pages, in order, each once. */
 export const cardPhotoIds = (card: Card): string[] => onEveryPage(card, (page) => photoIds(page).map((id) => ({ id }))).map((p) => p.id);
 
+/** An entry's photos and videos, on its front and on its other pages, in order, each once. */
+export const cardMedia = (card: Card): Media[] => onEveryPage(card, mediaItems);
+
 /**
- * Every photo in `cards` (the entries already narrowed to those to show), newest entry first and an entry's own in
- * the order they're in it, by the day the entry was written. A photo in two entries, as a copy of a template leaves
- * it, shows once, with the newer.
+ * Every photo and video in `cards` (the entries already narrowed to those to show), newest entry first and an entry's
+ * own in the order they're in it, by the day the entry was written. One in two entries, as a copy of a template
+ * leaves it, shows once, with the newer.
  */
-export const photoDays = (cards: readonly Card[]): PhotoDay[] => entryDays(cards, (card) => cardPhotoIds(card).map((id) => ({ id })), true);
+export const photoDays = (cards: readonly Card[]): PhotoDay[] => entryDays(cards, cardMedia, true);
 
 /** Where a photo or a day's heading sits in the Photos page's layout, in pixels from its top left. */
 export interface Box {
@@ -132,6 +135,11 @@ const EXTENSIONS: Record<string, string> = {
   'image/avif': 'avif',
   'image/heic': 'heic',
   'image/heif': 'heif',
+  'video/mp4': 'mp4',
+  'video/quicktime': 'mov',
+  'video/webm': 'webm',
+  'video/x-m4v': 'm4v',
+  'video/3gpp': '3gp',
 };
 
 /**

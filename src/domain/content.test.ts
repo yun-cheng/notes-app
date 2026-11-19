@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { cardPages, checklistProgress, fileAttachments, CODE_CLOSE, CODE_OPEN, displayTitle, hasPhoto, HIDE_CLOSE, HIDE_OPEN, isBlank, isImageUrl, leadLine, linkedCardIds, linkUrls, photoIds, plainText, previewLines, previewParts, siteName, splitLinks, storedPages, textToDoc, translationPage, pagesHaveTranslation, withNewPage, withoutLeadLine, withoutPage, withPage, wordsToDoc } from './content';
+import { cardPages, checklistProgress, clipLength, fileAttachments, isPoster, mediaItems, posterId, CODE_CLOSE, CODE_OPEN, displayTitle, hasPhoto, HIDE_CLOSE, HIDE_OPEN, isBlank, isImageUrl, leadLine, linkedCardIds, linkUrls, photoIds, plainText, previewLines, previewParts, siteName, splitLinks, storedPages, textToDoc, translationPage, pagesHaveTranslation, withNewPage, withoutLeadLine, withoutPage, withPage, wordsToDoc } from './content';
 import { doc, link, note, p, tag, text } from './testFixtures';
 import type { JSONNode } from './types';
 
@@ -129,6 +129,27 @@ describe('files', () => {
     expect(isBlank(note('m', '', { content: doc({ type: 'file', attrs: { id: 'f-3', name: 'a.txt' } }) }))).toBe(false);
     expect(previewLines(withFile.content)).toEqual(['Tickets']);
     expect(previewLines(withFile.content, undefined, true)).toEqual(['Tickets', '[File: Itinerary.pdf]', '[File: Untitled]']);
+  });
+
+  it('keeps what a video was found to be, and shows it among the photos in order', () => {
+    const video = { type: 'file', attrs: { id: 'v-1', name: 'Beach.mov', mime: 'video/quicktime', size: 9, poster: posterId('v-1'), width: 1920, height: 1080, duration: 7.4 } };
+    const unread = { type: 'file', attrs: { id: 'v-2', name: 'clip.mkv', mime: 'video/x-matroska', size: 3, poster: '', width: -1, duration: 'long' } };
+    const body = doc({ type: 'photo', attrs: { id: 'p-1' } }, video, { type: 'file', attrs: { id: 'f-1', name: 'a.pdf', mime: 'application/pdf' } }, unread);
+    const [clip] = fileAttachments(body);
+    expect(clip).toEqual({ id: 'v-1', name: 'Beach.mov', mime: 'video/quicktime', size: 9, poster: 'v-1-poster', width: 1920, height: 1080, duration: 7.4 });
+    expect(fileAttachments(body)[2]).toEqual({ id: 'v-2', name: 'clip.mkv', mime: 'video/x-matroska', size: 3, poster: null, width: null, height: null, duration: null });
+    expect(mediaItems(body).map((m) => [m.id, !!m.video])).toEqual([
+      ['p-1', false],
+      ['v-1', true],
+      ['v-2', true],
+    ]);
+    expect(isPoster('v-1-poster')).toBe(true);
+    expect(isPoster('v-1')).toBe(false);
+    expect(previewLines(body, undefined, true)).toEqual(['[Photo]', '[Video: Beach.mov]', '[File: a.pdf]', '[Video: clip.mkv]']);
+  });
+
+  it('tells a video\'s length as a player does', () => {
+    expect([clipLength(0), clipLength(7.4), clipLength(65), clipLength(3729)]).toEqual(['0:00', '0:07', '1:05', '1:02:09']);
   });
 });
 

@@ -30,9 +30,12 @@ export interface Holder {
   name: string | null;
 }
 
-/** The photos and files a card holds, on every page, each once, with a file's name. */
+/** The photos and files a card holds, on every page, each once, with a file's name, and each video's still. */
 export function heldBy(card: Card): { id: string; name: string | null }[] {
-  return onEveryPage(card, (page) => [...photoIds(page).map((id) => ({ id, name: null })), ...fileAttachments(page).map((f) => ({ id: f.id, name: f.name }))]);
+  return onEveryPage(card, (page) => [
+    ...photoIds(page).map((id) => ({ id, name: null })),
+    ...fileAttachments(page).flatMap((f) => [{ id: f.id, name: f.name }, ...(f.poster ? [{ id: f.poster, name: null }] : [])]),
+  ]);
 }
 
 /** Whether it's a file rather than a photo: it has a name, or isn't a picture. */

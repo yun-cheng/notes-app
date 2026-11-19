@@ -1,4 +1,4 @@
-import { fileAttachments, linkUrls, storedPages, type FileInfo } from './content';
+import { fileAttachments, isVideo, linkUrls, storedPages, type FileInfo } from './content';
 import { toDateKey } from './dates';
 import type { Card, JSONNode } from './types';
 
@@ -58,5 +58,8 @@ export const cardFiles = (card: Card): FileInfo[] => onEveryPage(card, fileAttac
  */
 export const linkDays = (cards: readonly Card[]) => entryDays(cards, cardLinks, false);
 
-/** Every attached file in `cards`, by day, for the Files page; one in two entries (a template's copy) shows once. */
-export const fileDays = (cards: readonly Card[]) => entryDays(cards, cardFiles, true);
+/**
+ * Every attached file in `cards`, by day, for the Files page; one in two entries (a template's copy) shows once.
+ * Videos are left to the Photos page.
+ */
+export const fileDays = (cards: readonly Card[]) => entryDays(cards, (card) => cardFiles(card).filter((f) => !isVideo(f)), true);

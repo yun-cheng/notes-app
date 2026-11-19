@@ -175,7 +175,7 @@ function PageOrNotHere() {
   const missing = missingFromFilter(filter, { vault: (id) => vaults.some((v) => v.id === id), card: (id) => index.byId.has(id) || index.lockedCards.has(id) });
   if (!missing) return <Outlet />;
   return (
-    <Page title="Not found">
+    <Page title="Not found" viewOnly={false}>
       <NotHere thing={missing} away={{ to: filterPath({ ...filter, vaultId: undefined, tagId: undefined }), label: 'Show without it' }} />
     </Page>
   );

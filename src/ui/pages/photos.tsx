@@ -178,6 +178,7 @@ export function PhotosPage() {
   let n = 0;
   return (
     <Page
+      viewOnly={false}
       title={
         selecting ? (
           <span className="photos__picked">

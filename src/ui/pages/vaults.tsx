@@ -100,7 +100,7 @@ export function VaultsPage() {
   const { index, vaults, locked } = useCards();
   const shown = vaults.filter((v) => !(v.hidden && locked.has(v.id)));
   return (
-    <Page title="Vaults">
+    <Page title="Vaults" viewOnly={false}>
       <p className="prose-note">A vault decides who can see a note. Use tags for topics.</p>
       <div className="list">
         {shown.map((v) => {
@@ -304,14 +304,14 @@ export function VaultPage() {
 
   if (!vault) {
     return (
-      <Page title="Not found">
+      <Page title="Not found" viewOnly={false}>
         <NotHere thing="vault" away={{ to: '/vaults', label: 'See your vaults' }} />
       </Page>
     );
   }
   if (locked.has(vault.id)) {
     return (
-      <Page title="Locked">
+      <Page title="Locked" viewOnly={false}>
         <LockPanel vaultId={vault.id} />
       </Page>
     );

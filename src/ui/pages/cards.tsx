@@ -41,14 +41,14 @@ export function CardPage() {
 
   if (lockedIn) {
     return (
-      <Page title="Locked">
+      <Page title="Locked" viewOnly={false}>
         <LockPanel vaultId={lockedIn} />
       </Page>
     );
   }
   if (!card) {
     return (
-      <Page title="Not found">
+      <Page title="Not found" viewOnly={false}>
         <NotHere away={{ to: '/journal', label: 'Go to the journal' }} />
       </Page>
     );

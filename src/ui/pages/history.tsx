@@ -61,7 +61,7 @@ export function HistoryPage() {
 
   if (lockedIn) {
     return (
-      <Page title="Locked">
+      <Page title="Locked" viewOnly={false}>
         <LockPanel vaultId={lockedIn} />
       </Page>
     );

@@ -17,7 +17,12 @@ import { SyncBadge } from './SyncStatus';
 import { AccountButton, DemoTag } from './AccountBadge';
 
 /** A page under its title bar. `below` is a second row of the bar, like the journal's filter chips, and stays in it as the page scrolls. */
-export function Page({ title, actions, below, children }: { title: ReactNode; actions?: ReactNode; below?: ReactNode; children: ReactNode }) {
+/**
+ * A page under its title bar. `viewOnly={false}` leaves out the view-only switch, on a page where nothing it stops
+ * can be done (the Photos, Links and Files pages, settings, the vaults list, a page saying something is locked or
+ * not here).
+ */
+export function Page({ title, actions, below, viewOnly = true, children }: { title: ReactNode; actions?: ReactNode; below?: ReactNode; viewOnly?: boolean; children: ReactNode }) {
   const page = useRef<HTMLDivElement>(null);
   const head = useRef<HTMLElement>(null);
   // What sticks under the title bar (a day's badge in the journal) needs its height, which changes with the phone's notch.
@@ -34,7 +39,7 @@ export function Page({ title, actions, below, children }: { title: ReactNode; ac
         <h1>{title}</h1>
         <DemoTag />
         <SyncBadge />
-        <ViewOnlyToggle />
+        {viewOnly && <ViewOnlyToggle />}
         {actions && <div className="page__actions">{actions}</div>}
         {/* Phones have no sidebar, so the account shows on every page here. */}
         <AccountButton className="only-mobile" />

@@ -119,6 +119,7 @@ function HeldList<T extends { id: string }>({ title, days, filtered, count, empt
   const all = days.flatMap((d) => d.items);
   return (
     <Page
+      viewOnly={false}
       title={title}
       actions={
         <button type="button" className={`icon-btn only-mobile${filter.tagId || filter.vaultId ? ' is-active' : ''}`} aria-label="Tags and vaults" title="Tags and vaults" onClick={() => setFiltering(true)}>

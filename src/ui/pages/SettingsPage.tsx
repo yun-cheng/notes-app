@@ -90,7 +90,7 @@ export function SettingsPage() {
   };
 
   return (
-    <Page title="Backup & settings">
+    <Page title="Backup & settings" viewOnly={false}>
       <Section title="Account">
         <p className="prose-note">
           Signed in as {account.name} ({account.email}). {describeSync(sync)}

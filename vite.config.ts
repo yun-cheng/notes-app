@@ -9,7 +9,7 @@ import { VitePWA } from 'vite-plugin-pwa';
  * `npm run demo` made on the local server, alongside any accounts it is already signed in to, and the demo's
  * photos and files are served from scripts/demoPhotos and scripts/demoFiles.
  */
-const DEMO_FILE_TYPES: Record<string, string> = { pdf: 'application/pdf', csv: 'text/csv', txt: 'text/plain' };
+const DEMO_FILE_TYPES: Record<string, string> = { pdf: 'application/pdf', csv: 'text/csv', txt: 'text/plain', mp4: 'video/mp4', jpg: 'image/jpeg' };
 
 function demoSignIn(): Plugin {
   return {
@@ -45,16 +45,28 @@ function demoSignIn(): Plugin {
         res.setHeader('cache-control', 'private, max-age=31536000, immutable');
         res.end(readFileSync(file));
       });
-      // The demo's files (`demo-file-<name>`) likewise, from scripts/demoFiles, sent the way the API sends a file.
+      // The demo's files (`demo-file-<name>`) likewise, from scripts/demoFiles, sent the way the API sends a file: a
+      // video a range at a time when its player asks, and a video's still (`demo-file-<name>-poster`) as a photo.
       server.middlewares.use((req, res, next) => {
-        const name = /^\/api\/(?:attachments|public\/[^/]+\/files)\/demo-file-([a-z-]+)$/.exec(req.url?.split('?')[0] ?? '')?.[1];
+        const name = /^\/api\/(?:attachments|public\/[^/]+\/(?:files|photos))\/demo-file-([a-z-]+)$/.exec(req.url?.split('?')[0] ?? '')?.[1];
         const file = name && readdirSync('scripts/demoFiles').find((f) => f.startsWith(`${name}.`) && !f.endsWith('.mjs'));
         if (req.method !== 'GET' || !file) return next();
-        res.setHeader('content-type', DEMO_FILE_TYPES[file.split('.').pop()!] ?? 'application/octet-stream');
-        res.setHeader('content-disposition', 'attachment');
-        res.setHeader('content-security-policy', 'sandbox');
+        const type = DEMO_FILE_TYPES[file.split('.').pop()!] ?? 'application/octet-stream';
+        res.setHeader('content-type', type);
+        if (!type.startsWith('image/')) {
+          res.setHeader('content-disposition', 'attachment');
+          res.setHeader('content-security-policy', 'sandbox');
+        }
         res.setHeader('x-content-type-options', 'nosniff');
-        res.end(readFileSync(`scripts/demoFiles/${file}`));
+        res.setHeader('accept-ranges', 'bytes');
+        const bytes = readFileSync(`scripts/demoFiles/${file}`);
+        const range = /^bytes=(\d*)-(\d*)$/.exec(req.headers.range ?? '');
+        if (!range || (!range[1] && !range[2])) return res.end(bytes);
+        const start = range[1] ? Number(range[1]) : Math.max(0, bytes.length - Number(range[2]));
+        const end = range[1] && range[2] ? Math.min(Number(range[2]), bytes.length - 1) : bytes.length - 1;
+        res.statusCode = 206;
+        res.setHeader('content-range', `bytes ${start}-${end}/${bytes.length}`);
+        res.end(bytes.subarray(start, end + 1));
       });
       server.middlewares.use('/demo', (_req, res) => {
         res.setHeader('content-type', 'text/html; charset=utf-8');

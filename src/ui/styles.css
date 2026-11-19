@@ -1080,10 +1080,11 @@ body:has(.batch) .toast-slot { bottom: calc(var(--tabbar) + env(safe-area-inset-
 .photo-tile:not(.is-picked):hover .photos__check { color: rgb(255 255 255 / 85%); }
 .photos__check.is-picked { border-color: var(--accent); background: var(--accent); color: #fff; box-shadow: none; }
 .photos__check:focus-visible { outline: 2px solid var(--accent); outline-offset: 1px; }
-/* A day's check slides in before its name on hover, and stays while picking. */
-.photos__check--day { width: 0; margin-right: 0; border-width: 0; border-color: var(--muted); background: none; box-shadow: none; transition: opacity 0.12s, width 0.12s, margin 0.12s; }
-.photos__day:hover .photos__check--day, .photos.is-selecting .photos__check--day, .photos__check--day:focus-visible { width: 18px; height: 18px; margin-right: 6px; border-width: 2px; }
-.photos__day:hover .photos__check--day:not(.is-picked) { color: var(--muted); }
+/* A day's check slides in before its name with the mouse over the name or any of the day's photos, and stays while
+   picking. It waits a moment to go, so it doesn't flicker as the mouse crosses the gaps between the day's photos. */
+.photos__check--day { width: 0; margin-right: 0; border-width: 0; border-color: var(--muted); background: none; box-shadow: none; transition: opacity 0.12s 0.15s, width 0.12s 0.15s, margin 0.12s 0.15s; }
+.photos__daygroup:hover .photos__check--day, .photos.is-selecting .photos__check--day, .photos__check--day:focus-visible { width: 18px; height: 18px; margin-right: 6px; border-width: 2px; opacity: 1; transition-delay: 0s; }
+.photos__daygroup:hover .photos__check--day:not(.is-picked) { color: var(--muted); }
 .photos__check--day.is-picked { border-color: var(--accent); background: var(--accent); }
 /* No hover on a touch screen: a long press starts picking. */
 @media (hover: none) { .photo-tile:not(.is-picked):hover .photos__check { color: transparent; } .photos:not(.is-selecting) .photos__check { opacity: 0; } .photos:not(.is-selecting) .photos__check--day { width: 0; margin-right: 0; border-width: 0; } }

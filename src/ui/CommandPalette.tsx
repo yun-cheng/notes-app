@@ -104,7 +104,7 @@ export function CommandPalette({ onClose, onShortcuts }: { onClose: () => void; 
       all.push({ id: `status-${status}`, group: 'Filter', label: `Todos: ${STATUS_LABEL[status].toLowerCase()}`, icon: 'todo', keywords: 'todo task status due', run: narrow({ status, type: undefined }) });
     }
     for (const has of Object.keys(CONTAINS_LABEL) as Contains[]) {
-      all.push({ id: `has-${has}`, group: 'Filter', label: `Show entries ${CONTAINS_LABEL[has].toLowerCase()}`, icon: has === 'link' ? 'link' : 'image', keywords: 'contains url web pictures images', run: narrow({ has }) });
+      all.push({ id: `has-${has}`, group: 'Filter', label: `Show entries ${CONTAINS_LABEL[has].toLowerCase()}`, icon: has === 'link' ? 'link' : has === 'file' ? 'attach' : 'image', keywords: 'contains url web pictures images files attachments documents', run: narrow({ has }) });
     }
     for (const t of index.live.filter(isTemplate)) {
       all.push({ id: `template-${t.id}`, group: 'Write', label: `New from template: ${displayTitle(t)}`, icon: 'template', keywords: 'template copy start reuse', run: () => void startFrom(t) });

@@ -81,6 +81,9 @@ interface FilterOption {
   checked: boolean;
 }
 
+/** Each Contains choice as its menu names it. */
+const CONTAINS_CHOICE: Record<Contains, string> = { link: 'Links', photo: 'Photos', file: 'Files' };
+
 /**
  * The filters, in the title bar's second row on the journal, the Archive and the history: a switch between All,
  * Notes, Todos and Stacks, then Todos, Written and Contains, each a chip that opens its choices. A chip in use names
@@ -160,7 +163,7 @@ export function FilterBar({ filter }: { filter: StreamFilter }) {
           name="Contains"
           value={filter.has && CONTAINS_LABEL[filter.has]}
           clear={filter.has ? path(without('has')) : undefined}
-          options={(Object.keys(CONTAINS_LABEL) as Contains[]).map((h) => option('has', h, h === 'link' ? 'Links' : 'Photos'))}
+          options={(Object.keys(CONTAINS_LABEL) as Contains[]).map((h) => option('has', h, CONTAINS_CHOICE[h]))}
         />
       )}
       {onHistory &&

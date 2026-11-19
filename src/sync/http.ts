@@ -4,7 +4,7 @@ import type { StoredAttachment } from '../domain/attachments';
 import type { CardRecord, JSONNode, Vault } from '../domain/types';
 import type { PhotoRecord, PhotoTransport, UploadResult } from '../photos/types';
 import { SyncAuthExpired, SyncOffline, type SyncTransport } from './engine';
-import type { Account, AccountSummary, ConfigResponse, DraftChange, DraftsResponse, ConnectedApp, LinkPreview, PullResponse, PushResponse, RecentVersionsResponse, ServerTranslation, SessionInfo, SharedResponse, SignedInAccounts, VersionResponse, VersionsResponse } from './protocol';
+import type { Account, AccountSummary, ConfigResponse, DraftChange, DraftsResponse, ConnectedApp, LinkPreview, PullResponse, PushResponse, RecentVersionsResponse, ServerTranscript, ServerTranslation, SessionInfo, SharedResponse, SignedInAccounts, VersionResponse, VersionsResponse } from './protocol';
 
 let requestAccount: string | null = null;
 
@@ -271,6 +271,25 @@ export async function shareDriveLink(id: string): Promise<ShareLinkResult> {
 export async function stopDriveLink(id: string): Promise<boolean> {
   const res = await rawRequest(`/attachments/${encodeURIComponent(id)}/link`, { method: 'DELETE' }).catch(() => null);
   return !!res?.ok;
+}
+
+/**
+ * How transcribing one piece of a voice message went: what the server heard; or it's in an encrypted vault, the day's
+ * hour is used up, the server can't transcribe, there's no connection, or anything else.
+ */
+export type TranscribeResult = ServerTranscript | { error: 'encrypted' | 'limit' | 'not_set_up' | 'offline' | 'failed' };
+
+/** Sends one piece of a voice message (a 16 kHz WAV) to be transcribed, for a vault this account can change. */
+export async function transcribePiece(vaultId: string, wav: Uint8Array<ArrayBuffer>): Promise<TranscribeResult> {
+  let res: Response;
+  try {
+    res = await rawRequest(`/transcribe?vault=${encodeURIComponent(vaultId)}`, { method: 'POST', headers: { 'content-type': 'audio/wav' }, body: wav });
+  } catch (err) {
+    if (err instanceof SyncOffline) return { error: 'offline' };
+    throw err;
+  }
+  if (res.ok) return (await res.json()) as ServerTranscript;
+  return { error: res.status === 403 ? 'encrypted' : res.status === 429 ? 'limit' : res.status === 501 ? 'not_set_up' : 'failed' };
 }
 
 export interface VaultPeople {

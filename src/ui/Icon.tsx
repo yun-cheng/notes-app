@@ -67,6 +67,11 @@ const PATHS = {
   smile: 'M21 12a9 9 0 1 1-18 0 9 9 0 0 1 18 0ZM8.5 14.5a4.5 4.5 0 0 0 7 0M9 9.5h.01M15 9.5h.01',
   play: 'M8 5.5v13l10.5-6.5L8 5.5Z',
   video: 'M4 6h11a1 1 0 0 1 1 1v10a1 1 0 0 1-1 1H4a1 1 0 0 1-1-1V7a1 1 0 0 1 1-1ZM16 10.5l5-3v9l-5-3',
+  pause: 'M8 5.5v13M16 5.5v13',
+  // A microphone: recording a voice message.
+  mic: 'M12 3a3 3 0 0 0-3 3v6a3 3 0 0 0 6 0V6a3 3 0 0 0-3-3ZM5.5 11a6.5 6.5 0 0 0 13 0M12 17.5V21M9 21h6',
+  stop: 'M7 6h10a1 1 0 0 1 1 1v10a1 1 0 0 1-1 1H7a1 1 0 0 1-1-1V7a1 1 0 0 1 1-1Z',
+  close: 'M6 6l12 12M18 6 6 18',
 } as const;
 
 export type IconName = keyof typeof PATHS;

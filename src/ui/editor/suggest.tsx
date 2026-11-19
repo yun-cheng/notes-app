@@ -121,13 +121,14 @@ export const slashBlock = (fn: (editor: TiptapEditor) => void): MenuItem['run'] 
   fn(editor);
 };
 
-/** The `/` menu choices both editors have: lists, a quote, a photo and a file. */
-export function commonSlashItems(pickPhoto: () => void, pickFile: () => void): (MenuItem & { words: string })[] {
+/** The `/` menu choices both editors have: lists, a quote, a photo, a file and a voice message. */
+export function commonSlashItems(pickPhoto: () => void, pickFile: () => void, record: () => void): (MenuItem & { words: string })[] {
   return [
     { id: 'bullets', label: 'Bullet list', hint: '-', words: 'bullet list', run: slashBlock((e) => e.chain().focus().toggleBulletList().run()) },
     { id: 'numbers', label: 'Numbered list', hint: '1.', words: 'numbered ordered list', run: slashBlock((e) => e.chain().focus().toggleOrderedList().run()) },
     { id: 'quote', label: 'Quote', hint: '>', words: 'quote blockquote', run: slashBlock((e) => e.chain().focus().toggleBlockquote().run()) },
     { id: 'photo', label: 'Photo', icon: 'image', words: 'photo image picture', run: slashBlock(pickPhoto) },
     { id: 'file', label: 'File', icon: 'attach', words: 'file attach attachment document pdf upload', run: slashBlock(pickFile) },
+    { id: 'voice', label: 'Voice message', icon: 'mic', words: 'voice message record audio sound microphone dictate transcript', run: slashBlock(record) },
   ];
 }

@@ -84,19 +84,20 @@ export class PhotoService {
   }
 
   /**
-   * Saves a file of any kind for a card in `vaultId`, as it is, and returns what its block keeps. Throws, saying why,
-   * for one too big to upload.
+   * Saves a file of any kind for a card in `vaultId`, as it is, and returns what its block keeps: with a sound's
+   * length in seconds, when known. Throws, saying why, for one too big to upload.
    */
-  async addFile(file: File, vaultId: string): Promise<{ id: string; name: string; mime: string; size: number }> {
+  async addFile(file: File, vaultId: string, duration: number | null = null): Promise<{ id: string; name: string; mime: string; size: number; duration?: number }> {
     if (file.size > MAX_FILE_BYTES) throw new Error(`${file.name || 'That file'} is ${fileSize(file.size)}. Files can be up to ${fileSize(MAX_FILE_BYTES)}.`);
     if (!file.size) throw new Error(`${file.name || 'That file'} is empty.`);
     const id = this.newId();
     const name = file.name || 'Untitled';
-    const mime = file.type || 'application/octet-stream';
-    await this.store.putPhoto({ id, vaultId, file: { name }, blob: file, mime, width: null, height: null, uploaded: 0, addedAt: this.now() });
+    // Without what a recorder adds to its type ("audio/webm;codecs=opus").
+    const mime = file.type.split(';')[0].trim() || 'application/octet-stream';
+    await this.store.putPhoto({ id, vaultId, file: { name }, blob: file, mime, width: null, height: null, ...(duration ? { duration } : {}), uploaded: 0, addedAt: this.now() });
     this.publish({ pending: this.state.pending + 1 });
     void this.upload();
-    return { id, name, mime, size: file.size };
+    return { id, name, mime, size: file.size, ...(duration ? { duration } : {}) };
   }
 
   /**

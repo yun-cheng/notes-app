@@ -19,6 +19,7 @@ import { linkTitle } from '../domain/cardIndex';
 import { clipboardProps, titleResolver } from './editor/clipboardStyle';
 import { ClipboardChoices } from './editor/clipboardChoices';
 import { useEditorMenu } from './editor/editorMenu';
+import { FileVault } from './files';
 import { CodeHighlight } from './editor/codeHighlight';
 import { FileBlock } from './editor/file';
 import { Photo } from './editor/photo';
@@ -162,7 +163,7 @@ export function JournalBox({ filter }: { filter: StreamFilter }) {
       { id: 'tag', label: 'Tag', hint: '#', icon: 'tag', words: 'tag file folder', run: replace('#') },
       { id: 'due', label: 'Due date', hint: '@', icon: 'calendar', words: 'due date when deadline', run: replace('@') },
       { id: 'diary', label: 'Diary', hint: '#diary', icon: 'diary', words: 'diary journal private', run: replace('#diary ') },
-      ...commonSlashItems(photoInput.pick, photoInput.pickFile),
+      ...commonSlashItems(photoInput.pick, photoInput.pickFile, photoInput.record),
       { id: 'heading', label: 'Heading', hint: '#', words: 'heading title', run: slashBlock((e) => e.chain().focus().toggleHeading({ level: 2 }).run()) },
     ];
     return all.filter((i) => matches(`${i.label} ${i.words}`, query));
@@ -321,13 +322,19 @@ export function JournalBox({ filter }: { filter: StreamFilter }) {
         >
           <Icon name="todo" size={20} />
         </button>
-        <EditorContent editor={editor} className="composer__editor" />
+        {/* Its voice messages are transcribed here, before it's saved, for the vault it will be saved in. */}
+        <FileVault.Provider value={photoVault}>
+          <EditorContent editor={editor} className="composer__editor" />
+        </FileVault.Provider>
         {textMenu.view}
         <button type="button" className="composer__kind" aria-label="Add a photo or video" title="Add a photo or video" onMouseDown={(e) => e.preventDefault()} onClick={photoInput.pick}>
           <Icon name="image" size={20} />
         </button>
         <button type="button" className="composer__kind" aria-label="Attach a file" title="Attach a file" onMouseDown={(e) => e.preventDefault()} onClick={photoInput.pickFile}>
           <Icon name="attach" size={20} />
+        </button>
+        <button type="button" className={`composer__kind${photoInput.recording ? ' is-active' : ''}`} aria-label="Record a voice message" title="Record a voice message" onMouseDown={(e) => e.preventDefault()} onClick={photoInput.record}>
+          <Icon name="mic" size={20} />
         </button>
         <button type="submit" className="composer__send" aria-label="Save" disabled={empty || saving}>
           <Icon name="send" size={20} />

@@ -147,7 +147,7 @@ function toggleCode(editor: TiptapEditor) {
   else editor.chain().focus().toggleCodeBlock().run();
 }
 
-function Toolbar({ editor, onPhoto, onFile, history }: { editor: TiptapEditor; onPhoto: () => void; onFile: () => void; history: boolean }) {
+function Toolbar({ editor, onPhoto, onFile, onVoice, history }: { editor: TiptapEditor; onPhoto: () => void; onFile: () => void; onVoice: () => void; history: boolean }) {
   const undoRedo = history ? historyTools(editor) : [];
   if (undoRedo.length) undoRedo[undoRedo.length - 1].className = 'tool-sep';
   const tools: Tool[] = [
@@ -164,6 +164,7 @@ function Toolbar({ editor, onPhoto, onFile, history }: { editor: TiptapEditor; o
     { label: '[[', title: 'Link to a card', run: () => editor.chain().focus().insertContent('[[').run() },
     { label: 'Photo', title: 'Add a photo or video', icon: 'image', run: onPhoto },
     { label: 'File', title: 'Attach a file', icon: 'attach', run: onFile },
+    { label: 'Voice', title: 'Record a voice message', icon: 'mic', run: onVoice },
   ];
   return (
     <div className="toolbar" role="toolbar" aria-label="Formatting">
@@ -244,7 +245,7 @@ export function Editor({ content, onChange, placeholder, selfId, vaultId, editab
       { id: 'h2', label: 'Heading', hint: '##', words: 'heading title', run: slashBlock((ed) => ed.chain().focus().toggleHeading({ level: 2 }).run()) },
       { id: 'h3', label: 'Small heading', hint: '###', words: 'heading subheading', run: slashBlock((ed) => ed.chain().focus().toggleHeading({ level: 3 }).run()) },
       { id: 'checklist', label: 'Checklist', hint: '[ ]', words: 'checklist check todo task tick box', run: slashBlock((ed) => ed.chain().focus().toggleTaskList().run()) },
-      ...commonSlashItems(photoInput.pick, photoInput.pickFile),
+      ...commonSlashItems(photoInput.pick, photoInput.pickFile, photoInput.record),
       { id: 'code', label: 'Code', hint: '```', words: 'code block', run: slashBlock((ed) => ed.chain().focus().toggleCodeBlock().run()) },
       { id: 'divider', label: 'Divider', hint: '---', words: 'divider line rule', run: slashBlock((ed) => ed.chain().focus().setHorizontalRule().run()) },
       { id: 'link', label: 'Link to a note', hint: '[[', icon: 'link', words: 'link card note', run: (ed, range) => ed.chain().focus().insertContentAt(range, '[[').run() },
@@ -411,8 +412,8 @@ export function Editor({ content, onChange, placeholder, selfId, vaultId, editab
       {editable &&
         toolbar &&
         (toolbarHost
-          ? createPortal(<Toolbar editor={editor} onPhoto={photoInput.pick} onFile={photoInput.pickFile} history={!historyHost} />, toolbarHost)
-          : <Toolbar editor={editor} onPhoto={photoInput.pick} onFile={photoInput.pickFile} history={!historyHost} />)}
+          ? createPortal(<Toolbar editor={editor} onPhoto={photoInput.pick} onFile={photoInput.pickFile} onVoice={photoInput.record} history={!historyHost} />, toolbarHost)
+          : <Toolbar editor={editor} onPhoto={photoInput.pick} onFile={photoInput.pickFile} onVoice={photoInput.record} history={!historyHost} />)}
       {editor && editable && historyHost && createPortal(<HistoryButtons editor={editor} />, historyHost)}
       <FileVault.Provider value={vaultId}>
         <EditorContent editor={editor} />

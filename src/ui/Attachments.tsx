@@ -1,6 +1,6 @@
 import { useEffect, useRef, useState, type ReactNode } from 'react';
 import { createPortal } from 'react-dom';
-import { fileAttachments, isVideo, linkUrls, mediaItems, siteName, type FileInfo, type Media } from '../domain/content';
+import { fileAttachments, isAudio, isVideo, linkUrls, mediaItems, siteName, type FileInfo, type Media } from '../domain/content';
 import type { Card } from '../domain/types';
 import { useCards } from '../state/CardsContext';
 import { usePhotoUrl } from './editor/photo';
@@ -14,6 +14,8 @@ import { useBackdropClose } from './useBackdrop';
 import { useCopyPhoto } from './copyPhoto';
 import { useInView } from './useInView';
 import { VideoMark, VideoPlayer, VideoStill } from './video';
+import { VoiceMessage } from './voice';
+import { withTranscript } from '../domain/voice';
 
 /** The videos among photos and videos, by ID, for the viewer to play. */
 export const videosIn = (items: readonly Media[]): ReadonlyMap<string, FileInfo> => new Map(items.flatMap((m) => (m.video ? [[m.id, m.video] as const] : [])));
@@ -31,24 +33,26 @@ const MAX_LINKS = 3;
 
 /**
  * An entry's photos, videos, files and web links, shown under its bubble: photos and videos large, as thumbnails or
- * as a count (a right-click on a photo copies it; a video is marked with its length, and plays full screen); files
- * as chips that open them; links as cards, as one line each or not at all (they stay links in the text). The entry's
+ * as a count (a right-click on a photo copies it; a video is marked with its length, and plays full screen); voice
+ * messages playing where they are, with their transcripts; files as chips that open them; links as cards, as one line each or not at all (they stay links in the text). The entry's
  * own style, from its style menu, wins over the device's setting.
  */
 export function Attachments({ card }: { card: Card }) {
-  const { vaults } = useCards();
+  const { vaults, repo } = useCards();
   const device = useDisplayPrefs();
   const prefs = previewFor(card.type === 'tag' ? undefined : card.preview, device);
   // Links in an encrypted vault, or in a card from a vault this account can't see, aren't sent anywhere to preview.
   const vault = vaults.find((v) => v.id === card.vaultId);
   const previews = !!vault && !vault.encryption;
   const photos = mediaItems(card.content);
-  const files = fileAttachments(card.content).filter((f) => !isVideo(f));
+  const all = fileAttachments(card.content);
+  const voices = all.filter(isAudio);
+  const files = all.filter((f) => !isVideo(f) && !isAudio(f));
   const links = prefs.links === 'off' ? [] : linkUrls(card.content);
   const [viewing, setViewing] = useState<number | null>(null);
   // A photo right-clicked: a menu to copy it, or a video's to download it. (The entry's own menu is the bubble's, beside these.)
   const [photoMenu, setPhotoMenu] = useState<{ id: string; video?: FileInfo; at: Point } | null>(null);
-  if (!photos.length && !files.length && !links.length) return null;
+  if (!photos.length && !voices.length && !files.length && !links.length) return null;
   const extra = photos.length - MAX_PHOTOS;
 
   return (
@@ -83,6 +87,14 @@ export function Attachments({ card }: { card: Card }) {
           ))}
         </div>
       )}
+      {voices.map((file) => (
+        <VoiceMessage
+          key={file.id}
+          file={file}
+          vaultId={card.vaultId}
+          onTranscript={(words) => void repo.update(card.id, { content: withTranscript(card.content, file.id, words) })}
+        />
+      ))}
       {files.map((file) => (
         <FileChip key={file.id} file={file} vaultId={card.vaultId} />
       ))}

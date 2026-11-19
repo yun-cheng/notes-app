@@ -2,9 +2,13 @@ import { useRef, type RefObject } from 'react';
 import { useNavigate } from 'react-router';
 import type { Editor as TiptapEditor } from '@tiptap/react';
 import type { EditorView } from '@tiptap/pm/view';
+import { NodeSelection } from '@tiptap/pm/state';
 import type { JSONNode } from '../../domain/types';
 import { picturesInHtml } from '../../photos/pasted';
 import { isVideoFile } from '../../photos/video';
+import { isAudioFile, probeAudio } from '../../photos/audio';
+import { voiceExtension, voiceName } from '../../domain/voice';
+import { recordedHere, useVoiceRecorder, type Recording } from '../voice';
 import { useCards } from '../../state/CardsContext';
 import { SyncOffline } from '../../sync/engine';
 import { fetchWebPicture } from '../../sync/http';
@@ -29,11 +33,11 @@ type Adding = () => Promise<JSONNode>;
 
 /**
  * Photos, videos and files added to an editor: pasted, dropped where they land, or picked from the device. A picture
- * is a photo; a video plays where it is; a file of any other kind (a PDF, a spreadsheet) is attached as it is. Each is saved on the device first, in
+ * is a photo; a video, or a sound, plays where it is; a file of any other kind (a PDF, a spreadsheet) is attached as it is. Each is saved on the device first, in
  * the vault `vaultId()` names, and goes in the text at once. A picture copied from a web page or an app often comes as
  * just its address in HTML, with no file; it's fetched and added like a pasted file. Pictures among copied words
  * follow the words when the paste keeps formatting. `editorProps` goes to `useEditor`, `input` somewhere on the page,
- * `pick` opens the photo and video picker and `pickFile` the file picker.
+ * `pick` opens the photo and video picker and `pickFile` the file picker; `record` records a voice message.
  */
 export function usePhotoInput(editor: RefObject<TiptapEditor | null>, vaultId: () => string | undefined) {
   const { photos } = useCards();
@@ -49,15 +53,20 @@ export function usePhotoInput(editor: RefObject<TiptapEditor | null>, vaultId: (
     let added = 0;
     let files = 0;
     let videos = 0;
+    let voices = 0;
     for (const add of adding) {
       try {
         const node = await add();
         const ed = editor.current;
         if (!ed || ed.isDestroyed) return;
-        if (node.type === 'file') files += String(node.attrs?.mime).startsWith('video/') ? 0 : 1;
-        if (String(node.attrs?.mime).startsWith('video/')) videos++;
+        const mime = String(node.attrs?.mime);
+        if (node.type === 'file') files += mime.startsWith('video/') || mime.startsWith('audio/') ? 0 : 1;
+        if (mime.startsWith('video/')) videos++;
+        if (mime.startsWith('audio/')) voices++;
         // At the start of a line with words on it, the picture goes before the line rather than splitting it.
         const { $from, empty } = ed.state.selection;
+        // With a photo, a file or a voice message picked (pressing its buttons picks it), it goes after it, not in its place.
+        if (pos === undefined && ed.state.selection instanceof NodeSelection) pos = ed.state.selection.to;
         if (pos === undefined && empty && $from.depth === 1 && $from.parentOffset === 0 && $from.parent.content.size) pos = $from.before();
         if (pos === undefined) ed.chain().focus().insertContent(node).run();
         else ed.chain().focus().insertContentAt(Math.min(pos, ed.state.doc.content.size), node).run();
@@ -76,12 +85,28 @@ export function usePhotoInput(editor: RefObject<TiptapEditor | null>, vaultId: (
     // It shows here at once either way; said when it can't go on to the server, so other devices won't have it.
     await photos.upload();
     const { problem } = photos.getState();
-    const what = files === added ? ['file', 'files'] : videos === added ? ['video', 'videos'] : files || videos ? ['attachment', 'attachments'] : ['photo', 'photos'];
+    const what =
+      files === added
+        ? ['file', 'files']
+        : videos === added
+          ? ['video', 'videos']
+          : voices === added
+            ? ['voice message', 'voice messages']
+            : files || videos || voices
+              ? ['attachment', 'attachments']
+              : ['photo', 'photos'];
     const these = added > 1 ? `These ${what[1]} stay` : `This ${what[0]} stays`;
     if (problem === 'needs_drive') toast(`${these} on this device until Google Drive is connected.`, { action: { label: 'Settings', run: () => void navigate('/settings') } });
     else if (problem === 'not_configured') toast(`${these} on this device for now: storage isn't set up on the server yet.`);
   };
-  /** Pictures as photos, videos to play where they are, and any other file as it is, in the order given. */
+  /** A sound, kept as it is, with its length and how loud it is along it, to play where it is. */
+  const sound = (file: File, recorded?: Recording): Adding => async () => {
+    const facts = await probeAudio(file);
+    const attrs = await photos.addFile(file, vaultId()!, facts.duration ?? recorded?.seconds ?? null);
+    if (recorded) recordedHere.add(attrs.id);
+    return { type: 'file', attrs: { ...attrs, ...(facts.peaks.length ? { peaks: facts.peaks } : {}) } };
+  };
+  /** Pictures as photos, videos and sounds to play where they are, and any other file as it is, in the order given. */
   const add = (files: File[], at?: number) =>
     addAll(
       files.map((file) =>
@@ -89,10 +114,17 @@ export function usePhotoInput(editor: RefObject<TiptapEditor | null>, vaultId: (
           ? photo(async () => file)
           : isVideoFile(file)
             ? async () => ({ type: 'file', attrs: { ...(await photos.addVideo(file, vaultId()!)) } })
-            : async () => ({ type: 'file', attrs: await photos.addFile(file, vaultId()!) }),
+            : isAudioFile(file)
+              ? sound(file)
+              : async () => ({ type: 'file', attrs: await photos.addFile(file, vaultId()!) }),
       ),
       at,
     );
+  /** A voice message just recorded goes in where the cursor was, named for when it was made, and is transcribed. */
+  const recorder = useVoiceRecorder((recorded) => {
+    const file = new File([recorded.blob], voiceName(new Date(recorded.startedAt), voiceExtension(recorded.blob.type)), { type: recorded.blob.type });
+    void latest.current.addAll([sound(file, recorded)]);
+  });
 
   // The editor keeps the props it was made with, so they reach the newest functions through this.
   const latest = useRef({ add, addAll });
@@ -158,10 +190,13 @@ export function usePhotoInput(editor: RefObject<TiptapEditor | null>, vaultId: (
     add,
     pick: () => picker.current?.click(),
     pickFile: () => filePicker.current?.click(),
+    record: recorder.start,
+    recording: recorder.recording,
     input: (
       <>
         {input}
         {fileInput}
+        {recorder.view}
       </>
     ),
     editorProps,

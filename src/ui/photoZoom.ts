@@ -127,7 +127,8 @@ export function usePhotoZoom(key: string) {
 
   const style: CSSProperties = {
     transform: zoom.scale === 1 ? undefined : `translate(${zoom.x}px, ${zoom.y}px) scale(${zoom.scale})`,
-    cursor: zoom.scale > 1 ? 'grab' : 'zoom-in',
+    // The usual arrow until it's zoomed (a double-click or the wheel zooms), then a hand to drag it about.
+    cursor: zoom.scale > 1 ? 'grab' : undefined,
   };
 
   return {

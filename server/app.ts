@@ -29,6 +29,7 @@ import { pullRecords, pushRecords } from './sync';
 import { reminderRoutes } from './reminders';
 import { createVault, listVaults, updateVault, type VaultUpdate } from './vaults';
 import { getVersion, listRecentVersions, listVersions, sealVersions, type Device } from './versions';
+import { transcribeRoutes } from './transcribe';
 import { translateRoutes } from './translate';
 import { draftRoutes } from './drafts';
 import { imageRoutes, unfurlRoutes, type WebFetch } from './unfurl';
@@ -349,6 +350,7 @@ export function createApp({
   unfurlRoutes(app, webFetch);
   imageRoutes(app, webFetch);
   translateRoutes(app, now);
+  transcribeRoutes(app, now);
   memberRoutes(app, now);
   shareRoutes(app, now);
   commentRoutes(app, now);

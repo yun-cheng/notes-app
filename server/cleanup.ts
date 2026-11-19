@@ -21,6 +21,7 @@ export async function removeExpired(db: Database, now: number): Promise<void> {
     db.prepare(`DELETE FROM reminders_sent WHERE sent_at < ?`).bind(now - 7 * 86_400_000),
     // Only today's count limits anything; yesterday's is kept for a day, in case of clocks near midnight.
     db.prepare(`DELETE FROM translation_counts WHERE day < ?`).bind(utcDay(now - 86_400_000)),
+    db.prepare(`DELETE FROM transcription_seconds WHERE day < ?`).bind(utcDay(now - 86_400_000)),
     db.prepare(`DELETE FROM drafts WHERE updated_at < ?`).bind(now - DRAFT_DAYS * 86_400_000),
     // Drive keeps a resumable upload's session for a week.
     db.prepare(`DELETE FROM attachment_uploads WHERE created_at < ?`).bind(now - 7 * 86_400_000),

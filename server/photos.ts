@@ -155,7 +155,7 @@ export function photoRoutes(app: Hono<AppEnv>, fetcher: GoogleFetch, now: () => 
     const name = file ? (c.req.query('name') ?? '').replace(/[\u0000-\u001f]/g, '').trim().slice(0, 200) || null : null;
     // A video's length in seconds, as the device read it.
     const seconds = Number(c.req.query('d'));
-    const duration = file && mime.startsWith('video/') && Number.isFinite(seconds) && seconds > 0 && seconds < 1_000_000 ? Math.round(seconds * 1000) / 1000 : null;
+    const duration = file && /^(video|audio)\//.test(mime) && Number.isFinite(seconds) && seconds > 0 && seconds < 1_000_000 ? Math.round(seconds * 1000) / 1000 : null;
     return { id, vaultId, ownerId: vault.owner_id, file, mime, name, width: pixels('w'), height: pixels('h'), duration, config };
   };
 

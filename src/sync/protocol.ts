@@ -143,6 +143,13 @@ export interface RecentVersionsResponse {
  */
 export type ServerTranslation = { kind: 'done'; from: string; to: string; pieces: string[] } | { kind: 'same'; from: string };
 
+/** What the server heard in one piece of a voice message: its words, their language, and when each stretch starts, in seconds. */
+export interface ServerTranscript {
+  text: string;
+  language: string | null;
+  cues: { start: number; text: string }[];
+}
+
 /** What a link's page says about itself, for a preview card. Only `url` is certain. */
 export interface LinkPreview {
   url: string;

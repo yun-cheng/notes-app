@@ -24,7 +24,7 @@ export interface Bindings {
   VAPID_PRIVATE_KEY?: string;
   /** Who push services are told sends the reminders: the app's address, or a mailto: link. */
   PUSH_SUBJECT?: string;
-  /** Workers AI, for translating where the browser can't (server/translate.ts). A binding, not a secret. */
+  /** Workers AI, for translating where the browser can't (server/translate.ts) and transcribing voice (server/transcribe.ts). A binding, not a secret. */
   AI?: AiBinding;
 }
 

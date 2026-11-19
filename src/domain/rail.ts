@@ -97,6 +97,20 @@ export function railItem(at: number, n: number): { index: number; into: number }
 }
 
 /**
+ * Items side by side (photos in a row) share one stretch of the page, from the row's top to the next row's: `first`
+ * is the row's first item and `count` how many it holds. How far down that stretch the place `into` the item at
+ * `index` is, so a slow drag goes smoothly down a row and the gap and heading under it, never back to its top.
+ */
+export function intoRow(index: number, into: number, first: number, count: number): number {
+  return count > 0 ? Math.min(1, Math.max(0, (index - first + into) / count)) : 0;
+}
+
+/** `intoRow`, turned round: the place on a rail of `n` items that's `down` the stretch of a row. */
+export function rowRailAt(first: number, count: number, down: number, n: number): number {
+  return n > 0 ? Math.min(1, (first + Math.min(1, Math.max(0, down)) * count) / n) : 0;
+}
+
+/**
  * Where the page is, as the rail tells it: the line it reads at runs from the top of what's in view, scrolled to the
  * top, to its foot, scrolled to the end, so the thumb is at either end exactly when the page is. `scrolled` and
  * `scrollable` are the page's, `top` and `height` what's in view between its title bar and anything at its foot.

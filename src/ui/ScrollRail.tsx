@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useRef, useState, type PointerEvent as ReactPointerEvent, type RefObject } from 'react';
 import { Icon } from './Icon';
-import { railItem, railLabel, railMarks, railScale, readingLine, scrollFor } from '../domain/rail';
+import { intoRow, railItem, railLabel, railMarks, railScale, readingLine, rowRailAt, scrollFor } from '../domain/rail';
 
 /** The attribute on each item the rail goes by, its place in the rail's `keys`. */
 export const RAIL_AT = 'data-rail-at';
@@ -58,6 +58,34 @@ function keepScrollbarRoom() {
   document.documentElement.style.setProperty('--scrollbar-room', `${room}px`);
 }
 
+/** The item drawn at a place on the rail, if it is. */
+const itemAt = (root: HTMLElement, index: number) => root.querySelector<HTMLElement>(`[${RAIL_AT}="${index}"]`);
+
+/**
+ * The row the item at `index` is in (photos side by side; on most pages each item is a row of its own) and the
+ * stretch of the page it covers, in the viewport: from its top to the next row's, or its own foot when that isn't
+ * drawn. Items in a row share it evenly (`intoRow`), so the rail goes smoothly down a row, not back to its top at
+ * each photo, and over the gap and heading under it rather than leaping them.
+ */
+function rowOf(root: HTMLElement, item: HTMLElement, index: number): { first: number; count: number; top: number; extent: number } {
+  const r = item.getBoundingClientRect();
+  const same = (i: number) => {
+    const el = itemAt(root, i);
+    return el && Math.abs(el.getBoundingClientRect().top - r.top) < 1 ? el : null;
+  };
+  let first = index;
+  while (same(first - 1)) first--;
+  let last = index;
+  let foot = r.bottom;
+  for (let el = same(last + 1); el; el = same(last + 1)) {
+    last++;
+    foot = Math.max(foot, el.getBoundingClientRect().bottom);
+  }
+  const next = itemAt(root, last + 1)?.getBoundingClientRect().top;
+  const extent = next !== undefined && next > r.top ? next - r.top : foot - r.top;
+  return { first, count: last - first + 1, top: r.top, extent };
+}
+
 function measure(root: HTMLElement, n: number): Place {
   const { top, height } = viewBounds();
   const scrollable = document.documentElement.scrollHeight - window.innerHeight;
@@ -74,9 +102,8 @@ function measure(root: HTMLElement, n: number): Place {
   }
   let at = 0;
   if (found >= 0) {
-    const r = items[found].getBoundingClientRect();
-    const into = r.height ? Math.min(1, Math.max(0, (line - r.top) / r.height)) : 0;
-    at = (Number(items[found].getAttribute(RAIL_AT)) + into) / n;
+    const row = rowOf(root, items[found], Number(items[found].getAttribute(RAIL_AT)));
+    at = rowRailAt(row.first, row.count, row.extent ? (line - row.top) / row.extent : 0, n);
   } else if (items.length) {
     at = Number(items[0].getAttribute(RAIL_AT)) / n;
   }
@@ -154,7 +181,7 @@ export function ScrollRail({ keys, name, root, reveal }: Props) {
       const el = root.current;
       if (j.to === null || !el) return;
       const { index, into } = railItem(j.to, latest.current.n);
-      const item = el.querySelector<HTMLElement>(`[${RAIL_AT}="${index}"]`);
+      const item = itemAt(el, index);
       if (!item) {
         if (j.tries++ === 0) latest.current.reveal?.(index);
         if (j.tries < TRIES) j.frame = requestAnimationFrame(run);
@@ -162,9 +189,10 @@ export function ScrollRail({ keys, name, root, reveal }: Props) {
       }
       j.to = null;
       const { top, height } = viewBounds();
-      const r = item.getBoundingClientRect();
+      const row = rowOf(el, item, index);
       const scrollable = document.documentElement.scrollHeight - window.innerHeight;
-      window.scrollTo({ top: scrollFor(window.scrollY + r.top + into * r.height, scrollable, top, height), behavior: 'instant' });
+      const y = window.scrollY + row.top + intoRow(index, into, row.first, row.count) * row.extent;
+      window.scrollTo({ top: scrollFor(y, scrollable, top, height), behavior: 'instant' });
     };
     j.frame = requestAnimationFrame(run);
   };

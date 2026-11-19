@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { drawnRange, railItem, railLabel, railMarks, railScale, readingLine, scrollFor, stretchFor } from './rail';
+import { drawnRange, intoRow, railItem, railLabel, railMarks, railScale, readingLine, rowRailAt, scrollFor, stretchFor } from './rail';
 
 const name = (key: string) => (key ? `#${key}` : 'None');
 const labels = (keys: string[], height = 1000) => railMarks(keys, height, name, 'en-US').filter((m) => m.label).map((m) => [m.label, m.at]);
@@ -80,5 +80,24 @@ describe('the rail beside a long page', () => {
     const middle = stretchFor(1000, false, start, 500, 150);
     expect(drawnRange(1000, false, middle)).toEqual({ from: 425, to: 575 });
     expect(stretchFor(1000, false, middle, 990, 150)).toEqual({ skip: 850, count: 150 });
+  });
+});
+
+describe('a row of items side by side, as photos are', () => {
+  it('goes steadily down the row as the rail goes through its items, never back to its top', () => {
+    // Items 4, 5 and 6 share a row: a quarter of the way into each, then the row's end.
+    const downs = [4, 5, 6].map((i) => intoRow(i, 0.25, 4, 3));
+    expect(downs).toEqual([0.25 / 3, 1.25 / 3, 2.25 / 3]);
+    expect(intoRow(6, 1, 4, 3)).toBe(1);
+    // An item alone in its row is the whole stretch, as before.
+    expect(intoRow(9, 0.5, 9, 1)).toBe(0.5);
+  });
+
+  it('turns round to the same place on the rail', () => {
+    const n = 20;
+    for (const [index, into] of [[4, 0.25], [5, 0.9], [6, 0]] as const) {
+      expect(rowRailAt(4, 3, intoRow(index, into, 4, 3), n)).toBeCloseTo((index + into) / n);
+    }
+    expect(rowRailAt(4, 3, 2, n)).toBeCloseTo(7 / n);
   });
 });

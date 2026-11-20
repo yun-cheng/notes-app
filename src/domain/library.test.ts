@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { cardFiles, cardLinks, fileDays, linkDays } from './library';
+import { cardFiles, cardLinks, fileDays, fileKind, fileKindIn, linkDays } from './library';
 import { doc, note, p, tag, text, todo } from './testFixtures';
 import type { JSONNode } from './types';
 
@@ -52,5 +52,30 @@ describe('fileDays', () => {
     // A video shows on the Photos page instead.
     const clip = note('clip', '', { content: doc({ type: 'file', attrs: { id: 'v', name: 'a.mp4', mime: 'video/mp4' } }) });
     expect(fileDays([clip])).toEqual([]);
+  });
+});
+
+describe('fileKind', () => {
+  it('sorts files by their extension, then their type', () => {
+    const kind = (name: string, mime: string | null = null) => fileKind({ name, mime });
+    expect(kind('lease.pdf', 'application/pdf')).toBe('pdf');
+    expect(kind('scan', 'application/pdf')).toBe('pdf');
+    expect(kind('budget.csv', 'text/plain')).toBe('spreadsheet');
+    expect(kind('plan.XLSX')).toBe('spreadsheet');
+    expect(kind('notes.txt', 'text/plain')).toBe('document');
+    expect(kind('letter', 'application/vnd.openxmlformats-officedocument.wordprocessingml.document')).toBe('document');
+    expect(kind('deck.key')).toBe('slides');
+    expect(kind('Voice message 2026-11-20 09.05.webm', 'audio/webm;codecs=opus')).toBe('audio');
+    expect(kind('song.mp3', 'application/octet-stream')).toBe('audio');
+    expect(kind('diagram.svg', 'image/svg+xml')).toBe('image');
+    expect(kind('photos.zip', 'application/zip')).toBe('archive');
+    expect(kind('data.bin', 'application/octet-stream')).toBe('other');
+    expect(kind('README')).toBe('other');
+  });
+
+  it('is read from the Files page’s address only when it names one', () => {
+    expect(fileKindIn(new URLSearchParams('kind=audio'))).toBe('audio');
+    expect(fileKindIn(new URLSearchParams('kind=nope'))).toBeUndefined();
+    expect(fileKindIn(new URLSearchParams(''))).toBeUndefined();
   });
 });

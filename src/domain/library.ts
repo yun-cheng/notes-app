@@ -63,3 +63,60 @@ export const linkDays = (cards: readonly Card[]) => entryDays(cards, cardLinks, 
  * Videos are left to the Photos page.
  */
 export const fileDays = (cards: readonly Card[]) => entryDays(cards, (card) => cardFiles(card).filter((f) => !isVideo(f)), true);
+
+/** What sort of file one is, for the Files page's switch. */
+export type FileKind = 'pdf' | 'document' | 'spreadsheet' | 'slides' | 'audio' | 'image' | 'video' | 'archive' | 'other';
+
+/** The kinds in the order the switch names them, with their names there. */
+export const FILE_KINDS: [FileKind, string][] = [
+  ['pdf', 'PDFs'],
+  ['document', 'Documents'],
+  ['spreadsheet', 'Spreadsheets'],
+  ['slides', 'Slides'],
+  ['audio', 'Audio'],
+  ['image', 'Images'],
+  ['video', 'Video'],
+  ['archive', 'Archives'],
+  ['other', 'Other'],
+];
+
+const BY_EXTENSION: Record<string, FileKind> = {};
+for (const [kind, extensions] of [
+  ['pdf', 'pdf'],
+  ['document', 'doc docx odt rtf txt md markdown pages epub tex'],
+  ['spreadsheet', 'csv tsv xls xlsx xlsm ods numbers'],
+  ['slides', 'ppt pptx odp key'],
+  ['audio', 'mp3 m4a wav aac oga ogg opus flac aif aiff weba'],
+  ['image', 'jpg jpeg png gif webp heic heif avif svg tif tiff bmp'],
+  ['video', 'mp4 m4v mov webm mkv avi'],
+  ['archive', 'zip gz tgz tar 7z rar bz2 xz'],
+] as [FileKind, string][]) {
+  for (const extension of extensions.split(' ')) BY_EXTENSION[extension] = kind;
+}
+
+/**
+ * What sort of file one is, by its name's extension and then its type: a .csv sent as text/plain is a spreadsheet,
+ * and a voice message saved as audio/webm is audio.
+ */
+export function fileKind(file: Pick<FileInfo, 'name' | 'mime'>): FileKind {
+  const extension = /\.([a-z0-9]+)$/i.exec(file.name)?.[1].toLowerCase();
+  const mime = file.mime?.split(';')[0].trim().toLowerCase() ?? '';
+  const [top, sub = ''] = mime.split('/');
+  // A sound or a video says so best by its type: .webm and .ogg can be either.
+  if (top === 'audio') return 'audio';
+  if (top === 'video') return 'video';
+  if (extension && BY_EXTENSION[extension]) return BY_EXTENSION[extension];
+  if (sub === 'pdf') return 'pdf';
+  if (top === 'image') return 'image';
+  if (/spreadsheet|excel|csv/.test(sub)) return 'spreadsheet';
+  if (/presentation|powerpoint/.test(sub)) return 'slides';
+  if (/zip|compressed|tar|rar|7z/.test(sub)) return 'archive';
+  if (top === 'text' || /wordprocessing|msword|rtf|opendocument\.text|epub/.test(sub)) return 'document';
+  return 'other';
+}
+
+/** Whether the Files page's address names a kind of file to show alone. */
+export function fileKindIn(params: URLSearchParams): FileKind | undefined {
+  const kind = params.get('kind');
+  return FILE_KINDS.find(([k]) => k === kind)?.[0];
+}

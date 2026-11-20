@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { FILES_PATH, libraryFilter, libraryPath, PHOTOS_PATH } from './paths';
+import { FILES_PATH, libraryFilter, libraryPath, LINKS_PATH, PHOTOS_PATH } from './paths';
 
 describe('libraryPath', () => {
   it("leaves out the type and a todo status, which the Photos, Links and Files pages don't take", () => {
@@ -10,5 +10,7 @@ describe('libraryPath', () => {
 
   it("keeps Photos' own switch", () => {
     expect(libraryPath(PHOTOS_PATH, { type: 'todo' }, new URLSearchParams('show=videos'))).toBe('/photos?show=videos');
+    expect(libraryPath(FILES_PATH, { tagId: 't1' }, new URLSearchParams('kind=pdf'))).toBe('/files?tag=t1&kind=pdf');
+    expect(libraryPath(LINKS_PATH, {}, new URLSearchParams('kind=pdf&show=videos'))).toBe('/links');
   });
 });

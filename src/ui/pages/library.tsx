@@ -1,9 +1,9 @@
 import { useMemo, useRef, useState, type MouseEvent, type ReactNode } from 'react';
 import { createPortal } from 'react-dom';
-import { useLocation, useNavigate } from 'react-router';
+import { useLocation, useNavigate, useSearchParams } from 'react-router';
 import { displayTitle, type FileInfo } from '../../domain/content';
 import { relativeDay } from '../../domain/dates';
-import { fileDays, linkDays, type DayItem, type ItemDay, type LinkInfo } from '../../domain/library';
+import { FILE_KINDS, fileDays, fileKind, fileKindIn, linkDays, type DayItem, type ItemDay, type LinkInfo } from '../../domain/library';
 import { entryMatcher, filterParams, isFiltered } from '../../domain/stream';
 import type { Card } from '../../domain/types';
 import { useCards, useToday } from '../../state/CardsContext';
@@ -14,7 +14,7 @@ import { ContextMenu, Item, LinkItems, Shield, type Point } from '../EntryMenu';
 import { FileChip, showsInTab, useFileActions } from '../files';
 import { FilterBar, FilterSheet, useJournalFilter } from '../FilterPanel';
 import { Icon } from '../Icon';
-import { cardPath, sheetState } from '../paths';
+import { cardPath, FILES_PATH, libraryPath, sheetState } from '../paths';
 import { useShowInJournal } from '../showInJournal';
 import { ScrollRail } from '../ScrollRail';
 import { useInView } from '../useInView';
@@ -106,6 +106,8 @@ interface ListProps<T extends { id: string }> {
   text: (item: DayItem<T>) => string;
   empty: string;
   emptyFiltered: string;
+  /** What goes first in the filter row, like the Files page's kinds of file. */
+  lead?: ReactNode;
   render: (item: DayItem<T>) => ReactNode;
   menu: (item: DayItem<T>, close: () => void) => ReactNode;
   menuLabel: string;
@@ -116,7 +118,7 @@ interface ListProps<T extends { id: string }> {
  * under it, pressed to open the entry. A right-click on one opens its menu (`HeldMenu`). The journal's filters
  * narrow it, as on the Photos page.
  */
-function HeldList<T extends { id: string }>({ title, days: held, filtered, noun, text, empty, emptyFiltered, render, menu, menuLabel }: ListProps<T>) {
+function HeldList<T extends { id: string }>({ title, days: held, filtered, noun, text, empty, emptyFiltered, lead, render, menu, menuLabel }: ListProps<T>) {
   const today = useToday();
   const filter = useJournalFilter();
   const [filtering, setFiltering] = useState(false);
@@ -149,7 +151,7 @@ function HeldList<T extends { id: string }>({ title, days: held, filtered, noun,
       below={
         <>
           {search.field}
-          <FilterBar filter={filter} />
+          <FilterBar filter={filter} lead={lead} />
         </>
       }
     >
@@ -237,16 +239,38 @@ function LinkRow({ url, card }: { url: string; card: Card }) {
  * (a template's copy) shows once, with the newer.
  */
 export function FilesPage() {
-  const { days, filter } = useLibrary<FileInfo>(fileDays);
+  const { days: every, filter } = useLibrary<FileInfo>(fileDays);
+  const navigate = useNavigate();
+  const [params] = useSearchParams();
+  const kind = fileKindIn(params);
+  // The switch names the kinds the filters leave, and the one picked even when they leave none of it.
+  const kinds = useMemo(() => {
+    const held = new Set(every.flatMap((d) => d.items.map(fileKind)));
+    return FILE_KINDS.filter(([k]) => held.has(k) || k === kind);
+  }, [every, kind]);
+  const days = useMemo(() => (kind ? every.map((d) => ({ ...d, items: d.items.filter((f) => fileKind(f) === kind) })).filter((d) => d.items.length) : every), [every, kind]);
+  const ofKind = FILE_KINDS.find(([k]) => k === kind)?.[1];
   return (
     <HeldList
       title="Files"
       days={days}
-      filtered={isFiltered(filter)}
+      filtered={isFiltered(filter) || !!kind}
       noun={['file', 'files']}
       text={fileText}
       empty="No files yet. Attach one to an entry with the paperclip, /file, or by dropping it in."
-      emptyFiltered="No files here match. Take a filter off above, or pick another."
+      emptyFiltered={ofKind ? `No ${ofKind === 'Audio' || ofKind === 'Video' ? `${ofKind.toLowerCase()} files` : ofKind.toLowerCase()} here. Pick All above, or take a filter off.` : 'No files here match. Take a filter off above, or pick another.'}
+      lead={
+        // Only worth a switch when there's more than one kind to tell apart.
+        (kinds.length > 1 || kind) && (
+          <span className="segmented filter-switch" role="group" aria-label="Kind of file">
+            {[[undefined, 'All'] as const, ...kinds].map(([k, label]) => (
+              <button key={label} type="button" aria-pressed={kind === k} onClick={() => void navigate(libraryPath(FILES_PATH, filter, undefined, k))}>
+                {label}
+              </button>
+            ))}
+          </span>
+        )
+      }
       render={(item) => (
         <span className="held__thing">
           <FileChip file={item} vaultId={item.card.vaultId} />

@@ -1,4 +1,5 @@
 import type { Location } from 'react-router';
+import { fileKindIn, type FileKind } from '../domain/library';
 import type { MediaShown } from '../domain/photos';
 import { filterParams, type StreamFilter } from '../domain/stream';
 import type { Card } from '../domain/types';
@@ -52,12 +53,14 @@ export const isLibraryPage = (pathname: string): pathname is LibraryPage => path
 /**
  * The Photos, Links or Files page, narrowed by the journal's filters. Its entries are those holding what it lists,
  * not archived and not templates, newest first, so the order, the board and Contains don't apply to it. On Photos,
- * whether it shows only photos or only videos, from `own` (the address it's on) or `show`.
+ * whether it shows only photos or only videos, and on Files only one kind of file, from `own` (the address it's on)
+ * or `show`.
  */
-export function libraryPath(page: LibraryPage, filter: StreamFilter, own?: URLSearchParams, show?: MediaShown): string {
+export function libraryPath(page: LibraryPage, filter: StreamFilter, own?: URLSearchParams, show?: MediaShown | FileKind): string {
   const params = filterParams(libraryFilter(filter));
-  const media = page === PHOTOS_PATH ? (show ?? (own ? mediaShownIn(own) : undefined)) : undefined;
-  if (media) params.set('show', media);
+  const shown = show ?? (own ? (page === PHOTOS_PATH ? mediaShownIn(own) : page === FILES_PATH ? fileKindIn(own) : undefined) : undefined);
+  if (shown && page === PHOTOS_PATH) params.set('show', shown);
+  if (shown && page === FILES_PATH) params.set('kind', shown);
   const query = params.toString();
   return query ? `${page}?${query}` : page;
 }

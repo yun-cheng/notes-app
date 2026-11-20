@@ -10,7 +10,8 @@ const GROUPS: { title: string; keys: [string, string][] }[] = [
   {
     title: 'Anywhere',
     keys: [
-      [`${MOD}K or /`, 'Commands and search'],
+      [`${MOD}K`, 'Commands and search'],
+      ['/', 'Search the journal’s entries; elsewhere, commands and search'],
       ['?', 'These shortcuts'],
       [`${MOD}Z`, 'Undo the last change, outside a text box'],
       [REDO_KEYS, 'Redo'],

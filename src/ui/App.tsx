@@ -122,7 +122,7 @@ function Layout() {
         }
       }
       // `/` opens it too, and `?` the list of shortcuts, when they aren't being typed into something.
-      if (typing || e.metaKey || e.ctrlKey || e.altKey || document.querySelector('.dialog-backdrop')) return;
+      if (typing || e.defaultPrevented || e.metaKey || e.ctrlKey || e.altKey || document.querySelector('.dialog-backdrop')) return;
       if (e.key === '/' || e.key === '?') {
         e.preventDefault();
         if (e.key === '/') setCommands(true);

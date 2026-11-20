@@ -1,5 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import type { Vault } from '../src/domain/types';
+import { wavBytes } from '../src/domain/voice';
 import { removeExpired } from './cleanup';
 import { DAY, setup } from './testHarness';
 import { DAILY_SECONDS, isPieceWav, TRANSCRIBE_MODEL } from './transcribe';
@@ -8,27 +9,8 @@ import type { AiBinding } from './translate';
 const pin = { salt: 'c2FsdA==', hash: 'aGFzaA==', iterations: 300_000 };
 const encryption = { version: 1, kdf: { name: 'argon2id', salt: 'c2FsdA==', memory: 19456, iterations: 2, parallelism: 1 }, wrapped: 'd3JhcHBlZA==', recovery: 'cmVjb3Zlcnk=' };
 
-/** A WAV as the app sends one: 16 kHz, one channel, 16 bits, `seconds` long. */
-function wav(seconds: number, rate = 16_000): Uint8Array {
-  const data = Math.round(seconds * rate) * 2;
-  const bytes = new Uint8Array(44 + data);
-  const view = new DataView(bytes.buffer);
-  const tag = (at: number, s: string) => [...s].forEach((ch, i) => (bytes[at + i] = ch.charCodeAt(0)));
-  tag(0, 'RIFF');
-  view.setUint32(4, 36 + data, true);
-  tag(8, 'WAVE');
-  tag(12, 'fmt ');
-  view.setUint32(16, 16, true);
-  view.setUint16(20, 1, true);
-  view.setUint16(22, 1, true);
-  view.setUint32(24, rate, true);
-  view.setUint32(28, rate * 2, true);
-  view.setUint16(32, 2, true);
-  view.setUint16(34, 16, true);
-  tag(36, 'data');
-  view.setUint32(40, data, true);
-  return bytes;
-}
+/** A WAV as the app sends one, `seconds` long: 16 kHz unless another `rate` is given. */
+const wav = (seconds: number, rate = 16_000) => wavBytes(new Float32Array(Math.round(seconds * rate)), rate);
 
 function fakeAi() {
   const calls: { model: string; audio: string }[] = [];

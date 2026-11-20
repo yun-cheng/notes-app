@@ -4,7 +4,7 @@
  * Topics), todos for the board by todo state, notes with headings, lists, checklists, quotes, code, web links and links to each other, todos
  * overdue, due today at a time, upcoming, undated, repeating, waiting, done and archived, entries tinted, set to view
  * only or with their own preview style, photos of every shape, one on a card's back page (served by the dev server from scripts/demoPhotos),
- * files attached (a PDF, a CSV, and a text file on the publicly linked recipe, from scripts/demoFiles), videos with their stills (one in the coast trip, one on the recipe, one in the Trash), voice messages (one transcribed with a quiet one just after it, one not yet, one in the Diary, which isn't sent to be), a private and encrypted Diary vault, a Health vault locked by the PIN but not encrypted, a vault shared with Sam and one Sam
+ * files attached (a PDF, a CSV, and a text file on the publicly linked recipe, from scripts/demoFiles), videos with their stills (one in the coast trip, one on the recipe, one in the Trash), voice messages (one transcribed with a quiet one just after it, one not yet, one in the Diary, which isn't sent to be), a private and encrypted Diary vault, a Health vault locked by the PIN but not encrypted and shared with Sam, who needs a PIN of their own to see it, Sam's Surprise party vault, which shows nothing until you set your own PIN, a vault shared with Sam and one Sam
  * shares to view, a card also in another vault, a note Sam shares, a public link, comments open and resolved, and
  * version history from more than one device, and entries going back three years. Two entries carry nearly all of it at once, to see how a full one looks:
  * a launch plan note and a moving todo.
@@ -265,6 +265,11 @@ export async function seed() {
   // Health is locked by the same PIN but not encrypted: out of sight in the app, while the server can still read it,
   // so its todo gets a reminder. One encrypted since, by hand, is left as it is, without the demo's entries.
   const health = vaults.find((v) => v.name === 'Health' && v.owner_id === DEMO.id) ?? (await call<Vault>(DEMO, '/vaults', { name: 'Health', pin: await hashPin(DEMO_PIN) }));
+  // Shared with Sam to view, asking everyone for a PIN of their own: Sam, without one, is listed as seeing nothing.
+  if (!health.encryption) {
+    await call(DEMO, `/vaults/${health.id}`, { members_need_pin: true }, 'PATCH');
+    await call(DEMO, `/vaults/${health.id}/members`, { email: SAM.email, role: 'viewer' });
+  }
 
   const mine: Draft[] = [];
   const add = (id: string, vaultId: string, when: number, payload: NewPayload) => {
@@ -643,12 +648,25 @@ export async function seed() {
   const { vaults: samVaults } = await call<SessionInfo>(SAM, '/me');
   const bookClub = samVaults.find((v) => v.name === 'Book club' && v.owner_id === SAM.id) ?? (await call<Vault>(SAM, '/vaults', { name: 'Book club' }));
   await call(SAM, `/vaults/${bookClub.id}/members`, { email: DEMO.email, role: 'viewer' });
+  // Sam's Surprise party, locked by Sam's PIN and shared with you to edit, asks everyone for a PIN of their own, so you
+  // see nothing in it until you set yours. A rerun takes yours off again.
+  const party = samVaults.find((v) => v.name === 'Surprise party' && v.owner_id === SAM.id) ?? (await call<Vault>(SAM, '/vaults', { name: 'Surprise party' }));
+  await call(SAM, `/vaults/${party.id}`, { pin: await hashPin(DEMO_PIN), members_need_pin: true }, 'PATCH');
+  await call(SAM, `/vaults/${party.id}/members`, { email: DEMO.email, role: 'editor' });
+  await call(DEMO, `/vaults/${party.id}`, { pin: null }, 'PATCH');
 
   // Sam writes in the shared vault, comments, and shares a note of their own with you.
   const samDraft = (id: string, vaultId: string, when: number, payload: CardPayload): Draft => ({ id, vaultId, at: when, payload });
   await push(
     SAM,
     [
+      samDraft('demo-sam-party', party.id, at(1, 20, 0), {
+        type: 'note',
+        title: 'Party plan',
+        tags: [],
+        createdAt: at(1, 20, 0),
+        content: doc(p('Saturday at 7, at ours. Keep it quiet!'), checklist(['Cake from the bakery', false], ['Balloons', true], ['Playlist', false])),
+      }),
       samDraft('demo-sam-family', family.id, ago(12), { type: 'note', title: '', tags: [], createdAt: ago(12), content: lines('Picked up the dry cleaning. Back by 6.') }),
       samDraft('demo-sam-recipe', samPersonal, at(4, 18, 0), {
         type: 'note',

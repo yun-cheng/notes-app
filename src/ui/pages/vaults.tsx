@@ -35,21 +35,39 @@ function useVaultSaver() {
   };
 }
 
+const ENCRYPTED_NOTE =
+  "Only devices where the PIN is entered can read it, and you'll get a recovery key in case you forget the PIN. As the server can't read it, its todos get no reminders, its voice messages aren't transcribed, its links get no previews and its entries can't be shared.";
+const LOCKED_NOTE = 'The PIN keeps it out of sight in the app, but the server can read it, as it can your other vaults, so everything works in it.';
+
+/** Whether a vault with a PIN is end-to-end encrypted too, and what each way gives up. */
+function EncryptChoice({ on, onChange }: { on: boolean; onChange: (on: boolean) => void }) {
+  return (
+    <div className="encrypt-choice">
+      <label className="check-row">
+        <input type="checkbox" checked={on} onChange={(e) => onChange(e.target.checked)} />
+        <span>Encrypt end to end</span>
+      </label>
+      <p className="prose-note">{on ? ENCRYPTED_NOTE : LOCKED_NOTE}</p>
+    </div>
+  );
+}
+
 function CreateVaultForm() {
   const save = useVaultSaver();
   const [name, setName] = useState('');
   const [pin, setPin] = useState('');
+  const [encrypt, setEncrypt] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [recoveryKey, setRecoveryKey] = useState<string | null>(null);
 
-  // A private vault is end-to-end encrypted from the start, and its recovery key is shown once.
+  // A private vault is end-to-end encrypted from the start unless that's turned off, and its recovery key is shown once.
   const submit = async (e: FormEvent) => {
     e.preventDefault();
     if (!name.trim()) return;
     if (pin && pin.length < MIN_PIN_LENGTH) return setError(pinError);
     setError(null);
     const hashed = pin ? await hashPin(pin) : null;
-    const sealed = pin ? await createVaultKey(pin) : null;
+    const sealed = pin && encrypt ? await createVaultKey(pin) : null;
     if (await save(() => createVault({ name: name.trim(), pin: hashed, encryption: sealed?.encryption ?? null }))) {
       setName('');
       setPin('');
@@ -61,6 +79,7 @@ function CreateVaultForm() {
     <form className="vault-form" onSubmit={(e) => void submit(e)}>
       <input className="text-input" value={name} placeholder="Vault name" aria-label="Vault name" maxLength={80} onChange={(e) => setName(e.target.value)} />
       <PinInput value={pin} placeholder="PIN (optional, makes it private)" aria-label="PIN" onChange={(e) => setPin(e.target.value)} />
+      {pin && <EncryptChoice on={encrypt} onChange={setEncrypt} />}
       <button type="submit" className="btn btn--primary" disabled={!name.trim()}>
         Create vault
       </button>
@@ -105,6 +124,7 @@ export function VaultsPage() {
       <div className="list">
         {shown.map((v) => {
           const count = index.live.filter((c) => c.vaultId === v.id).length;
+          const state = [locked.has(v.id) ? 'Locked' : `${count} ${count === 1 ? 'card' : 'cards'}`, v.encryption && 'Encrypted'];
           return (
             <Link className="row row--link" key={v.id} to={`/vault/${encodeURIComponent(v.id)}`}>
               <span className="row__icon">
@@ -112,7 +132,7 @@ export function VaultsPage() {
               </span>
               <span className="row__body">
                 <span className="row__title">{v.name}</span>
-                <span className="row__preview">{locked.has(v.id) ? 'Locked' : `${count} ${count === 1 ? 'card' : 'cards'}`}</span>
+                <span className="row__preview">{state.filter(Boolean).join(' · ')}</span>
               </span>
             </Link>
           );
@@ -169,6 +189,8 @@ function VaultSettings({ vault }: { vault: Vault }) {
   const [busy, setBusy] = useState<string | null>(null);
   const [recoveryKey, setRecoveryKey] = useState<string | null>(null);
   const [currentPin, setCurrentPin] = useState('');
+  const [encryptNew, setEncryptNew] = useState(true);
+  const [stopping, setStopping] = useState(false);
 
   /** Runs a step that may take a while, reporting any failure. */
   const step = async (label: string, work: () => Promise<void>) => {
@@ -194,9 +216,9 @@ function VaultSettings({ vault }: { vault: Vault }) {
     const next = pin;
     setPin('');
     if (encrypted) return step('Changing the PIN…', async () => (await crypt.rewrap(vault, next), toast('PIN changed')));
-    // Making a vault private encrypts it.
-    if (!isPrivate) return step('Encrypting…', async () => setRecoveryKey(await crypt.encrypt(vault, next)));
-    if (await change({ pin: await hashPin(next) }, 'PIN changed')) setPin('');
+    // Making a vault private encrypts it, unless that's turned off.
+    if (!isPrivate && encryptNew) return step('Encrypting…', async () => setRecoveryKey(await crypt.encrypt(vault, next)));
+    await change({ pin: await hashPin(next) }, isPrivate ? 'PIN changed' : 'Vault is private');
   };
 
   const encryptNow = async (e: FormEvent) => {
@@ -207,6 +229,14 @@ function VaultSettings({ vault }: { vault: Vault }) {
     setError(null);
     await step('Encrypting…', async () => setRecoveryKey(await crypt.encrypt(vault, entered)));
   };
+
+  /** Keeps the PIN, storing the cards readable again so the server can work on them. */
+  const stopEncrypting = () =>
+    step('Decrypting…', async () => {
+      await crypt.decrypt(vault, { keepPin: true });
+      setStopping(false);
+      toast('Vault is no longer encrypted');
+    });
 
   const removePin = async () => {
     if (encrypted && !confirm(`Remove the PIN from ${vault.name}? Its cards will be decrypted and stored readable again.`)) return;
@@ -249,15 +279,40 @@ function VaultSettings({ vault }: { vault: Vault }) {
           </form>
           {error && <p className="lock-panel__error">{error}</p>}
           {!isPrivate && (
-            <p className="prose-note vault-gap">A private vault is end-to-end encrypted: its cards are readable only on devices where you enter the PIN. You'll get a recovery key in case you forget it.</p>
+            <div className="vault-gap">
+              <EncryptChoice on={encryptNew} onChange={setEncryptNew} />
+            </div>
           )}
         </>
       )}
 
-      {isPrivate && encrypted && <p className="access-note vault-gap">End-to-end encrypted. Only devices where the PIN is entered can read this vault.</p>}
+      {isPrivate && encrypted && (
+        <div className="encrypt-box vault-gap">
+          <p className="access-note">End-to-end encrypted. Only devices where the PIN is entered can read this vault.</p>
+          {stopping ? (
+            <>
+              <p className="prose-note">
+                Its cards will be stored readable again, on the server too. The PIN still locks it in the app, and reminders, voice transcripts, link previews and sharing start working in it.
+              </p>
+              <div className="lock-panel__row">
+                <button type="button" className="btn btn--primary" disabled={!!busy} onClick={() => void stopEncrypting()}>
+                  Stop encrypting
+                </button>
+                <button type="button" className="btn" disabled={!!busy} onClick={() => setStopping(false)}>
+                  Cancel
+                </button>
+              </div>
+            </>
+          ) : (
+            <button type="button" className="btn" disabled={!!busy} onClick={() => setStopping(true)}>
+              Stop encrypting…
+            </button>
+          )}
+        </div>
+      )}
       {isPrivate && !encrypted && (
         <form className="encrypt-box vault-gap" onSubmit={(e) => void encryptNow(e)}>
-          <p className="prose-note">This vault was made before encryption. Its PIN only hides it in the app; the server and this device can still read its cards.</p>
+          <p className="prose-note">Locked by its PIN, not encrypted: the PIN keeps it out of sight in the app, but the server can read its cards, so everything works in it. Encrypting it makes it readable only where the PIN is entered, and turns off reminders, voice transcripts, link previews and sharing in it.</p>
           <div className="lock-panel__row">
             <PinInput value={currentPin} placeholder="Current PIN" aria-label="Current PIN to encrypt with" onChange={(e) => setCurrentPin(e.target.value)} />
             <button type="submit" className="btn btn--primary" disabled={!currentPin || !!busy}>

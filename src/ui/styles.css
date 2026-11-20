@@ -629,6 +629,10 @@ a.change__title:hover { color: var(--accent); }
 .public__foot { margin-top: 32px; color: var(--muted); font-size: 13px; }
 .recovery-key { font: 600 18px/1.6 ui-monospace, "SF Mono", Menlo, monospace; letter-spacing: 0.04em; padding: 12px 14px; border-radius: 10px; background: var(--sunken); overflow-wrap: anywhere; user-select: all; }
 .encrypt-box { padding: 12px; border: 1px solid var(--line); border-radius: 10px; display: flex; flex-direction: column; gap: 8px; }
+.encrypt-box > .btn { align-self: flex-start; }
+.encrypt-box > .access-note { margin: 0; }
+.encrypt-choice { display: flex; flex-direction: column; gap: 4px; }
+.encrypt-choice .prose-note { margin: 0; }
 .signin__code { font: 700 32px/1.2 ui-monospace, "SF Mono", Menlo, monospace; letter-spacing: 0.2em; margin: 6px 0; }
 
 /* Journal stream: everything as compact bubbles, newest at the bottom, with a box to write the next one. */

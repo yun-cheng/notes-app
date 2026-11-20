@@ -31,6 +31,18 @@ describe('encrypted vaults', () => {
     expect(open).toMatchObject({ lock: 'none', encryption: null });
     expect((await send(ann.cookie, 'PATCH', `/api/vaults/${vault.id}`, { encryption: { nope: 1 } })).status).toBe(400);
   });
+  it('can stop encrypting and stay locked by its PIN, taking readable cards again', async () => {
+    const { vault, send, json, push, ann } = await encryptedVault();
+    const locked = await json<Vault>(send(ann.cookie, 'PATCH', `/api/vaults/${vault.id}`, { encryption: null }));
+    expect(locked).toMatchObject({ lock: 'pin', pin, encryption: null });
+    const [plain] = await push(ann.cookie, [rec(vault.id, 'p', { payload: '{"title":"readable"}' })]);
+    expect(plain.status).toBe('ok');
+  });
+  it('makes a vault locked by its PIN alone, unencrypted', async () => {
+    const { send, json, ann } = await people();
+    const vault = await json<Vault>(send(ann.cookie, 'POST', '/api/vaults', { name: 'Health', pin }));
+    expect(vault).toMatchObject({ lock: 'pin', encryption: null });
+  });
   it('purges plaintext history once a vault is encrypted', async () => {
     const t = await people();
     const vault = await t.json<Vault>(t.send(t.ann.cookie, 'POST', '/api/vaults', { name: 'Diary', pin }));

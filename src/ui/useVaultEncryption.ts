@@ -42,10 +42,13 @@ export function useVaultEncryption() {
     return recoveryKey;
   };
 
-  /** Stores the vault's cards readable again and drops its PIN. The vault must be open. */
-  const decrypt = async (vault: Vault) => {
+  /**
+   * Stores the vault's cards readable again and drops its PIN, or, with `keepPin`, keeps it locked by the PIN alone.
+   * The vault must be open.
+   */
+  const decrypt = async (vault: Vault, { keepPin = false } = {}) => {
     await engine.sync();
-    await save(vault, { pin: null, encryption: null });
+    await save(vault, keepPin ? { encryption: null } : { pin: null, encryption: null });
     await repo.recodeVault(vault.id);
     await repo.setMeta(deviceKeyName(vault.id), null);
     await repo.setMeta(encryptingName(vault.id), null);

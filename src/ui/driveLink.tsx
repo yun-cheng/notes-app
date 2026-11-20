@@ -52,7 +52,7 @@ export function useShareLink() {
  * A photo, video or file right-clicked anywhere: Share via public link shares it from the vault owner's Google Drive, so
  * anyone with the link can open it there, and copies the link. The name says it's public, as Drive's "anyone with the
  * link" is. Once it's shared, Copy public link copies it again and Stop sharing link takes it back.
- * For those who can change its vault, unless the vault is private (encrypted); one who only views it gets the link
+ * For those who can change its vault, unless the vault is encrypted; one who only views it gets the link
  * if it's shared already.
  */
 export function DriveLinkItems({ id, noun, onClose }: { id: string; noun: Noun; onClose: () => void }) {

@@ -63,7 +63,7 @@ export const FileVault = createContext<string | undefined>(undefined);
 /**
  * A file attached to an entry, as a chip: its kind, name and size. Pressing it opens the file, or downloads one the
  * browser can't show; the arrow always downloads, and the share button beside it shares it by a public Google Drive
- * link and copies the link, for one who can change its vault, unless that's private (encrypted).
+ * link and copies the link, for one who can change its vault, unless that one is encrypted.
  */
 export function FileChip({ file, vaultId }: { file: FileInfo; vaultId?: string }) {
   const act = useFileActions();

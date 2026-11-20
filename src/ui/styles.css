@@ -1184,12 +1184,14 @@ body:has(.batch) .toast-slot { bottom: calc(var(--tabbar) + env(safe-area-inset-
 .bubble__add { display: inline-grid; place-items: center; width: 22px; height: 18px; padding: 0; border: 1px dashed var(--line); border-radius: 9px; background: none; color: var(--muted); opacity: 0; cursor: pointer; transition: opacity 0.12s; }
 .bubble__add:hover { color: var(--text); border-color: var(--muted); }
 /* The one that adds a reaction shows always, faint, so where to react is never hidden; hovered, it shows in full. */
-.reactions .bubble__add { opacity: 0.4; }
+.reactions .bubble__add { opacity: 0.4; width: 20px; height: 20px; border-color: transparent; border-radius: 50%; }
+/* Only the icon, which a dashed outline on every bubble made look like an empty chip; pointed at or open, a soft round backing. */
+.reactions .bubble__add:hover, .reactions .is-open > .bubble__add { border-color: transparent; background: color-mix(in srgb, var(--text) 12%, transparent); color: var(--text); }
 .stream__entry:hover .bubble__add, .bubble:focus-visible .bubble__add, .bubble:has(:focus-visible) .bubble__add, .is-open > .bubble__add { opacity: 1; }
 /* Without hover the others are gone, taking no room in the row. */
 @media (pointer: coarse) { .bubble__add, .bubble-menu:has(> .bubble__add:only-child) { display: none; } }
 /* Except a reaction's, there to tap, a little bigger for a finger: a phone has no hover, and before it reached reactions only from the entry's sheet. */
-@media (pointer: coarse) { .reactions > .bubble-menu:has(> .bubble__add) { display: flex; } .reactions .bubble__add { display: inline-grid; width: 28px; height: 20px; border-radius: 10px; } }
+@media (pointer: coarse) { .reactions > .bubble-menu:has(> .bubble__add) { display: flex; } .reactions .bubble__add { display: inline-grid; width: 28px; height: 24px; margin: -2px 0; border-radius: 12px; } }
 .bubble-menu { position: relative; display: flex; }
 /* Reactions: in a bubble's bottom row on the left, and under the tags in its sheet. */
 .reactions { display: inline-flex; flex-wrap: wrap; align-items: center; gap: 4px; }

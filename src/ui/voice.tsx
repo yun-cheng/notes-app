@@ -81,6 +81,38 @@ const letGo = (root: HTMLElement | null) => {
   setNow(null);
 };
 
+/**
+ * The voice messages whose transcript is hidden on this device, as Telegram folds one away: each one's own choice,
+ * kept (the newest few hundred) so it stays hidden.
+ */
+const HIDDEN_KEY = 'voice-transcripts-hidden';
+let hidden: ReadonlySet<string> = (() => {
+  try {
+    const ids = JSON.parse(localStorage.getItem(HIDDEN_KEY) ?? '[]') as unknown;
+    return new Set(Array.isArray(ids) ? ids.filter((id): id is string => typeof id === 'string') : []);
+  } catch {
+    return new Set<string>();
+  }
+})();
+const hiddenListeners = new Set<() => void>();
+function setHidden(id: string, hide: boolean) {
+  const next = new Set(hidden);
+  next.delete(id);
+  if (hide) next.add(id);
+  hidden = next;
+  try {
+    localStorage.setItem(HIDDEN_KEY, JSON.stringify([...next].slice(-500)));
+  } catch {
+    // Hidden this visit only.
+  }
+  hiddenListeners.forEach((l) => l());
+}
+const useHidden = (id: string) =>
+  useSyncExternalStore(
+    (l) => (hiddenListeners.add(l), () => void hiddenListeners.delete(l)),
+    () => hidden.has(id),
+  );
+
 /** The longest voice message recorded at once: a quarter of what a day's transcribing allows. */
 export const MAX_RECORDING_SECONDS = 15 * 60;
 
@@ -242,6 +274,7 @@ export function VoiceMessage({ file, vaultId, onTranscript }: { file: FileInfo; 
   const cues = file.cues ?? [];
   const saying = playing || time > 0 ? cueAt(cues, time) : -1;
   const words = file.transcript ?? null;
+  const folded = useHidden(file.id);
   // The bar over the page follows the one playing.
   useEffect(() => {
     const me = root.current;
@@ -276,6 +309,21 @@ export function VoiceMessage({ file, vaultId, onTranscript }: { file: FileInfo; 
           {speed}×
         </button>
         <VolumeButton />
+        {words !== null && (
+          <button
+            type="button"
+            className={`voice__words${folded ? '' : ' is-active'}`}
+            aria-pressed={!folded}
+            aria-label={folded ? 'Show transcript' : 'Hide transcript'}
+            title={folded ? 'Show transcript' : 'Hide transcript'}
+            onClick={(e) => {
+              e.stopPropagation();
+              setHidden(file.id, !folded);
+            }}
+          >
+            <Icon name="transcript" size={16} />
+          </button>
+        )}
         {address && (
           <audio
             ref={audio}
@@ -307,37 +355,39 @@ export function VoiceMessage({ file, vaultId, onTranscript }: { file: FileInfo; 
         )}
       </div>
       {words !== null ? (
-        <div className="voice__transcript">
-          <p lang={file.language ?? undefined}>
-            {words === '' ? (
-              <span className="voice__quiet">No words were heard.</span>
-            ) : cues.length ? (
-              cues.map((cue, i) => (
-                <span key={i}>
-                  <span className={`voice__cue${i === saying ? ' is-saying' : ''}`} role="button" tabIndex={-1} title={`Play from ${clipLength(cue.start)}`} onClick={() => seek(cue.start, true)}>
-                    {cue.text}
-                  </span>{' '}
-                </span>
-              ))
-            ) : (
-              words
-            )}
-          </p>
-          <span className="voice__actions">
-            {words && (
-              <button type="button" onClick={() => void writeClipboard(words).then((ok) => toast(ok ? 'Copied the transcript.' : 'The transcript couldn’t be copied here.'))}>
-                <Icon name="copy" size={14} /> Copy
-              </button>
-            )}
-            {can && job?.state !== 'working' && (
-              <button type="button" onClick={() => void transcribe(file.id, vaultId!, photos)}>
-                <Icon name="repeat" size={14} /> Transcribe again
-              </button>
-            )}
-            {job?.state === 'working' && <span className="voice__status">Transcribing…</span>}
-            {job?.state === 'failed' && <span className="voice__status">{job.message}</span>}
-          </span>
-        </div>
+        folded ? null : (
+          <div className="voice__transcript">
+            <p lang={file.language ?? undefined}>
+              {words === '' ? (
+                <span className="voice__quiet">No words were heard.</span>
+              ) : cues.length ? (
+                cues.map((cue, i) => (
+                  <span key={i}>
+                    <span className={`voice__cue${i === saying ? ' is-saying' : ''}`} role="button" tabIndex={-1} title={`Play from ${clipLength(cue.start)}`} onClick={() => seek(cue.start, true)}>
+                      {cue.text}
+                    </span>{' '}
+                  </span>
+                ))
+              ) : (
+                words
+              )}
+            </p>
+            <span className="voice__actions">
+              {words && (
+                <button type="button" onClick={() => void writeClipboard(words).then((ok) => toast(ok ? 'Copied the transcript.' : 'The transcript couldn’t be copied here.'))}>
+                  <Icon name="copy" size={14} /> Copy
+                </button>
+              )}
+              {can && job?.state !== 'working' && (
+                <button type="button" onClick={() => void transcribe(file.id, vaultId!, photos)}>
+                  <Icon name="repeat" size={14} /> Transcribe again
+                </button>
+              )}
+              {job?.state === 'working' && <span className="voice__status">Transcribing…</span>}
+              {job?.state === 'failed' && <span className="voice__status">{job.message}</span>}
+            </span>
+          </div>
+        )
       ) : job?.state === 'working' ? (
         <p className="voice__status">Transcribing…</p>
       ) : job?.state === 'failed' ? (

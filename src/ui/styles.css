@@ -1030,6 +1030,10 @@ body:has(.batch) .toast-slot { bottom: calc(var(--tabbar) + env(safe-area-inset-
 .voice__volume-pop input { display: block; width: 20px; height: 96px; margin: 0; padding: 0; writing-mode: vertical-lr; direction: rtl; accent-color: var(--accent); cursor: pointer; }
 @media (hover: hover) { .voice__volume:hover > .voice__volume-pop { display: block; } }
 .voice__volume:has(:focus-visible) > .voice__volume-pop, .voice__volume.is-open > .voice__volume-pop { display: block; }
+/* Showing or hiding the transcript under it: lit while it shows. */
+.voice__words { display: grid; place-items: center; flex: none; width: 26px; height: 26px; margin: -2px -4px -2px -6px; padding: 0; border: 0; border-radius: 50%; background: none; color: var(--muted); }
+.voice__words:hover { background: color-mix(in srgb, var(--text) 12%, transparent); color: var(--text); }
+.voice__words.is-active { color: var(--accent); }
 .voice__transcript { display: flex; flex-direction: column; gap: 4px; padding-top: 6px; border-top: 1px solid var(--line); }
 .voice__transcript p { margin: 0; font-size: 14px; white-space: pre-wrap; overflow-wrap: anywhere; }
 .voice__cue { border-radius: 4px; cursor: pointer; }

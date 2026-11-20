@@ -171,7 +171,7 @@ export function shareRoutes(app: Hono<AppEnv>, now: () => number) {
     if (typeof body?.vault_id === 'string') {
       // Only into vaults the sharer belongs to, and not the card's own vault.
       const ok = await db
-        .prepare(`SELECT 1 AS ok FROM vault_members m JOIN cards c ON c.id = ? WHERE m.vault_id = ? AND m.user_id = ? AND c.vault_id != m.vault_id`)
+        .prepare(`SELECT 1 AS ok FROM vault_access m JOIN cards c ON c.id = ? WHERE m.vault_id = ? AND m.user_id = ? AND c.vault_id != m.vault_id`)
         .bind(cardId, body.vault_id, me.id)
         .first();
       if (!ok) return c.json({ error: 'Vault not found' }, 404);

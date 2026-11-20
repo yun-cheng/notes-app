@@ -99,7 +99,7 @@ export function drivePublicRoutes(app: Hono<AppEnv>, fetcher: GoogleFetch, now: 
 /** At most this many photos and files trashed or kept in one request. */
 const MAX_STATE_CHANGES = 500;
 /** The vaults the user (the next binding) can change. */
-const EDITABLE = `SELECT vault_id FROM vault_members WHERE user_id = ? AND role IN ('owner', 'editor')`;
+const EDITABLE = `SELECT vault_id FROM vault_access WHERE user_id = ? AND role IN ('owner', 'editor')`;
 /**
  * Whether a card the server can read holds the attachment, in the journal or the Trash. One in an encrypted vault
  * can't be read here, so devices, which can, decide for those. Only cards that could: those in a vault of anyone in
@@ -139,7 +139,7 @@ export function photoRoutes(app: Hono<AppEnv>, fetcher: GoogleFetch, now: () => 
     const mime = (c.req.header('content-type') ?? '').split(';')[0].trim().toLowerCase() || (file ? 'application/octet-stream' : '');
     if (!/^[\w-]{8,64}$/.test(id) || !(file ? MIME.test(mime) : IMAGE_TYPES[mime])) return c.json({ error: file ? 'Invalid file' : 'Invalid photo' }, 400);
     const vault = await c.env.DB.prepare(
-      `SELECT v.owner_id FROM vaults v JOIN vault_members m ON m.vault_id = v.id WHERE v.id = ? AND m.user_id = ? AND m.role IN ('owner', 'editor')`,
+      `SELECT v.owner_id FROM vaults v JOIN vault_access m ON m.vault_id = v.id WHERE v.id = ? AND m.user_id = ? AND m.role IN ('owner', 'editor')`,
     )
       .bind(vaultId, c.get('user').id)
       .first<{ owner_id: string }>();
@@ -278,7 +278,7 @@ export function photoRoutes(app: Hono<AppEnv>, fetcher: GoogleFetch, now: () => 
   app.get('/attachments', async (c) => {
     const { results } = await c.env.DB.prepare(
       `SELECT id, vault_id, mime, size, name, width, height, duration, created_at, trashed_at, trashed_from FROM attachments
-       WHERE vault_id IN (SELECT vault_id FROM vault_members WHERE user_id = ?) ORDER BY created_at`,
+       WHERE vault_id IN (SELECT vault_id FROM vault_access WHERE user_id = ?) ORDER BY created_at`,
     )
       .bind(c.get('user').id)
       .all<StoredAttachment>();
@@ -323,7 +323,7 @@ export function photoRoutes(app: Hono<AppEnv>, fetcher: GoogleFetch, now: () => 
     const userId = c.get('user').id;
     const row = await c.env.DB.prepare(
       `SELECT a.drive_link, (a.vault_id IN (${EDITABLE}) AND v.encryption IS NULL) AS can FROM attachments a JOIN vaults v ON v.id = a.vault_id
-       WHERE a.id = ? AND a.vault_id IN (SELECT vault_id FROM vault_members WHERE user_id = ?)`,
+       WHERE a.id = ? AND a.vault_id IN (SELECT vault_id FROM vault_access WHERE user_id = ?)`,
     )
       .bind(userId, c.req.param('id'), userId)
       .first<{ drive_link: string | null; can: number }>();
@@ -411,7 +411,7 @@ export function photoRoutes(app: Hono<AppEnv>, fetcher: GoogleFetch, now: () => 
     const row = await c.env.DB.prepare(
       `SELECT a.id, a.owner_id, a.vault_id, a.drive_file_id, a.mime FROM attachments a
        WHERE a.id = ?
-         AND (a.vault_id IN (SELECT vault_id FROM vault_members WHERE user_id = ?)
+         AND (a.vault_id IN (SELECT vault_id FROM vault_access WHERE user_id = ?)
               OR EXISTS (SELECT 1 FROM cards c JOIN card_shares s ON s.card_id = c.id
                          WHERE c.vault_id = a.vault_id AND instr(c.payload, a.id) > 0 AND ${SHARED_WITH}))`,
     )

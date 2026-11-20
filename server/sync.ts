@@ -33,7 +33,7 @@ function mayWrite(record: CardRecord, current: CardRecord | undefined, writable:
 
 async function writableVaults(db: Database, userId: string): Promise<Set<string>> {
   const { results } = await db
-    .prepare(`SELECT vault_id FROM vault_members WHERE user_id = ? AND role IN ('owner', 'editor')`)
+    .prepare(`SELECT vault_id FROM vault_access WHERE user_id = ? AND role IN ('owner', 'editor')`)
     .bind(userId)
     .all<{ vault_id: string }>();
   return new Set(results.map((r) => r.vault_id));
@@ -150,7 +150,7 @@ export async function pullRecords(db: Database, userId: string, since: number): 
     .prepare(
       `SELECT c.id, c.vault_id, c.updated_at, c.deleted, c.seq, c.payload FROM cards c
        WHERE c.seq > ?
-         AND (c.vault_id IN (SELECT vault_id FROM vault_members WHERE user_id = ?)
+         AND (c.vault_id IN (SELECT vault_id FROM vault_access WHERE user_id = ?)
               OR c.id IN (SELECT s.card_id FROM card_shares s WHERE ${SHARED_WITH}))
        ORDER BY c.seq LIMIT ?`,
     )
@@ -164,8 +164,8 @@ export async function pullRecords(db: Database, userId: string, since: number): 
     .prepare(
       `SELECT m.card_id, MAX(m.seq) AS seq FROM card_moves m JOIN cards c ON c.id = m.card_id
        WHERE m.seq > ? AND m.seq <= ?
-         AND m.vault_id IN (SELECT vault_id FROM vault_members WHERE user_id = ?)
-         AND c.vault_id NOT IN (SELECT vault_id FROM vault_members WHERE user_id = ?)
+         AND m.vault_id IN (SELECT vault_id FROM vault_access WHERE user_id = ?)
+         AND c.vault_id NOT IN (SELECT vault_id FROM vault_access WHERE user_id = ?)
          AND c.id NOT IN (SELECT s.card_id FROM card_shares s WHERE ${SHARED_WITH})
        GROUP BY m.card_id`,
     )

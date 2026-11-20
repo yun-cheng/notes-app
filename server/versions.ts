@@ -191,7 +191,7 @@ export async function listRecentVersions(db: Database, userId: string, device: s
        JOIN users u ON u.id = v.author_id
        LEFT JOIN card_versions p ON p.id = (SELECT MAX(id) FROM card_versions WHERE card_id = v.card_id AND id < v.id)
        WHERE (v.saved_at < ? OR (v.saved_at = ? AND v.id < ?))
-         AND (c.vault_id IN (SELECT vault_id FROM vault_members WHERE user_id = ?)
+         AND (c.vault_id IN (SELECT vault_id FROM vault_access WHERE user_id = ?)
               OR c.id IN (SELECT s.card_id FROM card_shares s WHERE ${SHARED_WITH}))
        ORDER BY v.saved_at DESC, v.id DESC LIMIT ?`,
     )

@@ -128,7 +128,7 @@ export async function sendReminders(db: Database, send: SendPush, now: number): 
     .prepare(
       `SELECT r.card_id, r.title, r.due, r.due_time, s.id, s.user_id, s.endpoint, s.p256dh, s.auth, s.time_zone, s.locale, s.remind_at, s.lead_minutes
        FROM reminders r
-       JOIN vault_members m ON m.vault_id = r.vault_id AND m.role != 'viewer'
+       JOIN vault_access m ON m.vault_id = r.vault_id AND m.role != 'viewer'
        JOIN push_subscriptions s ON s.user_id = m.user_id
        WHERE r.due BETWEEN ? AND ?
          AND NOT EXISTS (SELECT 1 FROM reminders_sent x WHERE x.card_id = r.card_id AND x.subscription_id = s.id AND x.due_key = r.due || ' ' || COALESCE(r.due_time, ''))`,

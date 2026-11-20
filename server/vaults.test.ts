@@ -91,9 +91,13 @@ describe('vaults', () => {
     const { vault } = await create(ann.cookie, { name: 'A' });
     expect((await patch(bob.cookie, vault.id, { name: 'stolen' })).status).toBe(404);
     db.raw.prepare(`INSERT INTO vault_members (vault_id, user_id, role) VALUES (?, ?, 'editor')`).run(vault.id, bob.user.id);
-    expect((await patch(bob.cookie, vault.id, { pin: null })).status).toBe(404);
-    const me = (await (await call('/api/me', {}, bob.cookie)).json()) as { vaults: Vault[] };
-    expect(me.vaults.find((v) => v.id === vault.id)?.name).toBe('A');
+    // A member changes only their own lock.
+    expect((await patch(bob.cookie, vault.id, { name: 'stolen' })).status).toBe(400);
+    expect((await patch(bob.cookie, vault.id, { pin, ai_access: 'off' })).status).toBe(400);
+    expect((await patch(bob.cookie, vault.id, { pin, hidden: true })).vault).toMatchObject({ name: 'A', lock: 'pin', pin, hidden: true });
+    const of = async (cookie: string) => ((await (await call('/api/me', {}, cookie)).json()) as { vaults: Vault[] }).vaults.find((v) => v.id === vault.id);
+    expect(await of(ann.cookie)).toMatchObject({ name: 'A', lock: 'none', pin: null, hidden: false });
+    expect((await patch(bob.cookie, vault.id, { pin: null })).vault).toMatchObject({ lock: 'none', pin: null, hidden: false });
   });
   it('requires a session', async () => {
     const { call } = vaultApi();

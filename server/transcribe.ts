@@ -77,7 +77,7 @@ export function transcribeRoutes(app: Hono<AppEnv>, now: () => number) {
     if (!ai) return c.json({ error: 'Transcribing isn’t set up on this server' }, 501);
     const user = c.get('user').id;
     const vault = await c.env.DB.prepare(
-      `SELECT v.encryption FROM vaults v JOIN vault_members m ON m.vault_id = v.id WHERE v.id = ? AND m.user_id = ? AND m.role IN ('owner', 'editor')`,
+      `SELECT v.encryption FROM vaults v JOIN vault_access m ON m.vault_id = v.id WHERE v.id = ? AND m.user_id = ? AND m.role IN ('owner', 'editor')`,
     )
       .bind(c.req.query('vault') ?? '', user)
       .first<{ encryption: string | null }>();

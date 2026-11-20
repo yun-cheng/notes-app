@@ -4,7 +4,7 @@ import type { Vault } from '../src/domain/types';
 import type { Database } from './db';
 import { unshare } from './shares';
 
-interface VaultRow extends Omit<Vault, 'pin' | 'hidden' | 'encryption'> {
+interface VaultRow extends Omit<Vault, 'pin' | 'hidden' | 'encryption' | 'members_need_pin' | 'withheld'> {
   encryption: string | null;
   role: 'owner' | 'editor' | 'viewer';
   members: number;
@@ -12,14 +12,31 @@ interface VaultRow extends Omit<Vault, 'pin' | 'hidden' | 'encryption'> {
   pin_hash: string | null;
   pin_iterations: number | null;
   hidden: number;
+  members_need_pin: number;
+  withheld: number;
 }
 
-const COLUMNS = `v.id, v.name, v.owner_id, v.lock, v.ai_access, v.created_at, v.pin_salt, v.pin_hash, v.pin_iterations, v.hidden, v.encryption, m.role,
+/**
+ * A vault as one member sees it. Its lock is theirs: the owner's PIN is on the vault, beside the encryption it wraps;
+ * anyone else's is on their membership, as is whether it hides the vault.
+ */
+const mine = (column: string) => `CASE WHEN m.role = 'owner' THEN v.${column} ELSE m.${column} END AS ${column}`;
+const COLUMNS = `v.id, v.name, v.owner_id, v.ai_access, v.created_at, v.encryption, v.members_need_pin, m.role,
+  CASE WHEN m.role = 'owner' THEN v.lock WHEN m.pin_hash IS NOT NULL THEN 'pin' ELSE 'none' END AS lock,
+  ${['pin_salt', 'pin_hash', 'pin_iterations', 'hidden'].map(mine).join(', ')},
+  (v.members_need_pin = 1 AND m.role != 'owner' AND m.pin_hash IS NULL) AS withheld,
   (SELECT COUNT(*) FROM vault_members x WHERE x.vault_id = v.id) AS members`;
 
-function toVault({ pin_salt, pin_hash, pin_iterations, hidden, encryption, ...rest }: VaultRow): Vault {
+function toVault({ pin_salt, pin_hash, pin_iterations, hidden, encryption, members_need_pin, withheld, ...rest }: VaultRow): Vault {
   const pin = pin_salt && pin_hash && pin_iterations ? { salt: pin_salt, hash: pin_hash, iterations: pin_iterations } : null;
-  return { ...rest, pin, hidden: !!hidden, encryption: encryption ? (JSON.parse(encryption) as VaultEncryption) : null };
+  return {
+    ...rest,
+    pin,
+    hidden: !!pin && !!hidden,
+    encryption: encryption ? (JSON.parse(encryption) as VaultEncryption) : null,
+    members_need_pin: !!members_need_pin,
+    withheld: !!withheld,
+  };
 }
 
 export const defaultVaultId = (userId: string) => `vault-${userId}`;
@@ -57,19 +74,37 @@ export async function createVault(db: Database, userId: string, input: VaultInpu
   return (await listVaults(db, userId)).find((v) => v.id === id)!;
 }
 
-export type VaultUpdate = Partial<VaultInput> & { ai_access?: Vault['ai_access'] };
+export type VaultUpdate = Partial<VaultInput> & { ai_access?: Vault['ai_access']; members_need_pin?: boolean };
 
-export type UpdateResult = { vault: Vault } | { error: 'not_found' | 'default_vault' | 'private_ai' | 'shared_private' | 'encrypted_open' };
+export type UpdateResult = { vault: Vault } | { error: 'not_found' | 'default_vault' | 'private_ai' | 'shared_private' | 'encrypted_open' | 'not_owner' };
 
-/** Only the owner can change a vault. A private vault never has AI access. */
+/** A member's own lock: their PIN, and whether it hides the vault. That's all they may change in someone else's vault. */
+async function updateOwnLock(db: Database, userId: string, current: Vault, update: VaultUpdate): Promise<UpdateResult> {
+  const { pin: newPin, hidden: newHidden, ...rest } = update;
+  if (Object.values(rest).some((v) => v !== undefined)) return { error: 'not_owner' };
+  const pin = newPin === undefined ? current.pin : newPin;
+  const hidden = !!pin && (newHidden ?? current.hidden);
+  await db
+    .prepare(`UPDATE vault_members SET pin_salt = ?, pin_hash = ?, pin_iterations = ?, hidden = ? WHERE vault_id = ? AND user_id = ?`)
+    .bind(pin?.salt ?? null, pin?.hash ?? null, pin?.iterations ?? null, hidden ? 1 : 0, current.id, userId)
+    .run();
+  return { vault: (await listVaults(db, userId)).find((v) => v.id === current.id)! };
+}
+
+/**
+ * The owner changes a vault; anyone else in it, only their own lock. A private vault never has AI access. A vault
+ * locked by a PIN alone can be shared, as each member's lock is their own; an encrypted one can't be yet, as its key
+ * would have to reach every member.
+ */
 export async function updateVault(db: Database, userId: string, id: string, update: VaultUpdate): Promise<UpdateResult> {
   const current = (await listVaults(db, userId)).find((v) => v.id === id);
-  if (!current || current.owner_id !== userId) return { error: 'not_found' };
+  if (!current) return { error: 'not_found' };
+  if (current.owner_id !== userId) return updateOwnLock(db, userId, current, update);
   if (update.pin && id === defaultVaultId(userId)) return { error: 'default_vault' };
-  // A PIN would have to be told to every member. Keep shared vaults open until sharing private vaults is designed.
-  if (update.pin && (current.members ?? 1) > 1) return { error: 'shared_private' };
+  const encrypting = !!update.encryption && !current.encryption;
   // Someone invited by email joins at their first sign-in, so an invite still waiting counts as sharing.
-  if (update.pin && (await db.prepare(`SELECT 1 FROM vault_invites WHERE vault_id = ? LIMIT 1`).bind(id).first())) return { error: 'shared_private' };
+  if (encrypting && ((current.members ?? 1) > 1 || (await db.prepare(`SELECT 1 FROM vault_invites WHERE vault_id = ? LIMIT 1`).bind(id).first())))
+    return { error: 'shared_private' };
 
   const pin = update.pin === undefined ? current.pin : update.pin;
   if (pin && update.ai_access && update.ai_access !== 'off') return { error: 'private_ai' };
@@ -78,8 +113,12 @@ export async function updateVault(db: Database, userId: string, id: string, upda
   const encryption = update.encryption === undefined ? (current.encryption ?? null) : update.encryption;
   // Dropping the PIN of an encrypted vault must say the encryption goes too, after the device decrypted its cards.
   if (!pin && encryption) return { error: 'encrypted_open' };
+  // Asking members for a PIN of their own comes with the owner's, and an encrypted vault has no other members to ask.
+  const needPin = !!pin && !encryption && (update.members_need_pin ?? current.members_need_pin ?? false);
   const save = db
-    .prepare(`UPDATE vaults SET name = ?, lock = ?, ai_access = ?, pin_salt = ?, pin_hash = ?, pin_iterations = ?, hidden = ?, encryption = ? WHERE id = ?`)
+    .prepare(
+      `UPDATE vaults SET name = ?, lock = ?, ai_access = ?, pin_salt = ?, pin_hash = ?, pin_iterations = ?, hidden = ?, encryption = ?, members_need_pin = ? WHERE id = ?`,
+    )
     .bind(
       update.name ?? current.name,
       pin ? 'pin' : 'none',
@@ -89,6 +128,7 @@ export async function updateVault(db: Database, userId: string, id: string, upda
       pin?.iterations ?? null,
       hidden ? 1 : 0,
       encryption ? JSON.stringify(encryption) : null,
+      needPin ? 1 : 0,
       id,
     );
   // Nobody a card was shared with can read it once it's encrypted, and its shares could no longer be managed: end them.

@@ -160,4 +160,11 @@ export interface Vault {
   members?: number;
   /** Set when the vault is end-to-end encrypted. Only ever with a PIN. */
   encryption?: VaultEncryption | null;
+  /**
+   * Set by the owner of a vault locked by their PIN: everyone in it must lock it with a PIN of their own before they
+   * see anything in it. `lock`, `pin` and `hidden` are this account's own, as each member's lock is theirs.
+   */
+  members_need_pin?: boolean;
+  /** True while this account is a member who hasn't yet set the PIN the owner asks for: the server sends none of its cards. */
+  withheld?: boolean;
 }

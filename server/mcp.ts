@@ -50,7 +50,9 @@ class ToolError extends Error {}
 async function loadScope(db: Database, userId: string, withCards = true): Promise<Scope> {
   const { results: all } = await db
     .prepare(
-      `SELECT v.id, v.name, v.lock, v.ai_access, v.owner_id, m.role FROM vaults v JOIN vault_members m ON m.vault_id = v.id
+      // Each member's own lock: the owner's is on the vault, anyone else's on their membership.
+      `SELECT v.id, v.name, CASE WHEN m.role = 'owner' THEN v.lock WHEN m.pin_hash IS NOT NULL THEN 'pin' ELSE 'none' END AS lock, v.ai_access, v.owner_id, m.role
+       FROM vaults v JOIN vault_members m ON m.vault_id = v.id
        WHERE m.user_id = ? ORDER BY v.created_at, v.id`,
     )
     .bind(userId)

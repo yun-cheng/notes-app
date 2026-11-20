@@ -135,6 +135,10 @@ function parseVaultBody(body: Record<string, unknown> | null): VaultUpdate | nul
     if (typeof body.hidden !== 'boolean') return null;
     out.hidden = body.hidden;
   }
+  if (body.members_need_pin !== undefined) {
+    if (typeof body.members_need_pin !== 'boolean') return null;
+    out.members_need_pin = body.members_need_pin;
+  }
   return out;
 }
 
@@ -289,7 +293,8 @@ export function createApp({
     const messages = {
       default_vault: 'The default vault cannot be locked',
       private_ai: 'A private vault cannot give AI access',
-      shared_private: 'A shared vault cannot have a PIN',
+      shared_private: 'A shared vault cannot be encrypted',
+      not_owner: 'Only the owner can change that',
       encrypted_open: 'Remove the encryption along with the PIN',
     };
     return c.json({ error: messages[result.error] }, 400);

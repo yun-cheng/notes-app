@@ -34,7 +34,7 @@ export async function openCommentCounts(db: Database, userId: string): Promise<C
     .prepare(
       `SELECT k.card_id, COUNT(*) AS open FROM comments k
        WHERE k.resolved_at IS NULL AND (
-         k.card_id IN (SELECT c.id FROM cards c JOIN vault_members m ON m.vault_id = c.vault_id WHERE m.user_id = ? AND c.deleted = 0)
+         k.card_id IN (SELECT c.id FROM cards c JOIN vault_access m ON m.vault_id = c.vault_id WHERE m.user_id = ? AND c.deleted = 0)
          OR k.card_id IN (SELECT s.card_id FROM card_shares s WHERE ${SHARED_WITH})
        )
        GROUP BY k.card_id ORDER BY k.card_id`,

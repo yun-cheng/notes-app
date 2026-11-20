@@ -8,6 +8,8 @@ export interface Member {
   name: string;
   email: string;
   role: 'owner' | MemberRole;
+  /** Whether they've locked the vault with a PIN of their own, as its owner may ask everyone to. */
+  locked: boolean;
 }
 
 export interface VaultPeople {
@@ -28,14 +30,15 @@ export async function vaultPeople(db: Database, vaultId: string): Promise<VaultP
   const [members, invites] = await Promise.all([
     db
       .prepare(
-        `SELECT u.id AS user_id, u.name, u.email, m.role FROM vault_members m JOIN users u ON u.id = m.user_id
+        `SELECT u.id AS user_id, u.name, u.email, m.role, (CASE WHEN m.role = 'owner' THEN v.lock = 'pin' ELSE m.pin_hash IS NOT NULL END) AS locked
+         FROM vault_members m JOIN users u ON u.id = m.user_id JOIN vaults v ON v.id = m.vault_id
          WHERE m.vault_id = ? ORDER BY m.role = 'owner' DESC, u.name`,
       )
       .bind(vaultId)
-      .all<Member>(),
+      .all<Omit<Member, 'locked'> & { locked: number }>(),
     db.prepare(`SELECT email, role FROM vault_invites WHERE vault_id = ? ORDER BY email`).bind(vaultId).all<{ email: string; role: MemberRole }>(),
   ]);
-  return { members: members.results, invites: invites.results };
+  return { members: members.results.map((m) => ({ ...m, locked: !!m.locked })), invites: invites.results };
 }
 
 /** Sharing a whole vault: its owner adds people by email as editors or viewers. Anyone may leave. */
@@ -50,9 +53,10 @@ export function memberRoutes(app: Hono<AppEnv>, now: () => number) {
   app.post('/vaults/:id/members', async (c) => {
     const vaultId = c.req.param('id');
     const me = c.get('user');
-    const vault = await c.env.DB.prepare(`SELECT owner_id, lock FROM vaults WHERE id = ?`).bind(vaultId).first<{ owner_id: string; lock: string }>();
+    const vault = await c.env.DB.prepare(`SELECT owner_id, encryption FROM vaults WHERE id = ?`).bind(vaultId).first<{ owner_id: string; encryption: string | null }>();
     if (!vault || vault.owner_id !== me.id) return c.json({ error: 'Vault not found' }, 404);
-    if (vault.lock !== 'none') return c.json({ error: 'A private vault cannot be shared' }, 400);
+    // Each member locks a vault with a PIN of their own, but an encrypted vault's key can't reach them yet.
+    if (vault.encryption) return c.json({ error: 'An encrypted vault cannot be shared' }, 400);
     const body = await c.req.json<{ email?: unknown; role?: unknown }>().catch(() => null);
     const email = typeof body?.email === 'string' ? body.email.trim().toLowerCase() : '';
     const role = body?.role;

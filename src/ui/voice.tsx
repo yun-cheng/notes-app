@@ -181,7 +181,8 @@ export function VoiceMessage({ file, vaultId, onTranscript }: { file: FileInfo; 
           <audio
             ref={audio}
             src={address}
-            preload="metadata"
+            // Its length is kept with it, so nothing is fetched (from Google Drive, for one from another device) until it plays.
+            preload="none"
             onLoadedMetadata={(e) => {
               const el = e.currentTarget;
               el.playbackRate = speed;

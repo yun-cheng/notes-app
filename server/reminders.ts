@@ -4,14 +4,15 @@ import { parsePayload } from '../src/domain/payload';
 import { dueKey, fireAt, LATE, notification, reminderOf, type Reminder, type ReminderSettings } from '../src/domain/reminders';
 import type { CardRecord } from '../src/domain/types';
 import type { AppEnv, Bindings, Database } from './db';
-import { validVapidKeys, webPushSender, type PushTarget, type SendPush, type VapidKeys } from './webpush';
+import { b64url, validVapidKeys, webPushSender, type PushTarget, type SendPush, type VapidKeys } from './webpush';
 
 /**
  * Due-date reminders. A browser that asks for them leaves a push subscription here, with its time zone and when it
  * wants them. As cards are pushed, open todos with a due date are noted (`syncReminders`); every few minutes the
  * scheduled run sends each one that's come due to the browsers of the people who can change it (`sendReminders`):
  * at its due time (or some minutes before), or for a todo with only a date, at a set time that day. The server
- * can't read an encrypted vault, so its todos have none.
+ * can't read an encrypted vault, so a device with it open works out its reminders and seals each for each browser
+ * (src/reminders/sealed.ts), and the server sends those as they are (`sealed_reminders`).
  */
 
 export { fireAt, localInstant, notification, reminderOf } from '../src/domain/reminders';
@@ -19,6 +20,10 @@ export { fireAt, localInstant, notification, reminderOf } from '../src/domain/re
 const DAY = 86_400_000;
 /** How many browsers one account can have reminders on. */
 const MAX_SUBSCRIPTIONS = 20;
+/** How many sealed reminders a device may leave for one vault at once: the nearest, as it sends them. */
+export const MAX_SEALED = 500;
+/** A sealed notification, base64url: a reminder's few hundred bytes, with room to spare. */
+const MAX_SEALED_BODY = 6000;
 
 /** Keeps the reminders in step with cards just written: noted, changed, or gone. */
 export async function syncReminders(db: Database, records: CardRecord[]): Promise<void> {
@@ -32,7 +37,9 @@ export async function syncReminders(db: Database, records: CardRecord[]): Promis
         // Not a card this server can read.
       }
     }
-    return reminder
+    // One the server can read now, or gone, has no sealed reminders left.
+    const unsealed = r.deleted || !r.payload.startsWith('e1:') ? [db.prepare(`DELETE FROM sealed_reminders WHERE card_id = ?`).bind(r.id)] : [];
+    const kept = reminder
       ? db
           .prepare(
             `INSERT INTO reminders (card_id, vault_id, title, due, due_time) VALUES (?, ?, ?, ?, ?)
@@ -40,8 +47,9 @@ export async function syncReminders(db: Database, records: CardRecord[]): Promis
           )
           .bind(r.id, r.vault_id, reminder.title.slice(0, 200), reminder.due, reminder.due_time)
       : db.prepare(`DELETE FROM reminders WHERE card_id = ?`).bind(r.id);
+    return [kept, ...unsealed];
   });
-  await db.batch(statements);
+  await db.batch(statements.flat());
 }
 
 export const isTimeZone = (zone: unknown): zone is string => {
@@ -94,8 +102,79 @@ export async function sendReminders(db: Database, send: SendPush, now: number): 
     sent++;
     await db.prepare(`INSERT OR IGNORE INTO reminders_sent (card_id, subscription_id, due_key, sent_at) VALUES (?, ?, ?, ?)`).bind(row.card_id, row.id, dueKey(row), now).run();
   }
+
+  // Those a device sealed, for todos in an encrypted vault: sent as they are, to the browser each was sealed for, while
+  // the todo is still in that vault and its owner (or an editor) still in it.
+  const { results: sealed } = await db
+    .prepare(
+      `SELECT r.card_id, r.fire_at, r.body, s.id, s.endpoint, s.p256dh, s.auth
+       FROM sealed_reminders r
+       JOIN push_subscriptions s ON s.id = r.subscription_id
+       JOIN vaults v ON v.id = r.vault_id AND v.encryption IS NOT NULL
+       JOIN vault_access m ON m.vault_id = r.vault_id AND m.user_id = s.user_id AND m.role != 'viewer'
+       JOIN cards c ON c.id = r.card_id AND c.vault_id = r.vault_id AND c.deleted = 0
+       WHERE r.fire_at <= ? AND r.fire_at >= ?
+         AND NOT EXISTS (SELECT 1 FROM reminders_sent x WHERE x.card_id = r.card_id AND x.subscription_id = s.id AND x.due_key = 'sealed ' || r.fire_at)`,
+    )
+    .bind(now, now - LATE)
+    .all<PushTarget & { id: string; card_id: string; fire_at: number; body: string }>();
+  for (const row of sealed) {
+    if (gone.has(row.id)) continue;
+    const outcome = await send(row, b64url.decode(row.body));
+    if (outcome === 'gone') {
+      gone.add(row.id);
+      continue;
+    }
+    if (outcome === 'failed') continue;
+    sent++;
+    await db.prepare(`INSERT OR IGNORE INTO reminders_sent (card_id, subscription_id, due_key, sent_at) VALUES (?, ?, ?, ?)`).bind(row.card_id, row.id, `sealed ${row.fire_at}`, now).run();
+  }
   if (gone.size) await db.batch([...gone].map((id) => db.prepare(`DELETE FROM push_subscriptions WHERE id = ?`).bind(id)));
   return sent;
+}
+
+interface SealedBody {
+  card_id?: unknown;
+  subscription_id?: unknown;
+  fire_at?: unknown;
+  body?: unknown;
+}
+
+/**
+ * Replaces the sealed reminders a device left for one encrypted vault, for this account's browsers: what it worked
+ * out from the vault's todos, open on it. Only for cards in that vault, and browsers of this account.
+ */
+async function replaceSealed(db: Database, userId: string, vaultId: string, input: unknown): Promise<{ kept: number } | { error: string; status: 400 | 404 }> {
+  const vault = await db
+    .prepare(`SELECT v.encryption FROM vaults v JOIN vault_access m ON m.vault_id = v.id WHERE v.id = ? AND m.user_id = ? AND m.role IN ('owner', 'editor')`)
+    .bind(vaultId, userId)
+    .first<{ encryption: string | null }>();
+  if (!vault) return { error: 'Vault not found', status: 404 };
+  if (!vault.encryption) return { error: 'The server reminds of an open vault’s todos itself', status: 400 };
+  const list = (input as { reminders?: unknown } | null)?.reminders;
+  if (!Array.isArray(list) || list.length > MAX_SEALED) return { error: 'Give the reminders as a list', status: 400 };
+  const [{ results: subs }, { results: cards }] = await Promise.all([
+    db.prepare(`SELECT id FROM push_subscriptions WHERE user_id = ?`).bind(userId).all<{ id: string }>(),
+    db.prepare(`SELECT id FROM cards WHERE vault_id = ? AND deleted = 0`).bind(vaultId).all<{ id: string }>(),
+  ]);
+  const mine = new Set(subs.map((s) => s.id));
+  const here = new Set(cards.map((c) => c.id));
+  const rows: { card_id: string; subscription_id: string; fire_at: number; body: string }[] = [];
+  for (const item of list as SealedBody[]) {
+    const { card_id, subscription_id, fire_at, body } = item ?? {};
+    if (typeof card_id !== 'string' || typeof subscription_id !== 'string' || !Number.isSafeInteger(fire_at) || !isKey(body, MAX_SEALED_BODY)) return { error: 'Not a sealed reminder', status: 400 };
+    // A card not synced yet, or a browser turned off since: left for the next time.
+    if (here.has(card_id) && mine.has(subscription_id)) rows.push({ card_id, subscription_id, fire_at: fire_at as number, body });
+  }
+  await db.batch([
+    db.prepare(`DELETE FROM sealed_reminders WHERE vault_id = ? AND subscription_id IN (SELECT id FROM push_subscriptions WHERE user_id = ?)`).bind(vaultId, userId),
+    ...rows.map((r) =>
+      db
+        .prepare(`INSERT OR REPLACE INTO sealed_reminders (card_id, subscription_id, vault_id, fire_at, body) VALUES (?, ?, ?, ?, ?)`)
+        .bind(r.card_id, r.subscription_id, vaultId, r.fire_at, r.body),
+    ),
+  ]);
+  return { kept: rows.length };
 }
 
 /** The server's VAPID keys, when its owner has set them. */
@@ -147,6 +226,19 @@ const isKey = (v: unknown, max: number): v is string => typeof v === 'string' &&
  */
 export function reminderRoutes(app: Hono<AppEnv>, now: () => number, fetcher?: typeof fetch) {
   app.get('/push/key', (c) => c.json({ key: vapidKeys(c.env)?.publicKey ?? null }));
+
+  /** This account's browsers with reminders on, with the keys a device seals an encrypted vault's reminders to. */
+  app.get('/push/subscriptions', async (c) => {
+    const { results } = await c.env.DB.prepare(`SELECT id, p256dh, auth, time_zone, locale, remind_at, lead_minutes FROM push_subscriptions WHERE user_id = ? ORDER BY id`)
+      .bind(c.get('user').id)
+      .all();
+    return c.json({ subscriptions: results });
+  });
+
+  app.put('/vaults/:id/sealed-reminders', async (c) => {
+    const result = await replaceSealed(c.env.DB, c.get('user').id, c.req.param('id'), await c.req.json().catch(() => null));
+    return 'error' in result ? c.json({ error: result.error }, result.status) : c.json(result);
+  });
 
   app.put('/push/subscription', async (c) => {
     const body = (await c.req.json().catch(() => null)) as SubscriptionBody | null;

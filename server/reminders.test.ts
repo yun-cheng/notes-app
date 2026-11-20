@@ -2,7 +2,7 @@ import { describe, expect, it } from 'vitest';
 import type { CardPayload } from '../src/domain/types';
 import { fireAt, localInstant, notification, reminderOf, sendReminders } from './reminders';
 import { rec, setup } from './testHarness';
-import type { PushTarget } from './webpush';
+import { b64url, type PushTarget } from './webpush';
 
 const todo = (over: Partial<CardPayload> & Record<string, unknown> = {}) =>
   JSON.stringify({ type: 'todo', title: 'Pay rent', content: { type: 'doc' }, tags: [], status: 'open', due: '2026-11-20', completedAt: null, createdAt: 1, ...over });
@@ -98,5 +98,57 @@ describe('reminders on the server', () => {
     outcome = 'gone';
     expect(await sendReminders(db, send, at('2026-11-22T09:01:00Z'))).toBe(0);
     expect((await db.prepare(`SELECT COUNT(*) AS n FROM push_subscriptions`).first<{ n: number }>())!.n).toBe(1);
+  });
+
+  it('keeps the reminders a device sealed for an encrypted vault, and sends them as they are', async () => {
+    const { db, signIn, call, push } = setup();
+    const ann = await signIn('ann');
+    const ben = await signIn('ben');
+    const pin = { salt: 'c2FsdA==', hash: 'aGFzaA==', iterations: 300_000 };
+    const encryption = { version: 1, kdf: { name: 'argon2id', salt: 'c2FsdA==', memory: 19456, iterations: 2, parallelism: 1 }, wrapped: 'd3JhcHBlZA==', recovery: 'cmVjb3Zlcnk=' };
+    const json = async <T>(res: Promise<Response>) => (await (await res).json()) as T;
+    const diary = await json<{ id: string }>(call('/api/vaults', { method: 'POST', body: JSON.stringify({ name: 'Diary', pin, encryption }) }, ann.cookie));
+    await push(ann.cookie, [rec(diary.id, 's1', { payload: 'e1:sealed' })]);
+    await call('/api/push/subscription', { method: 'PUT', body: JSON.stringify(subscription('https://push.example.com/ann')) }, ann.cookie);
+    await call('/api/push/subscription', { method: 'PUT', body: JSON.stringify(subscription('https://push.example.com/ben')) }, ben.cookie);
+
+    const { subscriptions } = await json<{ subscriptions: { id: string; p256dh: string; time_zone: string; lead_minutes: number }[] }>(call('/api/push/subscriptions', {}, ann.cookie));
+    expect(subscriptions).toEqual([expect.objectContaining({ p256dh: 'BKey', auth: 'auth', time_zone: 'Asia/Taipei', locale: 'en-US', remind_at: '08:30', lead_minutes: 10 })]);
+    const mine = subscriptions[0].id;
+    const bens = (await db.prepare(`SELECT id FROM push_subscriptions WHERE user_id = ?`).bind(ben.user.id).first<{ id: string }>())!.id;
+
+    const fire = Date.parse('2026-11-20T07:00:00Z');
+    const body = b64url.encode(new Uint8Array([1, 2, 3, 4]));
+    const put = (vault: string, reminders: unknown, cookie = ann.cookie) => call(`/api/vaults/${vault}/sealed-reminders`, { method: 'PUT', body: JSON.stringify({ reminders }) }, cookie);
+    // Only for an encrypted vault, by someone who can change it, in a shape that's sealed reminders.
+    expect((await put(ann.vault, [])).status).toBe(400);
+    expect((await put(diary.id, [], ben.cookie)).status).toBe(404);
+    expect((await put(diary.id, [{ card_id: 's1', subscription_id: mine, fire_at: 'soon', body }])).status).toBe(400);
+    // A card that isn't in the vault, or someone else's browser, is left out.
+    const kept = await json<{ kept: number }>(
+      put(diary.id, [
+        { card_id: 's1', subscription_id: mine, fire_at: fire, body },
+        { card_id: 'elsewhere', subscription_id: mine, fire_at: fire, body },
+        { card_id: 's1', subscription_id: bens, fire_at: fire, body },
+      ]),
+    );
+    expect(kept).toEqual({ kept: 1 });
+
+    const sent: [string, unknown][] = [];
+    const send = async (target: PushTarget, message: unknown) => (sent.push([target.endpoint, message]), 'sent' as const);
+    expect(await sendReminders(db, send, fire - 60_000)).toBe(0);
+    expect(await sendReminders(db, send, fire + 60_000)).toBe(1);
+    expect(sent).toEqual([['https://push.example.com/ann', new Uint8Array([1, 2, 3, 4])]]);
+    expect(await sendReminders(db, send, fire + 120_000)).toBe(0);
+
+    // Replaced as a whole; and gone once the card is.
+    const count = async () => (await db.prepare(`SELECT COUNT(*) AS n FROM sealed_reminders`).first<{ n: number }>())!.n;
+    await put(diary.id, [{ card_id: 's1', subscription_id: mine, fire_at: fire + 86_400_000, body }]);
+    expect(await count()).toBe(1);
+    await put(diary.id, []);
+    expect(await count()).toBe(0);
+    await put(diary.id, [{ card_id: 's1', subscription_id: mine, fire_at: fire + 86_400_000, body }]);
+    await push(ann.cookie, [rec(diary.id, 's1', { seq: 1, updated_at: 200, deleted: true, payload: 'e1:sealed' })]);
+    expect(await count()).toBe(0);
   });
 });

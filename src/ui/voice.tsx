@@ -98,9 +98,11 @@ export function VoiceMessage({ file, vaultId, onTranscript }: { file: FileInfo; 
     }
   }, [can, vaultId, file.id]);
   useEffect(() => {
-    if (job?.state !== 'done' || !latest.current) return;
-    latest.current(job.words);
+    // Read again, not `job`: with the entry open in the journal too, the first view to get here saves it, alone.
+    const now = jobs.get(file.id);
+    if (now?.state !== 'done' || !latest.current) return;
     setJob(file.id, null);
+    latest.current(now.words);
   }, [job]);
 
   const total = length ?? file.duration ?? 0;
@@ -219,6 +221,7 @@ export function VoiceMessage({ file, vaultId, onTranscript }: { file: FileInfo; 
               </button>
             )}
             {job?.state === 'working' && <span className="voice__status">Transcribing…</span>}
+            {job?.state === 'failed' && <span className="voice__status">{job.message}</span>}
           </span>
         </div>
       ) : job?.state === 'working' ? (

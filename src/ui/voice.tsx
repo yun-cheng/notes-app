@@ -1,7 +1,7 @@
 import { useEffect, useRef, useState, useSyncExternalStore, type KeyboardEvent, type MouseEvent, type PointerEvent } from 'react';
 import { createPortal } from 'react-dom';
 import { clipLength, type FileInfo } from '../domain/content';
-import type { Vault } from '../domain/types';
+import { canChangeInTheOpen } from '../domain/access';
 import { cueAt, cutPoints, joinTranscripts, PEAK_BARS, VOICE_RATE, wavBytes, type Transcript } from '../domain/voice';
 import { decodeVoice } from '../photos/audio';
 import type { PhotoService } from '../photos/service';
@@ -14,9 +14,6 @@ import { useVideoAddress } from './video';
 
 /** The longest voice message recorded at once: a quarter of what a day's transcribing allows. */
 export const MAX_RECORDING_SECONDS = 15 * 60;
-
-/** Whether what's in a vault may be transcribed: one this account can change, and not private (encrypted). */
-export const canTranscribeIn = (vault: Vault | undefined) => !!vault && vault.role !== 'viewer' && !vault.encryption;
 
 type Job = { state: 'working' } | { state: 'done'; words: Transcript } | { state: 'failed'; message: string };
 
@@ -88,7 +85,7 @@ export function VoiceMessage({ file, vaultId, onTranscript }: { file: FileInfo; 
   const [broken, setBroken] = useState(false);
   const job = useSyncExternalStore(subscribe, () => jobs.get(file.id));
   const vault = vaults.find((v) => v.id === vaultId);
-  const can = !!onTranscript && canTranscribeIn(vault);
+  const can = !!onTranscript && canChangeInTheOpen(vault);
   const latest = useRef(onTranscript);
   latest.current = onTranscript;
 

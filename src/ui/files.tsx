@@ -2,7 +2,8 @@ import { createContext, useContext, type MouseEvent } from 'react';
 import type { FileInfo } from '../domain/content';
 import { fileSize } from '../photos/service';
 import { useCards } from '../state/CardsContext';
-import { canShareIn, useShareLink } from './driveLink';
+import { canChangeInTheOpen } from '../domain/access';
+import { useShareLink } from './driveLink';
 import { Icon } from './Icon';
 import { useToast } from './Toast';
 
@@ -68,7 +69,7 @@ export function FileChip({ file, vaultId }: { file: FileInfo; vaultId?: string }
   const act = useFileActions();
   const { vaults } = useCards();
   const inVault = useContext(FileVault);
-  const sharable = canShareIn(vaults.find((v) => v.id === (vaultId ?? inVault)));
+  const sharable = canChangeInTheOpen(vaults.find((v) => v.id === (vaultId ?? inVault)));
   const share = useShareLink();
   const stop = (e: MouseEvent) => e.stopPropagation();
   const detail = [file.size !== null ? fileSize(file.size) : null, fileKind(file.name)].filter(Boolean).join(' · ');

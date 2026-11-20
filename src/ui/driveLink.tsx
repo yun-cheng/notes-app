@@ -1,7 +1,6 @@
 import { useEffect, useState } from 'react';
 import { useNavigate } from 'react-router';
 import { fetchDriveLink, shareDriveLink, stopDriveLink, type DriveLink, type ShareLinkResult } from '../sync/http';
-import type { Vault } from '../domain/types';
 import { writeClipboard } from './entryActions';
 import { Item } from './EntryMenu';
 import { useToast } from './Toast';
@@ -48,9 +47,6 @@ export function useShareLink() {
     });
   };
 }
-
-/** Whether this account may share what's in a vault by link: one it can change, and not private (encrypted). */
-export const canShareIn = (vault: Vault | undefined) => !!vault && vault.role !== 'viewer' && !vault.encryption;
 
 /**
  * A photo, video or file right-clicked anywhere: Share via public link shares it from the vault owner's Google Drive, so

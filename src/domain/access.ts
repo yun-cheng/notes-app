@@ -48,6 +48,12 @@ function reach(card: Card, vaults: Vault[], shared: ReadonlyMap<string, SharedCa
 }
 
 /** The account's own main vault, which new cards go into. */
+/**
+ * Whether the server may work on what's in a vault for this account: one it can change, and not private (encrypted),
+ * whose contents never reach the server. Sharing by a Google Drive link and transcribing voice both ask this.
+ */
+export const canChangeInTheOpen = (vault: Vault | undefined) => !!vault && vault.role !== 'viewer' && !vault.encryption;
+
 export const mainVault = (vaults: Vault[], accountId: string) => vaults.find((v) => v.id === `vault-${accountId}`) ?? vaults[0];
 
 /** The account's diary: the vault made for it at sign-in, whatever it has been renamed to. `#diary` files an entry there. */

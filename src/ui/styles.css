@@ -1174,7 +1174,7 @@ body:has(.batch) .toast-slot { bottom: calc(var(--tabbar) + env(safe-area-inset-
 .bubble__copy { position: absolute; top: 4px; right: 4px; display: grid; place-items: center; width: 24px; height: 24px; padding: 0; border: 1px solid var(--line); border-radius: 8px; background: var(--surface); box-shadow: 0 1px 3px rgb(0 0 0 / 12%); color: var(--muted); opacity: 0; cursor: pointer; transition: opacity 0.12s; }
 .bubble__copy:hover { color: var(--text); border-color: var(--muted); }
 /*
- * The button that adds a reaction keeps its room at the left of the bottom row, shown on hover or not, so the row's
+ * The button that adds a reaction keeps its room at the left of the bottom row, faint until hovered, so the row's
  * words never move as the mouse comes and goes, and the button never covers them (since 2026-11-21). On 2026-11-18 it
  * stopped holding room with no reactions yet, floating over the row's words, and for a moment that day it sat in the
  * top right corner beside the copy button.
@@ -1183,9 +1183,13 @@ body:has(.batch) .toast-slot { bottom: calc(var(--tabbar) + env(safe-area-inset-
 .stream__entry:hover .bubble__copy, .bubble:focus-visible .bubble__copy, .bubble:has(:focus-visible) .bubble__copy { opacity: 1; }
 .bubble__add { display: inline-grid; place-items: center; width: 22px; height: 18px; padding: 0; border: 1px dashed var(--line); border-radius: 9px; background: none; color: var(--muted); opacity: 0; cursor: pointer; transition: opacity 0.12s; }
 .bubble__add:hover { color: var(--text); border-color: var(--muted); }
+/* The one that adds a reaction shows always, faint, so where to react is never hidden; hovered, it shows in full. */
+.reactions .bubble__add { opacity: 0.4; }
 .stream__entry:hover .bubble__add, .bubble:focus-visible .bubble__add, .bubble:has(:focus-visible) .bubble__add, .is-open > .bubble__add { opacity: 1; }
-/* Without hover they're gone, taking no room in the row: its reactions start at the bubble's edge. */
+/* Without hover the others are gone, taking no room in the row. */
 @media (pointer: coarse) { .bubble__add, .bubble-menu:has(> .bubble__add:only-child) { display: none; } }
+/* Except a reaction's, there to tap, a little bigger for a finger: a phone has no hover, and before it reached reactions only from the entry's sheet. */
+@media (pointer: coarse) { .reactions > .bubble-menu:has(> .bubble__add) { display: flex; } .reactions .bubble__add { display: inline-grid; width: 28px; height: 20px; border-radius: 10px; } }
 .bubble-menu { position: relative; display: flex; }
 /* Reactions: in a bubble's bottom row on the left, and under the tags in its sheet. */
 .reactions { display: inline-flex; flex-wrap: wrap; align-items: center; gap: 4px; }
@@ -1461,7 +1465,8 @@ span.bubble__template { color: var(--muted); cursor: default; }
 .stack-list a { color: var(--text); }
 /* In an open stack, a card's own buttons show when it's hovered, not with the whole stack. */
 .stream__entry:hover .stack__card .bubble__copy, .stream__entry:hover .stack__card .bubble__add { opacity: 0; }
-.stream__entry .stack__card:hover .bubble__copy, .stream__entry .stack__card:hover .bubble__add,
+.stream__entry:hover .stack__card .reactions .bubble__add { opacity: 0.4; }
+.stream__entry .stack__card:hover .bubble__copy, .stream__entry .stack__card:hover .bubble__add, .stream__entry .stack__card:hover .reactions .bubble__add,
 .stream__entry .stack__card .bubble:focus-visible .bubble__copy, .stream__entry .stack__card .bubble:has(:focus-visible) .bubble__copy { opacity: 1; }
 
 /* The month: weeks of days, each with its todos as chips in rows that keep a span on one line through the week. */

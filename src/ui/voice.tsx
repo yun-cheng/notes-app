@@ -254,35 +254,50 @@ const LEVELS = 28;
 
 /**
  * Recording a voice message from the microphone: `start` asks for it and starts, and `view` is the bar that shows
- * while recording, with the time, how loud it is now, Discard and Done. Done hands the recording to `onRecorded`. It
- * stops by itself at `MAX_RECORDING_SECONDS`.
+ * while recording, with the time, how loud it is now, Discard and Done. Only Discard throws it away: Done, stopping by
+ * itself at `MAX_RECORDING_SECONDS`, or the microphone going (unplugged, or taken by the system) hands what was
+ * recorded to `onRecorded`.
  */
 export function useVoiceRecorder(onRecorded: (recording: Recording) => void) {
   const toast = useToast();
   const [shown, setShown] = useState<{ seconds: number; levels: number[] } | null>(null);
-  const live = useRef<{ recorder: MediaRecorder; stop: () => void; keep: boolean } | null>(null);
+  const live = useRef<{ recorder: MediaRecorder; keep: boolean } | null>(null);
+  // Asking for the microphone, so a second press meanwhile doesn't start a second recording.
+  const asking = useRef(false);
+  const mounted = useRef(true);
   const latest = useRef(onRecorded);
   latest.current = onRecorded;
 
+  /** Stops it, keeping what was recorded or not. The recorder's stop event does the rest, once its last piece is in. */
   const finish = (keep: boolean) => {
     const now = live.current;
     if (!now) return;
     now.keep = keep;
     if (now.recorder.state !== 'inactive') now.recorder.stop();
-    else now.stop();
   };
-  useEffect(() => () => finish(false), []);
+  useEffect(() => {
+    mounted.current = true;
+    return () => {
+      mounted.current = false;
+      finish(false);
+    };
+  }, []);
 
   const start = async () => {
-    if (live.current) return;
+    if (live.current || asking.current) return;
     if (!navigator.mediaDevices?.getUserMedia || typeof MediaRecorder === 'undefined') return toast('This browser can’t record sound.');
     let stream: MediaStream;
+    asking.current = true;
     try {
       stream = await navigator.mediaDevices.getUserMedia({ audio: { echoCancellation: true, noiseSuppression: true } });
     } catch (err) {
       const name = (err as { name?: string }).name;
       return toast(name === 'NotAllowedError' || name === 'SecurityError' ? 'Allow the microphone for this site to record a voice message.' : 'No microphone was found to record with.');
+    } finally {
+      asking.current = false;
     }
+    // Gone while the browser asked: nothing to record into.
+    if (!mounted.current) return stream.getTracks().forEach((t) => t.stop());
     const type = RECORD_TYPES.find((t) => MediaRecorder.isTypeSupported(t));
     const recorder = new MediaRecorder(stream, type ? { mimeType: type } : undefined);
     const chunks: Blob[] = [];
@@ -309,7 +324,10 @@ export function useVoiceRecorder(onRecorded: (recording: Recording) => void) {
         levels = [...levels.slice(1), Math.min(100, Math.round(Math.sqrt(sum / data.length) * 400))];
       }
       setShown({ seconds, levels });
-      if (seconds >= MAX_RECORDING_SECONDS) finish(true);
+      if (seconds >= MAX_RECORDING_SECONDS) {
+        clearInterval(tick);
+        finish(true);
+      }
     }, 100);
     const stop = () => {
       clearInterval(tick);
@@ -323,7 +341,7 @@ export function useVoiceRecorder(onRecorded: (recording: Recording) => void) {
     };
     recorder.ondataavailable = (e) => e.data.size && chunks.push(e.data);
     recorder.onstop = stop;
-    live.current = { recorder, stop, keep: false };
+    live.current = { recorder, keep: true };
     setShown({ seconds: 0, levels });
     recorder.start(1000);
   };

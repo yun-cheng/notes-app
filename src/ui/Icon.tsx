@@ -68,6 +68,9 @@ const PATHS = {
   play: 'M8 5.5v13l10.5-6.5L8 5.5Z',
   video: 'M4 6h11a1 1 0 0 1 1 1v10a1 1 0 0 1-1 1H4a1 1 0 0 1-1-1V7a1 1 0 0 1 1-1ZM16 10.5l5-3v9l-5-3',
   pause: 'M8 5.5v13M16 5.5v13',
+  // Skipping to the previous or next voice message, in the bar over the page.
+  previous: 'M18 6.5v11L9.5 12 18 6.5ZM6.5 6.5v11',
+  next: 'M6 6.5v11l8.5-5.5L6 6.5ZM17.5 6.5v11',
   // A microphone: recording a voice message.
   mic: 'M12 3a3 3 0 0 0-3 3v6a3 3 0 0 0 6 0V6a3 3 0 0 0-3-3ZM5.5 11a6.5 6.5 0 0 0 13 0M12 17.5V21M9 21h6',
   stop: 'M7 6h10a1 1 0 0 1 1 1v10a1 1 0 0 1-1 1H7a1 1 0 0 1-1-1V7a1 1 0 0 1 1-1Z',

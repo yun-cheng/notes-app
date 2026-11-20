@@ -1058,7 +1058,11 @@ body:has(.batch) .toast-slot { bottom: calc(var(--tabbar) + env(safe-area-inset-
 .voice-bar button { font: inherit; cursor: pointer; }
 .voice-bar__play, .voice-bar__close { display: grid; place-items: center; flex: none; width: 28px; height: 28px; padding: 0; border: 0; border-radius: 50%; }
 .voice-bar__play { background: var(--accent); color: var(--on-accent); }
-.voice-bar__play svg path { fill: currentColor; }
+.voice-bar__play svg path, .voice-bar__skip svg path { fill: currentColor; }
+.voice-bar__controls { display: flex; align-items: center; gap: 2px; flex: none; }
+.voice-bar__skip { display: grid; place-items: center; flex: none; width: 28px; height: 28px; padding: 0; border: 0; border-radius: 50%; background: none; color: var(--muted); }
+.voice-bar__skip:hover:not(:disabled) { background: var(--sunken); color: var(--text); }
+.voice-bar__skip:disabled { opacity: 0.35; cursor: default; }
 .voice-bar__close { background: none; color: var(--muted); }
 .voice-bar__close:hover { background: var(--sunken); color: var(--text); }
 .voice-bar__what { display: flex; align-items: baseline; gap: 8px; flex: 1; min-width: 0; padding: 0; border: 0; background: none; color: inherit; text-align: left; white-space: nowrap; }

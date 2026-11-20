@@ -19,20 +19,36 @@ import { readySound, releaseSound, setVoiceVolume, toggleVoiceMute, useVoiceVolu
  */
 const players = new Map<HTMLElement, { play: () => boolean; pause: () => void }>();
 
+/** The voice messages on show beside `root` (in the journal, or the same open entry), in order, after it or before it, nearest first. */
+function besides(root: HTMLElement, after: boolean): HTMLElement[] {
+  const scope = root.closest('.stream, .ProseMirror') ?? document.body;
+  const side = after ? Node.DOCUMENT_POSITION_FOLLOWING : Node.DOCUMENT_POSITION_PRECEDING;
+  return [...players.keys()]
+    .filter((r) => r !== root && scope.contains(r) && root.compareDocumentPosition(r) & side)
+    .sort((a, b) => (a.compareDocumentPosition(b) & side ? -1 : 1));
+}
+
 /** Plays the voice message after `root` if it comes straight after: in the same entry, or the next one. Whether one did. */
 function playAfter(root: HTMLElement): boolean {
-  const scope = root.closest('.stream, .ProseMirror') ?? document.body;
-  const next = [...players.keys()]
-    .filter((r) => r !== root && scope.contains(r) && root.compareDocumentPosition(r) & Node.DOCUMENT_POSITION_FOLLOWING)
-    .sort((a, b) => (a.compareDocumentPosition(b) & Node.DOCUMENT_POSITION_FOLLOWING ? -1 : 1))[0];
+  const next = besides(root, true)[0];
   if (!next) return false;
   const entry = root.closest('.stream__entry');
   const nextEntry = next.closest('.stream__entry');
   if (entry !== nextEntry) {
+    const scope = root.closest('.stream, .ProseMirror') ?? document.body;
     const entries = [...scope.querySelectorAll('.stream__entry')];
     if (!entry || !nextEntry || entries.indexOf(nextEntry) !== entries.indexOf(entry) + 1) return false;
   }
   return players.get(next)?.play() ?? false;
+}
+
+/** Plays the voice message before or after `root`, as the bar's ‹‹ and ›› do, from its start: any on show, the nearest that can play. */
+function skip(root: HTMLElement, after: boolean): void {
+  for (const r of besides(root, after)) {
+    const el = r.querySelector('audio');
+    if (el) el.currentTime = 0;
+    if (players.get(r)?.play()) return;
+  }
 }
 
 /**
@@ -413,7 +429,7 @@ function VolumeButton() {
 
 /**
  * The voice message playing, in a bar along the foot of the title bar while it plays and while it's only paused, as
- * Telegram has one over a chat: play and pause, its name (pressed, it's scrolled to) and what's being said, the time,
+ * Telegram has one over a chat: play and pause between the previous and next voice message on show, its name (pressed, it's scrolled to) and what's being said, the time,
  * the speed and the volume, a line along its foot to seek in, and a close. It's always there, empty while nothing
  * plays, so the page under it is moved as it comes and goes, and what's on screen stays put.
  */
@@ -445,9 +461,17 @@ export function VoiceBar() {
   };
   return (
     <div ref={bar} className="voice-bar" role="region" aria-label="Voice message playing">
-      <button type="button" className="voice-bar__play" aria-label={playing ? 'Pause' : 'Play'} title={playing ? 'Pause' : 'Play'} onClick={current.toggle}>
-        <Icon name={playing ? 'pause' : 'play'} size={16} />
-      </button>
+      <span className="voice-bar__controls">
+        <button type="button" className="voice-bar__skip" aria-label="Previous voice message" title="Previous voice message" disabled={!besides(root, false).length} onClick={() => skip(root, false)}>
+          <Icon name="previous" size={16} />
+        </button>
+        <button type="button" className="voice-bar__play" aria-label={playing ? 'Pause' : 'Play'} title={playing ? 'Pause' : 'Play'} onClick={current.toggle}>
+          <Icon name={playing ? 'pause' : 'play'} size={16} />
+        </button>
+        <button type="button" className="voice-bar__skip" aria-label="Next voice message" title="Next voice message" disabled={!besides(root, true).length} onClick={() => skip(root, true)}>
+          <Icon name="next" size={16} />
+        </button>
+      </span>
       <button type="button" className="voice-bar__what" title="Show it" onClick={() => root.scrollIntoView({ block: 'center', behavior: 'smooth' })}>
         <strong>{name}</strong>
         {saying && <span>{saying}</span>}

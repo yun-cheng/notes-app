@@ -18,6 +18,7 @@ import { cardPath, sheetState } from '../paths';
 import { useShowInJournal } from '../showInJournal';
 import { ScrollRail } from '../ScrollRail';
 import { useInView } from '../useInView';
+import { holdsWords, usePageSearch } from '../PageSearch';
 
 /**
  * What the journal's entries hold, by day, for the Photos, Links or Files page: the notes and todos the journal's
@@ -99,7 +100,10 @@ interface ListProps<T extends { id: string }> {
   title: string;
   days: ItemDay<T>[];
   filtered: boolean;
-  count: string;
+  /** One and many of what's listed: link, links. */
+  noun: [string, string];
+  /** What one is called besides its entry, for the search: a link's address, a file's name. */
+  text: (item: DayItem<T>) => string;
   empty: string;
   emptyFiltered: string;
   render: (item: DayItem<T>) => ReactNode;
@@ -112,12 +116,19 @@ interface ListProps<T extends { id: string }> {
  * under it, pressed to open the entry. A right-click on one opens its menu (`HeldMenu`). The journal's filters
  * narrow it, as on the Photos page.
  */
-function HeldList<T extends { id: string }>({ title, days, filtered, count, empty, emptyFiltered, render, menu, menuLabel }: ListProps<T>) {
+function HeldList<T extends { id: string }>({ title, days: held, filtered, noun, text, empty, emptyFiltered, render, menu, menuLabel }: ListProps<T>) {
   const today = useToday();
   const filter = useJournalFilter();
   const [filtering, setFiltering] = useState(false);
   const entry = useEntryActions();
   const [menuFor, setMenuFor] = useState<{ item: DayItem<T>; at: Point } | null>(null);
+  // The title bar's search keeps those whose entry has its words, or that have them themselves (a link's address, a file's name).
+  const search = usePageSearch({ placeholder: `Search ${noun[1]}` });
+  const { words, found } = search;
+  const days = useMemo(
+    () => (found ? held.map((d) => ({ ...d, items: d.items.filter((i) => found.has(i.card.id) || holdsWords(text(i), words)) })).filter((d) => d.items.length) : held),
+    [held, found, words, text],
+  );
   const all = days.flatMap((d) => d.items);
   const keys = useMemo(() => days.flatMap((d) => d.items.map(() => d.day)), [days]);
   const list = useRef<HTMLDivElement>(null);
@@ -128,18 +139,26 @@ function HeldList<T extends { id: string }>({ title, days, filtered, count, empt
       viewOnly={false}
       title={title}
       actions={
-        <button type="button" className={`icon-btn only-mobile${filter.tagId || filter.vaultId ? ' is-active' : ''}`} aria-label="Tags and vaults" title="Tags and vaults" onClick={() => setFiltering(true)}>
+        <>
+          {search.button}
+          <button type="button" className={`icon-btn only-mobile${filter.tagId || filter.vaultId ? ' is-active' : ''}`} aria-label="Tags and vaults" title="Tags and vaults" onClick={() => setFiltering(true)}>
           <Icon name="filter" />
-        </button>
+          </button>
+        </>
       }
-      below={<FilterBar filter={filter} />}
+      below={
+        <>
+          {search.field}
+          <FilterBar filter={filter} />
+        </>
+      }
     >
       {filtering && <FilterSheet onClose={() => setFiltering(false)} />}
       {!all.length ? (
-        <Empty>{filtered ? emptyFiltered : empty}</Empty>
+        <Empty>{words ? `No ${noun[1]} here have “${words}” in them or their entries.` : filtered ? emptyFiltered : empty}</Empty>
       ) : (
         <div className="held" ref={list}>
-          <p className="photos__count">{count}</p>
+          <p className="photos__count">{countLine(all, ...noun)}</p>
           {days.map(({ day, items }) => (
             <section key={day} className="held__day" aria-label={relativeDay(day, today)}>
               <h2 className="held__head">{relativeDay(day, today)}</h2>
@@ -182,13 +201,13 @@ function HeldList<T extends { id: string }>({ title, days, filtered, count, empt
  */
 export function LinksPage() {
   const { days, filter } = useLibrary<LinkInfo>(linkDays);
-  const all = days.flatMap((d) => d.items);
   return (
     <HeldList
       title="Links"
       days={days}
       filtered={isFiltered(filter)}
-      count={countLine(all, 'link', 'links')}
+      noun={['link', 'links']}
+      text={linkText}
       empty="No links yet. Paste or type a web address into an entry and it shows here."
       emptyFiltered="No links here match. Take a filter off above, or pick another."
       render={(item) => <LinkRow url={item.id} card={item.card} />}
@@ -197,6 +216,9 @@ export function LinksPage() {
     />
   );
 }
+
+const linkText = (link: DayItem<LinkInfo>) => link.id;
+const fileText = (file: DayItem<FileInfo>) => file.name;
 
 function LinkRow({ url, card }: { url: string; card: Card }) {
   const { vaults } = useCards();
@@ -216,13 +238,13 @@ function LinkRow({ url, card }: { url: string; card: Card }) {
  */
 export function FilesPage() {
   const { days, filter } = useLibrary<FileInfo>(fileDays);
-  const all = days.flatMap((d) => d.items);
   return (
     <HeldList
       title="Files"
       days={days}
       filtered={isFiltered(filter)}
-      count={countLine(all, 'file', 'files')}
+      noun={['file', 'files']}
+      text={fileText}
       empty="No files yet. Attach one to an entry with the paperclip, /file, or by dropping it in."
       emptyFiltered="No files here match. Take a filter off above, or pick another."
       render={(item) => (

@@ -99,13 +99,13 @@ h1, h2, p { margin: 0; }
 /* A second row of the title bar: the filters, in one line that scrolls sideways, out to the screen's edges. */
 .page__head--below { flex-wrap: wrap; row-gap: 8px; }
 .page__below { flex: 0 0 100%; min-width: 0; margin: 0 -16px; }
-/* The journal's search, a row of the title bar above the filters. */
-.journal-search { display: flex; align-items: center; gap: 8px; margin: 0 16px 8px; padding: 0 4px 0 12px; min-height: 40px; background: var(--surface); border: 1px solid var(--line); border-radius: 10px; color: var(--muted); }
-.journal-search:focus-within { border-color: var(--accent); }
-.journal-search input { flex: 1; min-width: 0; min-height: 38px; border: 0; background: none; outline: none; color: var(--text); font: inherit; }
-.journal-search input::-webkit-search-cancel-button { display: none; }
-.journal-search__close { display: inline-flex; align-items: center; justify-content: center; width: 32px; height: 32px; border-radius: 7px; color: var(--muted); }
-.journal-search__close:hover { background: var(--sunken); color: var(--text); }
+/* A page's search (`PageSearch.tsx`), a row of the title bar above the filters. */
+.page-search { display: flex; align-items: center; gap: 8px; margin: 0 16px 8px; padding: 0 4px 0 12px; min-height: 40px; background: var(--surface); border: 1px solid var(--line); border-radius: 10px; color: var(--muted); }
+.page-search:focus-within { border-color: var(--accent); }
+.page-search input { flex: 1; min-width: 0; min-height: 38px; border: 0; background: none; outline: none; color: var(--text); font: inherit; }
+.page-search input::-webkit-search-cancel-button { display: none; }
+.page-search__close { display: inline-flex; align-items: center; justify-content: center; width: 32px; height: 32px; border-radius: 7px; color: var(--muted); }
+.page-search__close:hover { background: var(--sunken); color: var(--text); }
 .filter-bar { display: flex; align-items: center; gap: 6px; overflow-x: auto; padding: 0 16px; scrollbar-width: none; }
 .filter-bar::-webkit-scrollbar { display: none; }
 /* A filter not in use is quiet; one in use is tinted and names its choice. */

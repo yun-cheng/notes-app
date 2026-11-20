@@ -1,11 +1,10 @@
-import { Fragment, useEffect, useLayoutEffect, useMemo, useRef, useState, type KeyboardEvent as ReactKeyboardEvent, type ReactNode, type Ref } from 'react';
+import { Fragment, useEffect, useLayoutEffect, useMemo, useRef, useState, type KeyboardEvent as ReactKeyboardEvent, type ReactNode } from 'react';
 import { Link, Navigate, Outlet, useLocation, useNavigate, useParams } from 'react-router';
 import { diaryVault } from '../../domain/access';
 import { linkTitle, resolveTags } from '../../domain/cardIndex';
 import { cardPages, checklistProgress, CODE_CLOSE, CODE_OPEN, displayTitle, HIDE_CLOSE, HIDE_OPEN, leadLine, previewParts, splitLinks, storedPages, translationPage, pagesHaveTranslation, withNewPage, withoutLeadLine, withoutPage, withPage, type PreviewPart } from '../../domain/content';
 import { isDateKey, relativeDay, relativeDayInSentence, toDateKey } from '../../domain/dates';
 import { STATE_BOARD } from '../../domain/board';
-import { buildSearch } from '../../domain/search';
 import { isFiltered, parseFilter, sortGroup, streamItems, type StreamFilter, type StreamItem, type StreamSort } from '../../domain/stream';
 import { EMPTY_DOC, type JSONNode, type NoteCard, type TodoCard } from '../../domain/types';
 import { useCards, useToday } from '../../state/CardsContext';
@@ -21,6 +20,7 @@ import { Editor } from '../editor/Editor';
 import { FilterBar, FilterSheet, SortMenu, useJournalFilter } from '../FilterPanel';
 import { Icon } from '../Icon';
 import { MOD } from '../Shortcuts';
+import { usePageSearch } from '../PageSearch';
 import { LockPanel } from '../LockPanel';
 import { cardPath, entryPath, journalPath, sheetState, type SheetState } from '../paths';
 import { ShareDialog } from '../ShareDialog';
@@ -73,11 +73,10 @@ function JournalStream() {
   const tag = index.tags.find((t) => t.id === filter.tagId);
   const vault = vaults.find((v) => v.id === filter.vaultId);
   const filtered = isFiltered(filter);
-  // Words typed in the title bar's search narrow what the filter shows, as they're typed. Null while it's closed.
-  const [query, setQuery] = useState<string | null>(null);
-  const words = query?.trim() ?? '';
-  const engine = useMemo(() => (words ? buildSearch(index) : null), [index, !!words]);
-  const found = useMemo(() => (engine ? new Set(engine.search(words).map((h) => h.card.id)) : null), [engine, words]);
+  const vaultLocked = !!vault && locked.has(vault.id);
+  // The title bar's search narrows what the filter shows, as words are typed. The newest found are at the foot in written order.
+  const search = usePageSearch({ placeholder: 'Search entries', fromFoot: (filter.sort ?? 'written') === 'written' && !filter.board, off: vaultLocked });
+  const { words, found } = search;
   const listed = streamItems(index, filter, today, sharedInto);
   const all = found ? listed.filter((i) => found.has(i.card.id)) : listed;
   // Shown as a board, by todo state or by a group that still has tags; otherwise the board asks which.
@@ -86,32 +85,9 @@ function JournalStream() {
   const items = filter.board ? all : foldStacks(all, stacksOf(index));
   const order = board ? board.columns.flatMap((c) => c.items.map((i) => i.card.id)) : items.map((i) => i.card.id);
   const selection = useSelectionState(order);
-  const vaultLocked = !!vault && locked.has(vault.id);
   useEntryShortcuts(selection, filter, !vaultLocked);
 
   const selecting = selection.selecting;
-  const searchBox = useRef<HTMLInputElement>(null);
-  const openSearch = () => {
-    setQuery((q) => q ?? '');
-    setTimeout(() => searchBox.current?.focus());
-  };
-  // `/` searches here, rather than opening the commands as it does elsewhere, when nothing's being typed into.
-  useEffect(() => {
-    const onKey = (e: KeyboardEvent) => {
-      if (e.key !== '/' || e.metaKey || e.ctrlKey || e.altKey || e.defaultPrevented) return;
-      const typing = e.target instanceof HTMLElement && e.target.closest('input, textarea, select, [contenteditable="true"]');
-      if (typing || document.querySelector('.dialog-backdrop')) return;
-      e.preventDefault();
-      openSearch();
-    };
-    window.addEventListener('keydown', onKey, true);
-    return () => window.removeEventListener('keydown', onKey, true);
-  }, []);
-  // What's found shows from where the stream starts: the newest at the foot, or with other sorts at the top.
-  const chat = (filter.sort ?? 'written') === 'written' && !filter.board;
-  useLayoutEffect(() => {
-    if (query !== null) window.scrollTo(0, chat ? document.documentElement.scrollHeight : 0);
-  }, [words]);
   // How many entries are on screen, beside the title; while picking, the title says how many are picked.
   const shown = vaultLocked ? 0 : order.length;
   const count = shown > 0 && (
@@ -133,18 +109,7 @@ function JournalStream() {
   );
   const actions = (
     <>
-      {!vaultLocked && (
-        <button
-          type="button"
-          className={`icon-btn${query !== null ? ' is-active' : ''}`}
-          aria-label="Search entries"
-          aria-expanded={query !== null}
-          title="Search entries (/)"
-          onClick={() => (query === null ? openSearch() : setQuery(null))}
-        >
-          <Icon name="search" />
-        </button>
-      )}
+      {search.button}
       {!vaultLocked && (filter.board ? <BoardMenu filter={filter} /> : <SortMenu filter={filter} />)}
       <ViewSwitch filter={filter} />
       {tag && (
@@ -181,7 +146,7 @@ function JournalStream() {
         actions={selecting ? pickingActions : actions}
         below={
           <>
-            {query !== null && !vaultLocked && <JournalSearch ref={searchBox} query={query} onChange={setQuery} />}
+            {search.field}
             <FilterBar filter={filter} />
           </>
         }
@@ -240,37 +205,6 @@ function JournalStream() {
         <Outlet />
       </Page>
     </SelectionProvider>
-  );
-}
-
-/**
- * The journal's search, under its title: what's typed narrows the entries shown to those with all its words, in
- * their text, their title, their tags or their pages, as the Search page finds them. Esc clears it, then closes it.
- */
-function JournalSearch({ ref, query, onChange }: { ref: Ref<HTMLInputElement>; query: string; onChange: (query: string | null) => void }) {
-  return (
-    <div className="journal-search">
-      <Icon name="search" size={18} />
-      <input
-        ref={ref}
-        type="search"
-        autoFocus
-        value={query}
-        placeholder="Search these entries"
-        aria-label="Search entries"
-        enterKeyHint="search"
-        onChange={(e) => onChange(e.target.value)}
-        onKeyDown={(e) => {
-          if (e.key !== 'Escape') return;
-          e.preventDefault();
-          e.stopPropagation();
-          onChange(query ? '' : null);
-        }}
-      />
-      <button type="button" className="journal-search__close" aria-label="Close search" title="Close search (Esc)" onClick={() => onChange(null)}>
-        <Icon name="close" size={18} />
-      </button>
-    </div>
   );
 }
 

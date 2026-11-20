@@ -262,7 +262,7 @@ export interface Recording {
 }
 
 /**
- * The volume all voice messages play at, as Telegram's desktop app has it: pointed at, a slider beside it; pressed,
+ * The volume all voice messages play at, as Telegram's desktop app has it: pointed at, a slider standing over it; pressed,
  * muted or back. On a touch screen, which can't point, a press shows the slider instead.
  */
 function VolumeButton() {
@@ -278,8 +278,21 @@ function VolumeButton() {
     return () => document.removeEventListener('pointerdown', away, true);
   }, [open]);
   const shown = silent ? 0 : Math.round(volume * 100);
+  // Above it, unless the title bar (or the window's top) is too near: below then.
+  const [below, setBelow] = useState(false);
+  const aim = () => {
+    const top = box.current?.getBoundingClientRect().top ?? 0;
+    const bar = document.querySelector('.page__head')?.getBoundingClientRect().bottom ?? 0;
+    setBelow(top - Math.max(0, bar) < 136);
+  };
   return (
-    <span ref={box} className={`voice__volume${open ? ' is-open' : ''}`} onPointerDown={(e) => e.stopPropagation()}>
+    <span
+      ref={box}
+      className={`voice__volume${open ? ' is-open' : ''}${below ? ' is-below' : ''}`}
+      onPointerDown={(e) => e.stopPropagation()}
+      onPointerEnter={aim}
+      onFocus={aim}
+    >
       <button
         type="button"
         aria-label={silent ? 'Unmute voice messages' : 'Mute voice messages'}

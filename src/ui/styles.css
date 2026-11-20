@@ -1018,14 +1018,18 @@ body:has(.batch) .toast-slot { bottom: calc(var(--tabbar) + env(safe-area-inset-
 .voice__time { flex: none; min-width: 34px; color: var(--muted); font-size: 12px; font-variant-numeric: tabular-nums; text-align: right; }
 .voice__speed { flex: none; min-width: 34px; padding: 2px 6px; border: 1px solid var(--line); border-radius: 999px; background: none; color: var(--muted); font-size: 12px !important; font-variant-numeric: tabular-nums; }
 .voice__speed:hover { color: var(--text); border-color: var(--muted); }
-/* The volume: a speaker, with a slider over the time and speed beside it while pointed at, focused, or pressed on a touch screen. */
+/* The volume: a speaker, with a slider standing over it (under it, near the top) while pointed at, focused, or pressed on a touch screen. */
 .voice__volume { position: relative; display: flex; flex: none; }
 .voice__volume > button { display: grid; place-items: center; width: 26px; height: 26px; margin: -2px -6px -2px -4px; padding: 0; border: 0; border-radius: 50%; background: none; color: var(--muted); }
 .voice__volume > button:hover, .voice__volume.is-open > button { background: color-mix(in srgb, var(--text) 12%, transparent); color: var(--text); }
-.voice__volume-pop { position: absolute; z-index: 2; top: 50%; right: calc(100% - 4px); display: none; align-items: center; width: 116px; height: 30px; padding: 0 12px; translate: 0 -50%; border: 1px solid var(--line); border-radius: 999px; background: var(--raised); box-shadow: var(--shadow); }
-.voice__volume-pop input { width: 100%; margin: 0; accent-color: var(--accent); cursor: pointer; }
-@media (hover: hover) { .voice__volume:hover > .voice__volume-pop { display: flex; } }
-.voice__volume:has(:focus-visible) > .voice__volume-pop, .voice__volume.is-open > .voice__volume-pop { display: flex; }
+/* Its padding bridges the gap to the speaker, so the pointer can go up to it without it closing. */
+.voice__volume-pop { position: absolute; z-index: 5; bottom: 100%; left: 50%; display: none; padding-bottom: 6px; translate: calc(-50% - 1px) 0; }
+.voice__volume.is-below > .voice__volume-pop { top: 100%; bottom: auto; padding: 6px 0 0; }
+.voice__volume-pop::before { content: ''; position: absolute; inset: 0 0 6px; z-index: -1; border: 1px solid var(--line); border-radius: 999px; background: var(--raised); box-shadow: var(--shadow); }
+.voice__volume.is-below > .voice__volume-pop::before { inset: 6px 0 0; }
+.voice__volume-pop input { display: block; width: 30px; height: 112px; margin: 0; padding: 12px 0; box-sizing: border-box; writing-mode: vertical-lr; direction: rtl; accent-color: var(--accent); cursor: pointer; }
+@media (hover: hover) { .voice__volume:hover > .voice__volume-pop { display: block; } }
+.voice__volume:has(:focus-visible) > .voice__volume-pop, .voice__volume.is-open > .voice__volume-pop { display: block; }
 .voice__transcript { display: flex; flex-direction: column; gap: 4px; padding-top: 6px; border-top: 1px solid var(--line); }
 .voice__transcript p { margin: 0; font-size: 14px; white-space: pre-wrap; overflow-wrap: anywhere; }
 .voice__cue { border-radius: 4px; cursor: pointer; }

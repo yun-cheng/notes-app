@@ -124,7 +124,7 @@ export function VaultsPage() {
       <div className="list">
         {shown.map((v) => {
           const count = index.live.filter((c) => c.vaultId === v.id).length;
-          const state = [locked.has(v.id) ? 'Locked' : `${count} ${count === 1 ? 'card' : 'cards'}`, v.encryption && 'Encrypted'];
+          const state = [v.withheld ? 'Needs your PIN' : locked.has(v.id) ? 'Locked' : `${count} ${count === 1 ? 'card' : 'cards'}`, v.encryption && 'Encrypted'];
           return (
             <Link className="row row--link" key={v.id} to={`/vault/${encodeURIComponent(v.id)}`}>
               <span className="row__icon">
@@ -183,6 +183,9 @@ function VaultSettings({ vault }: { vault: Vault }) {
   const [canUseFingerprint, setCanUseFingerprint] = useState(false);
   const [fingerprintOn, setFingerprintOn] = useState(false);
   const change = (changes: VaultChanges, done: string) => save(() => updateVault(vault.id, changes), done);
+  // Each member's lock is their own; only the owner changes the rest, and only theirs can be encrypted.
+  const owner = (vault.role ?? 'owner') === 'owner';
+  const alone = (vault.members ?? 1) <= 1;
   const isPrivate = vault.lock === 'pin';
   const encrypted = !!vault.encryption;
   const crypt = useVaultEncryption();
@@ -216,9 +219,9 @@ function VaultSettings({ vault }: { vault: Vault }) {
     const next = pin;
     setPin('');
     if (encrypted) return step('Changing the PIN…', async () => (await crypt.rewrap(vault, next), toast('PIN changed')));
-    // Making a vault private encrypts it, unless that's turned off.
-    if (!isPrivate && encryptNew) return step('Encrypting…', async () => setRecoveryKey(await crypt.encrypt(vault, next)));
-    await change({ pin: await hashPin(next) }, isPrivate ? 'PIN changed' : 'Vault is private');
+    // Making a vault of one's own private encrypts it, unless that's turned off. A shared one can't be encrypted yet.
+    if (!isPrivate && owner && alone && encryptNew) return step('Encrypting…', async () => setRecoveryKey(await crypt.encrypt(vault, next)));
+    await change({ pin: await hashPin(next) }, isPrivate ? 'PIN changed' : owner ? 'Vault is private' : 'Locked with your PIN');
   };
 
   const encryptNow = async (e: FormEvent) => {
@@ -241,7 +244,7 @@ function VaultSettings({ vault }: { vault: Vault }) {
   const removePin = async () => {
     if (encrypted && !confirm(`Remove the PIN from ${vault.name}? Its cards will be decrypted and stored readable again.`)) return;
     if (encrypted) await step('Decrypting…', async () => (await crypt.decrypt(vault), toast('Vault is no longer private')));
-    else await change({ pin: null }, 'Vault is no longer private');
+    else await change({ pin: null }, owner ? 'Vault is no longer private' : 'Your PIN is removed');
   };
 
   const toggleFingerprint = async (on: boolean) => {
@@ -255,33 +258,43 @@ function VaultSettings({ vault }: { vault: Vault }) {
   };
 
   return (
-    <Section title="Settings">
-      <form
-        className="lock-panel__row"
-        onSubmit={(e) => {
-          e.preventDefault();
-          if (name.trim() && name.trim() !== vault.name) void change({ name: name.trim() }, 'Vault renamed');
-        }}
-      >
-        <input className="text-input" value={name} aria-label="Vault name" maxLength={80} onChange={(e) => setName(e.target.value)} />
-        <button type="submit" className="btn" disabled={!name.trim() || name.trim() === vault.name}>
-          Rename
-        </button>
-      </form>
+    <Section title={owner ? 'Settings' : 'Your lock'}>
+      {owner && (
+        <form
+          className="lock-panel__row"
+          onSubmit={(e) => {
+            e.preventDefault();
+            if (name.trim() && name.trim() !== vault.name) void change({ name: name.trim() }, 'Vault renamed');
+          }}
+        >
+          <input className="text-input" value={name} aria-label="Vault name" maxLength={80} onChange={(e) => setName(e.target.value)} />
+          <button type="submit" className="btn" disabled={!name.trim() || name.trim() === vault.name}>
+            Rename
+          </button>
+        </form>
+      )}
 
-      {!isDefaultVault(vault) && (vault.members ?? 1) <= 1 && (
+      {!owner && (
+        <p className="prose-note">
+          {isPrivate ? 'You lock this vault with a PIN of your own, on your devices. No one else in it needs it.' : 'Lock this vault with a PIN of your own, on your devices. No one else in it needs it, and theirs don’t lock it for you.'}
+        </p>
+      )}
+      {!(owner && isDefaultVault(vault)) && (
         <>
-          <form className="lock-panel__row vault-gap" onSubmit={(e) => void submitPin(e)}>
+          <form className={`lock-panel__row${owner ? ' vault-gap' : ''}`} onSubmit={(e) => void submitPin(e)}>
             <PinInput value={pin} placeholder={isPrivate ? 'New PIN' : 'PIN'} aria-label={isPrivate ? 'New PIN' : 'PIN'} onChange={(e) => setPin(e.target.value)} />
             <button type="submit" className="btn" disabled={!pin || !!busy}>
-              {isPrivate ? 'Change PIN' : 'Make private'}
+              {isPrivate ? 'Change PIN' : owner ? 'Make private' : 'Lock with PIN'}
             </button>
           </form>
           {error && <p className="lock-panel__error">{error}</p>}
-          {!isPrivate && (
+          {!isPrivate && owner && alone && (
             <div className="vault-gap">
               <EncryptChoice on={encryptNew} onChange={setEncryptNew} />
             </div>
+          )}
+          {!isPrivate && owner && !alone && (
+            <p className="prose-note vault-gap">The PIN is yours: the others in this vault see it without it, unless you then ask each of them for a PIN of their own. A shared vault can’t be encrypted.</p>
           )}
         </>
       )}
@@ -310,7 +323,7 @@ function VaultSettings({ vault }: { vault: Vault }) {
           )}
         </div>
       )}
-      {isPrivate && !encrypted && (
+      {isPrivate && !encrypted && owner && alone && (
         <form className="encrypt-box vault-gap" onSubmit={(e) => void encryptNow(e)}>
           <p className="prose-note">Locked by its PIN, not encrypted: the PIN keeps it out of sight in the app, but the server can read its cards, so everything works in it. Encrypting it makes it readable only where the PIN is entered, and turns off reminders, voice transcripts, link previews and sharing in it.</p>
           <div className="lock-panel__row">
@@ -321,10 +334,27 @@ function VaultSettings({ vault }: { vault: Vault }) {
           </div>
         </form>
       )}
+      {isPrivate && !encrypted && owner && (
+        <div className="encrypt-choice vault-gap">
+          <label className="check-row">
+            <input
+              type="checkbox"
+              checked={!!vault.members_need_pin}
+              onChange={(e) => void change({ members_need_pin: e.target.checked }, e.target.checked ? 'Everyone needs a PIN of their own now' : 'A PIN is up to each person now')}
+            />
+            <span>Everyone in it needs a PIN of their own to see it</span>
+          </label>
+          <p className="prose-note">
+            {vault.members_need_pin
+              ? 'Until someone sets one, the server sends them nothing in this vault.'
+              : 'Your PIN locks it only for you. With this on, anyone you share it with sees nothing in it until they lock it with a PIN of their own.'}
+          </p>
+        </div>
+      )}
       {busy && <p className="prose-note vault-gap" role="status">{busy}</p>}
       {recoveryKey && <RecoveryKeyDialog recoveryKey={recoveryKey} onClose={() => setRecoveryKey(null)} />}
 
-      {!isPrivate && (
+      {!isPrivate && owner && (
         <div className="vault-gap">
           <AiAccessField vault={vault} />
         </div>
@@ -342,12 +372,55 @@ function VaultSettings({ vault }: { vault: Vault }) {
               <span>Unlock with fingerprint on this device. Anyone with a fingerprint enrolled on it can then open this vault, and family members often have theirs enrolled.</span>
             </label>
           )}
-          <button type="button" className="btn vault-gap" disabled={!!busy} onClick={() => void removePin()}>
-            Remove PIN
-          </button>
+          {owner || !vault.members_need_pin ? (
+            <button type="button" className="btn vault-gap" disabled={!!busy} onClick={() => void removePin()}>
+              Remove PIN
+            </button>
+          ) : (
+            <p className="prose-note">Its owner asks everyone in it to keep a PIN on it, so yours can be changed but not removed.</p>
+          )}
         </div>
       )}
     </Section>
+  );
+}
+
+/**
+ * What a member sees of a vault whose owner asks everyone for a PIN of their own, until they set theirs: the server
+ * sends none of its cards before then.
+ */
+export function SetOwnPin({ vault }: { vault: Vault }) {
+  const { locks, engine } = useCards();
+  const save = useVaultSaver();
+  const [pin, setPin] = useState('');
+  const [error, setError] = useState<string | null>(null);
+
+  const submit = async (e: FormEvent) => {
+    e.preventDefault();
+    if (pin.length < MIN_PIN_LENGTH) return setError(pinError);
+    setError(null);
+    const hashed = await hashPin(pin);
+    setPin('');
+    if (!(await save(() => updateVault(vault.id, { pin: hashed }), 'Locked with your PIN'))) return;
+    // Just typed, so open here; its cards come with the next sync.
+    locks.unlockVerified(vault.id);
+    void engine.sync();
+  };
+
+  return (
+    <div className="lock-panel">
+      <div className="lock-panel__title">
+        <Icon name="lock" size={16} /> Set your own PIN to see {vault.name}
+      </div>
+      <p className="prose-note">Its owner asks everyone in it to lock it with a PIN of their own. Yours is only yours: no one else in the vault needs it, and it locks the vault on your devices.</p>
+      <form className="lock-panel__row" onSubmit={(e) => void submit(e)}>
+        <PinInput value={pin} placeholder="New PIN" aria-label={`New PIN for ${vault.name}`} onChange={(e) => setPin(e.target.value)} />
+        <button type="submit" className="btn btn--primary" disabled={!pin}>
+          Set PIN
+        </button>
+      </form>
+      {error && <p className="lock-panel__error">{error}</p>}
+    </div>
   );
 }
 
@@ -382,7 +455,7 @@ export function VaultPage() {
               Lock now
             </button>
           )}
-          {vault.role !== 'viewer' && (
+          {vault.role !== 'viewer' && !vault.withheld && (
             <button type="button" className="btn btn--primary" onClick={() => void newNote([], vault.id)}>
               New note here
             </button>
@@ -390,7 +463,9 @@ export function VaultPage() {
         </>
       }
     >
-      {cards.length ? (
+      {vault.withheld ? (
+        <SetOwnPin vault={vault} />
+      ) : cards.length ? (
         <div className="list">
           {cards.map((c) => (
             <CardRow key={c.id} card={c} />
@@ -399,7 +474,8 @@ export function VaultPage() {
       ) : (
         <Empty>Nothing in this vault yet.</Empty>
       )}
-      {(vault.role ?? 'owner') === 'owner' && <VaultSettings key={vault.id} vault={vault} />}
+      {/* A member's own lock; the rest is the owner's. An encrypted vault has no one else in it. */}
+      {!vault.withheld && ((vault.role ?? 'owner') === 'owner' || !vault.encryption) && <VaultSettings key={vault.id} vault={vault} />}
       <VaultPeopleSection key={`people-${vault.id}`} vault={vault} />
     </Page>
   );

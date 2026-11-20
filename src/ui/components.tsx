@@ -449,7 +449,7 @@ export function useVaultMove(card: Card) {
   const may = usePermissions();
   const toast = useToast();
   const { undoAction } = useUndo();
-  const options = vaults.filter((v) => !locked.has(v.id) && (v.role ?? 'owner') !== 'viewer');
+  const options = vaults.filter((v) => !locked.has(v.id) && !v.withheld && (v.role ?? 'owner') !== 'viewer');
   if (options.length < 2 || !may(card).manage) return null;
   const move = (vaultId: string) => {
     if (vaultId === card.vaultId) return;

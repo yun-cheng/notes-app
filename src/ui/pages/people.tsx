@@ -42,7 +42,9 @@ export function VaultPeopleSection({ vault }: { vault: Vault }) {
     const address = email.trim();
     if (!address) return;
     const count = (people?.members.length ?? 1) + (people?.invites.length ?? 0);
-    if (count === 1 && !confirm(`Everything in ${vault.name} will be visible to ${address}. Share it?`)) return;
+    // Their lock is their own: a vault locked by the owner's PIN alone is open to them unless the owner asks for theirs.
+    const unlocked = vault.lock === 'pin' && !vault.members_need_pin ? ' They won’t need your PIN to see it.' : '';
+    if (count === 1 && !confirm(`Everything in ${vault.name} will be visible to ${address}.${unlocked} Share it?`)) return;
     if (await run(() => addVaultMember(vault.id, address, role))) setEmail('');
   };
 
@@ -51,10 +53,10 @@ export function VaultPeopleSection({ vault }: { vault: Vault }) {
     if (await run(() => removeVaultMember(vault.id, accountId), `You left ${vault.name}`)) void navigate('/vaults', { replace: true });
   };
 
-  if (vault.lock === 'pin') {
+  if (vault.encryption) {
     return (
       <Section title="People">
-        <p className="prose-note">Only you can see a private vault. To share it, remove its PIN first.</p>
+        <p className="prose-note">Only you can see an encrypted vault. To share it, stop encrypting it first: your PIN still locks it for you.</p>
       </Section>
     );
   }
@@ -73,6 +75,7 @@ export function VaultPeopleSection({ vault }: { vault: Vault }) {
                 </span>
                 <span className="row__preview">
                   {m.email} · {ROLE_LABEL[m.role]}
+                  {vault.members_need_pin && m.role !== 'owner' && !m.locked ? ' · No PIN yet, so sees nothing in it' : ''}
                 </span>
               </span>
               {owner && m.role !== 'owner' && (
@@ -109,7 +112,11 @@ export function VaultPeopleSection({ vault }: { vault: Vault }) {
           </button>
         </form>
       )}
-      {owner && <p className="prose-note vault-gap">Everyone here sees every card in this vault. To share just one card, use Share on that card.</p>}
+      {owner && (
+        <p className="prose-note vault-gap">
+          Everyone here sees every card in this vault{vault.members_need_pin ? ', once they’ve locked it with a PIN of their own' : ''}. To share just one card, use Share on that card.
+        </p>
+      )}
       {!owner && (
         <button type="button" className="btn vault-gap" onClick={() => void leave()}>
           Leave this vault

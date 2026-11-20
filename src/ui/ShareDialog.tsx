@@ -44,7 +44,7 @@ export function ShareDialog({ card, onClose }: { card: Card; onClose: () => void
   const home = vaults.find((v) => v.id === card.vaultId);
   const isPrivate = home?.lock === 'pin';
   const [confirmed, setConfirmed] = useState(!isPrivate);
-  const others = vaults.filter((v) => v.id !== card.vaultId && v.lock === 'none' && !locked.has(v.id));
+  const others = vaults.filter((v) => v.id !== card.vaultId && !v.encryption && !v.withheld && !locked.has(v.id));
   const chosen = others.find((v) => v.id === target);
 
   useEffect(() => {

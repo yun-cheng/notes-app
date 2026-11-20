@@ -70,7 +70,7 @@ export function BatchBar({ selection }: { selection: Selection }) {
     void actions.trash(ids);
   };
 
-  const targets = vaults.filter((v) => !locked.has(v.id) && (v.role ?? 'owner') !== 'viewer');
+  const targets = vaults.filter((v) => !locked.has(v.id) && !v.withheld && (v.role ?? 'owner') !== 'viewer');
   const move = async (vaultId: string) => {
     const moving = manageable.filter((c) => c.vaultId !== vaultId);
     if (!moving.length) return;

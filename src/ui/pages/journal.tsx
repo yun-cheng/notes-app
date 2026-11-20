@@ -22,6 +22,7 @@ import { Icon } from '../Icon';
 import { MOD } from '../Shortcuts';
 import { usePageSearch } from '../PageSearch';
 import { LockPanel } from '../LockPanel';
+import { SetOwnPin } from './vaults';
 import { cardPath, entryPath, journalPath, sheetState, type SheetState } from '../paths';
 import { ShareDialog } from '../ShareDialog';
 import { JournalBox } from '../JournalBox';
@@ -154,6 +155,10 @@ function JournalStream() {
         {vault && vaultLocked ? (
           <div className="stream">
             <LockPanel vaultId={vault.id} />
+          </div>
+        ) : vault?.withheld ? (
+          <div className="stream">
+            <SetOwnPin vault={vault} />
           </div>
         ) : filter.board ? (
           <>

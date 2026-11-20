@@ -106,6 +106,7 @@ export interface VaultChanges {
   hidden?: boolean;
   ai_access?: Vault['ai_access'];
   encryption?: Vault['encryption'];
+  members_need_pin?: boolean;
 }
 
 export const createVault = (input: VaultChanges) => request<Vault>('/vaults', { method: 'POST', body: JSON.stringify(input) });
@@ -293,7 +294,8 @@ export async function transcribePiece(vaultId: string, wav: Uint8Array<ArrayBuff
 }
 
 export interface VaultPeople {
-  members: { user_id: string; name: string; email: string; role: 'owner' | 'editor' | 'viewer' }[];
+  /** `locked`: whether they've locked the vault with a PIN of their own. */
+  members: { user_id: string; name: string; email: string; role: 'owner' | 'editor' | 'viewer'; locked: boolean }[];
   invites: { email: string; role: 'editor' | 'viewer' }[];
 }
 

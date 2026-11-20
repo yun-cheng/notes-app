@@ -191,6 +191,22 @@ describe('vaults', () => {
     expect(await repo.applyAccess([vault('a', 1)], [])).toBe(false);
     expect(writes).toBe(2);
   });
+  it('lets go of a vault’s cards while it’s withheld, and asks for them again once it isn’t', async () => {
+    const card = await repo.createNote({ title: 'x', vaultId: 'b' });
+    await store.markSynced(card.id, card.updatedAt, 3);
+    expect(await repo.applyAccess([vault('a', 1), vault('b', 2)], [])).toBe(true);
+    expect(await repo.applyAccess([vault('a', 1), { ...vault('b', 2), withheld: true }], [])).toBe(false);
+    expect(await store.getCard(card.id)).toBeUndefined();
+    expect((await store.listVaults()).map((v) => v.id)).toEqual(['a', 'b']);
+    // Reached again: true, so the next pull starts over and brings its cards back.
+    expect(await repo.applyAccess([vault('a', 1), vault('b', 2)], [])).toBe(true);
+  });
+  it('starts the pull over when a vault saved here is no longer withheld', async () => {
+    await repo.applyAccess([vault('a', 1), { ...vault('b', 2), withheld: true }], []);
+    await repo.setCursor(40);
+    await repo.putVaults([{ ...vault('b', 2), lock: 'pin' }]);
+    expect(await repo.getCursor()).toBe(0);
+  });
   it('creates cards in a chosen vault', async () => {
     const card = await repo.createNote({ title: 'x', vaultId: 'private' });
     expect(card.vaultId).toBe('private');

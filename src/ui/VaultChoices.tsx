@@ -49,7 +49,7 @@ export function VaultChoices({ card, onMoved }: { card: Entry; onMoved: () => vo
   if (!vaultMove || !home) return null;
   const also = vaults.filter((v) => v.id !== home.id && sharedInto.get(card.id)?.includes(v.id));
   // A private vault's entries are shared from the share dialog, which warns that the PIN won't guard them.
-  const more = home.lock === 'pin' ? [] : vaults.filter((v) => v.id !== home.id && v.lock === 'none' && !locked.has(v.id));
+  const more = home.lock === 'pin' ? [] : vaults.filter((v) => v.id !== home.id && !v.encryption && !v.withheld && !locked.has(v.id));
   return (
     <div className="vault-choices">
       <div className="style-menu__group" role="group" aria-label="Lives in">

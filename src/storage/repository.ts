@@ -481,8 +481,13 @@ export class CardRepository {
     });
   }
 
+  /** Saves vaults as changed here. One no longer withheld has its cards pulled again, as they're older than the cursor. */
   putVaults(vaults: Vault[]): Promise<void> {
-    return this.enqueue(() => this.store.putVaults(vaults));
+    return this.enqueue(async () => {
+      const known = new Map((await this.store.listVaults()).map((v) => [v.id, v]));
+      await this.store.putVaults(vaults);
+      if (vaults.some((v) => !v.withheld && known.get(v.id)?.withheld)) await this.store.setMeta('cursor', 0);
+    });
   }
 
   private device: Promise<string> | null = null;
@@ -612,7 +617,8 @@ export class CardRepository {
       const knownVaultShares = await this.store.getMeta('vaultShares');
       if (JSON.stringify(knownVaultShares ?? []) !== JSON.stringify(vaultShares)) await this.store.setMeta('vaultShares', vaultShares);
       const [known, knownShared] = await Promise.all([this.store.listVaults(), this.store.getMeta('shared') as Promise<SharedCard[] | undefined>]);
-      const vaultIds = new Set(vaults.map((v) => v.id));
+      // A vault withheld until this account sets the PIN its owner asks for is listed, but its cards aren't here.
+      const vaultIds = new Set(vaults.filter((v) => !v.withheld).map((v) => v.id));
       const sharedIds = new Set(shared.map((s) => s.card_id));
       const outOfReach = (r: CardRecord) => !vaultIds.has(r.vault_id) && !sharedIds.has(r.id);
 
@@ -625,8 +631,10 @@ export class CardRepository {
         return false;
       }
 
-      const before = new Set([...known.map((v) => `v:${v.id}`), ...(knownShared ?? []).map((s) => `c:${s.card_id}`)]);
-      const after = [...vaults.map((v) => `v:${v.id}`), ...shared.map((s) => `c:${s.card_id}`)];
+      // A withheld vault counts as reached once it no longer is, so its cards, older than the cursor, are pulled again.
+      const reached = (list: Vault[]) => list.filter((v) => !v.withheld).map((v) => `v:${v.id}`);
+      const before = new Set([...reached(known), ...(knownShared ?? []).map((s) => `c:${s.card_id}`)]);
+      const after = [...reached(vaults), ...shared.map((s) => `c:${s.card_id}`)];
       const gone = (await this.store.listCards()).filter(outOfReach).map((r) => r.id);
       await this.store.replaceVaults(vaults);
       await this.store.setMeta('shared', shared);

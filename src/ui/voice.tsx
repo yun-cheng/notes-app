@@ -34,8 +34,11 @@ const setJob = (id: string, job: Job | null) => {
 };
 const subscribe = (l: () => void) => (listeners.add(l), () => void listeners.delete(l));
 
-/** Voice messages recorded on this device this visit, transcribed as soon as a view of them that can change them shows. */
-export const recordedHere = new Set<string>();
+/**
+ * Voice messages recorded on this device this visit, transcribed as soon as a view of them that can change them
+ * shows, each with its sound as decoded when it was added (null if it couldn't be), so it isn't decoded again.
+ */
+export const recordedHere = new Map<string, Float32Array | null>();
 
 const PROBLEM: Record<Exclude<TranscribeResult, { text: string }>['error'], string> = {
   encrypted: 'Voice in a private vault isn’t sent to the server, so it isn’t transcribed.',
@@ -46,13 +49,13 @@ const PROBLEM: Record<Exclude<TranscribeResult, { text: string }>['error'], stri
 };
 
 /** Transcribes a voice message on the server, a piece of up to two minutes at a time, cut between words. */
-async function transcribe(id: string, vaultId: string, photos: PhotoService): Promise<void> {
+async function transcribe(id: string, vaultId: string, photos: PhotoService, decoded: Float32Array | null = null): Promise<void> {
   if (jobs.get(id)?.state === 'working') return;
   setJob(id, { state: 'working' });
   try {
-    const blob = await photos.blob(id).catch(() => null);
-    if (!blob) return setJob(id, { state: 'failed', message: 'This recording isn’t here yet: it hasn’t been uploaded from its device.' });
-    const samples = await decodeVoice(blob).catch(() => null);
+    const blob = decoded ? null : await photos.blob(id).catch(() => null);
+    if (!decoded && !blob) return setJob(id, { state: 'failed', message: 'This recording isn’t here yet: it hasn’t been uploaded from its device.' });
+    const samples = decoded ?? (await decodeVoice(blob!).catch(() => null));
     if (!samples) return setJob(id, { state: 'failed', message: 'This browser can’t read this recording to transcribe it.' });
     const bounds = [0, ...cutPoints(samples), samples.length];
     const pieces = [];
@@ -93,8 +96,9 @@ export function VoiceMessage({ file, vaultId, onTranscript }: { file: FileInfo; 
   useEffect(() => {
     if (!can || !vaultId) return;
     if (recordedHere.has(file.id) && !file.transcript) {
+      const decoded = recordedHere.get(file.id) ?? null;
       recordedHere.delete(file.id);
-      void transcribe(file.id, vaultId, photos);
+      void transcribe(file.id, vaultId, photos, decoded);
     }
   }, [can, vaultId, file.id]);
   useEffect(() => {

@@ -41,6 +41,13 @@ export function fileSize(bytes: number): string {
   return `${mb < 10 ? mb.toFixed(1) : Math.round(mb)} MB`;
 }
 
+/** Why a file can't be attached as it is (too big to upload, or empty), or null when it can. */
+export function fileProblem(file: File): string | null {
+  if (file.size > MAX_FILE_BYTES) return `${file.name || 'That file'} is ${fileSize(file.size)}. Files can be up to ${fileSize(MAX_FILE_BYTES)}.`;
+  if (!file.size) return `${file.name || 'That file'} is empty.`;
+  return null;
+}
+
 /**
  * Photos are saved on the device first and uploaded in the background, so adding one works
  * offline. A photo from another device is fetched once and then kept here.
@@ -88,8 +95,8 @@ export class PhotoService {
    * length in seconds, when known. Throws, saying why, for one too big to upload.
    */
   async addFile(file: File, vaultId: string, duration: number | null = null): Promise<{ id: string; name: string; mime: string; size: number; duration?: number }> {
-    if (file.size > MAX_FILE_BYTES) throw new Error(`${file.name || 'That file'} is ${fileSize(file.size)}. Files can be up to ${fileSize(MAX_FILE_BYTES)}.`);
-    if (!file.size) throw new Error(`${file.name || 'That file'} is empty.`);
+    const problem = fileProblem(file);
+    if (problem) throw new Error(problem);
     const id = this.newId();
     const name = file.name || 'Untitled';
     // Without what a recorder adds to its type ("audio/webm;codecs=opus").

@@ -20,12 +20,15 @@ export async function decodeVoice(blob: Blob): Promise<Float32Array> {
   return mixed;
 }
 
-/** What a sound is, read as it's added: its length and how loud it is along it. Nulls for one this browser can't read. */
-export async function probeAudio(blob: Blob): Promise<{ duration: number | null; peaks: number[] }> {
+/**
+ * What a sound is, read as it's added: its length, how loud it is along it, and the sound as decoded, to transcribe
+ * without decoding it again. Nothing known of one this browser can't read.
+ */
+export async function probeAudio(blob: Blob): Promise<{ duration: number | null; peaks: number[]; samples: Float32Array | null }> {
   try {
     const samples = await decodeVoice(blob);
-    return { duration: samples.length ? Math.round((samples.length / VOICE_RATE) * 1000) / 1000 : null, peaks: peaksOf(samples) };
+    return { duration: samples.length ? Math.round((samples.length / VOICE_RATE) * 1000) / 1000 : null, peaks: peaksOf(samples), samples };
   } catch {
-    return { duration: null, peaks: [] };
+    return { duration: null, peaks: [], samples: null };
   }
 }

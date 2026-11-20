@@ -7,8 +7,9 @@ import type { JSONNode } from '../../domain/types';
 import { picturesInHtml } from '../../photos/pasted';
 import { isVideoFile } from '../../photos/video';
 import { isAudioFile, probeAudio } from '../../photos/audio';
+import { fileProblem } from '../../photos/service';
 import { voiceExtension, voiceName } from '../../domain/voice';
-import { recordedHere, useVoiceRecorder, type Recording } from '../voice';
+import { canTranscribeIn, recordedHere, useVoiceRecorder, type Recording } from '../voice';
 import { useCards } from '../../state/CardsContext';
 import { SyncOffline } from '../../sync/engine';
 import { fetchWebPicture } from '../../sync/http';
@@ -40,7 +41,7 @@ type Adding = () => Promise<JSONNode>;
  * `pick` opens the photo and video picker and `pickFile` the file picker; `record` records a voice message.
  */
 export function usePhotoInput(editor: RefObject<TiptapEditor | null>, vaultId: () => string | undefined) {
-  const { photos } = useCards();
+  const { photos, vaults } = useCards();
   const toast = useToast();
   const navigate = useNavigate();
   const picker = useRef<HTMLInputElement>(null);
@@ -101,9 +102,13 @@ export function usePhotoInput(editor: RefObject<TiptapEditor | null>, vaultId: (
   };
   /** A sound, kept as it is, with its length and how loud it is along it, to play where it is. */
   const sound = (file: File, recorded?: Recording): Adding => async () => {
+    // Said before reading it, so a huge one isn't decoded only to be turned down.
+    const problem = fileProblem(file);
+    if (problem) throw new Error(problem);
     const facts = await probeAudio(file);
     const attrs = await photos.addFile(file, vaultId()!, facts.duration ?? recorded?.seconds ?? null);
-    if (recorded) recordedHere.add(attrs.id);
+    // Held for transcribing only where it will be: not in a private vault, whose sound stays on the device.
+    if (recorded && canTranscribeIn(vaults.find((v) => v.id === vaultId()))) recordedHere.set(attrs.id, facts.samples);
     return { type: 'file', attrs: { ...attrs, ...(facts.peaks.length ? { peaks: facts.peaks } : {}) } };
   };
   /** Pictures as photos, videos and sounds to play where they are, and any other file as it is, in the order given. */

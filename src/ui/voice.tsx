@@ -14,18 +14,25 @@ import { useVideoAddress } from './video';
 import { readySound, releaseSound, setVoiceVolume, toggleVoiceMute, useVoiceVolume } from './voiceSound';
 
 /**
- * The voice messages on show, so they play as Telegram plays them: one at a time, and on from one that ends to the
- * next one down the same journal or entry, whatever is between them.
+ * The voice messages on show, so they play one at a time, as Telegram plays them, and on from one that ends to the
+ * next while they come one after another: in the same entry, or the entry just after it in the journal.
  */
 const players = new Map<HTMLElement, { play: () => boolean; pause: () => void }>();
 
-/** Plays the next voice message down from `root` that can play, if there is one. */
+/** Plays the voice message after `root` if it comes straight after: in the same entry, or the next one. */
 function playAfter(root: HTMLElement) {
   const scope = root.closest('.stream, .ProseMirror') ?? document.body;
-  const after = [...players.keys()]
+  const next = [...players.keys()]
     .filter((r) => r !== root && scope.contains(r) && root.compareDocumentPosition(r) & Node.DOCUMENT_POSITION_FOLLOWING)
-    .sort((a, b) => (a.compareDocumentPosition(b) & Node.DOCUMENT_POSITION_FOLLOWING ? -1 : 1));
-  for (const r of after) if (players.get(r)?.play()) return;
+    .sort((a, b) => (a.compareDocumentPosition(b) & Node.DOCUMENT_POSITION_FOLLOWING ? -1 : 1))[0];
+  if (!next) return;
+  const entry = root.closest('.stream__entry');
+  const nextEntry = next.closest('.stream__entry');
+  if (entry !== nextEntry) {
+    const entries = [...scope.querySelectorAll('.stream__entry')];
+    if (!entry || !nextEntry || entries.indexOf(nextEntry) !== entries.indexOf(entry) + 1) return;
+  }
+  players.get(next)?.play();
 }
 
 /** The longest voice message recorded at once: a quarter of what a day's transcribing allows. */
@@ -85,7 +92,7 @@ async function transcribe(id: string, vaultId: string, photos: PhotoService, dec
 
 /**
  * A voice message (any sound attached) playing where it is: a play button, its loudness drawn along its length to
- * seek in, the time, a speed to play it at, and the volume all voice messages play at (`voiceSound`), each evened out. One plays at a time, and one that ends runs on to the next one down (`playAfter`). Under it, its transcript, each stretch pressed to play from there and
+ * seek in, the time, a speed to play it at, and the volume all voice messages play at (`voiceSound`), each evened out. One plays at a time, and one that ends runs on to the next while they come one after another (`playAfter`). Under it, its transcript, each stretch pressed to play from there and
  * the one being said marked; or, where `onTranscript` can save one, Transcribe, which a recording made here does by
  * itself. `vaultId` is the vault of the entry holding it.
  */

@@ -195,5 +195,68 @@
         "text": "What if the weekly review read your voice notes back to you, as a little podcast?"
       }
     ]
+  },
+  "errands-more-voice": {
+    "duration": 4.401,
+    "peaks": [
+      0,
+      0,
+      0,
+      14,
+      80,
+      70,
+      33,
+      4,
+      0,
+      27,
+      85,
+      94,
+      100,
+      81,
+      39,
+      59,
+      66,
+      44,
+      6,
+      0,
+      0,
+      0,
+      0,
+      0,
+      5,
+      10,
+      70,
+      78,
+      31,
+      8,
+      78,
+      87,
+      22,
+      66,
+      80,
+      30,
+      62,
+      65,
+      9,
+      62,
+      23,
+      5,
+      0,
+      0,
+      0,
+      0,
+      0,
+      0
+    ],
+    "cues": [
+      {
+        "start": 0.35,
+        "text": "Oh, one more thing."
+      },
+      {
+        "start": 2.24,
+        "text": "Stamps from the post office."
+      }
+    ]
   }
 }

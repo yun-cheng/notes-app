@@ -3,7 +3,7 @@
  * the Mac's own voices, each sentence on its own so when each starts is known: `<name>.m4a`, as Safari records, and
  * `voices.json` with each one's length, its loudness along its length (as a device finds when one is added) and
  * when each sentence starts, which scripts/demoData.ts gives its transcript. Needs macOS's `say` and ffmpeg; run
- * `node scripts/demoFiles/voices.mjs` from the project folder.
+ * `node scripts/demoFiles/voices.mjs` from the project folder, followed by names to write only those (keeping the rest).
  */
 import { execFileSync } from 'node:child_process';
 import { mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
@@ -27,6 +27,12 @@ const VOICES = {
     voice: 'Daniel',
     sentences: ['An idea for the app.', 'What if the weekly review read your voice notes back to you, as a little podcast?'],
   },
+  // Sent just after the errands, and recorded quietly, as from across the room: it plays on from the one before, evened out.
+  'errands-more-voice': {
+    voice: 'Samantha',
+    sentences: ['Oh, one more thing.', 'Stamps from the post office.'],
+    gain: 0.2,
+  },
 };
 
 /** Sound as 16 kHz samples, one channel, from any file ffmpeg reads. */
@@ -49,14 +55,16 @@ function peaks(all) {
   return levels.map((l) => Math.round((l / loudest) * 100));
 }
 
-const facts = {};
+const only = process.argv.slice(2);
+const facts = only.length ? JSON.parse(readFileSync(`${here}voices.json`, 'utf8')) : {};
 const work = mkdtempSync(`${tmpdir()}/voices-`);
 try {
-  for (const [name, { voice, sentences }] of Object.entries(VOICES)) {
+  for (const [name, { voice, sentences, gain = 1 }] of Object.entries(VOICES)) {
+    if (only.length && !only.includes(name)) continue;
     const parts = sentences.map((text, i) => {
       const file = `${work}/${name}-${i}.aiff`;
       execFileSync('say', ['-v', voice, '-o', file, text]);
-      return { text, pcm: samples(file) };
+      return { text, pcm: samples(file).map((s) => Math.round(s * gain)) };
     });
     const gap = new Int16Array(Math.round(GAP * RATE));
     const pieces = [gap, ...parts.flatMap((p) => [p.pcm, gap])];

@@ -4,7 +4,7 @@
  * Topics), todos for the board by todo state, notes with headings, lists, checklists, quotes, code, web links and links to each other, todos
  * overdue, due today at a time, upcoming, undated, repeating, waiting, done and archived, entries tinted, set to view
  * only or with their own preview style, photos of every shape, one on a card's back page (served by the dev server from scripts/demoPhotos),
- * files attached (a PDF, a CSV, and a text file on the publicly linked recipe, from scripts/demoFiles), videos with their stills (one in the coast trip, one on the recipe, one in the Trash), voice messages (one transcribed, one not yet, one in the Diary, which isn't sent to be), a private and encrypted Diary vault, a vault shared with Sam and one Sam
+ * files attached (a PDF, a CSV, and a text file on the publicly linked recipe, from scripts/demoFiles), videos with their stills (one in the coast trip, one on the recipe, one in the Trash), voice messages (one transcribed with a quiet one just after it, one not yet, one in the Diary, which isn't sent to be), a private and encrypted Diary vault, a vault shared with Sam and one Sam
  * shares to view, a card also in another vault, a note Sam shares, a public link, comments open and resolved, and
  * version history from more than one device, and entries going back three years. Two entries carry nearly all of it at once, to see how a full one looks:
  * a launch plan note and a moving todo.
@@ -546,6 +546,8 @@ export async function seed() {
   note('demo-note-today-2', ago(40), lines('Buy oat milk, bananas and coffee beans'), [home]);
   // A voice message alone, transcribed: its words play along, and search finds them ("dry cleaning").
   note('demo-note-voice', ago(20), doc(voice('errands-voice', true)), [home]);
+  // Another just after it, recorded quietly: one ending plays on to it, and it's turned up to be heard as loud.
+  note('demo-note-voice-more', ago(19), doc(voice('errands-more-voice', true)), [home]);
   note('demo-note-secret', at(2, 23, 0), lines('Gift budget this year: 300. Don\'t tell anyone.'), [], '', diaryVault);
   // Templates, on their own page, to start new entries from: their checklists come unticked, and {date} is the day.
   note('demo-template-packing', at(9, 9, 30), doc(checklist(['Passport', false], ['Chargers', false], ['Toothbrush', false], ['Rain jacket', false], ['Snacks', false])), [travel], 'Packing list', personal, { template: true });

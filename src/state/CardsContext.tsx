@@ -11,6 +11,8 @@ import { SyncEngine, type SyncStatus } from '../sync/engine';
 import type { CommentCount, SharedCard, VaultShare } from '../sync/protocol';
 import { deleteAttachment, fetchDrafts, httpTransport, listAttachments, markAttachments, photoTransport, sendDrafts } from '../sync/http';
 import { AttachmentKeeper } from '../photos/keeper';
+import { reminderOf } from '../domain/reminders';
+import { sealReminders } from '../reminders/sealed';
 import { preparePhoto } from '../photos/prepare';
 import { probeVideo } from '../photos/video';
 import { PhotoService, type PhotoState } from '../photos/service';
@@ -187,6 +189,29 @@ export function CardsProvider({ accountId, children }: { accountId: string; chil
       if (vault.encryption && !locked.has(vault.id)) void finishEncrypting(repo, engine, keyring, vault.id).catch(() => false);
     }
   }, [vaults, locked, repo, engine, keyring]);
+
+  // Reminders for todos in encrypted vaults open here, sealed for each of this account's browsers: a moment after their
+  // cards change, and every half hour, as browsers turn reminders on elsewhere and reminders pass.
+  // Only what reminds counts, so edits elsewhere don't start it.
+  const sealing = useMemo(() => {
+    const open = (vaults ?? []).filter((v) => v.encryption && !locked.has(v.id) && (v.role ?? 'owner') !== 'viewer');
+    const ids = new Set(open.map((v) => v.id));
+    const todos = (index?.live ?? []).filter((c) => c.type === 'todo' && ids.has(c.vaultId));
+    const key = JSON.stringify([open.map((v) => v.id), todos.map((c) => [c.id, c.vaultId, reminderOf(c)])]);
+    return { open, todos, key };
+  }, [index, vaults, locked]);
+  const sealingRef = useRef(sealing);
+  sealingRef.current = sealing;
+  useEffect(() => {
+    if (!sealingRef.current.open.length) return;
+    const run = () => void sealReminders(repo, sealingRef.current.open, sealingRef.current.todos).catch(() => undefined);
+    const soon = setTimeout(run, 3000);
+    const often = setInterval(run, 30 * 60_000);
+    return () => {
+      clearTimeout(soon);
+      clearInterval(often);
+    };
+  }, [sealing.key, repo]);
 
   // The shared lists change only when a sync brings new ones.
   useEffect(() => {

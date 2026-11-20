@@ -106,7 +106,7 @@ describe('reminders on the server', () => {
     const ben = await signIn('ben');
     const pin = { salt: 'c2FsdA==', hash: 'aGFzaA==', iterations: 300_000 };
     const encryption = { version: 1, kdf: { name: 'argon2id', salt: 'c2FsdA==', memory: 19456, iterations: 2, parallelism: 1 }, wrapped: 'd3JhcHBlZA==', recovery: 'cmVjb3Zlcnk=' };
-    const json = async <T>(res: Promise<Response>) => (await (await res).json()) as T;
+    const json = async <T>(res: Response | Promise<Response>) => (await (await res).json()) as T;
     const diary = await json<{ id: string }>(call('/api/vaults', { method: 'POST', body: JSON.stringify({ name: 'Diary', pin, encryption }) }, ann.cookie));
     await push(ann.cookie, [rec(diary.id, 's1', { payload: 'e1:sealed' })]);
     await call('/api/push/subscription', { method: 'PUT', body: JSON.stringify(subscription('https://push.example.com/ann')) }, ann.cookie);

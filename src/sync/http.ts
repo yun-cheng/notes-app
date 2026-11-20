@@ -1,3 +1,4 @@
+import type { ReminderBrowser } from '../reminders/sealed';
 import { deviceName } from '../domain/device';
 import type { VaultPin } from '../domain/pin';
 import type { StoredAttachment } from '../domain/attachments';
@@ -401,5 +402,12 @@ export const savePushSubscription = (subscription: PushSubscriptionJSON, setting
   });
 
 export const removePushSubscription = (endpoint: string) => request<{ ok: true }>('/push/subscription', { method: 'DELETE', body: JSON.stringify({ endpoint }) });
+
+/** This account's browsers with reminders on, to seal an encrypted vault's reminders to (src/reminders/sealed.ts). */
+export const fetchReminderBrowsers = async () => (await request<{ subscriptions: ReminderBrowser[] }>('/push/subscriptions')).subscriptions;
+
+/** Replaces the reminders sealed for an encrypted vault's todos. Gives how many the server kept. */
+export const putSealedReminders = (vaultId: string, reminders: { card_id: string; subscription_id: string; fire_at: number; body: string }[]) =>
+  request<{ kept: number }>(`/vaults/${encodeURIComponent(vaultId)}/sealed-reminders`, { method: 'PUT', body: JSON.stringify({ reminders }) });
 
 export const sendTestPush = () => request<{ sent: number; browsers: number }>('/push/test', { method: 'POST' });

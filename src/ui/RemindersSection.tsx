@@ -143,8 +143,9 @@ export function RemindersSection() {
   return (
     <Section title="Reminders">
       <p className="prose-note">
-        A notification when an open todo comes due, even with the app closed: at its time, or for a todo with only a date, at the time set below. Waiting todos don't remind,
-        and nor do todos in an encrypted vault, which the server can't read. This is set for each browser.
+        A notification when an open todo comes due, even with the app closed: at its time, or for a todo with only a date, at the time set below. Waiting todos don't remind.
+        Todos in an encrypted vault do once the vault has been open on one of your devices since their date was set: that device seals each notification for each of your
+        browsers, so the server learns only when to send it. This is set for each browser.
       </p>
       {blocked === 'checking' ? null : blocked ? (
         <p className="prose-note reminders__note">{note[blocked]}</p>

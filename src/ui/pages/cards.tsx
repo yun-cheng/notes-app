@@ -10,6 +10,7 @@ import { Editor } from '../editor/Editor';
 import { LockPanel } from '../LockPanel';
 import { Comments } from '../Comments';
 import { Icon } from '../Icon';
+import { VoiceBar } from '../voice';
 import { entryPath, journalPath } from '../paths';
 import { ShareDialog } from '../ShareDialog';
 import { DueFields, useTickTodo } from '../TodoDue';
@@ -121,6 +122,9 @@ function CardDetail({ card }: { card: Card }) {
             <Icon name="trash" />
           </button>
         )}
+      </div>
+      <div className="voice-bar-slot">
+        <VoiceBar />
       </div>
       {can.note && <p className="access-note">{can.note}</p>}
 

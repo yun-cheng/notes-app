@@ -1046,6 +1046,29 @@ body:has(.batch) .toast-slot { bottom: calc(var(--tabbar) + env(safe-area-inset-
 .file-block--voice .voice { width: min(420px, 100%); }
 .file-block.is-selected .voice { outline: 2px solid var(--accent); outline-offset: 2px; }
 .attachments .voice { width: min(100%, 420px); }
+/*
+ * The voice message playing (`VoiceBar`), as Telegram shows one over a chat: a row along the foot of the title bar (on
+ * an entry's page, under its buttons, kept on screen), with a line along its edge to seek in.
+ */
+.voice-bar { position: relative; display: flex; align-items: center; gap: 8px; min-width: 0; height: 40px; color: var(--text); font-size: 13px; line-height: 1.3; }
+.page__head:has(> .voice-bar) { flex-wrap: wrap; row-gap: 8px; }
+.page__head > .voice-bar { flex: 0 0 100%; margin: 0 -16px -10px; padding: 0 16px; border-top: 1px solid var(--line); box-sizing: content-box; }
+.voice-bar-slot { position: sticky; top: 0; z-index: 6; margin: 0 -16px 8px; padding: 0 16px; background: var(--bg); box-shadow: 0 1px 0 var(--line); }
+.voice-bar-slot:empty { display: none; }
+.voice-bar button { font: inherit; cursor: pointer; }
+.voice-bar__play, .voice-bar__close { display: grid; place-items: center; flex: none; width: 28px; height: 28px; padding: 0; border: 0; border-radius: 50%; }
+.voice-bar__play { background: var(--accent); color: var(--on-accent); }
+.voice-bar__play svg path { fill: currentColor; }
+.voice-bar__close { background: none; color: var(--muted); }
+.voice-bar__close:hover { background: var(--sunken); color: var(--text); }
+.voice-bar__what { display: flex; align-items: baseline; gap: 8px; flex: 1; min-width: 0; padding: 0; border: 0; background: none; color: inherit; text-align: left; white-space: nowrap; }
+.voice-bar__what strong { flex: 0 1 auto; min-width: 0; max-width: 60%; overflow: hidden; text-overflow: ellipsis; font-weight: 600; }
+.voice-bar__what span { flex: 1 1 0; min-width: 0; overflow: hidden; text-overflow: ellipsis; color: var(--muted); }
+.voice-bar__what:hover strong { color: var(--accent); }
+.voice-bar__time { flex: none; color: var(--muted); font-size: 12px; font-variant-numeric: tabular-nums; }
+.voice-bar__line { position: absolute; left: 0; right: 0; bottom: -5px; z-index: 1; height: 12px; cursor: pointer; touch-action: none; }
+.voice-bar__line > span { position: absolute; left: 0; bottom: 5px; height: 2px; background: var(--accent); }
+@media (max-width: 419px) { .voice-bar__time > span { display: none; } }
 /* The bar shown while recording one: a red dot, the time, how loud it is now, Discard and Done. */
 .voice-recorder { position: fixed; z-index: 60; left: 50%; bottom: calc(var(--tabbar) + env(safe-area-inset-bottom) + 76px); transform: translateX(-50%); display: flex; align-items: center; gap: 10px; width: max-content; max-width: calc(100vw - 32px); padding: 8px 8px 8px 14px; border: 1px solid var(--line); border-radius: 999px; background: var(--raised); color: var(--text); box-shadow: var(--shadow); }
 .voice-recorder__dot { width: 10px; height: 10px; flex: none; border-radius: 50%; background: var(--alert); animation: voice-recording 1.2s ease-in-out infinite; }

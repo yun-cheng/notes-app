@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState, useSyncExternalStore, type KeyboardEvent, type MouseEvent, type PointerEvent } from 'react';
+import { useEffect, useLayoutEffect, useRef, useState, useSyncExternalStore, type KeyboardEvent, type MouseEvent, type PointerEvent } from 'react';
 import { createPortal } from 'react-dom';
 import { clipLength, type FileInfo } from '../domain/content';
 import { canChangeInTheOpen } from '../domain/access';
@@ -19,21 +19,51 @@ import { readySound, releaseSound, setVoiceVolume, toggleVoiceMute, useVoiceVolu
  */
 const players = new Map<HTMLElement, { play: () => boolean; pause: () => void }>();
 
-/** Plays the voice message after `root` if it comes straight after: in the same entry, or the next one. */
-function playAfter(root: HTMLElement) {
+/** Plays the voice message after `root` if it comes straight after: in the same entry, or the next one. Whether one did. */
+function playAfter(root: HTMLElement): boolean {
   const scope = root.closest('.stream, .ProseMirror') ?? document.body;
   const next = [...players.keys()]
     .filter((r) => r !== root && scope.contains(r) && root.compareDocumentPosition(r) & Node.DOCUMENT_POSITION_FOLLOWING)
     .sort((a, b) => (a.compareDocumentPosition(b) & Node.DOCUMENT_POSITION_FOLLOWING ? -1 : 1))[0];
-  if (!next) return;
+  if (!next) return false;
   const entry = root.closest('.stream__entry');
   const nextEntry = next.closest('.stream__entry');
   if (entry !== nextEntry) {
     const entries = [...scope.querySelectorAll('.stream__entry')];
-    if (!entry || !nextEntry || entries.indexOf(nextEntry) !== entries.indexOf(entry) + 1) return;
+    if (!entry || !nextEntry || entries.indexOf(nextEntry) !== entries.indexOf(entry) + 1) return false;
   }
-  players.get(next)?.play();
+  return players.get(next)?.play() ?? false;
 }
+
+/**
+ * The voice message playing, or played and only paused, as the bar over the page shows it (`VoiceBar`), as Telegram
+ * shows one: till it's closed, or it ends with none after it. `owner` is its player, which keeps it up to date.
+ */
+interface NowPlaying {
+  root: HTMLElement;
+  name: string;
+  /** What's being said, when it's transcribed. */
+  saying: string | null;
+  playing: boolean;
+  time: number;
+  total: number;
+  speed: number;
+  toggle: () => void;
+  seek: (to: number) => void;
+  faster: () => void;
+}
+let owner: HTMLElement | null = null;
+let now: NowPlaying | null = null;
+const nowListeners = new Set<() => void>();
+const setNow = (next: NowPlaying | null) => {
+  now = next;
+  nowListeners.forEach((l) => l());
+};
+const letGo = (root: HTMLElement | null) => {
+  if (!root || owner !== root) return;
+  owner = null;
+  setNow(null);
+};
 
 /** The longest voice message recorded at once: a quarter of what a day's transcribing allows. */
 export const MAX_RECORDING_SECONDS = 15 * 60;
@@ -141,6 +171,7 @@ export function VoiceMessage({ file, vaultId, onTranscript }: { file: FileInfo; 
       play: () => {
         const el = audio.current;
         if (!el || broken) return false;
+        owner = me;
         start(el);
         return true;
       },
@@ -148,6 +179,10 @@ export function VoiceMessage({ file, vaultId, onTranscript }: { file: FileInfo; 
     });
     return () => void players.delete(me);
   });
+  useEffect(() => {
+    const me = root.current;
+    return () => letGo(me);
+  }, []);
 
   const total = length ?? file.duration ?? 0;
   /** Starts it, saying so only if this browser can't play it at all (not when it was only stopped or not allowed yet). */
@@ -179,8 +214,8 @@ export function VoiceMessage({ file, vaultId, onTranscript }: { file: FileInfo; 
     e.stopPropagation();
     seek(time + step);
   };
-  const faster = (e: MouseEvent) => {
-    e.stopPropagation();
+  const faster = (e?: MouseEvent) => {
+    e?.stopPropagation();
     const next = speed === 1 ? 1.5 : speed === 1.5 ? 2 : 1;
     setSpeed(next);
     if (audio.current) audio.current.playbackRate = next;
@@ -191,6 +226,12 @@ export function VoiceMessage({ file, vaultId, onTranscript }: { file: FileInfo; 
   const cues = file.cues ?? [];
   const saying = playing || time > 0 ? cueAt(cues, time) : -1;
   const words = file.transcript ?? null;
+  // The bar over the page follows the one playing.
+  useEffect(() => {
+    const me = root.current;
+    if (!me || owner !== me) return;
+    setNow({ root: me, name: file.name.replace(/\.[^.]+$/, ''), saying: cues[saying]?.text ?? null, playing, time, total, speed, toggle: () => play(), seek: (to) => seek(to), faster: () => faster() });
+  });
 
   return (
     <div ref={root} className="voice" data-voice-id={file.id} onClick={(e) => e.stopPropagation()}>
@@ -233,6 +274,7 @@ export function VoiceMessage({ file, vaultId, onTranscript }: { file: FileInfo; 
             onDurationChange={(e) => Number.isFinite(e.currentTarget.duration) && e.currentTarget.duration > 0 && setLength(e.currentTarget.duration)}
             onTimeUpdate={(e) => setTime(e.currentTarget.currentTime)}
             onPlay={() => {
+              owner = root.current;
               setPlaying(true);
               for (const [r, p] of players) if (r !== root.current) p.pause();
             }}
@@ -242,7 +284,7 @@ export function VoiceMessage({ file, vaultId, onTranscript }: { file: FileInfo; 
               setTime(0);
               // Back to the start, for one that ends short of the length it gives, which would play on from there.
               e.currentTarget.currentTime = 0;
-              if (root.current) playAfter(root.current);
+              if (root.current && !playAfter(root.current)) letGo(root.current);
             }}
             onError={() => setBroken(true)}
           />
@@ -367,6 +409,93 @@ function VolumeButton() {
       </span>
     </span>
   );
+}
+
+/**
+ * The voice message playing, in a bar along the foot of the title bar while it plays and while it's only paused, as
+ * Telegram has one over a chat: play and pause, its name (pressed, it's scrolled to) and what's being said, the time,
+ * the speed and the volume, a line along its foot to seek in, and a close. It's always there, empty while nothing
+ * plays, so the page under it is moved as it comes and goes, and what's on screen stays put.
+ */
+export function VoiceBar() {
+  const current = useSyncExternalStore(
+    (l) => (nowListeners.add(l), () => void nowListeners.delete(l)),
+    () => now,
+  );
+  const bar = useRef<HTMLDivElement>(null);
+  const tall = useRef(0);
+  // Where the page was before it came or went: once it's gone, the page is shorter, and at its foot already moved.
+  const was = useRef(0);
+  was.current = window.scrollY;
+  const shown = !!current;
+  useLayoutEffect(() => {
+    if (shown) {
+      tall.current = bar.current ? grows(bar.current) : 0;
+      window.scrollTo(0, was.current + tall.current);
+    } else if (tall.current) {
+      window.scrollTo(0, was.current - tall.current);
+      tall.current = 0;
+    }
+  }, [shown]);
+  if (!current) return null;
+  const { root, name, saying, playing, time, total, speed } = current;
+  const seekAt = (e: PointerEvent<HTMLElement>) => {
+    const box = e.currentTarget.getBoundingClientRect();
+    if (box.width) current.seek(((e.clientX - box.left) / box.width) * total);
+  };
+  return (
+    <div ref={bar} className="voice-bar" role="region" aria-label="Voice message playing">
+      <button type="button" className="voice-bar__play" aria-label={playing ? 'Pause' : 'Play'} title={playing ? 'Pause' : 'Play'} onClick={current.toggle}>
+        <Icon name={playing ? 'pause' : 'play'} size={16} />
+      </button>
+      <button type="button" className="voice-bar__what" title="Show it" onClick={() => root.scrollIntoView({ block: 'center', behavior: 'smooth' })}>
+        <strong>{name}</strong>
+        {saying && <span>{saying}</span>}
+      </button>
+      <span className="voice-bar__time">
+        {clipLength(time)}
+        <span> / {clipLength(total)}</span>
+      </span>
+      <button type="button" className="voice__speed" title="Playback speed" aria-label={`Playback speed ${speed}×`} onClick={current.faster}>
+        {speed}×
+      </button>
+      <VolumeButton />
+      <button
+        type="button"
+        className="voice-bar__close"
+        aria-label="Stop and close"
+        title="Stop and close"
+        onClick={() => {
+          players.get(root)?.pause();
+          letGo(root);
+        }}
+      >
+        <Icon name="close" size={16} />
+      </button>
+      <span
+        className="voice-bar__line"
+        role="slider"
+        aria-label="Position"
+        aria-valuemin={0}
+        aria-valuemax={Math.round(total)}
+        aria-valuenow={Math.round(time)}
+        aria-valuetext={`${clipLength(time)} of ${clipLength(total)}`}
+        onPointerDown={seekAt}
+      >
+        <span style={{ width: `${total ? Math.min(100, (time / total) * 100) : 0}%` }} />
+      </span>
+    </div>
+  );
+}
+
+/** How much taller the voice bar makes what holds it: the title bar (a row, and the gap above it), or its own slot. */
+function grows(bar: HTMLElement): number {
+  const host = bar.parentElement;
+  const slot = host?.classList.contains('voice-bar-slot') ? host : null;
+  const box = slot ?? bar;
+  const style = getComputedStyle(box);
+  const gap = slot || !host ? 0 : parseFloat(getComputedStyle(host).rowGap) || 0;
+  return box.offsetHeight + parseFloat(style.marginTop) + parseFloat(style.marginBottom) + gap;
 }
 
 /** What a browser records in, best first: Opus in WebM (Chrome, Firefox, Edge), else AAC in MP4 (Safari). */

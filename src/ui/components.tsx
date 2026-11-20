@@ -15,6 +15,7 @@ import { colorClass } from './EntryStyle';
 import { DueLabel, useTickTodo } from './TodoDue';
 import { SyncBadge } from './SyncStatus';
 import { AccountButton, DemoTag } from './AccountBadge';
+import { VoiceBar } from './voice';
 
 /** A page under its title bar. `below` is a second row of the bar, like the journal's filter chips, and stays in it as the page scrolls. */
 /**
@@ -44,6 +45,7 @@ export function Page({ title, actions, below, viewOnly = true, children }: { tit
         {/* Phones have no sidebar, so the account shows on every page here. */}
         <AccountButton className="only-mobile" />
         {below && <div className="page__below">{below}</div>}
+        <VoiceBar />
       </header>
       {children}
     </div>

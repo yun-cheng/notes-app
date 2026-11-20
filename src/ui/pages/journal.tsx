@@ -12,7 +12,7 @@ import { setViewOnly, useInTrash, usePermissions, useViewOnly } from '../viewOnl
 import { ScrollJump, STREAM_END } from '../ScrollJump';
 import { ScrollRail } from '../ScrollRail';
 import { drawnRange, stretchFor, type DrawnStretch } from '../../domain/rail';
-import { Comments } from '../Comments';
+import { Comments, useCanComment } from '../Comments';
 import { ReactionsRow } from '../Reactions';
 import { Backlinks, Empty, Page, TagChips, TagPicker, TitleField, useDeleteCard, VaultField } from '../components';
 import { NotHere } from '../NotHere';
@@ -504,6 +504,7 @@ function BubbleMeta({ card, at, fold, pager, lead }: { card: NoteCard | TodoCard
       <span className="bubble__meta">
         {card.viewOnly && <ViewOnlyMark />}
         <ReactionsRow card={card} />
+        <CommentButton card={card} />
         <span className="bubble__end">
           {lead}
           {card.template && <UseTemplate card={card} />}
@@ -535,6 +536,7 @@ function BubbleMeta({ card, at, fold, pager, lead }: { card: NoteCard | TodoCard
  */
 function CardBadges({ card }: { card: NoteCard | TodoCard }) {
   const { commentCounts } = useCards();
+  const openComments = useOpenComments(card);
   const checks = useMemo(() => checklistProgress(card.content), [card.content]);
   const comments = commentCounts.get(card.id) ?? 0;
   if (!checks && !comments) return null;
@@ -547,13 +549,50 @@ function CardBadges({ card }: { card: NoteCard | TodoCard }) {
           {checks.done}/{checks.total}
         </span>
       )}
-      {comments > 0 && (
-        <span className="bubble__badge" title={comments === 1 ? '1 open comment' : `${comments} open comments`}>
-          <Icon name="comment" size={13} />
-          {comments}
-        </span>
-      )}
+      {comments > 0 &&
+        (openComments ? (
+          <button type="button" className="bubble__badge bubble__badge--button" title={`${comments === 1 ? '1 open comment' : `${comments} open comments`}: show`} onClick={openComments}>
+            <Icon name="comment" size={13} />
+            {comments}
+          </button>
+        ) : (
+          <span className="bubble__badge" title={comments === 1 ? '1 open comment' : `${comments} open comments`}>
+            <Icon name="comment" size={13} />
+            {comments}
+          </span>
+        ))}
     </>
+  );
+}
+
+/**
+ * Opens an entry's sheet at its comments, with the box focused; null in the Trash, where a press picks it instead.
+ * The press stays out of the bubble's own (opening, picking).
+ */
+function useOpenComments(card: NoteCard | TodoCard) {
+  const navigate = useNavigate();
+  const location = useLocation();
+  const trashed = useInTrash();
+  if (trashed) return null;
+  return (e: { stopPropagation: () => void }) => {
+    e.stopPropagation();
+    void navigate(cardPath(card), { state: sheetState(location, card, { comments: true }) });
+  };
+}
+
+/**
+ * A button to comment, beside the one to react, faint until pointed at, on an entry others can see and comment on
+ * that has no open comments yet (one that has some shows their count, which opens them too).
+ */
+function CommentButton({ card }: { card: NoteCard | TodoCard }) {
+  const { commentCounts } = useCards();
+  const writable = useCanComment(card);
+  const open = useOpenComments(card);
+  if (!writable || !open || (commentCounts.get(card.id) ?? 0) > 0) return null;
+  return (
+    <button type="button" className="bubble__add bubble__comment" aria-label="Comment" title="Comment" onClick={open}>
+      <Icon name="comment" size={12} />
+    </button>
   );
 }
 
@@ -1225,7 +1264,7 @@ export function EntrySheet() {
   else if (!card) body = <NotHere thing="entry" />;
   else if (card.deleted) body = <Empty>This is in the Trash.</Empty>;
   else if (!entry) body = <Empty>That isn't a note or a todo.</Empty>;
-  else body = <EntryDetail key={entry.id} card={entry} fresh={!!state?.fresh} edit={!!state?.edit} onClose={close} />;
+  else body = <EntryDetail key={entry.id} card={entry} fresh={!!state?.fresh} edit={!!state?.edit} comments={!!state?.comments} onClose={close} />;
 
   return (
     <div className="dialog-backdrop" {...backdrop}>
@@ -1244,7 +1283,7 @@ export function EntrySheet() {
   );
 }
 
-function EntryDetail({ card, fresh, edit, onClose }: { card: NoteCard | TodoCard; fresh: boolean; edit: boolean; onClose: () => void }) {
+function EntryDetail({ card, fresh, edit, comments, onClose }: { card: NoteCard | TodoCard; fresh: boolean; edit: boolean; comments: boolean; onClose: () => void }) {
   const { repo } = useCards();
   const may = usePermissions();
   const tick = useTickTodo();
@@ -1356,7 +1395,7 @@ function EntryDetail({ card, fresh, edit, onClose }: { card: NoteCard | TodoCard
       )}
       <ReactionsRow card={card} look="sheet" />
       {isStack(card) && !onBack && <StackList stack={card} />}
-      <Comments card={card} />
+      <Comments card={card} focus={comments} />
       <Backlinks cardId={card.id} />
       <div className="note-sheet__bar">
         <div ref={setToolbarHost} className="note-sheet__format" />

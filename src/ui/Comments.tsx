@@ -10,9 +10,24 @@ function when(at: number) {
   return new Date(at).toLocaleString(undefined, { dateStyle: 'medium', timeStyle: 'short' });
 }
 
-/** Comments live on the server only, so they need a connection. A card never synced has none yet. */
-export function Comments({ card }: { card: Card }) {
-  const { vaults, accountId, engine, drafts } = useCards();
+/**
+ * Whether a comment can be written on it: synced, this account may comment, and others can see it (on a card only
+ * its owner sees, comments would be clutter). Then its bubble has a button for one, and its sheet the box.
+ */
+export function useCanComment(card: Card): boolean {
+  const { vaults } = useCards();
+  const may = usePermissions();
+  const can = may(card);
+  const home = vaults.find((v) => v.id === card.vaultId);
+  return card.seq > 0 && can.comment && ((home?.members ?? 1) > 1 || !!can.sharedBy);
+}
+
+/**
+ * Comments live on the server only, so they need a connection. A card never synced has none yet. `focus` (opened
+ * from a bubble's comment button or count) brings them into view once they've come, with the box focused.
+ */
+export function Comments({ card, focus = false }: { card: Card; focus?: boolean }) {
+  const { accountId, engine, drafts } = useCards();
   const may = usePermissions();
   const toast = useToast();
   const can = may(card);
@@ -73,15 +88,26 @@ export function Comments({ card }: { card: Card }) {
   };
 
   // On a card only its owner sees, comments would be clutter. They appear once others can see it, or once there are some.
-  const home = vaults.find((v) => v.id === card.vaultId);
-  const social = (home?.members ?? 1) > 1 || !!can.sharedBy;
-  if (!synced || (offline && !comments) || !(comments?.length || (can.comment && social))) return null;
+  const writable = useCanComment(card);
+  const section = useRef<HTMLElement>(null);
+  const brought = useRef(false);
+  useEffect(() => {
+    if (!focus || brought.current || (comments === null && !offline)) return;
+    brought.current = true;
+    if (offline && !comments) {
+      toast('Comments need a connection.');
+      return;
+    }
+    section.current?.scrollIntoView({ block: 'start', behavior: 'smooth' });
+    box.current?.focus({ preventScroll: true });
+  }, [focus, comments, offline, toast]);
+  if (!synced || (offline && !comments) || !(comments?.length || writable)) return null;
   const open = comments?.filter((c) => !c.resolved_at) ?? [];
   const resolved = comments?.filter((c) => c.resolved_at) ?? [];
   const shown = showResolved ? [...open, ...resolved] : open;
 
   return (
-    <section className="section comments">
+    <section className="section comments" ref={section}>
       <h2>Comments{open.length ? ` (${open.length})` : ''}</h2>
       {shown.map((c) => (
         <article key={c.id} className={`comment${c.resolved_at ? ' is-resolved' : ''}`}>

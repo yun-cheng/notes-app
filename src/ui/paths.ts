@@ -117,6 +117,8 @@ export interface SheetState {
   fresh?: boolean;
   /** Opened with Edit (or Enter), so its text starts focused, ready to type. */
   edit?: boolean;
+  /** Opened from a bubble's comment button or count, so it starts at its comments, with the box focused. */
+  comments?: boolean;
 }
 
 /** Keeps the page under an open sheet when one sheet links to another. */

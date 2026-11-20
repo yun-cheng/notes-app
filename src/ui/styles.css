@@ -1005,7 +1005,7 @@ body:has(.batch) .toast-slot { bottom: calc(var(--tabbar) + env(safe-area-inset-
 .file-block.is-selected .file-chip { outline: 2px solid var(--accent); outline-offset: 2px; }
 .composer__prose .file-block { margin: 6px 0; }
 /* Voice messages: a play button, the sound's loudness along its length to seek in, the time and a speed, with the transcript under them. */
-.voice { display: flex; flex-direction: column; gap: 6px; width: min(100%, 420px); padding: 8px 10px; border: 1px solid var(--line); border-radius: 14px; background: var(--surface); color: var(--text); line-height: 1.4; }
+.voice { display: flex; flex-direction: column; gap: 6px; width: 420px; max-width: 100%; padding: 8px 10px; border: 1px solid var(--line); border-radius: 14px; background: var(--surface); color: var(--text); line-height: 1.4; }
 .voice button { font: inherit; cursor: pointer; }
 .voice__player { display: flex; align-items: center; gap: 10px; }
 .voice__play { display: grid; place-items: center; flex: none; width: 34px; height: 34px; border: 0; border-radius: 50%; background: var(--accent); color: var(--on-accent); }
@@ -1047,9 +1047,7 @@ body:has(.batch) .toast-slot { bottom: calc(var(--tabbar) + env(safe-area-inset-
 .voice__retry { display: inline; color: var(--accent); text-decoration: underline; }
 .voice__status { margin: 0; color: var(--muted); font-size: 12px; }
 .file-block--voice { width: fit-content; max-width: 100%; }
-.file-block--voice .voice { width: min(420px, 100%); }
 .file-block.is-selected .voice { outline: 2px solid var(--accent); outline-offset: 2px; }
-.attachments .voice { width: min(100%, 420px); }
 /*
  * The voice message playing (`VoiceBar`), as Telegram shows one over a chat: a row along the foot of the title bar (on
  * an entry's page, under its buttons, kept on screen), with a line along its edge to seek in.

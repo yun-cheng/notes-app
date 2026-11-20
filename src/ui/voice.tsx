@@ -126,7 +126,8 @@ export function VoiceMessage({ file, vaultId, onTranscript }: { file: FileInfo; 
   const seekAt = (e: PointerEvent<HTMLElement>) => {
     e.stopPropagation();
     const box = e.currentTarget.getBoundingClientRect();
-    seek(((e.clientX - box.left) / box.width) * total);
+    // Not laid out (a hidden page): no place to point at.
+    if (box.width) seek(((e.clientX - box.left) / box.width) * total);
   };
   const keys = (e: KeyboardEvent) => {
     const step = e.key === 'ArrowRight' ? 5 : e.key === 'ArrowLeft' ? -5 : 0;

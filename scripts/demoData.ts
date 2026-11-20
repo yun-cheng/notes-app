@@ -606,6 +606,8 @@ export async function seed() {
   // A voice message in the private Diary: it plays, but its sound never goes to the server to be transcribed.
   note('demo-diary-3', at(3, 22, 0), doc(p('Quiet day.'), voice('diary-voice', false)), [], '', diaryVault);
   note('demo-diary-2', at(2, 22, 0), lines('Tried the curry recipe. Too much ginger, but good.'), [], '', diaryVault);
+  // A todo in the encrypted Diary with a date: a device with the Diary open seals its reminder for each browser.
+  todo('demo-diary-todo', 'Write to Grandma', addDays(today, 2), { dueTime: '19:00', when: at(1, 22, 30), vaultId: diaryVault });
   note('demo-diary-1', at(1, 22, 0), doc(p('Design review went well.'), p('Grateful for:'), bullets('Sunny weather', 'A good book', 'Dinner with Sam')), [], '', diaryVault);
 
   // Health, locked by the PIN without encryption: a note, and a todo whose reminder comes as one in the open would.

@@ -74,6 +74,38 @@ export function cueAt(cues: readonly Cue[], time: number): number {
   return at;
 }
 
+/**
+ * Evening out voice messages as they play, so a quiet recording is heard as loud as the rest: how loud it's speaking
+ * is followed as it plays (`nextLevel`, from each short stretch heard, in dB below full scale), and it's turned up or
+ * down by the difference from `LEVEL_TARGET` (`levelGain`), within limits. Quiet stretches (pauses, breathing) are
+ * left out, so a pause isn't turned up; it rises fast, so a loud start isn't blared, and falls slowly.
+ */
+export const LEVEL_TARGET = -18;
+const LEVEL_GATE = -50;
+const MOST_UP = 18;
+const MOST_DOWN = -6;
+
+/** How loud a short stretch of sound is: its RMS in dB below full scale, -Infinity for silence. */
+export function loudness(samples: Float32Array): number {
+  let sum = 0;
+  for (const s of samples) sum += s * s;
+  const rms = samples.length ? Math.sqrt(sum / samples.length) : 0;
+  return rms > 0 ? 20 * Math.log10(rms) : -Infinity;
+}
+
+/** How loud a voice message is speaking, from what it was and the stretch just `heard`; null until it's spoken. */
+export function nextLevel(level: number | null, heard: number): number | null {
+  if (!(heard > LEVEL_GATE)) return level;
+  if (level === null) return heard;
+  return level + (heard - level) * (heard > level ? 0.5 : 0.04);
+}
+
+/** What to multiply a voice message by, speaking at `level`, to be heard at `LEVEL_TARGET`: as it is until it's spoken. */
+export function levelGain(level: number | null): number {
+  if (level === null) return 1;
+  return 10 ** (Math.min(MOST_UP, Math.max(MOST_DOWN, LEVEL_TARGET - level)) / 20);
+}
+
 /** How loud a sound is along its length, in `bars` bars from 0 to 100, the loudest at 100. */
 export function peaksOf(samples: Float32Array, bars = PEAK_BARS): number[] {
   if (!samples.length) return [];

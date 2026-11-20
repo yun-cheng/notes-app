@@ -2,7 +2,7 @@ import { describe, expect, it } from 'vitest';
 import { fileAttachments, plainText, previewLines } from './content';
 import { toMarkdown } from './markdown';
 import type { JSONNode } from './types';
-import { cueAt, cutPoints, joinTranscripts, peaksOf, voiceExtension, voiceName, wavBytes, withTranscript } from './voice';
+import { cueAt, cutPoints, joinTranscripts, LEVEL_TARGET, levelGain, loudness, nextLevel, peaksOf, voiceExtension, voiceName, wavBytes, withTranscript } from './voice';
 
 const voice = (attrs: Record<string, unknown> = {}): JSONNode => ({ type: 'file', attrs: { id: 'v1', name: 'Voice message.webm', mime: 'audio/webm', size: 900, duration: 4.2, ...attrs } });
 const doc = (...content: JSONNode[]): JSONNode => ({ type: 'doc', content });
@@ -60,6 +60,27 @@ describe('voice messages', () => {
     expect(peaksOf(samples, 4)).toEqual([0, 100, 0, 50]);
     expect(peaksOf(new Float32Array(0))).toEqual([]);
     expect(peaksOf(new Float32Array(10), 2)).toEqual([0, 0]);
+  });
+
+  it('are evened out as they play: quiet ones turned up, loud ones down, pauses left alone', () => {
+    expect(loudness(new Float32Array(100).fill(0.5))).toBeCloseTo(-6.02, 1);
+    expect(loudness(new Float32Array(100))).toBe(-Infinity);
+    // Nothing said yet: as it is.
+    expect(nextLevel(null, -70)).toBeNull();
+    expect(levelGain(null)).toBe(1);
+    // A quiet recording, at -32: turned up to the target.
+    let level = nextLevel(null, -32);
+    expect(level).toBe(-32);
+    expect(20 * Math.log10(levelGain(level))).toBeCloseTo(LEVEL_TARGET + 32);
+    // A pause says nothing of how loud it speaks.
+    expect(nextLevel(level, -65)).toBe(level);
+    // Louder speech is followed fast, quieter slowly.
+    level = nextLevel(-32, -12);
+    expect(level).toBe(-22);
+    expect(nextLevel(-22, -32)).toBeCloseTo(-22.4);
+    // Within limits: a whisper is turned up 18 dB at most, a shout down 6.
+    expect(20 * Math.log10(levelGain(-45))).toBeCloseTo(18);
+    expect(20 * Math.log10(levelGain(-3))).toBeCloseTo(-6);
   });
 
   it('are cut into pieces short enough to send, between words', () => {

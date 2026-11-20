@@ -11,6 +11,7 @@ import { writeClipboard } from './entryActions';
 import { Icon } from './Icon';
 import { useToast } from './Toast';
 import { useVideoAddress } from './video';
+import { readySound, releaseSound, setVoiceVolume, toggleVoiceMute, useVoiceVolume } from './voiceSound';
 
 /** The longest voice message recorded at once: a quarter of what a day's transcribing allows. */
 export const MAX_RECORDING_SECONDS = 15 * 60;
@@ -69,7 +70,7 @@ async function transcribe(id: string, vaultId: string, photos: PhotoService, dec
 
 /**
  * A voice message (any sound attached) playing where it is: a play button, its loudness drawn along its length to
- * seek in, the time, and a speed to play it at. Under it, its transcript, each stretch pressed to play from there and
+ * seek in, the time, a speed to play it at, and the volume all voice messages play at (`voiceSound`), each evened out. Under it, its transcript, each stretch pressed to play from there and
  * the one being said marked; or, where `onTranscript` can save one, Transcribe, which a recording made here does by
  * itself. `vaultId` is the vault of the entry holding it.
  */
@@ -106,9 +107,14 @@ export function VoiceMessage({ file, vaultId, onTranscript }: { file: FileInfo; 
     latest.current(now.words);
   }, [job]);
 
+  useEffect(() => {
+    const el = audio.current;
+    return () => void (el && releaseSound(el));
+  }, [address]);
+
   const total = length ?? file.duration ?? 0;
   /** Starts it, saying so only if this browser can't play it at all (not when it was only stopped or not allowed yet). */
-  const start = (el: HTMLAudioElement) => void el.play().catch((err: { name?: string }) => err?.name === 'NotSupportedError' && setBroken(true));
+  const start = (el: HTMLAudioElement) => (readySound(el), void el.play().catch((err: { name?: string }) => err?.name === 'NotSupportedError' && setBroken(true)));
   const play = (e?: MouseEvent) => {
     e?.stopPropagation();
     const el = audio.current;
@@ -175,6 +181,7 @@ export function VoiceMessage({ file, vaultId, onTranscript }: { file: FileInfo; 
         <button type="button" className="voice__speed" title="Playback speed" aria-label={`Playback speed ${speed}×`} onClick={faster}>
           {speed}×
         </button>
+        <VolumeButton />
         {address && (
           <audio
             ref={audio}
@@ -252,6 +259,55 @@ export interface Recording {
   blob: Blob;
   startedAt: number;
   seconds: number;
+}
+
+/**
+ * The volume all voice messages play at, as Telegram's desktop app has it: pointed at, a slider beside it; pressed,
+ * muted or back. On a touch screen, which can't point, a press shows the slider instead.
+ */
+function VolumeButton() {
+  const { volume, muted } = useVoiceVolume();
+  const [open, setOpen] = useState(false);
+  const box = useRef<HTMLSpanElement>(null);
+  const touch = useRef(false);
+  const silent = muted || volume === 0;
+  useEffect(() => {
+    if (!open) return;
+    const away = (e: Event) => box.current?.contains(e.target as Node) || setOpen(false);
+    document.addEventListener('pointerdown', away, true);
+    return () => document.removeEventListener('pointerdown', away, true);
+  }, [open]);
+  const shown = silent ? 0 : Math.round(volume * 100);
+  return (
+    <span ref={box} className={`voice__volume${open ? ' is-open' : ''}`} onPointerDown={(e) => e.stopPropagation()}>
+      <button
+        type="button"
+        aria-label={silent ? 'Unmute voice messages' : 'Mute voice messages'}
+        title={silent ? 'Unmute' : 'Mute'}
+        onPointerDown={(e) => (touch.current = e.pointerType === 'touch')}
+        onClick={(e) => {
+          e.stopPropagation();
+          if (touch.current) setOpen((o) => !o);
+          else toggleVoiceMute();
+          touch.current = false;
+        }}
+      >
+        <Icon name={silent ? 'mute' : volume < 0.5 ? 'volumeLow' : 'volume'} size={16} />
+      </button>
+      <span className="voice__volume-pop">
+        <input
+          type="range"
+          min={0}
+          max={100}
+          step={1}
+          value={shown}
+          aria-label="Voice message volume"
+          aria-valuetext={`${shown}%`}
+          onChange={(e) => setVoiceVolume(Number(e.target.value) / 100)}
+        />
+      </span>
+    </span>
+  );
 }
 
 /** What a browser records in, best first: Opus in WebM (Chrome, Firefox, Edge), else AAC in MP4 (Safari). */

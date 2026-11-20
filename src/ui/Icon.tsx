@@ -72,6 +72,10 @@ const PATHS = {
   mic: 'M12 3a3 3 0 0 0-3 3v6a3 3 0 0 0 6 0V6a3 3 0 0 0-3-3ZM5.5 11a6.5 6.5 0 0 0 13 0M12 17.5V21M9 21h6',
   stop: 'M7 6h10a1 1 0 0 1 1 1v10a1 1 0 0 1-1 1H7a1 1 0 0 1-1-1V7a1 1 0 0 1 1-1Z',
   close: 'M6 6l12 12M18 6 6 18',
+  // A speaker, loud, quiet and muted: a voice message's volume.
+  volume: 'M4 9.5h3l5-4v13l-5-4H4ZM15.5 9a4.2 4.2 0 0 1 0 6M18.5 6.5a8 8 0 0 1 0 11',
+  volumeLow: 'M4 9.5h3l5-4v13l-5-4H4ZM15.5 9a4.2 4.2 0 0 1 0 6',
+  mute: 'M4 9.5h3l5-4v13l-5-4H4ZM16 9.5l5 5M21 9.5l-5 5',
 } as const;
 
 export type IconName = keyof typeof PATHS;

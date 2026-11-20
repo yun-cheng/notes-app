@@ -13,6 +13,21 @@ import { useToast } from './Toast';
 import { useVideoAddress } from './video';
 import { readySound, releaseSound, setVoiceVolume, toggleVoiceMute, useVoiceVolume } from './voiceSound';
 
+/**
+ * The voice messages on show, so they play as Telegram plays them: one at a time, and on from one that ends to the
+ * next one down the same journal or entry, whatever is between them.
+ */
+const players = new Map<HTMLElement, { play: () => boolean; pause: () => void }>();
+
+/** Plays the next voice message down from `root` that can play, if there is one. */
+function playAfter(root: HTMLElement) {
+  const scope = root.closest('.stream, .ProseMirror') ?? document.body;
+  const after = [...players.keys()]
+    .filter((r) => r !== root && scope.contains(r) && root.compareDocumentPosition(r) & Node.DOCUMENT_POSITION_FOLLOWING)
+    .sort((a, b) => (a.compareDocumentPosition(b) & Node.DOCUMENT_POSITION_FOLLOWING ? -1 : 1));
+  for (const r of after) if (players.get(r)?.play()) return;
+}
+
 /** The longest voice message recorded at once: a quarter of what a day's transcribing allows. */
 export const MAX_RECORDING_SECONDS = 15 * 60;
 
@@ -70,7 +85,7 @@ async function transcribe(id: string, vaultId: string, photos: PhotoService, dec
 
 /**
  * A voice message (any sound attached) playing where it is: a play button, its loudness drawn along its length to
- * seek in, the time, a speed to play it at, and the volume all voice messages play at (`voiceSound`), each evened out. Under it, its transcript, each stretch pressed to play from there and
+ * seek in, the time, a speed to play it at, and the volume all voice messages play at (`voiceSound`), each evened out. One plays at a time, and one that ends runs on to the next one down (`playAfter`). Under it, its transcript, each stretch pressed to play from there and
  * the one being said marked; or, where `onTranscript` can save one, Transcribe, which a recording made here does by
  * itself. `vaultId` is the vault of the entry holding it.
  */
@@ -111,6 +126,21 @@ export function VoiceMessage({ file, vaultId, onTranscript }: { file: FileInfo; 
     const el = audio.current;
     return () => void (el && releaseSound(el));
   }, [address]);
+  const root = useRef<HTMLDivElement>(null);
+  useEffect(() => {
+    const me = root.current;
+    if (!me) return;
+    players.set(me, {
+      play: () => {
+        const el = audio.current;
+        if (!el || broken) return false;
+        start(el);
+        return true;
+      },
+      pause: () => audio.current?.pause(),
+    });
+    return () => void players.delete(me);
+  });
 
   const total = length ?? file.duration ?? 0;
   /** Starts it, saying so only if this browser can't play it at all (not when it was only stopped or not allowed yet). */
@@ -156,7 +186,7 @@ export function VoiceMessage({ file, vaultId, onTranscript }: { file: FileInfo; 
   const words = file.transcript ?? null;
 
   return (
-    <div className="voice" data-voice-id={file.id} onClick={(e) => e.stopPropagation()}>
+    <div ref={root} className="voice" data-voice-id={file.id} onClick={(e) => e.stopPropagation()}>
       <div className="voice__player">
         <button type="button" className="voice__play" aria-label={playing ? 'Pause' : `Play ${file.name}`} title={playing ? 'Pause' : 'Play'} disabled={!address || broken} onClick={play}>
           <Icon name={playing ? 'pause' : 'play'} size={18} />
@@ -195,9 +225,16 @@ export function VoiceMessage({ file, vaultId, onTranscript }: { file: FileInfo; 
             }}
             onDurationChange={(e) => Number.isFinite(e.currentTarget.duration) && e.currentTarget.duration > 0 && setLength(e.currentTarget.duration)}
             onTimeUpdate={(e) => setTime(e.currentTarget.currentTime)}
-            onPlay={() => setPlaying(true)}
+            onPlay={() => {
+              setPlaying(true);
+              for (const [r, p] of players) if (r !== root.current) p.pause();
+            }}
             onPause={() => setPlaying(false)}
-            onEnded={() => (setPlaying(false), setTime(0))}
+            onEnded={() => {
+              setPlaying(false);
+              setTime(0);
+              if (root.current) playAfter(root.current);
+            }}
             onError={() => setBroken(true)}
           />
         )}

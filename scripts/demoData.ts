@@ -4,7 +4,7 @@
  * Topics), todos for the board by todo state, notes with headings, lists, checklists, quotes, code, web links and links to each other, todos
  * overdue, due today at a time, upcoming, undated, repeating, waiting, done and archived, entries tinted, set to view
  * only or with their own preview style, photos of every shape, one on a card's back page (served by the dev server from scripts/demoPhotos),
- * files attached (a PDF, a CSV, and a text file on the publicly linked recipe, from scripts/demoFiles), videos with their stills (one in the coast trip, one on the recipe, one in the Trash), voice messages (one transcribed with a quiet one just after it, one not yet, one in the Diary, which isn't sent to be), a private and encrypted Diary vault, a vault shared with Sam and one Sam
+ * files attached (a PDF, a CSV, and a text file on the publicly linked recipe, from scripts/demoFiles), videos with their stills (one in the coast trip, one on the recipe, one in the Trash), voice messages (one transcribed with a quiet one just after it, one not yet, one in the Diary, which isn't sent to be), a private and encrypted Diary vault, a Health vault locked by the PIN but not encrypted, a vault shared with Sam and one Sam
  * shares to view, a card also in another vault, a note Sam shares, a public link, comments open and resolved, and
  * version history from more than one device, and entries going back three years. Two entries carry nearly all of it at once, to see how a full one looks:
  * a launch plan note and a moving todo.
@@ -262,6 +262,9 @@ export async function seed() {
     recoveryKey = sealed.recoveryKey;
   }
   const keys = new Map(diaryKey ? [[diaryVault, diaryKey]] : []);
+  // Health is locked by the same PIN but not encrypted: out of sight in the app, while the server can still read it,
+  // so its todo gets a reminder. One encrypted since, by hand, is left as it is, without the demo's entries.
+  const health = vaults.find((v) => v.name === 'Health' && v.owner_id === DEMO.id) ?? (await call<Vault>(DEMO, '/vaults', { name: 'Health', pin: await hashPin(DEMO_PIN) }));
 
   const mine: Draft[] = [];
   const add = (id: string, vaultId: string, when: number, payload: NewPayload) => {
@@ -281,10 +284,10 @@ export async function seed() {
     id: string,
     title: string,
     due: string | null,
-    extra: Extras & { done?: number; tags?: string[]; when?: number; dueTime?: string; start?: string; repeat?: Repeat; waiting?: boolean; content?: JSONNode } = {},
+    extra: Extras & { done?: number; tags?: string[]; when?: number; dueTime?: string; start?: string; repeat?: Repeat; waiting?: boolean; content?: JSONNode; vaultId?: string } = {},
   ) => {
-    const { done, tags = [], when, dueTime, start, repeat, waiting, content, ...extras } = extra;
-    return add(id, personal, done ?? when ?? at(3, 10), {
+    const { done, tags = [], when, dueTime, start, repeat, waiting, content, vaultId = personal, ...extras } = extra;
+    return add(id, vaultId, done ?? when ?? at(3, 10), {
       type: 'todo',
       title,
       due,
@@ -600,6 +603,10 @@ export async function seed() {
   note('demo-diary-2', at(2, 22, 0), lines('Tried the curry recipe. Too much ginger, but good.'), [], '', diaryVault);
   note('demo-diary-1', at(1, 22, 0), doc(p('Design review went well.'), p('Grateful for:'), bullets('Sunny weather', 'A good book', 'Dinner with Sam')), [], '', diaryVault);
 
+  // Health, locked by the PIN without encryption: a note, and a todo whose reminder comes as one in the open would.
+  note('demo-health-physio', at(2, 8, 0), doc(p('Physio: three sets of ten squats, then the stretches on the sheet.')), [], 'Physio exercises', health.id);
+  todo('demo-health-refill', 'Refill the prescription', addDays(today, 1), { dueTime: '09:00', when: at(1, 8, 30), vaultId: health.id });
+
   // A shared vault with Sam: notes from both of you.
   note('demo-family-groceries', at(2, 17, 0), doc(p('Shared shopping list'), checklist(['Rice', true], ['Eggs', false], ['Dish soap', false])), [], '', family.id);
   // Reactions: Sam's and yours together on one, Sam's alone on the other; a press puts yours on or takes it off.
@@ -607,7 +614,7 @@ export async function seed() {
     reactions: { '🏔️': [SAM.id, DEMO.id], '🏖️': [SAM.id] },
   });
 
-  const pushed = diaryKey ? mine : mine.filter((d) => d.vaultId !== diaryVault);
+  const pushed = mine.filter((d) => (diaryKey || d.vaultId !== diaryVault) && !(health.encryption && d.vaultId === health.id));
   // Cards an earlier demo had and this one doesn't: sent as deleted, so a browser that synced them lets them go.
   const retired = RETIRED.map(([id, title]): CardRecord => {
     const payload: CardPayload = { type: 'tag', title, pinned: false, tags: [], content: doc(p()), createdAt: at(9, 9) };

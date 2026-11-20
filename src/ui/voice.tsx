@@ -230,9 +230,11 @@ export function VoiceMessage({ file, vaultId, onTranscript }: { file: FileInfo; 
               for (const [r, p] of players) if (r !== root.current) p.pause();
             }}
             onPause={() => setPlaying(false)}
-            onEnded={() => {
+            onEnded={(e) => {
               setPlaying(false);
               setTime(0);
+              // Back to the start, for one that ends short of the length it gives, which would play on from there.
+              e.currentTarget.currentTime = 0;
               if (root.current) playAfter(root.current);
             }}
             onError={() => setBroken(true)}

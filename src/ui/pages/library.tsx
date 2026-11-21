@@ -1,4 +1,4 @@
-import { useMemo, useRef, useState, type MouseEvent, type ReactNode } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState, type MouseEvent, type ReactNode } from 'react';
 import { createPortal } from 'react-dom';
 import { useLocation, useNavigate, useSearchParams } from 'react-router';
 import { displayTitle, isAudio, type FileInfo } from '../../domain/content';
@@ -20,6 +20,8 @@ import { ScrollRail } from '../ScrollRail';
 import { useInView } from '../useInView';
 import { holdsWords, usePageSearch } from '../PageSearch';
 import { VoiceMessage } from '../voice';
+import { keptPreviews, shownPreview } from '../useLinkPreview';
+import type { LinkPreview } from '../../sync/protocol';
 
 /**
  * What the journal's entries hold, by day, for the Photos, Links or Files page: the notes and todos the journal's
@@ -204,6 +206,29 @@ function HeldList<T extends { id: string }>({ title, days: held, filtered, noun,
  */
 export function LinksPage() {
   const { days, filter } = useLibrary<LinkInfo>(linkDays);
+  const { repo, vaults } = useCards();
+  // Its search finds a link by its page's title and description too, as this device has them: none is asked for to search.
+  const previewed = useMemo(() => {
+    const open = new Set(vaults.filter((v) => !v.encryption).map((v) => v.id));
+    return new Set(days.flatMap((d) => d.items.filter((i) => open.has(i.card.vaultId)).map((i) => i.id)));
+  }, [days, vaults]);
+  // Read again only when the links change, not each time an entry does.
+  const asked = [...previewed].sort().join('\n');
+  const [kept, setKept] = useState<ReadonlyMap<string, LinkPreview>>(new Map());
+  useEffect(() => {
+    let live = true;
+    void keptPreviews(repo, asked ? asked.split('\n') : []).then((got) => live && setKept(got));
+    return () => {
+      live = false;
+    };
+  }, [repo, asked]);
+  const linkText = useCallback(
+    (link: DayItem<LinkInfo>) => {
+      const preview = previewed.has(link.id) ? (shownPreview(link.id) ?? kept.get(link.id)) : undefined;
+      return [link.id, preview?.title, preview?.description, preview?.site].filter(Boolean).join(' ');
+    },
+    [previewed, kept],
+  );
   return (
     <HeldList
       title="Links"
@@ -220,7 +245,6 @@ export function LinksPage() {
   );
 }
 
-const linkText = (link: DayItem<LinkInfo>) => link.id;
 const fileText = (file: DayItem<FileInfo>) => file.name;
 
 function LinkRow({ url, card }: { url: string; card: Card }) {

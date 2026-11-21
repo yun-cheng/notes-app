@@ -58,3 +58,21 @@ export function useLinkPreview(url: string, allowed: boolean): LinkPreview | nul
 
   return preview;
 }
+
+/** A link's preview if it was read this session, asking nothing of the server. */
+export const shownPreview = (url: string): LinkPreview | undefined => memory.get(url);
+
+/**
+ * The previews this device kept of these links, from before, asking nothing of the server: to find a link by its
+ * page's title before its preview is shown again.
+ */
+export async function keptPreviews(repo: { getMeta(key: string): Promise<unknown> }, urls: readonly string[]): Promise<Map<string, LinkPreview>> {
+  const kept = new Map<string, LinkPreview>();
+  await Promise.all(
+    urls.map(async (url) => {
+      const stored = (await repo.getMeta(`link-preview:${url}`)) as Stored | undefined;
+      if (stored?.preview) kept.set(url, stored.preview);
+    }),
+  );
+  return kept;
+}

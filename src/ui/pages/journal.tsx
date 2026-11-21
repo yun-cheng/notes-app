@@ -1390,7 +1390,7 @@ function EntryDetail({ card, fresh, edit, comments, onClose }: { card: NoteCard 
         />
       </div>
       {tagging && can.edit ? (
-        <TagPicker tagIds={card.tags} onChange={(tags) => void repo.update(card.id, { tags })} />
+        <TagPicker tagIds={card.tags} vaultId={card.vaultId} onChange={(tags) => void repo.update(card.id, { tags })} />
       ) : (
         (card.tags.length > 0 || can.edit) && (
           <div className="note-sheet__tags">

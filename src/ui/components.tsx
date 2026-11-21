@@ -17,6 +17,7 @@ import { SyncBadge } from './SyncStatus';
 import { AccountButton, DemoTag } from './AccountBadge';
 import { VoiceBar } from './voice';
 import { composing } from './composing';
+import { tagsFor } from '../domain/tagScope';
 
 /** A page under its title bar. `below` is a second row of the bar, like the journal's filter chips, and stays in it as the page scrolls. */
 /**
@@ -318,9 +319,10 @@ export function TitleField({ value, onSave, autoFocus, readOnly }: { value: stri
  * (`inMenu`) the tags aren't links to their journal (a click there would leave the menu for another page): a grouped
  * one (Priority: High) opens its group's tags under the field instead, to switch it with one click, and a one-choice
  * group the entry has no tag from offers itself as "+ Priority". Only the group asked for shows, so one of dozens of
- * topics takes no room until then, and the field still finds any tag.
+ * topics takes no room until then, and the field still finds any tag offered in the entry's vault (`vaultId`), where
+ * a new one is made, kept to it.
  */
-export function TagPicker({ tagIds, onChange, autoFocus = false, inMenu = false }: { tagIds: string[]; onChange: (tags: string[]) => void; autoFocus?: boolean; inMenu?: boolean }) {
+export function TagPicker({ tagIds, vaultId, onChange, autoFocus = false, inMenu = false }: { tagIds: string[]; vaultId: string; onChange: (tags: string[]) => void; autoFocus?: boolean; inMenu?: boolean }) {
   const { index, repo } = useCards();
   const [query, setQuery] = useState('');
   const [open, setOpen] = useState(false);
@@ -328,7 +330,8 @@ export function TagPicker({ tagIds, onChange, autoFocus = false, inMenu = false 
   const { groupOf, groups } = index.tagGroups;
   const current = resolveTags(index, inMenu ? orderTags(tagIds, index.tagGroups) : tagIds);
   const q = query.trim().toLowerCase();
-  const options = index.tags.filter((t) => !tagIds.includes(t.id) && t.title.toLowerCase().includes(q)).slice(0, 6);
+  const offered = tagsFor(index.tags, vaultId);
+  const options = offered.filter((t) => !tagIds.includes(t.id) && t.title.toLowerCase().includes(q)).slice(0, 6);
   const unset = inMenu ? groups.filter((g) => g.choice === 'one' && g.members.length && !g.members.some((m) => tagIds.includes(m.id))) : [];
   const group = groups.find((g) => g.id === shown);
   const groupButton = (g: TagGroup, label: string, className?: string) => (
@@ -336,7 +339,7 @@ export function TagPicker({ tagIds, onChange, autoFocus = false, inMenu = false 
       {label}
     </button>
   );
-  const exact = index.tags.find((t) => t.title.toLowerCase() === q);
+  const exact = offered.find((t) => t.title.toLowerCase() === q);
 
   const add = (id: string) => {
     onChange(withTag(tagIds, id, index.tagGroups.groupOf));
@@ -351,7 +354,7 @@ export function TagPicker({ tagIds, onChange, autoFocus = false, inMenu = false 
       return;
     }
     const id = repo.newId();
-    void repo.createTag({ id, title });
+    void repo.createTag({ id, title, vaultId });
     add(id);
   };
 

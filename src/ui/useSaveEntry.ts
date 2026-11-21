@@ -1,8 +1,9 @@
 import { parseEntries, type Entry } from '../domain/entry';
-import { diaryVault } from '../domain/access';
+import { diaryVault, mainVault } from '../domain/access';
 import { isDateKey, parseDateKey } from '../domain/dates';
 import type { StreamFilter } from '../domain/stream';
 import { isGroupName, settleTags } from '../domain/tagGroups';
+import { tagNamedIn } from '../domain/tagScope';
 import type { Card } from '../domain/types';
 import { useCards, useToday } from '../state/CardsContext';
 import { useToast } from './Toast';
@@ -60,6 +61,7 @@ export function useSaveEntries() {
       return { saved: 0, ids: [] };
     }
     const diary = diaryVault(vaults, accountId)?.id;
+    const main = mainVault(vaults, accountId)?.id;
     const vaultOf = (entry: Entry) => (entry.diary && diary ? diary : opts.vaultId);
 
     // Nothing is saved if part of it can't be, so the whole text stays in the box.
@@ -70,16 +72,17 @@ export function useSaveEntries() {
     const made = new Map<string, string>();
     const tagging: Promise<Card>[] = [];
     const { groups, groupOf } = index.tagGroups;
-    const tagIdsFor = (names: string[]) => {
+    // A typed tag is the one offered in the entry's vault by that name, or a new one kept to that vault.
+    const tagIdsFor = (names: string[], vaultId: string | undefined) => {
       const ids = [...new Set([...(opts.tagId ? [opts.tagId] : []), ...(opts.tags ?? [])])];
       for (const name of names) {
         if (isGroupName(name, groups)) continue;
-        const key = name.toLowerCase();
-        let id = index.tags.find((t) => t.title.toLowerCase() === key)?.id ?? made.get(key);
+        const key = `${vaultId}:${name.toLowerCase()}`;
+        let id = tagNamedIn(index.tags, name, vaultId)?.id ?? made.get(key);
         if (!id) {
           id = repo.newId();
           made.set(key, id);
-          tagging.push(repo.createTag({ id, title: name }));
+          tagging.push(repo.createTag({ id, title: name, vaultId }));
         }
         if (!ids.includes(id)) ids.push(id);
       }
@@ -91,7 +94,7 @@ export function useSaveEntries() {
     const action = repo.action();
     const at = opts.date ? onDay(opts.date) : undefined;
     const making: Promise<Card>[] = entries.map((entry, i) => {
-      const common = { id: entry.id, title: entry.title, content: entry.content, pages: entry.pages, tags: tagIdsFor(entry.tags), vaultId: vaultOf(entry), createdAt: entry.createdAt ?? (at === undefined ? undefined : at + i), template: opts.template || entry.template };
+      const common = { id: entry.id, title: entry.title, content: entry.content, pages: entry.pages, tags: tagIdsFor(entry.tags, vaultOf(entry) ?? main), vaultId: vaultOf(entry), createdAt: entry.createdAt ?? (at === undefined ? undefined : at + i), template: opts.template || entry.template };
       if (entry.kind === 'note') return repo.createNote(common);
       const due = entry.due ?? opts.due ?? null;
       return repo.createTodo({ ...common, due, start: entry.start, dueTime: entry.dueTime, repeat: entry.repeat, done: entry.done, waiting: opts.waiting });

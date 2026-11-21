@@ -911,6 +911,7 @@ body:has(.composer:focus-within) .journal-dock { --dock-gap: 8px; --dock-margin:
 .check--waiting input:not(:checked) { appearance: none; -webkit-appearance: none; border: 2px dashed var(--muted); border-radius: 5px; background: none; }
 .waiting-mark { display: inline-flex; align-items: center; gap: 3px; color: var(--muted); font-size: 12px; font-weight: 600; }
 .vault-select { max-width: 9em; min-height: 32px; margin-left: 4px; padding: 0 6px; border: 1px solid var(--line); border-radius: 8px; background: var(--surface); color: var(--muted); font-size: 13px; }
+.tag-scope--fixed { color: var(--muted); font-size: 13px; white-space: nowrap; }
 
 
 /* Journal filters: in the sidebar on a computer, in a sheet on a phone */

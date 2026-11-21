@@ -433,12 +433,14 @@ export class CardRepository {
   }
 
   /** A tag, or with `members`, a tag group. */
-  createTag(init: { title: string; id?: string; members?: string[]; choice?: 'one' | 'many'; ordered?: boolean }): Promise<Card> {
+  /** With `vaultId`, a tag kept to that vault; without, one for every vault, in the account's own vault. */
+  createTag(init: { title: string; id?: string; vaultId?: string; members?: string[]; choice?: 'one' | 'many'; ordered?: boolean }): Promise<Card> {
     const id = init.id ?? this.newId();
     const group = init.members ? { members: init.members, choice: init.choice ?? 'many', ordered: init.ordered ?? false } : {};
+    const scope = init.vaultId && !init.members ? { scope: 'vault' as const } : {};
     const action = this.acting();
     return this.enqueue(async () =>
-      this.write({ ...(await this.newEnvelope(id)), type: 'tag', title: init.title, content: EMPTY_DOC, tags: [], pinned: false, ...group }, action),
+      this.write({ ...(await this.newEnvelope(id, init.vaultId)), type: 'tag', title: init.title, content: EMPTY_DOC, tags: [], pinned: false, ...group, ...scope }, action),
     );
   }
 
@@ -492,6 +494,21 @@ export class CardRepository {
     return this.enqueue(async () => {
       const card = await this.read(id);
       if (card && card.vaultId !== vaultId) await this.write({ ...card, vaultId, updatedAt: this.now() }, action, card);
+    });
+  }
+
+  /**
+   * Keeps a tag to `vaultId`, moving it there so everyone in that vault has it, or with null makes it one for every
+   * vault, back in the account's own vault. One change, so undo puts back both.
+   */
+  setTagScope(id: string, vaultId: string | null): Promise<void> {
+    const action = this.acting();
+    return this.enqueue(async () => {
+      const card = await this.read(id);
+      if (card?.type !== 'tag') return;
+      const { scope: _, ...rest } = card;
+      const next: Card = vaultId ? { ...rest, vaultId, scope: 'vault' } : { ...rest, vaultId: (await this.defaultVault()).id };
+      if (next.vaultId !== card.vaultId || next.scope !== card.scope) await this.write({ ...next, updatedAt: this.now() }, action, card);
     });
   }
 

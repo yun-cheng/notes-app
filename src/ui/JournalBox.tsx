@@ -31,6 +31,7 @@ import { useToast } from './Toast';
 import { BOX_PASTE, type ForwardedPaste } from './useEntryShortcuts';
 import { journalDefaults, useSaveEntries } from './useSaveEntry';
 import { journalPath } from './paths';
+import { tagsFor } from '../domain/tagScope';
 
 /** Enter saves on a computer. On a phone, Return makes a new line and the button saves. */
 const enterSaves = () => !window.matchMedia('(pointer: coarse)').matches;
@@ -171,7 +172,8 @@ export function JournalBox({ filter }: { filter: StreamFilter }) {
 
   const tagItems = (query: string): MenuItem[] => {
     const q = query.trim().toLowerCase();
-    const tags = latest.current.index.tags;
+    // Those offered where the box writes; a `#diary` line still finds its own when saved (`useSaveEntry`).
+    const tags = tagsFor(latest.current.index.tags, latest.current.photoVault);
     const found = tags
       .filter((t) => t.title.toLowerCase().includes(q))
       .sort((a, b) => Number(b.title.toLowerCase().startsWith(q)) - Number(a.title.toLowerCase().startsWith(q)) || Number(b.pinned) - Number(a.pinned))

@@ -14,6 +14,7 @@ import { useUndo } from './useUndo';
 import { useStacking } from './useStacking';
 import { isStack } from '../domain/stacks';
 import { composing } from './composing';
+import { tagsForAll } from '../domain/tagScope';
 
 /**
  * Takes the writing box's place while entries are picked: tag, finish, mark waiting, date, switch between note and todo, copy,
@@ -182,8 +183,11 @@ function BatchTags({ cards, onEdit }: { cards: Card[]; onEdit: (edit: BatchEdit,
   const [query, setQuery] = useState('');
   const counts = tagCounts(cards);
   const q = query.trim().toLowerCase();
-  const exact = index.tags.find((t) => t.title.toLowerCase() === q);
-  const options = q ? index.tags.filter((t) => t.title.toLowerCase().includes(q)).slice(0, 6) : [];
+  // Only tags every picked entry may take; a new one is kept to their vault when they share one, else for every vault.
+  const vaultIds = [...new Set(cards.map((c) => c.vaultId))];
+  const offered = tagsForAll(index.tags, vaultIds);
+  const exact = offered.find((t) => t.title.toLowerCase() === q);
+  const options = q ? offered.filter((t) => t.title.toLowerCase().includes(q)).slice(0, 6) : [];
   const title = (id: string) => index.tags.find((t) => t.id === id)?.title ?? 'tag';
 
   const add = (tagId: string, name: string) => {
@@ -195,7 +199,7 @@ function BatchTags({ cards, onEdit }: { cards: Card[]; onEdit: (edit: BatchEdit,
     if (!name) return;
     if (exact) return add(exact.id, exact.title);
     const id = repo.newId();
-    void repo.createTag({ id, title: name });
+    void repo.createTag({ id, title: name, vaultId: vaultIds.length === 1 ? vaultIds[0] : undefined });
     add(id, name);
   };
 

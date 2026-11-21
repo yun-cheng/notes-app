@@ -124,6 +124,11 @@ export interface TagCard extends CardCommon {
   choice?: 'one' | 'many';
   /** A group whose order ranks its tags (High before Low), so the journal can sort by it. */
   ordered?: boolean;
+  /**
+   * Kept to its vault: offered only on entries living there, and seen by everyone in it. Without it, a tag is for
+   * every vault, as tags made before 2026-11-22 and a group's are. See `tagScope.ts`.
+   */
+  scope?: 'vault';
 }
 
 export type Card = NoteCard | TodoCard | TagCard;

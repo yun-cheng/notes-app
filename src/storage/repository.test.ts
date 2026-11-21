@@ -91,6 +91,22 @@ describe('updates', () => {
     const t = await repo.createTag({ title: 'work' });
     expect((await repo.update(t.id, { type: 'note' }))?.type).toBe('tag');
   });
+  it('keeps a tag made for a vault to it, and moves a tag between a vault and every vault', async () => {
+    await repo.putVaults([{ id: 'family', name: 'Family', owner_id: 'local', lock: 'none', ai_access: 'off', created_at: 9999, pin: null, hidden: false }]);
+    const everywhere = await repo.createTag({ title: 'work' });
+    const kept = await repo.createTag({ title: 'trip', vaultId: 'family' });
+    const group = await repo.createTag({ title: 'Priority', vaultId: 'family', members: [] });
+    expect(everywhere).not.toHaveProperty('scope');
+    expect(kept).toMatchObject({ vaultId: 'family', scope: 'vault' });
+    expect(group).not.toHaveProperty('scope');
+    const own = everywhere.vaultId;
+    await repo.setTagScope(everywhere.id, 'family');
+    expect(await repo.decode((await store.getCard(everywhere.id))!)).toMatchObject({ vaultId: 'family', scope: 'vault' });
+    await repo.setTagScope(kept.id, null);
+    const back = await repo.decode((await store.getCard(kept.id))!);
+    expect(back?.vaultId).toBe(own);
+    expect(back).not.toHaveProperty('scope');
+  });
   it('ignores updates to cards that do not exist', async () => {
     expect(await repo.update('nope', { title: 'x' })).toBeUndefined();
   });

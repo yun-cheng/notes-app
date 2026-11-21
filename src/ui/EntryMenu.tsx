@@ -369,7 +369,7 @@ function EntryMenu({ card, at, extras, onShare, onClose }: MenuProps) {
     return (
       <ContextMenu at={at} label="Tags" onClose={onClose} wide layout={panel}>
         <PanelHeader title="Tags" onBack={() => setPanel(null)} />
-        <TagPicker tagIds={card.tags} onChange={(tags) => void repo.update(card.id, { tags })} autoFocus inMenu />
+        <TagPicker tagIds={card.tags} vaultId={card.vaultId} onChange={(tags) => void repo.update(card.id, { tags })} autoFocus inMenu />
       </ContextMenu>
     );
   }

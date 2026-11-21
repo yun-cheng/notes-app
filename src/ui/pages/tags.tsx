@@ -13,6 +13,9 @@ import { useUndo } from '../useUndo';
 import { usePopover } from '../usePopover';
 import { composing } from '../composing';
 import { usePermissions } from '../viewOnly';
+import { mainVault } from '../../domain/access';
+import { tagNamedIn } from '../../domain/tagScope';
+import type { Vault } from '../../domain/types';
 
 /** Moving tags in and out of groups, and making groups. A tag is in one group at most. */
 function useGroupEdits() {
@@ -65,19 +68,23 @@ const tagCount = (index: ReturnType<typeof useCards>['index'], id: string) => (i
  * group. Pinned tags show in the sidebar; groups always do.
  */
 export function TagsPage() {
-  const { index, repo } = useCards();
+  const { index, repo, vaults, accountId } = useCards();
   const edits = useGroupEdits();
   const { groups, loose } = index.tagGroups;
+  const homes = useTagHomes();
   const [title, setTitle] = useState('');
+  // A new tag is kept to a vault, the account's own unless another is picked; '' is every vault.
+  const [scope, setScope] = useState(() => mainVault(vaults, accountId)?.id ?? '');
   const [groupTitle, setGroupTitle] = useState('');
-  const taken = (name: string) => index.tags.some((t) => t.title.toLowerCase() === name.toLowerCase()) || groups.some((g) => g.title.toLowerCase() === name.toLowerCase());
+  const isGroup = (name: string) => groups.some((g) => g.title.toLowerCase() === name.toLowerCase());
+  const taken = (name: string) => index.tags.some((t) => t.title.toLowerCase() === name.toLowerCase()) || isGroup(name);
 
   const submit = (e: FormEvent) => {
     e.preventDefault();
     const text = title.trim().replace(/^#/, '');
     if (!text) return;
     setTitle('');
-    if (!taken(text)) void repo.createTag({ title: text });
+    if (!tagNamedIn(index.tags, text, scope || undefined) && !isGroup(text)) void repo.createTag({ title: text, vaultId: scope || undefined });
   };
   const submitGroup = (e: FormEvent) => {
     e.preventDefault();
@@ -110,8 +117,10 @@ export function TagsPage() {
       </Section>
 
       <Section title={groups.length ? 'Other tags' : 'Tags'}>
+        <p className="prose-note">A tag is kept to its vault: it's offered only on entries there, and everyone in the vault has it. One for all vaults is offered everywhere, and only you see it.</p>
         <form className="quick-add" onSubmit={submit}>
           <input value={title} onChange={(e) => setTitle(e.target.value)} placeholder="New tag" aria-label="New tag" enterKeyHint="done" />
+          {homes.length > 0 && <ScopeSelect value={scope} vaults={homes} label="Where the new tag can go" onChange={setScope} />}
           <button type="submit" aria-label="Add tag" disabled={!title.trim()}>
             <Icon name="plus" size={18} />
           </button>
@@ -132,6 +141,7 @@ export function TagsPage() {
                 >
                   <Icon name="pin" />
                 </button>
+                <TagScope tag={t} />
                 <TrashTag tag={t} />
               </div>
             ))}
@@ -164,6 +174,47 @@ function TagColor({ tag }: { tag: TagCard }) {
       )}
     </div>
   );
+}
+
+/** The vaults a tag can be kept to: open ones this account can write in. */
+function useTagHomes(): Vault[] {
+  const { vaults, locked } = useCards();
+  return vaults.filter((v) => !locked.has(v.id) && !v.withheld && (v.role ?? 'owner') !== 'viewer');
+}
+
+function ScopeSelect({ value, vaults, label, onChange }: { value: string; vaults: Vault[]; label: string; onChange: (vaultId: string) => void }) {
+  return (
+    <select className="vault-select tag-scope" value={value} aria-label={label} title={label} onChange={(e) => onChange(e.target.value)}>
+      {vaults.map((v) => (
+        <option key={v.id} value={v.id}>
+          {v.name}
+        </option>
+      ))}
+      <option value="">All vaults</option>
+    </select>
+  );
+}
+
+/** Where a tag can go: kept to a vault, moving it there, or every vault. With an undo. */
+function TagScope({ tag }: { tag: TagCard }) {
+  const { repo, vaults } = useCards();
+  const can = usePermissions();
+  const homes = useTagHomes();
+  const toast = useToast();
+  const { undoAction } = useUndo();
+  const value = tag.scope === 'vault' ? tag.vaultId : '';
+  if (!can(tag).manage || !homes.length || (value && !homes.some((v) => v.id === value))) {
+    const name = value ? vaults.find((v) => v.id === value)?.name : 'All vaults';
+    return name ? <span className="tag-scope tag-scope--fixed">{name}</span> : null;
+  }
+  const change = (vaultId: string) => {
+    if (vaultId === value) return;
+    const action = repo.action();
+    void repo.setTagScope(tag.id, vaultId || null);
+    const where = vaultId ? `kept to ${vaults.find((v) => v.id === vaultId)?.name ?? 'its vault'}` : 'for all vaults';
+    toast(`${tag.title} is ${where}`, { action: { label: 'Undo', run: () => void undoAction(action) } });
+  };
+  return <ScopeSelect value={value} vaults={homes} label={`Where ${tag.title} can go`} onChange={change} />;
 }
 
 /**
@@ -267,6 +318,7 @@ function GroupBlock({ group }: { group: TagGroup }) {
               <button type="button" className="icon-btn" aria-label={`Take ${t.title} out of ${group.title}`} title="Take out of the group (the tag stays)" onClick={() => edits.removeFrom(group, t.id)}>
                 ×
               </button>
+              <TagScope tag={t} />
               <TrashTag tag={t} />
             </div>
           ))}

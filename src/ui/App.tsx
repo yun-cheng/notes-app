@@ -33,6 +33,9 @@ import { isMac, ShortcutsDialog } from './Shortcuts';
 import { ToastProvider, useToast } from './Toast';
 import { useUndo } from './useUndo';
 
+/** How often an open app looks for a new version of itself. */
+const UPDATE_EVERY_MS = 30 * 60 * 1000;
+
 /** The phone's tab bar. Today is a journal filter: open todos due by today. */
 const TABS: { to: string; label: string; icon: IconName }[] = [
   { to: '/journal', label: 'Journal', icon: 'notes' },
@@ -146,6 +149,16 @@ function Layout() {
     const update = registerSW({
       onNeedRefresh: () =>
         toast('A new version is ready', { sticky: true, action: { label: 'Reload', run: () => void update(true) } }),
+      // The browser looks for a new version only when the app is opened, so an open tab or the installed app ran an
+      // old one for days, fixes and all, never offering Reload. It looks every half hour, and on coming back to it.
+      onRegisteredSW: (_url, registration) => {
+        if (!registration) return;
+        const look = () => {
+          if (document.visibilityState === 'visible' && navigator.onLine && !registration.installing) void registration.update().catch(() => undefined);
+        };
+        setInterval(look, UPDATE_EVERY_MS);
+        document.addEventListener('visibilitychange', look);
+      },
     });
   }, [toast]);
 

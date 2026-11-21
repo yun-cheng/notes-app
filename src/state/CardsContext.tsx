@@ -16,6 +16,7 @@ import { sealReminders } from '../reminders/sealed';
 import { preparePhoto } from '../photos/prepare';
 import { probeVideo } from '../photos/video';
 import { PhotoService, type PhotoState } from '../photos/service';
+import { resealVaults, type ResealLeft } from '../photos/reseal';
 import { Keyring } from '../crypto/keyring';
 import { unlockWithPin } from '../crypto/vaultKeys';
 import { forgetTranslations, keepTranslationsIn } from '../ui/translate';
@@ -65,6 +66,28 @@ function openAccount(accountId: string) {
     forgetAll: () => keyring.forgetAll(),
   };
   const photos = new PhotoService(store, photoTransport, preparePhoto, undefined, undefined, probeVideo, keyring);
+  const attachments = new AttachmentKeeper(
+    { list: listAttachments, mark: markAttachments, remove: deleteAttachment },
+    { get: (key) => repo.getMeta(key), set: (key, value) => repo.setMeta(key, value) },
+    (id) => photos.forget(id),
+    undefined,
+    async (id) => {
+      const facts = await photos.sealedFacts(id);
+      return facts && { mime: facts.mime, name: facts.name ?? null, size: facts.size, width: facts.width ?? null, height: facts.height ?? null, duration: facts.duration ?? null };
+    },
+  );
+  const reseal = (vaults: { vaultId: string; seal: boolean }[]) =>
+    resealVaults(
+      {
+        cards: async () => (await repo.exportAll()).cards,
+        stored: listAttachments,
+        local: photos.local,
+        copyAs: (...args) => photos.copyAs(...args),
+        update: (id, patch) => repo.update(id, patch),
+        replaced: (pairs) => attachments.replaced(pairs),
+      },
+      vaults,
+    );
   return {
     store,
     repo,
@@ -72,16 +95,8 @@ function openAccount(accountId: string) {
     keyring,
     locks: new VaultLocks(undefined, undefined, keys),
     photos,
-    attachments: new AttachmentKeeper(
-      { list: listAttachments, mark: markAttachments, remove: deleteAttachment },
-      { get: (key) => repo.getMeta(key), set: (key, value) => repo.setMeta(key, value) },
-      (id) => photos.forget(id),
-      undefined,
-      async (id) => {
-        const facts = await photos.sealedFacts(id);
-        return facts && { mime: facts.mime, name: facts.name ?? null, size: facts.size, width: facts.width ?? null, height: facts.height ?? null, duration: facts.duration ?? null };
-      },
-    ),
+    attachments,
+    reseal,
     unsynced: new Unsynced(),
     drafts: new Drafts(accountId, { fetch: fetchDrafts, send: sendDrafts }),
   };
@@ -96,6 +111,8 @@ interface CardsValue {
   photos: PhotoService;
   /** Photos and files no entry holds, in the Trash for 30 days, then deleted from Drive too. */
   attachments: AttachmentKeeper;
+  /** Copies the photos and files in these vaults that aren't kept as each keeps them, sealed or not (`resealVaults`). */
+  reseal: (vaults: { vaultId: string; seal: boolean }[]) => Promise<ResealLeft>;
   keyring: Keyring;
   /** Cards with changes not yet sent to the server. */
   unsynced: Unsynced;
@@ -115,7 +132,7 @@ interface CardsValue {
 const CardsContext = createContext<CardsValue | null>(null);
 
 export function CardsProvider({ accountId, children }: { accountId: string; children: ReactNode }) {
-  const [{ store, repo, engine, locks, photos, attachments, keyring, unsynced, drafts }] = useState(() => openAccount(accountId));
+  const [{ store, repo, engine, locks, photos, attachments, reseal, keyring, unsynced, drafts }] = useState(() => openAccount(accountId));
   // This account's translations, kept on this device.
   useEffect(() => {
     void keepTranslationsIn(store);
@@ -133,8 +150,8 @@ export function CardsProvider({ accountId, children }: { accountId: string; chil
   const [commentCounts, setCommentCounts] = useState<ReadonlyMap<string, number>>(new Map());
   // The same object until something in it changes, since every entry on screen reads it.
   const value = useMemo<CardsValue | null>(
-    () => (index && vaults ? { index, repo, engine, vaults, locks, locked, photos, attachments, keyring, unsynced, drafts, accountId, shared, sharedInto, commentCounts } : null),
-    [index, repo, engine, vaults, locks, locked, photos, attachments, keyring, unsynced, drafts, accountId, shared, sharedInto, commentCounts],
+    () => (index && vaults ? { index, repo, engine, vaults, locks, locked, photos, attachments, reseal, keyring, unsynced, drafts, accountId, shared, sharedInto, commentCounts } : null),
+    [index, repo, engine, vaults, locks, locked, photos, attachments, reseal, keyring, unsynced, drafts, accountId, shared, sharedInto, commentCounts],
   );
 
   // After a sync that left nothing to send, photos and files no entry holds go to the Trash, and those 30 days
@@ -194,6 +211,36 @@ export function CardsProvider({ accountId, children }: { accountId: string; chil
       if (vault.encryption && !locked.has(vault.id)) void finishEncrypting(repo, engine, keyring, vault.id).catch(() => false);
     }
   }, [vaults, locked, repo, engine, keyring]);
+
+  // Photos and files kept as each vault open here keeps them: sealed in an encrypted vault (one encrypted before
+  // photos were, or an entry moved in), as they are in any other (an entry moved out of one). Once a session for
+  // each, after a sync, and again while some couldn't be done. Without an encrypted vault, nothing is sealed.
+  const resealed = useRef(new Set<string>());
+  useEffect(() => {
+    if (!vaults?.some((v) => v.encryption)) return;
+    const due = vaults
+      .filter((v) => !locked.has(v.id) && !v.withheld && (v.role ?? 'owner') !== 'viewer')
+      .map((v) => ({ vaultId: v.id, seal: !!v.encryption }))
+      .filter((t) => !resealed.current.has(`${t.vaultId}:${t.seal}`));
+    if (!due.length) return;
+    const timer = setTimeout(() => {
+      const keys = due.map((t) => `${t.vaultId}:${t.seal}`);
+      keys.forEach((k) => resealed.current.add(k));
+      void engine
+        .sync()
+        .then(() => reseal(due))
+        .then(
+          (left) => {
+            if (left.failed || left.unknown) keys.forEach((k) => resealed.current.delete(k));
+          },
+          (err: unknown) => {
+            keys.forEach((k) => resealed.current.delete(k));
+            console.error('Sealing photos and files failed', err);
+          },
+        );
+    }, 5000);
+    return () => clearTimeout(timer);
+  }, [vaults, locked, engine, reseal]);
 
   // Reminders for todos in encrypted vaults open here, sealed for each of this account's browsers: a moment after their
   // cards change, and every half hour, as browsers turn reminders on elsewhere and reminders pass.

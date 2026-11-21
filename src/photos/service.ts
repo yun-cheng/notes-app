@@ -104,9 +104,9 @@ export class PhotoService {
    * Keeps one added here, to upload: sealed with its vault's key when that vault is encrypted, so neither this
    * device's storage nor the server holds it readable. Its name, type and shape go in the seal.
    */
-  private async keep(record: PhotoRecord, facts: Omit<SealedFacts, 'size'>): Promise<void> {
-    if (!this.keys?.isEncrypted(record.vaultId)) return this.store.putPhoto(record);
-    const key = this.keys.key(record.vaultId);
+  private async keep(record: PhotoRecord, facts: Omit<SealedFacts, 'size'>, seal = !!this.keys?.isEncrypted(record.vaultId)): Promise<void> {
+    if (!seal) return this.store.putPhoto(record);
+    const key = this.keys?.key(record.vaultId);
     if (!key) throw new VaultClosed('Open the vault first.');
     const blob = await sealAttachment(key, record.blob, record.id, record.vaultId, facts);
     await this.store.putPhoto({ id: record.id, vaultId: record.vaultId, blob, mime: SEALED_TYPE, width: null, height: null, sealed: 1, uploaded: 0, addedAt: record.addedAt });
@@ -122,6 +122,43 @@ export class PhotoService {
     if (!opened) return blob;
     this.opened.set(id, vaultId);
     return opened.blob;
+  }
+
+  /** This device's copy, as kept: sealed, for one in an encrypted vault. */
+  local = (id: string) => this.store.getPhoto(id);
+
+  /**
+   * Copies a photo or file under a new ID for `vaultId`, sealed or not as `seal` says, to replace it in its entries
+   * when its vault starts or stops being encrypted: the server keeps one as it came, so the old can't become the
+   * new. `facts` are what its block says of it (a file's name and type, a video's shape and length); a sealed one
+   * says the rest itself. False when it can't be had now: not on the server yet, offline, or sealed in a vault
+   * locked here.
+   */
+  async copyAs(id: string, by: string, vaultId: string, seal: boolean, facts: { file: boolean } & Partial<Omit<SealedFacts, 'size'>>): Promise<boolean> {
+    const local = await this.store.getPhoto(id);
+    const raw = local?.blob ?? (await this.transport.download(id).catch(() => null));
+    if (!raw) return false;
+    let blob = raw;
+    let told: Partial<SealedFacts> = local && !local.sealed ? { mime: local.mime, name: local.file?.name, width: local.width, height: local.height, duration: local.duration } : {};
+    const sealedFor = await sealedVault(raw);
+    if (sealedFor) {
+      const key = this.keys?.key(sealedFor);
+      const opened = key && (await openAttachment(key, raw, id));
+      if (!opened) return false;
+      blob = opened.blob;
+      told = opened.facts;
+    }
+    const mime = facts.mime || told.mime || blob.type || SEALED_TYPE;
+    const name = facts.name ?? told.name ?? 'Untitled';
+    const shape = { width: facts.width ?? told.width ?? null, height: facts.height ?? told.height ?? null, duration: facts.duration ?? told.duration ?? null };
+    await this.keep(
+      { id: by, vaultId, ...(facts.file ? { file: { name } } : {}), blob, mime, ...shape, uploaded: 0, addedAt: this.now() },
+      { mime, ...(facts.file ? { name } : {}), ...shape },
+      seal,
+    );
+    this.publish({ pending: this.state.pending + 1 });
+    void this.upload();
+    return true;
   }
 
   /** Whether one the server has, and this device doesn't, is sealed: from its first bytes, asked once. */

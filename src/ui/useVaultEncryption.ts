@@ -7,13 +7,16 @@ import { updateVault, type VaultChanges } from '../sync/http';
 
 export class NeedsPin extends Error {}
 
+/** Thrown stopping encryption while some of the vault's photos or files can't be fetched to open: they'd be lost with the key. */
+export class SealedOutOfReach extends Error {}
+
 /**
  * Turning a vault's encryption on and off, changing its PIN, and recovering it.
  * Each step that changes how cards are stored runs a sync first and after, so every card is
  * re-stored from this device and the server ends up holding only one kind of payload.
  */
 export function useVaultEncryption() {
-  const { repo, engine, keyring, vaults, locks } = useCards();
+  const { repo, engine, keyring, vaults, locks, reseal, attachments } = useCards();
 
   const save = async (vault: Vault, changes: VaultChanges): Promise<Vault> => {
     const updated = await updateVault(vault.id, changes);
@@ -39,6 +42,11 @@ export function useVaultEncryption() {
     locks.unlockVerified(vault.id);
     // The recovery key is shown whatever happens next; what's left is done when the vault is next opened.
     await finishEncrypting(repo, engine, keyring, vault.id).catch(() => false);
+    // Its photos and files are sealed too, in the background: copies sealed, and the readable ones deleted.
+    void reseal([{ vaultId: vault.id, seal: true }])
+      .then(() => engine.sync())
+      .then(() => attachments.sweep(true))
+      .catch(() => undefined);
     return recoveryKey;
   };
 
@@ -48,11 +56,15 @@ export function useVaultEncryption() {
    */
   const decrypt = async (vault: Vault, { keepPin = false } = {}) => {
     await engine.sync();
+    // Its photos and files are opened first, while the key is here: once it's gone, a sealed one can't be.
+    const { failed } = await reseal([{ vaultId: vault.id, seal: false }]);
+    if (failed) throw new SealedOutOfReach(`${failed === 1 ? 'A photo or file' : `${failed} photos or files`} in it can’t be fetched now. Try again when you’re online.`);
     await save(vault, keepPin ? { encryption: null } : { pin: null, encryption: null });
     await repo.recodeVault(vault.id);
     await repo.setMeta(deviceKeyName(vault.id), null);
     await repo.setMeta(encryptingName(vault.id), null);
     await engine.sync();
+    void attachments.sweep(true);
   };
 
   /** New PIN for an encrypted vault: the same key, wrapped again. Needs the key opened by PIN, not fingerprint. */

@@ -32,6 +32,10 @@ export interface KeeperState {
 }
 
 const HOLDERS = 'attachmentHolders';
+/** Photos and files copied to be sealed or opened (`resealVault`), each with its copy, waiting to be deleted. */
+const REPLACED = 'replacedAttachments';
+
+type Replaced = { id: string; by: string };
 /** A sweep after a sync at most this often; the Trash asks for one whenever it opens. */
 const EVERY_MS = 10 * 60_000;
 
@@ -111,10 +115,47 @@ export class AttachmentKeeper {
     return this.running;
   }
 
+  /** Notes photos and files replaced by copies (`resealVault`), to delete at the next sweep once their copies are up. */
+  async replaced(pairs: Replaced[]): Promise<void> {
+    if (!pairs.length) return;
+    const kept = await this.pendingReplaced();
+    await this.meta.set(REPLACED, [...kept.filter((k) => !pairs.some((p) => p.id === k.id)), ...pairs]);
+  }
+
+  private async pendingReplaced(): Promise<Replaced[]> {
+    const kept = await this.meta.get(REPLACED);
+    return Array.isArray(kept) ? (kept as Replaced[]) : [];
+  }
+
+  /**
+   * Deletes the ones replaced by copies, straight away rather than after 30 days in the Trash, as each copy is in its
+   * place: once the copy is on the server, and no entry here holds the old one. One an entry here still holds (a
+   * template's copy in another vault) is left to the usual sweep. Answers whether any went.
+   */
+  private async dropReplaced(view: SweepView, stored: StoredAttachment[]): Promise<boolean> {
+    const pairs = await this.pendingReplaced();
+    if (!pairs.length || !view.mayDelete) return false;
+    const there = new Map(stored.map((a) => [a.id, a]));
+    const held = new Set([...(await view.fresh())].flatMap((c) => heldBy(c).map((h) => h.id)));
+    const ready = pairs.filter((p) => !p.by || there.has(p.by));
+    const done = new Set(ready.filter((p) => held.has(p.id) || !there.has(p.id)).map((p) => p.id));
+    const going = ready.filter((p) => !done.has(p.id)).map((p) => p.id);
+    const toTrash = going.filter((id) => there.get(id)!.trashed_at === null);
+    if (toTrash.length) await this.api.mark({ trash: toTrash.map((id) => ({ id, from: null, name: null })), keep: [] });
+    for (const id of going) {
+      const result = await this.api.remove(id);
+      if (result === 'ok' || result === 'gone') await this.forget(id);
+      if (result === 'ok' || result === 'gone' || result === 'in_use') done.add(id);
+    }
+    await this.meta.set(REPLACED, pairs.filter((p) => !done.has(p.id)));
+    return going.length > 0;
+  }
+
   private async run(view: SweepView) {
     try {
-      const stored = await this.api.list();
+      let stored = await this.api.list();
       if (!view.ready) return this.show(stored);
+      if (await this.dropReplaced(view, stored)) stored = await this.api.list();
       const kept = await this.meta.get(HOLDERS);
       const holders = new Map<string, Holder>(kept && typeof kept === 'object' ? (Object.entries(kept) as [string, Holder][]) : []);
       const plan = planSweep({ stored, cards: view.cards(), judges: view.judges, mayDelete: view.mayDelete, holders, now: this.now() });

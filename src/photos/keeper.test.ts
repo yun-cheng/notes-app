@@ -40,6 +40,21 @@ function setup(cards: Card[]) {
 }
 
 describe('AttachmentKeeper', () => {
+  it('deletes one replaced by a sealed copy at once, once the copy is up and no entry holds it', async () => {
+    const t = setup([holding('n', 'b2'), holding('m', 'b'), holding('k', 'a2')]);
+    t.rows.push({ ...row('a2'), sealed: 1 });
+    await t.keeper.replaced([{ id: 'a', by: 'a2' }, { id: 'b', by: 'b2' }]);
+    await t.keeper.sweep(true);
+    // a's copy is up and nothing holds a; b's copy isn't up yet, and an entry still holds b.
+    expect(t.server.removed).toEqual(['a']);
+    expect(t.forgotten).toEqual(['a']);
+    t.rows.push(row('b2'));
+    t.view.cards = [holding('n', 'b2'), holding('k', 'a2')];
+    await t.keeper.sweep(true);
+    expect(t.server.removed).toEqual(['a', 'b']);
+    expect(t.keeper.getState().trash).toEqual([]);
+  });
+
   it('says what a sealed one in the Trash is, from the device, and sends the server no name for it', async () => {
     const clock = { now: DAY };
     const rows = [{ ...row('s'), mime: 'application/octet-stream', size: 90, sealed: 1 }];

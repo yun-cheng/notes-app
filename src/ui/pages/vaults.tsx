@@ -15,7 +15,7 @@ import { LockPanel } from '../LockPanel';
 import { useToast } from '../Toast';
 import { PinInput } from '../PinInput';
 import { RecoveryKeyDialog } from '../RecoveryKeyDialog';
-import { NeedsPin, useVaultEncryption } from '../useVaultEncryption';
+import { NeedsPin, SealedOutOfReach, useVaultEncryption } from '../useVaultEncryption';
 import { VaultPeopleSection } from './people';
 
 const pinError = `Use at least ${MIN_PIN_LENGTH} characters.`;
@@ -201,7 +201,7 @@ function VaultSettings({ vault }: { vault: Vault }) {
     try {
       await work();
     } catch (err) {
-      toast(err instanceof NeedsPin ? err.message : err instanceof SyncOffline ? 'Connect to the internet to change a vault.' : "That didn't work. Try again.");
+      toast(err instanceof NeedsPin || err instanceof SealedOutOfReach ? err.message : err instanceof SyncOffline ? 'Connect to the internet to change a vault.' : "That didn't work. Try again.");
     } finally {
       setBusy(null);
     }

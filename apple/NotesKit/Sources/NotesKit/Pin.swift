@@ -28,19 +28,8 @@ public enum VaultPin {
         return out
     }
 
-    /// The key of an encrypted vault, or nil if the PIN is wrong.
-    public static func unlock(encryption: JSONValue, pin: String) -> SymmetricKey? {
-        let kdf = encryption["kdf"]
-        guard kdf?["name"]?.stringValue == "argon2id",
-            let salt = kdf?["salt"]?.stringValue.flatMap({ Data(base64Encoded: $0) }),
-            let memory = kdf?["memory"]?.intValue, let iterations = kdf?["iterations"]?.intValue,
-            let parallelism = kdf?["parallelism"]?.intValue,
-            let wrapped = encryption["wrapped"]?.stringValue,
-            memory >= 8, memory <= 1_048_576, iterations >= 1, iterations <= 64, parallelism >= 1, parallelism <= 16
-        else { return nil }
-        let raw = Argon2id.hash(
-            password: Data(pin.precomposedStringWithCanonicalMapping.utf8), salt: salt,
-            memoryKiB: Int(memory), iterations: Int(iterations), parallelism: Int(parallelism), length: 32)
-        return VaultCrypto.open(SymmetricKey(data: raw), wrapped, aad: VaultCrypto.wrapAAD).map(SymmetricKey.init(data:))
+    /// The key of an encrypted vault, or nil if the PIN is wrong (or a member hasn't been let in yet).
+    public static func unlock(encryption: JSONValue, pin: String, vaultId: String = "") -> SymmetricKey? {
+        VaultKeys.unlock(encryption, pin: pin, vaultId: vaultId)
     }
 }

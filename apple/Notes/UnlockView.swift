@@ -71,7 +71,7 @@ extension AppModel {
         // Argon2id takes a moment, so it runs off the main thread.
         let opened: Bool = await Task.detached {
             if let encryption, !encryption.isNull {
-                let key = recoveryKey ? VaultCrypto.unlock(encryption: encryption, recoveryKey: pin) : VaultPin.unlock(encryption: encryption, pin: pin)
+                let key = recoveryKey ? VaultCrypto.unlock(encryption: encryption, recoveryKey: pin) : VaultPin.unlock(encryption: encryption, pin: pin, vaultId: vaultId)
                 guard let key else { return false }
                 keyring.set(vaultId, key: key)
                 return true

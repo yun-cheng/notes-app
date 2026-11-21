@@ -715,8 +715,9 @@ export async function seed() {
   note('demo-health-physio', at(2, 8, 0), doc(p('Physio: three sets of ten squats, then the stretches on the sheet.')), [], 'Physio exercises', health.id);
   todo('demo-health-refill', 'Refill the prescription', addDays(today, 1), { dueTime: '09:00', when: at(1, 8, 30), vaultId: health.id });
 
-  // A shared vault with Sam: notes from both of you.
-  note('demo-family-groceries', at(2, 17, 0), doc(p('Shared shopping list'), checklist(['Rice', true], ['Eggs', false], ['Dish soap', false])), [], '', family.id);
+  // A shared vault with Sam: notes from both of you. Chores is a tag kept to it: Sam has it too, and only its entries offer it.
+  add('demo-tag-chores', family.id, at(9, 9), { type: 'tag', title: 'Chores', pinned: false, tags: [], content: doc(p()), scope: 'vault' });
+  note('demo-family-groceries', at(2, 17, 0), doc(p('Shared shopping list'), checklist(['Rice', true], ['Eggs', false], ['Dish soap', false])), ['demo-tag-chores'], '', family.id);
   // Reactions: Sam's and yours together on one, Sam's alone on the other; a press puts yours on or takes it off.
   note('demo-family-trip', at(1, 9, 30), doc(p('Summer trip: beach or mountains? Vote below.'), photo('lake', 'The lake by the cabins')), [], 'Summer trip', family.id, {
     reactions: { '🏔️': [SAM.id, DEMO.id], '🏖️': [SAM.id] },
@@ -770,7 +771,7 @@ export async function seed() {
         createdAt: at(1, 20, 0),
         content: doc(p('Saturday at 7, at ours. Keep it quiet!'), checklist(['Cake from the bakery', false], ['Balloons', true], ['Playlist', false])),
       }),
-      samDraft('demo-sam-family', family.id, ago(12), { type: 'note', title: '', tags: [], createdAt: ago(12), content: lines('Picked up the dry cleaning. Back by 6.') }),
+      samDraft('demo-sam-family', family.id, ago(12), { type: 'note', title: '', tags: ['demo-tag-chores'], createdAt: ago(12), content: lines('Picked up the dry cleaning. Back by 6.') }),
       samDraft('demo-sam-recipe', samPersonal, at(4, 18, 0), {
         type: 'note',
         title: 'Grandma\'s dumplings',

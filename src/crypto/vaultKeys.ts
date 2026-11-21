@@ -257,9 +257,23 @@ export async function changeMemberPin(vaultKey: CryptoKey, newPin: string, vault
  * that put its own key in place of theirs would show.
  */
 export async function keyCode(publicKey: string): Promise<string> {
-  const digest = new Uint8Array(await crypto.subtle.digest('SHA-256', fromBase64(publicKey)));
-  const groups = [0, 2, 4, 6].map((i) => String(((digest[i] << 8) | digest[i + 1]) % 10_000).padStart(4, '0'));
-  return groups.join(' ');
+  return codeOf(new Uint8Array(await crypto.subtle.digest('SHA-256', fromBase64(publicKey))));
+}
+
+/** Four groups of four digits from the first eight bytes. */
+const codeOf = (bytes: Uint8Array) => [0, 2, 4, 6].map((i) => String(((bytes[i] << 8) | bytes[i + 1]) % 10_000).padStart(4, '0')).join(' ');
+
+/**
+ * A short code for a vault key itself, for everyone in a shared encrypted vault to compare once they're in. The grant
+ * a member opens is sealed to their public key, which the server knows too, so a server could seal one of its own in
+ * the owner's place; the member's code would then differ from the owner's. It's the tag of nothing sealed under a
+ * nonce of zeros, bound to the vault: one fixed message for the key, never sealed under that nonce with anything else,
+ * so it gives nothing of the key away, and it works with a key that can't be exported, as one opened by fingerprint.
+ */
+export async function vaultKeyCode(key: CryptoKey, vaultId: string): Promise<string> {
+  const iv = new Uint8Array(12);
+  const additionalData = new TextEncoder().encode(`key check|${vaultId}`);
+  return codeOf(new Uint8Array(await crypto.subtle.encrypt({ name: 'AES-GCM', iv, additionalData }, key, new Uint8Array(0))));
 }
 
 const commentAad = (cardId: string, vaultId: string): Bytes => new TextEncoder().encode(`comment|${cardId}|${vaultId}`);

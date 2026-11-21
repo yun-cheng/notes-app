@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { changeMemberPin, changePin, createVaultKey, grantVaultKey, keyCode, memberPinMatches, requestVaultKey, decryptPayload, encryptPayload, isEncryptedPayload, normalizeRecoveryKey, unlockWithPin, unlockWithRecoveryKey } from './vaultKeys';
+import { vaultKeyCode, changeMemberPin, changePin, createVaultKey, grantVaultKey, keyCode, memberPinMatches, requestVaultKey, decryptPayload, encryptPayload, isEncryptedPayload, normalizeRecoveryKey, unlockWithPin, unlockWithRecoveryKey } from './vaultKeys';
 
 // Light Argon2id settings keep tests quick; the app uses the defaults.
 const FAST = { memory: 256, iterations: 1 };
@@ -66,5 +66,20 @@ describe('vault keys', () => {
     const { public: pub } = await requestVaultKey('x', FAST);
     expect(await keyCode(pub)).toMatch(/^\d{4} \d{4} \d{4} \d{4}$/);
     expect(await keyCode(pub)).toBe(await keyCode(pub));
+  });
+
+  it('shows a vault key as a code the same for everyone who holds it, and only them', async () => {
+    const { key, encryption } = await createVaultKey('2468', FAST);
+    const asked = await requestVaultKey('their-pin', FAST);
+    const theirs = await unlockWithPin({ version: 1, member: { ...asked, grant: await grantVaultKey(key, asked.public, 'v1') } }, 'their-pin', 'v1');
+    const owners = await unlockWithPin(encryption, '2468');
+    expect(await vaultKeyCode(theirs!, 'v1')).toBe(await vaultKeyCode(owners!, 'v1'));
+    expect(await vaultKeyCode(key, 'v1')).toMatch(/^\d{4} \d{4} \d{4} \d{4}$/);
+    // A key of the server's own, sealed in the owner's place, shows another.
+    const forged = await createVaultKey('x', FAST);
+    expect(await vaultKeyCode(forged.key, 'v1')).not.toBe(await vaultKeyCode(key, 'v1'));
+    // A key kept on the device for fingerprint unlock can't be exported, and gives the same code.
+    const kept = await crypto.subtle.importKey('raw', await crypto.subtle.exportKey('raw', key), 'AES-GCM', false, ['encrypt', 'decrypt']);
+    expect(await vaultKeyCode(kept, 'v1')).toBe(await vaultKeyCode(key, 'v1'));
   });
 });

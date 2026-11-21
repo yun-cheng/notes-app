@@ -9,13 +9,13 @@ import { Empty, Section } from '../components';
 import { useToast } from '../Toast';
 import { PinInput } from '../PinInput';
 import { useVaultEncryption } from '../useVaultEncryption';
-import { KeyCode } from '../KeyCode';
+import { KeyCode, VaultKeyCode } from '../KeyCode';
 
 const ROLE_LABEL = { owner: 'Owner', editor: 'Can edit', viewer: 'Can view and comment' } as const;
 
 /** Who can see a vault. Its owner adds people by email; anyone else can leave. */
 export function VaultPeopleSection({ vault }: { vault: Vault }) {
-  const { engine, accountId } = useCards();
+  const { engine, accountId, keyring } = useCards();
   const toast = useToast();
   const navigate = useNavigate();
   const [people, setPeople] = useState<VaultPeople | null>(null);
@@ -24,6 +24,7 @@ export function VaultPeopleSection({ vault }: { vault: Vault }) {
   const [role, setRole] = useState<'editor' | 'viewer'>('editor');
   const owner = (vault.role ?? 'owner') === 'owner';
   const encrypted = !!vault.encryption;
+  const vaultKey = keyring.key(vault.id);
 
   // Again once this account's own place in it changes: a PIN set, a key asked for or given.
   const mine = `${vault.withheld}|${vault.lock}|${vault.encryption && isMemberCopy(vault.encryption) ? (vault.encryption.member?.public ?? '') : ''}`;
@@ -114,6 +115,17 @@ export function VaultPeopleSection({ vault }: { vault: Vault }) {
             Share
           </button>
         </form>
+      )}
+      {encrypted && vaultKey && (people?.members.length ?? 0) > 1 && (
+        <div className="vault-gap">
+          <p className="prose-note">
+            Its key’s code here is <VaultKeyCode vaultKey={vaultKey} vaultId={vault.id} />
+          </p>
+          <p className="prose-note">
+            Everyone let in sees the same code on this page. Compare it once with {owner ? 'each of them' : 'its owner'}: someone who sees another got a key that isn’t this vault’s, and what they write in it isn’t safe.
+            {owner ? ' Remove them and let them ask again.' : ' Ask for its key again with Forgot PIN? on the lock.'}
+          </p>
+        </div>
       )}
       {owner && (
         <p className="prose-note vault-gap">

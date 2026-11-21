@@ -30,6 +30,7 @@ import { useUndo } from '../useUndo';
 import { journalDefaults, useSaveEntries } from '../useSaveEntry';
 import { usePermissions, useViewOnly } from '../viewOnly';
 import { EntryBubble } from './journal';
+import { composing } from '../composing';
 
 type Entry = NoteCard | TodoCard;
 
@@ -536,7 +537,7 @@ function AddCard({ into, title, filter }: { into: AddInto; title: string; filter
         placeholder="Write a card, or [] for a todo"
         onChange={(e) => setText(e.target.value)}
         onKeyDown={(e) => {
-          if (e.key === 'Enter' && !e.shiftKey && !e.nativeEvent.isComposing) {
+          if (e.key === 'Enter' && !e.shiftKey && !composing(e)) {
             e.preventDefault();
             void save();
           } else if (e.key === 'Escape') {

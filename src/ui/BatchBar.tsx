@@ -13,6 +13,7 @@ import { useToast } from './Toast';
 import { useUndo } from './useUndo';
 import { useStacking } from './useStacking';
 import { isStack } from '../domain/stacks';
+import { composing } from './composing';
 
 /**
  * Takes the writing box's place while entries are picked: tag, finish, mark waiting, date, switch between note and todo, copy,
@@ -226,7 +227,7 @@ function BatchTags({ cards, onEdit }: { cards: Card[]; onEdit: (edit: BatchEdit,
         enterKeyHint="done"
         onChange={(e) => setQuery(e.target.value)}
         onKeyDown={(e) => {
-          if (e.key === 'Enter') {
+          if (e.key === 'Enter' && !composing(e)) {
             e.preventDefault();
             create();
           }

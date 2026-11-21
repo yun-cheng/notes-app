@@ -22,6 +22,7 @@ import { useUndo } from './useUndo';
 import { useStartFromTemplate } from './useTemplates';
 import { isTemplate } from '../domain/templates';
 import { useBackdropClose } from './useBackdrop';
+import { composing } from './composing';
 
 interface Command {
   id: string;
@@ -218,7 +219,7 @@ export function CommandPalette({ onClose, onShortcuts }: { onClose: () => void; 
           aria-activedescendant={items[pick] ? `palette-${items[pick].id}` : undefined}
           onChange={(e) => setQuery(e.target.value)}
           onKeyDown={(e) => {
-            if (e.nativeEvent.isComposing) return;
+            if (composing(e)) return;
             if (e.key === 'ArrowDown' || e.key === 'ArrowUp') {
               e.preventDefault();
               const step = e.key === 'ArrowDown' ? 1 : -1;

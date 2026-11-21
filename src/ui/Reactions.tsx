@@ -6,6 +6,7 @@ import { EMOJI_GROUPS, searchEmoji } from './emojiData';
 import { Icon } from './Icon';
 import { usePopover } from './usePopover';
 import { useInTrash, usePermissions } from './viewOnly';
+import { composing } from './composing';
 
 type Entry = NoteCard | TodoCard;
 
@@ -97,7 +98,7 @@ export function ReactionPicker({ mine, onPick }: { mine: (emoji: string) => bool
   const found = query.trim() ? [...new Set([...typed, ...searchEmoji(query)])] : [];
   const recent = recentReactions();
   const onKey = (e: KeyboardEvent) => {
-    if (e.key === 'Enter' && found[0]) {
+    if (e.key === 'Enter' && !composing(e) && found[0]) {
       e.preventDefault();
       pick(found[0]);
     }

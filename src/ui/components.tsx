@@ -16,6 +16,7 @@ import { DueLabel, useTickTodo } from './TodoDue';
 import { SyncBadge } from './SyncStatus';
 import { AccountButton, DemoTag } from './AccountBadge';
 import { VoiceBar } from './voice';
+import { composing } from './composing';
 
 /** A page under its title bar. `below` is a second row of the bar, like the journal's filter chips, and stays in it as the page scrolls. */
 /**
@@ -384,7 +385,7 @@ export function TagPicker({ tagIds, onChange, autoFocus = false, inMenu = false 
           onFocus={() => setOpen(true)}
           onBlur={() => setOpen(false)}
           onKeyDown={(e) => {
-            if (e.key === 'Enter') {
+            if (e.key === 'Enter' && !composing(e)) {
               e.preventDefault();
               submit();
             } else if (e.key === 'Backspace' && !query && tagIds.length) {

@@ -6,6 +6,7 @@ import type { AccountSummary } from '../sync/protocol';
 import { Section } from './components';
 import { useToast } from './Toast';
 import { useBackdropClose } from './useBackdrop';
+import { composing } from './composing';
 
 const count = (n: number, one: string, many = `${one}s`) => `${n} ${n === 1 ? one : many}`;
 
@@ -125,7 +126,7 @@ function DeleteAccountDialog({ onExport, onClose }: { onExport: () => void; onCl
             disabled={busy}
             onChange={(e) => setTyped(e.target.value)}
             onKeyDown={(e) => {
-              if (e.key === 'Enter' && ready) void remove();
+              if (e.key === 'Enter' && !composing(e) && ready) void remove();
             }}
           />
         </label>

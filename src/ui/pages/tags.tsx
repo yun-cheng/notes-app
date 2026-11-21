@@ -11,6 +11,7 @@ import { journalPath } from '../paths';
 import { useToast } from '../Toast';
 import { useUndo } from '../useUndo';
 import { usePopover } from '../usePopover';
+import { composing } from '../composing';
 
 /** Moving tags in and out of groups, and making groups. A tag is in one group at most. */
 function useGroupEdits() {
@@ -206,7 +207,7 @@ function GroupBlock({ group }: { group: TagGroup }) {
   return (
     <div className="tag-group">
       <div className="tag-group__head">
-        <input className="tag-group__name" value={name} aria-label="Group name" onChange={(e) => setName(e.target.value)} onBlur={rename} onKeyDown={(e) => e.key === 'Enter' && e.currentTarget.blur()} />
+        <input className="tag-group__name" value={name} aria-label="Group name" onChange={(e) => setName(e.target.value)} onBlur={rename} onKeyDown={(e) => e.key === 'Enter' && !composing(e) && e.currentTarget.blur()} />
         <button type="button" className="icon-btn" aria-label={`Remove the ${group.title} group`} title="Remove group (its tags stay)" onClick={remove}>
           <Icon name="trash" />
         </button>
@@ -254,7 +255,7 @@ function GroupBlock({ group }: { group: TagGroup }) {
           enterKeyHint="done"
           onChange={(e) => setAdding(e.target.value)}
           onKeyDown={(e) => {
-            if (e.key !== 'Enter' || !q) return;
+            if (e.key !== 'Enter' || composing(e) || !q) return;
             e.preventDefault();
             add(exact ? exact.id : edits.tagNamed(adding.trim().replace(/^#/, '')));
           }}

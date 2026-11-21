@@ -26,6 +26,11 @@ export interface StoredAttachment {
   trashed_at: number | null;
   /** The entry it was last in, to put it back there. */
   trashed_from: string | null;
+  /**
+   * 1 for one sealed on a device, in an encrypted vault: the server knows nothing of it but its size, so its type,
+   * name, size and shape come from opening its start (`AttachmentKeeper`'s `describe`).
+   */
+  sealed?: number;
 }
 
 /** Where a photo or file was last seen: the entry holding it, and a file's name. */

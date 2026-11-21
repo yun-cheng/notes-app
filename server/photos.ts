@@ -31,6 +31,12 @@ export const MAX_VIDEO_BYTES = 1024 * 1024 * 1024;
 /** The most one piece of an upload carries. Drive takes each but the last in multiples of 256 KB. */
 export const MAX_PIECE_BYTES = 16 * 1024 * 1024;
 const largest = (mime: string) => (mime.startsWith('video/') ? MAX_VIDEO_BYTES : MAX_FILE_BYTES);
+/**
+ * What sealing adds to a photo or file in an encrypted vault (`src/crypto/attachmentSeal.ts`): its header, and 16
+ * bytes a MiB. The server can't tell a sealed video from a sealed file, so either may be as big as a video.
+ */
+export const SEALED_SLACK = 64 * 1024;
+const SEALED = 'application/octet-stream';
 const IMAGE_TYPES: Record<string, string> = { 'image/jpeg': 'jpg', 'image/png': 'png', 'image/webp': 'webp', 'image/gif': 'gif', 'image/heic': 'heic', 'image/avif': 'avif' };
 const MIME = /^[a-z0-9][\w.+-]*\/[\w.+-]+$/;
 
@@ -135,8 +141,10 @@ export function photoRoutes(app: Hono<AppEnv>, fetcher: GoogleFetch, now: () => 
   const uploadTarget = async (c: Context<AppEnv>) => {
     const id = c.req.param('id') ?? '';
     const vaultId = c.req.query('vault') ?? '';
-    const file = c.req.query('kind') === 'file';
-    const mime = (c.req.header('content-type') ?? '').split(';')[0].trim().toLowerCase() || (file ? 'application/octet-stream' : '');
+    // Sealed on the device, for an encrypted vault: bytes to keep as they are, which say nothing of what they are.
+    const sealed = c.req.query('sealed') === '1';
+    const file = sealed || c.req.query('kind') === 'file';
+    const mime = sealed ? SEALED : (c.req.header('content-type') ?? '').split(';')[0].trim().toLowerCase() || (file ? SEALED : '');
     if (!/^[\w-]{8,64}$/.test(id) || !(file ? MIME.test(mime) : IMAGE_TYPES[mime])) return c.json({ error: file ? 'Invalid file' : 'Invalid photo' }, 400);
     const vault = await c.env.DB.prepare(
       `SELECT v.owner_id FROM vaults v JOIN vault_access m ON m.vault_id = v.id WHERE v.id = ? AND m.user_id = ? AND m.role IN ('owner', 'editor')`,
@@ -152,24 +160,25 @@ export function photoRoutes(app: Hono<AppEnv>, fetcher: GoogleFetch, now: () => 
       const n = Number(c.req.query(key));
       return Number.isInteger(n) && n > 0 && n < 100_000 ? n : null;
     };
+    if (sealed) return { id, vaultId, ownerId: vault.owner_id, file, sealed, mime, name: null, width: null, height: null, duration: null, config };
     const name = file ? (c.req.query('name') ?? '').replace(/[\u0000-\u001f]/g, '').trim().slice(0, 200) || null : null;
     // A video's length in seconds, as the device read it.
     const seconds = Number(c.req.query('d'));
     const duration = file && /^(video|audio)\//.test(mime) && Number.isFinite(seconds) && seconds > 0 && seconds < 1_000_000 ? Math.round(seconds * 1000) / 1000 : null;
-    return { id, vaultId, ownerId: vault.owner_id, file, mime, name, width: pixels('w'), height: pixels('h'), duration, config };
+    return { id, vaultId, ownerId: vault.owner_id, file, sealed, mime, name, width: pixels('w'), height: pixels('h'), duration, config };
   };
 
   /** Notes an uploaded photo or file, now in Drive. Repeated, the first stays. */
   const record = (
     c: Context<AppEnv>,
-    a: { id: string; ownerId: string; vaultId: string; fileId: string; mime: string; size: number; width: number | null; height: number | null; duration: number | null; name: string | null },
+    a: { id: string; ownerId: string; vaultId: string; fileId: string; mime: string; size: number; width: number | null; height: number | null; duration: number | null; name: string | null; sealed: boolean },
     at: number,
   ) =>
     c.env.DB.prepare(
-      `INSERT INTO attachments (id, owner_id, vault_id, drive_file_id, mime, size, width, height, duration, created_at, name) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+      `INSERT INTO attachments (id, owner_id, vault_id, drive_file_id, mime, size, width, height, duration, created_at, name, sealed) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
        ON CONFLICT(id) DO NOTHING`,
     )
-      .bind(a.id, a.ownerId, a.vaultId, a.fileId, a.mime, a.size, a.width, a.height, a.duration, at, a.name)
+      .bind(a.id, a.ownerId, a.vaultId, a.fileId, a.mime, a.size, a.width, a.height, a.duration, at, a.name, a.sealed ? 1 : 0)
       .run();
 
   /**
@@ -179,12 +188,13 @@ export function photoRoutes(app: Hono<AppEnv>, fetcher: GoogleFetch, now: () => 
   app.put('/attachments/:id', async (c) => {
     const target = await uploadTarget(c);
     if (target instanceof Response) return target;
-    const { id, file, mime, config } = target;
+    const { id, file, sealed, mime, config } = target;
     const bytes = await c.req.arrayBuffer();
-    if (!bytes.byteLength || bytes.byteLength > (file ? MAX_FILE_BYTES : MAX_PHOTO_BYTES)) return c.json({ error: file ? 'File too large' : 'Photo too large' }, 413);
+    if (!bytes.byteLength || bytes.byteLength > (sealed ? MAX_FILE_BYTES + SEALED_SLACK : file ? MAX_FILE_BYTES : MAX_PHOTO_BYTES)) return c.json({ error: file ? 'File too large' : 'Photo too large' }, 413);
     try {
       const at = now();
-      const name = file ? driveName(id, c.req.query('name')) : `${id}.${IMAGE_TYPES[mime]}`;
+      // A sealed one's Drive name is its ID alone: its own name is sealed in it.
+      const name = sealed ? id : file ? driveName(id, c.req.query('name')) : `${id}.${IMAGE_TYPES[mime]}`;
       const fileId = await uploadFile(c.env.DB, config, target.ownerId, { name, mime, bytes }, at);
       await record(c, { ...target, fileId, size: bytes.byteLength }, at);
       return c.json({ id }, 201);
@@ -197,13 +207,13 @@ export function photoRoutes(app: Hono<AppEnv>, fetcher: GoogleFetch, now: () => 
   const uploadRow = (c: Context<AppEnv>, id: string) =>
     c.env.DB.prepare(`SELECT * FROM attachment_uploads WHERE id = ? AND vault_id IN (${EDITABLE})`)
       .bind(id, c.get('user').id)
-      .first<{ id: string; owner_id: string; vault_id: string; session_url: string; mime: string; size: number; name: string | null; width: number | null; height: number | null; duration: number | null }>();
+      .first<{ id: string; owner_id: string; vault_id: string; session_url: string; mime: string; size: number; name: string | null; width: number | null; height: number | null; duration: number | null; sealed: number }>();
 
   /** Where an upload stands, from Drive's answer: the next byte to send, or done (the file noted, the session dropped). */
   const progress = async (c: Context<AppEnv>, row: NonNullable<Awaited<ReturnType<typeof uploadRow>>>, got: UploadProgress) => {
     if ('next' in got) return c.json({ next: got.next });
     const at = now();
-    await record(c, { id: row.id, ownerId: row.owner_id, vaultId: row.vault_id, fileId: got.fileId, mime: row.mime, size: row.size, width: row.width, height: row.height, duration: row.duration, name: row.name }, at);
+    await record(c, { id: row.id, ownerId: row.owner_id, vaultId: row.vault_id, fileId: got.fileId, mime: row.mime, size: row.size, width: row.width, height: row.height, duration: row.duration, name: row.name, sealed: !!row.sealed }, at);
     await c.env.DB.prepare(`DELETE FROM attachment_uploads WHERE id = ?`).bind(row.id).run();
     return c.json({ id: row.id }, 201);
   };
@@ -214,13 +224,13 @@ export function photoRoutes(app: Hono<AppEnv>, fetcher: GoogleFetch, now: () => 
    * far as Drive got before; or with the ID once it has it all.
    */
   app.post('/attachments/:id/upload', async (c) => {
-    if (c.req.query('kind') !== 'file') return c.json({ error: 'Invalid file' }, 400);
+    if (c.req.query('kind') !== 'file' && c.req.query('sealed') !== '1') return c.json({ error: 'Invalid file' }, 400);
     const target = await uploadTarget(c);
     if (target instanceof Response) return target;
-    const { id, vaultId, ownerId, mime, config } = target;
+    const { id, vaultId, ownerId, mime, sealed, config } = target;
     const size = Number(c.req.query('size'));
     if (!Number.isSafeInteger(size) || size <= 0) return c.json({ error: 'Invalid file' }, 400);
-    if (size > largest(mime)) return c.json({ error: 'File too large' }, 413);
+    if (size > (sealed ? MAX_VIDEO_BYTES + SEALED_SLACK : largest(mime))) return c.json({ error: 'File too large' }, 413);
     try {
       const at = now();
       const row = await uploadRow(c, id);
@@ -233,12 +243,12 @@ export function photoRoutes(app: Hono<AppEnv>, fetcher: GoogleFetch, now: () => 
           await c.env.DB.prepare(`DELETE FROM attachment_uploads WHERE id = ?`).bind(id).run();
         }
       }
-      const session = await startUpload(c.env.DB, config, ownerId, { name: driveName(id, c.req.query('name')), mime, size }, at);
+      const session = await startUpload(c.env.DB, config, ownerId, { name: sealed ? id : driveName(id, c.req.query('name')), mime, size }, at);
       await c.env.DB.prepare(
-        `INSERT INTO attachment_uploads (id, owner_id, vault_id, session_url, mime, size, name, width, height, duration, created_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+        `INSERT INTO attachment_uploads (id, owner_id, vault_id, session_url, mime, size, name, width, height, duration, created_at, sealed) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
          ON CONFLICT(id) DO UPDATE SET session_url = excluded.session_url, created_at = excluded.created_at`,
       )
-        .bind(id, ownerId, vaultId, session, mime, size, target.name, target.width, target.height, target.duration, at)
+        .bind(id, ownerId, vaultId, session, mime, size, target.name, target.width, target.height, target.duration, at, sealed ? 1 : 0)
         .run();
       return c.json({ next: 0 });
     } catch (err) {
@@ -277,7 +287,7 @@ export function photoRoutes(app: Hono<AppEnv>, fetcher: GoogleFetch, now: () => 
    */
   app.get('/attachments', async (c) => {
     const { results } = await c.env.DB.prepare(
-      `SELECT id, vault_id, mime, size, name, width, height, duration, created_at, trashed_at, trashed_from FROM attachments
+      `SELECT id, vault_id, mime, size, name, width, height, duration, created_at, trashed_at, trashed_from, sealed FROM attachments
        WHERE vault_id IN (SELECT vault_id FROM vault_access WHERE user_id = ?) ORDER BY created_at`,
     )
       .bind(c.get('user').id)
@@ -302,7 +312,7 @@ export function photoRoutes(app: Hono<AppEnv>, fetcher: GoogleFetch, now: () => 
     const statements = [
       ...trash.map((t) =>
         c.env.DB.prepare(
-          `UPDATE attachments SET trashed_at = ?, trashed_from = ?, name = coalesce(name, ?)
+          `UPDATE attachments SET trashed_at = ?, trashed_from = ?, name = CASE WHEN sealed = 1 THEN NULL ELSE coalesce(name, ?) END
            WHERE id = ? AND trashed_at IS NULL AND vault_id IN (${EDITABLE}) AND NOT ${IN_A_CARD}`,
         ).bind(at, text(t.from, 64), text(t.name, 200), t.id, userId),
       ),
@@ -322,7 +332,7 @@ export function photoRoutes(app: Hono<AppEnv>, fetcher: GoogleFetch, now: () => 
   app.get('/attachments/:id/link', async (c) => {
     const userId = c.get('user').id;
     const row = await c.env.DB.prepare(
-      `SELECT a.drive_link, (a.vault_id IN (${EDITABLE}) AND v.encryption IS NULL) AS can FROM attachments a JOIN vaults v ON v.id = a.vault_id
+      `SELECT a.drive_link, (a.vault_id IN (${EDITABLE}) AND v.encryption IS NULL AND a.sealed = 0) AS can FROM attachments a JOIN vaults v ON v.id = a.vault_id
        WHERE a.id = ? AND a.vault_id IN (SELECT vault_id FROM vault_access WHERE user_id = ?)`,
     )
       .bind(userId, c.req.param('id'), userId)
@@ -335,7 +345,7 @@ export function photoRoutes(app: Hono<AppEnv>, fetcher: GoogleFetch, now: () => 
   const linkable = (c: Context<AppEnv>) =>
     c.env.DB.prepare(
       `SELECT a.id, a.owner_id, a.drive_file_id FROM attachments a JOIN vaults v ON v.id = a.vault_id
-       WHERE a.id = ? AND a.vault_id IN (${EDITABLE}) AND v.encryption IS NULL`,
+       WHERE a.id = ? AND a.vault_id IN (${EDITABLE}) AND v.encryption IS NULL AND a.sealed = 0`,
     )
       .bind(c.req.param('id'), c.get('user').id)
       .first<{ id: string; owner_id: string; drive_file_id: string }>();

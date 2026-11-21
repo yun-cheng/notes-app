@@ -239,6 +239,34 @@ describe('photos in Google Drive', () => {
     // With its shape and length, for the Trash and for its block when it's put back.
     expect(listed.attachments).toEqual([expect.objectContaining({ id: 'video-0001', size: 10, name: 'Clip.mp4', mime: 'video/mp4', width: 1920, height: 1080, duration: 90.5 })]);
   });
+  it('keeps a sealed one as bytes with no name, type or shape, in pieces too, and never shares it by link', async () => {
+    const t = await connected();
+    const sealed = Uint8Array.from({ length: 12 }, (_, i) => 200 - i);
+    const put = await t.call(`/api/attachments/sealed-0001?vault=${t.ann.vault}&sealed=1&kind=file&name=Secret.pdf&w=10&h=10`, { method: 'PUT', body: sealed.slice().buffer, headers: { 'content-type': 'application/pdf' } }, t.ann.cookie);
+    expect(put.status).toBe(201);
+    expect(t.names.get('file-1')).toBe('sealed-0001');
+    const got = await t.call('/api/attachments/sealed-0001', {}, t.ann.cookie);
+    expect(got.headers.get('content-type')).toBe('application/octet-stream');
+    expect(new Uint8Array(await got.arrayBuffer())).toEqual(sealed);
+    // A sealed video, as big as a video may be, in pieces.
+    const start = await t.call(`/api/attachments/sealed-0002/upload?vault=${t.ann.vault}&sealed=1&size=4&name=Clip.mp4`, { method: 'POST', headers: { 'content-type': 'video/mp4' } }, t.ann.cookie);
+    expect(await start.json()).toEqual({ next: 0 });
+    const done = await t.call('/api/attachments/sealed-0002/upload', { method: 'PUT', body: new Uint8Array([1, 2, 3, 4]).buffer, headers: { 'content-range': 'bytes 0-3/4' } }, t.ann.cookie);
+    expect(done.status).toBe(201);
+    expect(t.names.get('file-2')).toBe('sealed-0002');
+    expect((await t.call(`/api/attachments/sealed-0003/upload?vault=${t.ann.vault}&sealed=1&size=${100 * 1024 ** 2}`, { method: 'POST' }, t.ann.cookie)).status).toBe(200);
+    const listed = (await (await t.call('/api/attachments', {}, t.ann.cookie)).json()) as { attachments: unknown[] };
+    expect(listed.attachments).toEqual([
+      expect.objectContaining({ id: 'sealed-0001', mime: 'application/octet-stream', name: null, width: null, height: null, sealed: 1 }),
+      expect.objectContaining({ id: 'sealed-0002', mime: 'application/octet-stream', name: null, duration: null, sealed: 1 }),
+    ]);
+    // Trashed, it keeps no name a device sends; and it's never shared by link.
+    await t.call('/api/attachments/state', { method: 'POST', body: JSON.stringify({ trash: [{ id: 'sealed-0001', from: 'card-1', name: 'Secret.pdf' }], keep: [] }), headers: { 'content-type': 'application/json' } }, t.ann.cookie);
+    const trashed = (await (await t.call('/api/attachments', {}, t.ann.cookie)).json()) as { attachments: { id: string; name: string | null; trashed_from: string | null }[] };
+    expect(trashed.attachments[0]).toMatchObject({ id: 'sealed-0001', name: null, trashed_from: 'card-1' });
+    expect(await (await t.call('/api/attachments/sealed-0002/link', {}, t.ann.cookie)).json()).toEqual({ url: null, can: false });
+    expect((await t.call('/api/attachments/sealed-0002/link', { method: 'POST' }, t.ann.cookie)).status).toBe(404);
+  });
   it('starts a piece-by-piece upload again once Drive has dropped it, and keeps to its sizes and vaults', async () => {
     const t = await connected();
     const start = (size: number, mime = 'video/mp4', vault = t.ann.vault, cookie = t.ann.cookie) =>

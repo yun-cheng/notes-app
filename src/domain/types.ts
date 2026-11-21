@@ -1,4 +1,4 @@
-import type { VaultEncryption } from '../crypto/vaultKeys';
+import type { AnyEncryption } from '../crypto/vaultKeys';
 import type { VaultPin } from './pin';
 
 export interface JSONNode {
@@ -158,13 +158,21 @@ export interface Vault {
   role?: 'owner' | 'editor' | 'viewer';
   /** How many people can see it, including the owner. */
   members?: number;
-  /** Set when the vault is end-to-end encrypted. Only ever with a PIN. */
-  encryption?: VaultEncryption | null;
+  /**
+   * Set when the vault is end-to-end encrypted. Only ever with a PIN. Its owner gets the vault key wrapped under their
+   * PIN and the recovery key; anyone else gets their own copy (see `MemberKey`), or `member: null` before they ask.
+   */
+  encryption?: AnyEncryption | null;
+  /** For the owner of an encrypted vault: how many members asked for its key and wait to be let in. */
+  waiting?: number;
   /**
    * Set by the owner of a vault locked by their PIN: everyone in it must lock it with a PIN of their own before they
    * see anything in it. `lock`, `pin` and `hidden` are this account's own, as each member's lock is theirs.
    */
   members_need_pin?: boolean;
-  /** True while this account is a member who hasn't yet set the PIN the owner asks for: the server sends none of its cards. */
+  /**
+   * True while this account is a member who hasn't yet set the PIN the owner asks for, or, in an encrypted vault,
+   * hasn't been let in by the owner: the server sends none of its cards.
+   */
   withheld?: boolean;
 }

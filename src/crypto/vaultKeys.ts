@@ -27,12 +27,41 @@ export interface VaultEncryption {
   wrapped: string;
   /** The vault key wrapped with the recovery key. */
   recovery: string;
+  member?: undefined;
 }
+
+/**
+ * A member's own copy of a shared vault's key. Their device makes a key pair and keeps the private half wrapped under
+ * the member's own PIN; the owner's device, once the owner lets them in, seals the vault key to the public half. So the
+ * vault key reaches them without the server, or anyone but the owner, ever holding it unsealed.
+ */
+export interface MemberKey {
+  kdf: KdfParams;
+  /** The member's private key (PKCS #8), wrapped under their PIN: base64 of IV then ciphertext. */
+  wrapped: string;
+  /** Their public key: P-256, SPKI, base64. */
+  public: string;
+  /** The vault key sealed to `public`, once the owner let them in. */
+  grant: string | null;
+}
+
+/** What a member of an encrypted vault gets of its encryption: their own copy, or null until they ask for one. */
+export interface MemberEncryption {
+  version: 1;
+  member: MemberKey | null;
+}
+
+export type AnyEncryption = VaultEncryption | MemberEncryption;
+
+export const isMemberCopy = (encryption: AnyEncryption): encryption is MemberEncryption => 'member' in encryption && encryption.member !== undefined;
 
 /** OWASP's recommended Argon2id settings: about a quarter second on a phone. */
 export const KDF_DEFAULTS = { memory: 19_456, iterations: 2, parallelism: 1 };
 const PREFIX = 'e1:';
 const WRAP_AAD: Bytes = new TextEncoder().encode('notes-app vault key v1');
+const MEMBER_AAD: Bytes = new TextEncoder().encode('notes-app member key v1');
+const GRANT_INFO = 'notes-app vault grant v1';
+const ECDH = { name: 'ECDH', namedCurve: 'P-256' } as const;
 
 type Bytes = Uint8Array<ArrayBuffer>;
 /** A copy backed by a plain ArrayBuffer, which is what WebCrypto's types accept. */
@@ -126,8 +155,12 @@ export async function createVaultKey(pin: string, kdf?: Partial<KdfParams>): Pro
   return { key: await importVaultKey(raw), encryption: { version: 1, ...(await wrapWithPin(raw, pin, kdf)), recovery }, recoveryKey };
 }
 
-/** The vault key, or null if the PIN is wrong. */
-export async function unlockWithPin(encryption: VaultEncryption, pin: string): Promise<CryptoKey | null> {
+/**
+ * The vault key, or null if the PIN is wrong, or for a member, if they haven't been let in yet. `vaultId` is what a
+ * member's copy was sealed for.
+ */
+export async function unlockWithPin(encryption: AnyEncryption, pin: string, vaultId = ''): Promise<CryptoKey | null> {
+  if (isMemberCopy(encryption)) return encryption.member && openMemberKey(encryption.member, pin, vaultId);
   const raw = await open(await pinKey(pin, encryption.kdf), encryption.wrapped, WRAP_AAD);
   return raw && importVaultKey(raw);
 }
@@ -156,4 +189,75 @@ export async function decryptPayload(key: CryptoKey, data: string, cardId: strin
   if (!isEncryptedPayload(data)) return null;
   const plain = await open(key, data.slice(PREFIX.length), aadFor(cardId, vaultId));
   return plain && new TextDecoder().decode(plain);
+}
+
+/** The key a grant is sealed with: from ECDH between one side's private key and the other's public, and both public keys. */
+async function grantKey(privateKey: CryptoKey, publicKey: CryptoKey, ephemeral: Bytes, member: Bytes): Promise<CryptoKey> {
+  const shared = await crypto.subtle.deriveBits({ name: 'ECDH', public: publicKey }, privateKey, 256);
+  const base = await crypto.subtle.importKey('raw', shared, 'HKDF', false, ['deriveKey']);
+  const info = new Uint8Array([...new TextEncoder().encode(GRANT_INFO), ...member]);
+  return crypto.subtle.deriveKey({ name: 'HKDF', hash: 'SHA-256', salt: ephemeral, info }, base, { name: 'AES-GCM', length: 256 }, false, ['encrypt', 'decrypt']);
+}
+
+const grantAad = (vaultId: string): Bytes => new TextEncoder().encode(`grant|${vaultId}`);
+
+/**
+ * Seals a vault key (opened by PIN, so it can be exported) for a member's public key: an ephemeral key pair's
+ * public half, then the vault key sealed under what ECDH gives with theirs, bound to the vault.
+ */
+export async function grantVaultKey(vaultKey: CryptoKey, memberPublic: string, vaultId: string): Promise<string> {
+  const member = fromBase64(memberPublic);
+  const theirs = await crypto.subtle.importKey('spki', member, ECDH, false, []);
+  const pair = await crypto.subtle.generateKey(ECDH, true, ['deriveBits']);
+  const ephemeral = new Uint8Array(await crypto.subtle.exportKey('raw', pair.publicKey));
+  const key = await grantKey(pair.privateKey, theirs, ephemeral, member);
+  const sealed = fromBase64(await seal(key, new Uint8Array(await crypto.subtle.exportKey('raw', vaultKey)), grantAad(vaultId)));
+  return toBase64(new Uint8Array([...ephemeral, ...sealed]));
+}
+
+/** A new key pair for asking a vault's owner for its key, the private half wrapped under the member's PIN. */
+export async function requestVaultKey(pin: string, kdf?: Partial<KdfParams>): Promise<MemberKey> {
+  const pair = await crypto.subtle.generateKey(ECDH, true, ['deriveBits']);
+  const privateKey = new Uint8Array(await crypto.subtle.exportKey('pkcs8', pair.privateKey));
+  const params: KdfParams = { name: 'argon2id', salt: toBase64(random(16)), ...KDF_DEFAULTS, ...kdf };
+  const wrapped = await seal(await pinKey(pin, params), privateKey, MEMBER_AAD);
+  return { kdf: params, wrapped, public: toBase64(new Uint8Array(await crypto.subtle.exportKey('spki', pair.publicKey))), grant: null };
+}
+
+async function openMemberKey(member: MemberKey, pin: string, vaultId: string): Promise<CryptoKey | null> {
+  if (!member.grant) return null;
+  const privateBytes = await open(await pinKey(pin, member.kdf), member.wrapped, MEMBER_AAD);
+  if (!privateBytes) return null;
+  try {
+    const privateKey = await crypto.subtle.importKey('pkcs8', privateBytes, ECDH, false, ['deriveBits']);
+    const grant = fromBase64(member.grant);
+    const ephemeral = grant.slice(0, 65);
+    const theirs = await crypto.subtle.importKey('raw', ephemeral, ECDH, false, []);
+    const key = await grantKey(privateKey, theirs, ephemeral, fromBase64(member.public));
+    const raw = await open(key, toBase64(grant.slice(65)), grantAad(vaultId));
+    return raw && importVaultKey(raw);
+  } catch {
+    return null;
+  }
+}
+
+/** Whether a PIN opens a member's wrapped private key, let in or not: their own PIN, checked without the vault key. */
+export async function memberPinMatches(member: MemberKey, pin: string): Promise<boolean> {
+  return !!(await open(await pinKey(pin, member.kdf), member.wrapped, MEMBER_AAD));
+}
+
+/** A member's new PIN: a new key pair, with the vault key they have open sealed to it themselves. */
+export async function changeMemberPin(vaultKey: CryptoKey, newPin: string, vaultId: string, kdf?: Partial<KdfParams>): Promise<MemberKey> {
+  const next = await requestVaultKey(newPin, kdf);
+  return { ...next, grant: await grantVaultKey(vaultKey, next.public, vaultId) };
+}
+
+/**
+ * A short code for a public key, for the owner and the member to compare before the owner lets them in, so a server
+ * that put its own key in place of theirs would show.
+ */
+export async function keyCode(publicKey: string): Promise<string> {
+  const digest = new Uint8Array(await crypto.subtle.digest('SHA-256', fromBase64(publicKey)));
+  const groups = [0, 2, 4, 6].map((i) => String(((digest[i] << 8) | digest[i + 1]) % 10_000).padStart(4, '0'));
+  return groups.join(' ');
 }

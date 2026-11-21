@@ -103,12 +103,18 @@ function isPin(value: unknown): value is VaultPin {
   );
 }
 
-/** The server can't check a wrapped key, only its shape and size. */
+/**
+ * The server can't check a wrapped key, only its shape and size: the owner's, or a member's own copy, which comes
+ * with a public key and, from a member already let in who changes their PIN, the vault key sealed to it.
+ */
 function isEncryption(value: unknown): boolean {
-  const e = value as { version?: unknown; kdf?: unknown; wrapped?: unknown; recovery?: unknown } | null;
-  return (
-    !!e && e.version === 1 && typeof e.kdf === 'object' && typeof e.wrapped === 'string' && typeof e.recovery === 'string' && JSON.stringify(e).length <= 4000
-  );
+  const e = value as { version?: unknown; kdf?: unknown; wrapped?: unknown; recovery?: unknown; member?: Record<string, unknown> } | null;
+  if (!e || e.version !== 1 || JSON.stringify(e).length > 4000) return false;
+  if (e.member !== undefined) {
+    const m = e.member;
+    return !!m && typeof m.kdf === 'object' && !!m.kdf && typeof m.wrapped === 'string' && typeof m.public === 'string' && (m.grant === null || m.grant === undefined || typeof m.grant === 'string');
+  }
+  return typeof e.kdf === 'object' && typeof e.wrapped === 'string' && typeof e.recovery === 'string';
 }
 
 /** Reads the fields of a vault create or update, or returns null if any is invalid. */
@@ -293,7 +299,7 @@ export function createApp({
     const messages = {
       default_vault: 'The default vault cannot be locked',
       private_ai: 'A private vault cannot give AI access',
-      shared_private: 'A shared vault cannot be encrypted',
+      needs_key: 'A PIN on an encrypted vault comes with a key of your own',
       not_owner: 'Only the owner can change that',
       encrypted_open: 'Remove the encryption along with the PIN',
     };

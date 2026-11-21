@@ -52,7 +52,7 @@ function openAccount(accountId: string) {
   repo.onChange = () => engine.schedule();
   const keys: VaultKeyHooks = {
     unlock: async (vault, pin) => {
-      const key = vault.encryption && (await unlockWithPin(vault.encryption, pin));
+      const key = vault.encryption && (await unlockWithPin(vault.encryption, pin, vault.id));
       if (key) keyring.set(vault.id, key);
       return !!key;
     },

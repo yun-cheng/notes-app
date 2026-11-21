@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { changePin, createVaultKey, decryptPayload, encryptPayload, isEncryptedPayload, normalizeRecoveryKey, unlockWithPin, unlockWithRecoveryKey } from './vaultKeys';
+import { changeMemberPin, changePin, createVaultKey, grantVaultKey, keyCode, memberPinMatches, requestVaultKey, decryptPayload, encryptPayload, isEncryptedPayload, normalizeRecoveryKey, unlockWithPin, unlockWithRecoveryKey } from './vaultKeys';
 
 // Light Argon2id settings keep tests quick; the app uses the defaults.
 const FAST = { memory: 256, iterations: 1 };
@@ -37,5 +37,34 @@ describe('vault keys', () => {
     expect(normalizeRecoveryKey('abcd-efgh-jkmn-pqrs-tvwx-yz01-2345-6789')).toBe('ABCDEFGHJKMNPQRSTVWXYZ0123456789');
     expect(normalizeRecoveryKey('oooo iiii llll 0000 1111 2222 3333 4444')).toBe('00001111111100001111222233334444');
     expect(normalizeRecoveryKey('too short')).toBeNull();
+  });
+
+  it('gives a member the vault key sealed for their own PIN, and nobody else', async () => {
+    const { key } = await createVaultKey('2468', FAST);
+    const sealed = await encryptPayload(key, 'shared', 'c1', 'v1');
+    const asked = await requestVaultKey('their-pin', FAST);
+    expect(await unlockWithPin({ version: 1, member: asked }, 'their-pin', 'v1')).toBeNull();
+    expect(await memberPinMatches(asked, 'their-pin')).toBe(true);
+    expect(await memberPinMatches(asked, '2468')).toBe(false);
+
+    const member = { ...asked, grant: await grantVaultKey(key, asked.public, 'v1') };
+    const opened = await unlockWithPin({ version: 1, member }, 'their-pin', 'v1');
+    expect(await decryptPayload(opened!, sealed, 'c1', 'v1')).toBe('shared');
+    expect(await unlockWithPin({ version: 1, member }, '2468', 'v1')).toBeNull();
+    // Bound to its vault, and to the key pair it was sealed for.
+    expect(await unlockWithPin({ version: 1, member }, 'their-pin', 'v2')).toBeNull();
+    const other = await requestVaultKey('their-pin', FAST);
+    expect(await unlockWithPin({ version: 1, member: { ...other, grant: member.grant } }, 'their-pin', 'v1')).toBeNull();
+    expect(await unlockWithPin({ version: 1, member: null }, 'their-pin', 'v1')).toBeNull();
+
+    // A new PIN is a new key pair, sealed by the member from the key they have open.
+    const changed = await changeMemberPin(opened!, 'newer-pin', 'v1', FAST);
+    expect(changed.public).not.toBe(member.public);
+    expect(await decryptPayload((await unlockWithPin({ version: 1, member: changed }, 'newer-pin', 'v1'))!, sealed, 'c1', 'v1')).toBe('shared');
+  });
+  it('shows a public key as a short code to compare', async () => {
+    const { public: pub } = await requestVaultKey('x', FAST);
+    expect(await keyCode(pub)).toMatch(/^\d{4} \d{4} \d{4} \d{4}$/);
+    expect(await keyCode(pub)).toBe(await keyCode(pub));
   });
 });

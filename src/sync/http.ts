@@ -305,8 +305,11 @@ export async function transcribePiece(vaultId: string, wav: Uint8Array<ArrayBuff
 }
 
 export interface VaultPeople {
-  /** `locked`: whether they've locked the vault with a PIN of their own. */
-  members: { user_id: string; name: string; email: string; role: 'owner' | 'editor' | 'viewer'; locked: boolean }[];
+  /**
+   * `locked`: whether they've locked the vault with a PIN of their own. `key`, in an encrypted vault: the public key
+   * someone asked for its key with, and whether the owner let them in, or null if they haven't asked.
+   */
+  members: { user_id: string; name: string; email: string; role: 'owner' | 'editor' | 'viewer'; locked: boolean; key?: { public: string; given: boolean } | null }[];
   invites: { email: string; role: 'editor' | 'viewer' }[];
 }
 
@@ -317,6 +320,9 @@ export const addVaultMember = (vaultId: string, email: string, role: 'editor' | 
   request<VaultPeople>(`${vaultPath(vaultId)}/members`, { method: 'POST', body: JSON.stringify({ email, role }) });
 export const removeVaultMember = (vaultId: string, userId: string) =>
   request<VaultPeople | { ok: true }>(`${vaultPath(vaultId)}/members/${encodeURIComponent(userId)}`, { method: 'DELETE' });
+/** The owner lets someone into an encrypted vault, with its key sealed to the public key they asked with. */
+export const giveVaultKey = (vaultId: string, userId: string, publicKey: string, grant: string) =>
+  request<VaultPeople>(`${vaultPath(vaultId)}/members/${encodeURIComponent(userId)}/key`, { method: 'PUT', body: JSON.stringify({ public: publicKey, grant }) });
 export const cancelVaultInvite = (vaultId: string, email: string) =>
   request<VaultPeople>(`${vaultPath(vaultId)}/invites/${encodeURIComponent(email)}`, { method: 'DELETE' });
 

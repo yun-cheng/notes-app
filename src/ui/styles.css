@@ -1639,3 +1639,8 @@ body:has(.viewer) .context-menu { z-index: 70; }
 .held__entry span { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .held__entry:hover { color: var(--text); background: var(--sunken); }
 .held__entry:focus-visible { outline: 2px solid var(--accent); outline-offset: 1px; }
+
+/* The code a vault's owner and a member compare before the owner lets them in. */
+.key-code { font-family: ui-monospace, SFMono-Regular, Menlo, monospace; font-size: 1.05rem; letter-spacing: 0.08em; font-variant-numeric: tabular-nums; white-space: nowrap; }
+.let-in .key-code { display: block; margin-top: 4px; }
+.let-in { display: flex; flex-direction: column; gap: 8px; margin-top: 8px; }

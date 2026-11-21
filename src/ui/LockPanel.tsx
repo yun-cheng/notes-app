@@ -5,6 +5,7 @@ import { Icon } from './Icon';
 import { MIN_PIN_LENGTH } from '../domain/pin';
 import { PinInput, PinStrength } from './PinInput';
 import { useVaultEncryption } from './useVaultEncryption';
+import { isMemberCopy } from '../crypto/vaultKeys';
 
 /** Asks for a vault's PIN. A hidden vault's name is never shown here. */
 export function LockPanel({ vaultId }: { vaultId: string }) {
@@ -24,6 +25,8 @@ export function LockPanel({ vaultId }: { vaultId: string }) {
   }, [repo, vaultId]);
 
   if (!vault) return null;
+  // A member's copy of an encrypted vault's key has no recovery key: they ask its owner for it again.
+  const member = !!vault.encryption && isMemberCopy(vault.encryption);
 
   const submit = async (e: FormEvent) => {
     e.preventDefault();
@@ -48,13 +51,41 @@ export function LockPanel({ vaultId }: { vaultId: string }) {
     setBusy(true);
     setError(null);
     try {
-      if (!(await crypt.recover(vault, recoveryKey, newPin))) setError("That recovery key isn't right.");
+      if (member) await crypt.askForKey(vault, newPin);
+      else if (!(await crypt.recover(vault, recoveryKey, newPin))) setError("That recovery key isn't right.");
     } catch {
       setError('Connect to the internet to set a new PIN.');
     } finally {
       setBusy(false);
     }
   };
+
+  if (recovering && member) {
+    return (
+      <form className="lock-panel" onSubmit={(e) => void recover(e)}>
+        <div className="lock-panel__title">
+          <Icon name="lock" size={18} />
+          <span>Ask for its key again</span>
+        </div>
+        <p className="prose-note">Your PIN held your copy of its key. With a new one, you ask its owner again, and see nothing in it until they let you in once more.</p>
+        <PinInput value={newPin} placeholder="New PIN" aria-label="New PIN" onChange={(e) => setNewPin(e.target.value)} />
+        <PinStrength pin={newPin} />
+        <div className="button-row vault-gap">
+          <button type="submit" className="btn btn--primary" disabled={!newPin || busy}>
+            Set PIN and ask
+          </button>
+          <button type="button" className="btn btn--quiet" onClick={() => setRecovering(false)}>
+            Back
+          </button>
+        </div>
+        {error && (
+          <p className="lock-panel__error" role="alert">
+            {error}
+          </p>
+        )}
+      </form>
+    );
+  }
 
   if (recovering) {
     return (

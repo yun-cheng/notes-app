@@ -1,9 +1,9 @@
-import { changePin, createVaultKey, unlockWithRecoveryKey } from '../crypto/vaultKeys';
+import { changeMemberPin, changePin, createVaultKey, grantVaultKey, isMemberCopy, requestVaultKey, unlockWithPin, unlockWithRecoveryKey } from '../crypto/vaultKeys';
 import { hashPin } from '../domain/pin';
 import type { Vault } from '../domain/types';
 import { deviceKeyName, useCards } from '../state/CardsContext';
 import { encryptingName, finishEncrypting } from '../state/encrypting';
-import { updateVault, type VaultChanges } from '../sync/http';
+import { giveVaultKey, updateVault, type VaultChanges, type VaultPeople } from '../sync/http';
 
 export class NeedsPin extends Error {}
 
@@ -67,17 +67,46 @@ export function useVaultEncryption() {
     void attachments.sweep(true);
   };
 
-  /** New PIN for an encrypted vault: the same key, wrapped again. Needs the key opened by PIN, not fingerprint. */
+  /**
+   * New PIN for an encrypted vault: the owner's wraps the same key again; a member's is a new key pair, with the key
+   * they have open sealed to it. Needs the key opened by PIN, not fingerprint.
+   */
   const rewrap = async (vault: Vault, newPin: string) => {
     const key = keyring.key(vault.id);
     if (!key?.extractable || !vault.encryption) throw new NeedsPin('Lock the vault and open it with its PIN first.');
-    await save(vault, { pin: await hashPin(newPin), encryption: await changePin(vault.encryption, key, newPin) });
+    const encryption = isMemberCopy(vault.encryption)
+      ? { version: 1 as const, member: await changeMemberPin(key, newPin, vault.id) }
+      : await changePin(vault.encryption, key, newPin);
+    await save(vault, { pin: await hashPin(newPin), encryption });
+  };
+
+  /**
+   * A member of an encrypted vault sets their own PIN, which asks its owner for its key: a new key pair, the private
+   * half wrapped under the PIN. They see nothing in it until the owner lets them in. Asking again (a forgotten PIN)
+   * starts over the same way.
+   */
+  const askForKey = async (vault: Vault, pin: string) => {
+    const member = await requestVaultKey(pin);
+    return save(vault, { pin: await hashPin(pin), encryption: { version: 1, member } });
+  };
+
+  /**
+   * The owner lets someone in: the vault key sealed to the public key they asked with. It must be one opened by PIN,
+   * so it can be sealed: `pin` opens it here if it was opened by fingerprint. Null if that PIN is wrong.
+   */
+  const letIn = async (vault: Vault, person: VaultPeople['members'][number], pin?: string): Promise<VaultPeople | null> => {
+    if (!vault.encryption || isMemberCopy(vault.encryption) || !person.key) return null;
+    const open = keyring.key(vault.id);
+    const key = open?.extractable ? open : pin ? await unlockWithPin(vault.encryption, pin, vault.id) : null;
+    if (!key) return null;
+    return giveVaultKey(vault.id, person.user_id, person.key.public, await grantVaultKey(key, person.key.public, vault.id));
   };
 
   /** Opens an encrypted vault with its recovery key and sets a new PIN. False if the recovery key is wrong. */
   const recover = async (vault: Vault, recoveryKey: string, newPin: string): Promise<boolean> => {
-    const key = vault.encryption && (await unlockWithRecoveryKey(vault.encryption, recoveryKey));
-    if (!key || !vault.encryption) return false;
+    if (!vault.encryption || isMemberCopy(vault.encryption)) return false;
+    const key = await unlockWithRecoveryKey(vault.encryption, recoveryKey);
+    if (!key) return false;
     await save(vault, { pin: await hashPin(newPin), encryption: await changePin(vault.encryption, key, newPin) });
     keyring.set(vault.id, key);
     locks.unlockVerified(vault.id);
@@ -96,5 +125,5 @@ export function useVaultEncryption() {
     await repo.setMeta(deviceKeyName(vault.id), stored);
   };
 
-  return { encrypt, decrypt, rewrap, recover, rememberOnDevice };
+  return { encrypt, decrypt, rewrap, recover, rememberOnDevice, askForKey, letIn };
 }

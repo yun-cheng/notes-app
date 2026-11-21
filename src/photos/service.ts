@@ -33,6 +33,23 @@ export const MAX_FILE_BYTES = 25 * 1024 * 1024;
 export const MAX_VIDEO_BYTES = 1024 * 1024 * 1024;
 const NOTHING_KNOWN: VideoFacts = { poster: null, width: null, height: null, duration: null };
 const SEALED_TYPE = 'application/octet-stream';
+
+/**
+ * Said of a file this browser isn't allowed to read. A picture copied in an app that keeps its files to itself, as
+ * Telegram does on a Mac, comes to the page only as that app's file, which macOS won't let the browser open, and
+ * there's nothing else on the clipboard to take instead. Without this, saving it failed as "DataError Failed to write
+ * blobs (IOError)".
+ */
+export const UNREADABLE = 'This browser isn’t allowed to read that file, as with a picture copied in an app that keeps its files to itself (Telegram on a Mac does). Save it to a folder first, then add it from there.';
+
+/** Throws, saying why, for a file the browser can't read: picked, pasted or dropped from somewhere it may not open. */
+async function mustRead(blob: Blob): Promise<void> {
+  try {
+    await blob.slice(0, 1).arrayBuffer();
+  } catch {
+    throw new Error(UNREADABLE);
+  }
+}
 /**
  * The largest fetched from the server that's kept on this device. A longer video plays from the server each time,
  * as one not sealed streams, rather than filling the device's storage: a sealed one is fetched whole each time.
@@ -115,6 +132,7 @@ export class PhotoService {
    * device's storage nor the server holds it readable. Its name, type and shape go in the seal.
    */
   private async keep(record: PhotoRecord, facts: Omit<SealedFacts, 'size'>, seal = !!this.keys?.isEncrypted(record.vaultId)): Promise<void> {
+    await mustRead(record.blob);
     if (!seal) return this.store.putPhoto(record);
     const key = this.keys?.key(record.vaultId);
     if (!key) throw new VaultClosed('Open the vault first.');

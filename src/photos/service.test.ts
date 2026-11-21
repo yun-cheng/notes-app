@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import { SyncAuthExpired, SyncOffline } from '../sync/engine';
-import { fileSize, KEEP_BYTES, MAX_FILE_BYTES, MAX_VIDEO_BYTES, PhotoService, SealedUnreadable, VaultClosed, type VaultKeys } from './service';
+import { fileSize, KEEP_BYTES, MAX_FILE_BYTES, MAX_VIDEO_BYTES, PhotoService, SealedUnreadable, UNREADABLE, VaultClosed, type VaultKeys } from './service';
 import { sealAttachment } from '../crypto/attachmentSeal';
 import { MemoryPhotoStore, type PhotoRecord, type PhotoTransport, type UploadResult, type VideoFacts } from './types';
 
@@ -54,6 +54,17 @@ async function diaryKeys() {
   };
   return { keys, lock };
 }
+
+describe('a file this browser may not read', () => {
+  it('is refused, saying why, before anything is kept', async () => {
+    const { photos, store } = fixture();
+    const unreadable = image();
+    unreadable.slice = () => Object.assign(new Blob(), { arrayBuffer: () => Promise.reject(new DOMException('The requested file could not be read', 'NotReadableError')) });
+    await expect(photos.add(unreadable, 'v')).rejects.toThrow(UNREADABLE);
+    await expect(photos.addFile(Object.assign(new File(['x'], 'a.pdf', { type: 'application/pdf' }), { slice: unreadable.slice }), 'v')).rejects.toThrow(UNREADABLE);
+    expect(store.photos.size).toBe(0);
+  });
+});
 
 describe('PhotoService in an encrypted vault', () => {
   it('keeps and sends a photo or file only sealed, and opens it again here and on another device', async () => {

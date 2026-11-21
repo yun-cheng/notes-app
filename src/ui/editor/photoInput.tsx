@@ -80,6 +80,7 @@ export function usePhotoInput(editor: RefObject<TiptapEditor | null>, vaultId: (
         pos = end;
         added++;
       } catch (err) {
+        console.error('Adding a photo or file failed', err, (err as { inner?: unknown })?.inner);
         toast(err instanceof Error ? err.message : "That couldn't be added.");
       }
     }

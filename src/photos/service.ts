@@ -33,6 +33,11 @@ export const MAX_FILE_BYTES = 25 * 1024 * 1024;
 export const MAX_VIDEO_BYTES = 1024 * 1024 * 1024;
 const NOTHING_KNOWN: VideoFacts = { poster: null, width: null, height: null, duration: null };
 const SEALED_TYPE = 'application/octet-stream';
+/**
+ * The largest fetched from the server that's kept on this device. A longer video plays from the server each time,
+ * as one not sealed streams, rather than filling the device's storage: a sealed one is fetched whole each time.
+ */
+export const KEEP_BYTES = 64 * 1024 * 1024;
 
 /** The vault keys open on this device (the `Keyring`), to seal what's added to an encrypted vault and open it again. */
 export interface VaultKeys {
@@ -277,7 +282,8 @@ export class PhotoService {
 
   /**
    * The photo or file itself, from this device or else the server, opened if it's sealed. Null if the server doesn't
-   * have it yet, or it's sealed in a vault locked here. A sealed one is kept here as it came, sealed.
+   * have it yet, or it's sealed in a vault locked here. One fetched is kept here as it came, sealed if it was, unless
+   * it's bigger than `KEEP_BYTES`.
    */
   async blob(id: string): Promise<Blob | null> {
     const local = await this.store.getPhoto(id);
@@ -285,7 +291,8 @@ export class PhotoService {
     const blob = await this.transport.download(id);
     if (!blob) return null;
     const vaultId = await sealedVault(blob);
-    await this.store.putPhoto({ id, vaultId: vaultId ?? '', blob, mime: vaultId ? SEALED_TYPE : blob.type, width: null, height: null, ...(vaultId ? { sealed: 1 as const } : {}), uploaded: 1, addedAt: this.now() });
+    if (blob.size <= KEEP_BYTES)
+      await this.store.putPhoto({ id, vaultId: vaultId ?? '', blob, mime: vaultId ? SEALED_TYPE : blob.type, width: null, height: null, ...(vaultId ? { sealed: 1 as const } : {}), uploaded: 1, addedAt: this.now() });
     return vaultId ? this.open(blob, id) : blob;
   }
 

@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import { SyncAuthExpired, SyncOffline } from '../sync/engine';
-import { fileSize, MAX_FILE_BYTES, MAX_VIDEO_BYTES, PhotoService, VaultClosed, type VaultKeys } from './service';
+import { fileSize, KEEP_BYTES, MAX_FILE_BYTES, MAX_VIDEO_BYTES, PhotoService, VaultClosed, type VaultKeys } from './service';
 import { MemoryPhotoStore, type PhotoRecord, type PhotoTransport, type UploadResult, type VideoFacts } from './types';
 
 function fixture(answers: (UploadResult | 'offline' | 'expired')[] = [], facts: VideoFacts | null = null, keys: VaultKeys | null = null) {
@@ -87,6 +87,20 @@ describe('PhotoService in an encrypted vault', () => {
     expect((await store.getPhoto(plain))!.sealed).toBeUndefined();
     await photos.upload();
     expect(await other.playAddress(plain)).toBe(`/api/attachments/${plain}`);
+  });
+});
+
+describe('keeping what was fetched', () => {
+  it('keeps one fetched on the device, unless it is as big as a long video', async () => {
+    const { photos, store, server } = fixture();
+    server.set('small', image());
+    const big = image();
+    Object.defineProperty(big, 'size', { value: KEEP_BYTES + 1 });
+    server.set('big', big);
+    expect(await photos.blob('small')).not.toBeNull();
+    expect(await photos.blob('big')).toBe(big);
+    expect(await store.getPhoto('small')).toBeDefined();
+    expect(await store.getPhoto('big')).toBeUndefined();
   });
 });
 

@@ -9,6 +9,7 @@ actor FakeServer: SyncAPI {
     var seq: Int64 = 0
     var vaultList: [Vault] = [personal]
     var reachable = true
+    var goneIds: [String] = []
 
     func setReachable(_ value: Bool) { reachable = value }
 
@@ -37,7 +38,7 @@ actor FakeServer: SyncAPI {
     func pull(since: Int64) async throws -> PullResponse {
         guard reachable else { throw APIError.offline }
         let newer = records.values.filter { $0.seq > since }.sorted { $0.seq < $1.seq }
-        return PullResponse(records: newer, next: newer.last?.seq ?? since, more: false)
+        return PullResponse(records: newer, gone: goneIds, next: newer.last?.seq ?? since, more: false)
     }
 
     func vaults() async throws -> [Vault] {
@@ -45,7 +46,10 @@ actor FakeServer: SyncAPI {
         return vaultList
     }
 
-    func shared() async throws -> [SharedCard] { [] }
+    func shared() async throws -> SharedResponse { SharedResponse(cards: [], vaults: [], comments: [CommentCount(card_id: "c-talk", open: 2)]) }
+
+    func setGone(_ ids: [String]) { goneIds = ids }
+    func setVaults(_ vaults: [Vault]) { vaultList = vaults }
 }
 
 @MainActor
@@ -98,5 +102,43 @@ actor FakeServer: SyncAPI {
         await server.setReachable(true)
         await sync.sync()
         #expect(sync.state == .idle && sync.pending == 0)
+    }
+
+    @Test func aCardMovedOutOfReachLeavesTheDevice() async throws {
+        let server = FakeServer()
+        let repo = try await makeRepo()
+        let sync = SyncEngine(repo: repo, api: server)
+        let note = try await repo.createNote(title: "Moving")
+        await sync.sync()
+        await server.setGone([note.id])
+        await sync.sync()
+        #expect(try await repo.card(note.id) == nil)
+        #expect(try await repo.commentCounts() == ["c-talk": 2])
+    }
+
+    @Test func aWithheldVaultKeepsNoCards() async throws {
+        let server = FakeServer()
+        let repo = try await makeRepo()
+        let sync = SyncEngine(repo: repo, api: server)
+        _ = try await repo.createNote(title: "Before the PIN")
+        await sync.sync()
+        var held = personal
+        held.withheld = true
+        await server.setVaults([held])
+        await sync.sync()
+        #expect(try await repo.allCards().isEmpty)
+        await server.setVaults([personal])
+        await sync.sync()
+        #expect(try await repo.allCards().map(\.title) == ["Before the PIN"])
+    }
+
+    @Test func anEditDuringAPushThatLostIsKept() async throws {
+        let repo = try await makeRepo()
+        let note = try await repo.createNote(title: "Mine")
+        let sent = try #require(try await repo.pushable().first)
+        try await repo.update(note.id) { $0.title = "Mine, edited" }
+        let server = CardRecord(id: note.id, vault_id: "v1", updated_at: 99_999, deleted: false, seq: 4, payload: #"{"type":"note","title":"Theirs","content":{"type":"doc"},"tags":[]}"#)
+        #expect(try await repo.forceRemote(server, ifUpdatedAt: sent.updated_at) == false)
+        #expect(try await repo.card(note.id)?.title == "Mine, edited")
     }
 }

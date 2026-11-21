@@ -85,18 +85,6 @@ struct TodayList: View {
         let today = DateKey.today()
         let due = model.todos.filter { !$0.isDone && ($0.due.map { $0 <= today } ?? false) }.sorted { ($0.due ?? "") < ($1.due ?? "") }
         List(selection: $route) {
-            SwiftUI.Section("Diary") {
-                if model.diaryLocked {
-                    Label("Your diary is in a private vault. Unlock it in Diary.", systemImage: "lock").foregroundStyle(.secondary)
-                } else {
-                    let entry = model.diary[today]
-                    VStack(alignment: .leading) {
-                        Text(entry == nil ? "Write about today" : "Today's entry").font(.headline)
-                        if let entry { Text(Doc.plainText(entry.content)).lineLimit(2).foregroundStyle(.secondary) }
-                    }
-                    .tag(Route.diary(today))
-                }
-            }
             SwiftUI.Section("Due") {
                 AddTodoField(due: today)
                 ForEach(due) { TodoRow(card: $0).tag(Route.card($0.id)) }
@@ -170,30 +158,6 @@ struct TodosList: View {
                     ForEach(done) { TodoRow(card: $0).tag(Route.card($0.id)) }
                 } header: {
                     Text("Done (\(done.count))")
-                }
-            }
-        }
-    }
-}
-
-struct DiaryList: View {
-    @Environment(AppModel.self) private var model
-    @Binding var route: Route?
-
-    var body: some View {
-        if model.diaryLocked, let vault = model.diaryVault {
-            UnlockView(vault: vault)
-        } else {
-            let today = DateKey.today()
-            let dates = Set(model.diary.keys).union([today]).sorted(by: >)
-            List(selection: $route) {
-                ForEach(dates, id: \.self) { date in
-                    VStack(alignment: .leading, spacing: 2) {
-                        Text(DateKey.date(date)?.formatted(date: .complete, time: .omitted) ?? date).font(.headline)
-                        let text = model.diary[date].map { Doc.plainText($0.content) } ?? ""
-                        Text(text.isEmpty ? (date == today ? "Write about today" : "") : text).lineLimit(2).foregroundStyle(.secondary)
-                    }
-                    .tag(Route.diary(date))
                 }
             }
         }

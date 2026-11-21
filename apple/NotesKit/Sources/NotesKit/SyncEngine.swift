@@ -70,7 +70,12 @@ public final class SyncEngine {
             // Vaults first, so a card in a newly private vault is never shown before its lock is known.
             async let vaults = api.vaults()
             async let shared = api.shared()
-            if try await repo.applyAccess(vaults: try await vaults, shared: try await shared) { try await repo.setCursor(0) }
+            let access = try await shared
+            // Newly shared cards can be older than the cursor, so pull everything again when access grows.
+            if try await repo.applyAccess(vaults: try await vaults, shared: access.cards, vaultShares: access.vaults ?? []) {
+                try await repo.setCursor(0)
+            }
+            try await repo.putCommentCounts(access.comments ?? [])
             try await pull()
             if refused > 0 { next = .error } else { lastSyncedAt = Date() }
         } catch APIError.offline {
@@ -101,8 +106,10 @@ public final class SyncEngine {
                     try await repo.markSynced(id: local.id, updatedAt: local.updated_at, seq: seq)
                     try await repo.saveConflictCopy(loser: loser, winner: local)
                 case .serverWon(_, let server):
-                    try await repo.saveConflictCopy(loser: local, winner: server)
-                    try await repo.forceRemote(server)
+                    // An edit made while the push was on its way is newer than what lost: it stays, and the next push settles it.
+                    if try await repo.forceRemote(server, ifUpdatedAt: local.updated_at) {
+                        try await repo.saveConflictCopy(loser: local, winner: server)
+                    }
                 case .retry:
                     break
                 case .refused:
@@ -118,6 +125,7 @@ public final class SyncEngine {
         while true {
             let page = try await api.pull(since: since)
             try await repo.applyRemote(page.records)
+            if let gone = page.gone, !gone.isEmpty { try await repo.dropCards(gone) }
             since = page.next
             try await repo.setCursor(since)
             if !page.more { return }

@@ -41,6 +41,22 @@ public enum Doc {
         return ids
     }
 
+    public static func isDoc(_ node: JSONValue) -> Bool { node["type"]?.stringValue == "doc" }
+
+    /// A document with no words, no photos and no files.
+    public static func isBlank(_ node: JSONValue) -> Bool {
+        plainText(node).isEmpty && photoIds(node).isEmpty && fileIds(node).isEmpty
+    }
+
+    /// IDs of files attached in the body, in order: videos, voice messages and anything else.
+    public static func fileIds(_ node: JSONValue) -> [String] {
+        var ids: [String] = []
+        walk(node) { n in
+            if n["type"]?.stringValue == "file", let id = n["attrs"]?["id"]?.stringValue { ids.append(id) }
+        }
+        return ids
+    }
+
     public static func photoIds(_ node: JSONValue) -> [String] {
         var ids: [String] = []
         walk(node) { n in

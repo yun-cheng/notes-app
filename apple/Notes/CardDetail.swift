@@ -168,45 +168,10 @@ struct Backlinks: View {
             VStack(alignment: .leading, spacing: 6) {
                 Text(card.type == .tag ? "Tagged" : "Linked from").font(.headline)
                 ForEach(links.prefix(20)) { other in
-                    Button(other.displayTitle) { route = other.type == .diary ? .diary(other.date) : .card(other.id) }
+                    Button(other.displayTitle) { route = .card(other.id) }
                         .buttonStyle(.borderless)
                 }
             }
-        }
-    }
-}
-
-struct DiaryDetail: View {
-    @Environment(AppModel.self) private var model
-    @State var date: String
-
-    var body: some View {
-        if model.diaryLocked, let vault = model.diaryVault {
-            UnlockView(vault: vault)
-        } else {
-            let entry = model.diary[date]
-            VStack(alignment: .leading, spacing: 12) {
-                HStack {
-                    Button { date = DateKey.adding(-1, to: date) } label: { Image(systemName: "chevron.left") }
-                        .accessibilityLabel("Previous day")
-                    Text(DateKey.date(date)?.formatted(date: .complete, time: .omitted) ?? date).font(.title2.bold())
-                    Button { date = DateKey.adding(1, to: date) } label: { Image(systemName: "chevron.right") }
-                        .accessibilityLabel("Next day")
-                    Spacer()
-                    if date != DateKey.today() { Button("Today") { date = DateKey.today() } }
-                }
-                .buttonStyle(.borderless)
-                // Fixed now, so a save while switching days lands on the day being left.
-                let day = date
-                let existing = entry?.id
-                let vault = model.diaryVault?.id
-                DocEditor(content: entry?.content ?? Doc.empty, editable: entry.map(model.canEdit) ?? true, titleOf: model.title) { doc in
-                    model.perform { _ = try await $0.saveDiary(date: day, content: doc, existingId: existing, vaultId: existing == nil ? vault : nil) }
-                }
-                .id(date)
-            }
-            .padding()
-            .navigationTitle("Diary")
         }
     }
 }

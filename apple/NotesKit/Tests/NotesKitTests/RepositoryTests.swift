@@ -74,14 +74,36 @@ func makeRepo(_ clock: Clock = Clock()) async throws -> Repository {
         #expect(try await repo.pushable().map(\.id) == [named.id])
     }
 
-    @Test func diaryIdComesFromTheDate() async throws {
+    @Test func anOldDiaryCardReadsAsANoteOnItsDay() async throws {
         let repo = try await makeRepo()
-        let doc: JSONValue = ["type": "doc", "content": [["type": "paragraph", "content": [["type": "text", "text": "Sunny"]]]]]
-        let entry = try await repo.saveDiary(date: "2026-11-11", content: doc)
-        #expect(entry.id == "diary:v1:2026-11-11")
-        #expect(entry.date == "2026-11-11")
-        let again = try await repo.saveDiary(date: "2026-11-11", content: Doc.empty)
-        #expect(again.id == entry.id && again.content == Doc.empty)
+        var calendar = Calendar(identifier: .gregorian)
+        calendar.timeZone = TimeZone(identifier: "Asia/Taipei")!
+        // Started on the 10th, for the 11th: it reads as written at the end of the 11th.
+        let started = Int64(calendar.date(from: DateComponents(year: 2026, month: 11, day: 10, hour: 9))!.timeIntervalSince1970 * 1000)
+        let old: [String: JSONValue] = ["type": "diary", "date": "2026-11-11", "createdAt": .int(started), "title": "", "tags": [], "content": Doc.empty]
+        let modern = modernPayload(old, calendar: calendar)
+        #expect(modern["type"] == "note" && modern["date"] == nil)
+        let end = Int64(calendar.date(from: DateComponents(year: 2026, month: 11, day: 11, hour: 23, minute: 59, second: 59, nanosecond: 999_000_000))!.timeIntervalSince1970 * 1000)
+        #expect(modern["createdAt"]?.intValue == end)
+        // Written on its day: its time stays.
+        let sameDay = Int64(calendar.date(from: DateComponents(year: 2026, month: 11, day: 11, hour: 8))!.timeIntervalSince1970 * 1000)
+        #expect(modernPayload(["type": "diary", "date": "2026-11-11", "createdAt": .int(sameDay)], calendar: calendar)["createdAt"]?.intValue == sameDay)
+
+        let record = CardRecord(id: "diary:v1:2026-11-11", vault_id: "v1", updated_at: 5, deleted: false, seq: 2, payload: #"{"type":"diary","date":"2026-11-11","title":"","tags":[],"content":{"type":"doc"}}"#)
+        try await repo.applyRemote([record])
+        #expect(try await repo.card(record.id)?.type == .note)
+    }
+
+    @Test func pagesKeepBlankOnesInTheMiddleOnly() throws {
+        let words = { (text: String) -> JSONValue in ["type": "doc", "content": [["type": "paragraph", "content": [["type": "text", "text": .string(text)]]]]] }
+        var card = Card(id: "c", vaultId: "v1", updatedAt: 1, deleted: false, seq: 0, payload: ["type": "note", "back": words("Old back")])
+        #expect(card.turnPages == [words("Old back")])
+        card.morePages = [words("Two"), Doc.empty, words("Four"), Doc.empty]
+        #expect(card.morePages == [words("Two"), Doc.empty, words("Four")])
+        #expect(card.turnPages == [words("Two"), words("Four")])
+        #expect(card.payload["back"] == .null)
+        card.morePages = [Doc.empty]
+        #expect(card.payload["pages"] == .null)
     }
 
     @Test func remoteChangesNeverOverwriteUnpushedOnes() async throws {

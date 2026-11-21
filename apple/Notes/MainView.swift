@@ -2,7 +2,7 @@ import NotesKit
 import SwiftUI
 
 enum Section: String, Hashable, CaseIterable, Identifiable {
-    case today, notes, todos, diary, tags, trash
+    case today, notes, todos, tags, trash
     var id: Self { self }
 
     var title: String {
@@ -10,7 +10,6 @@ enum Section: String, Hashable, CaseIterable, Identifiable {
         case .today: "Today"
         case .notes: "Notes"
         case .todos: "Todos"
-        case .diary: "Diary"
         case .tags: "Tags"
         case .trash: "Trash"
         }
@@ -21,7 +20,6 @@ enum Section: String, Hashable, CaseIterable, Identifiable {
         case .today: "sun.max"
         case .notes: "note.text"
         case .todos: "checklist"
-        case .diary: "book.closed"
         case .tags: "tag"
         case .trash: "trash"
         }
@@ -31,7 +29,6 @@ enum Section: String, Hashable, CaseIterable, Identifiable {
 /// What the detail column shows.
 enum Route: Hashable {
     case card(String)
-    case diary(String)
 }
 
 extension AppModel {
@@ -65,7 +62,6 @@ struct MainView: View {
                 case .today: TodayList(route: $route)
                 case .notes: NotesList(route: $route)
                 case .todos: TodosList(route: $route)
-                case .diary: DiaryList(route: $route)
                 case .tags: TagsList(route: $route)
                 case .trash: TrashList(route: $route)
                 }
@@ -75,7 +71,6 @@ struct MainView: View {
             NavigationStack {
                 switch route {
                 case .card(let id): CardDetail(id: id, route: $route).id(id)
-                case .diary(let date): DiaryDetail(date: date).id(date)
                 case nil: ContentUnavailableView("Nothing selected", systemImage: "note.text", description: Text("Pick a card, or make a new one."))
                 }
             }

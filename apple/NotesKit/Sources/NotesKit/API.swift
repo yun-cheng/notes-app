@@ -13,7 +13,7 @@ public protocol SyncAPI: Sendable {
     func push(_ records: [CardRecord]) async throws -> [PushResult]
     func pull(since: Int64) async throws -> PullResponse
     func vaults() async throws -> [Vault]
-    func shared() async throws -> [SharedCard]
+    func shared() async throws -> SharedResponse
 }
 
 /// The notes server over HTTPS, signed in with a bearer token.
@@ -69,10 +69,7 @@ public struct ServerAPI: SyncAPI {
 
     public func vaults() async throws -> [Vault] { try await me().vaults }
 
-    public func shared() async throws -> [SharedCard] {
-        struct Response: Decodable { let cards: [SharedCard] }
-        return try await json(Response.self, "/shared").cards
-    }
+    public func shared() async throws -> SharedResponse { try await json(SharedResponse.self, "/shared") }
 
     // MARK: Signing in through the browser
 

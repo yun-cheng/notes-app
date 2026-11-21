@@ -35,18 +35,36 @@ public struct Vault: Codable, Sendable, Hashable, Identifiable {
     public var hidden: Bool
     public var role: Role?
     public var members: Int?
-    /// Set when the vault is end-to-end encrypted.
+    /// Set when the vault is end-to-end encrypted. Its owner gets the key wrapped under their PIN and the recovery
+    /// key; anyone else gets their own copy (`member`), or `member: null` before they ask for one.
     public var encryption: JSONValue?
+    /// For the owner of an encrypted vault: how many members asked for its key and wait to be let in.
+    public var waiting: Int?
+    /// Set by the owner of a vault locked by their PIN: everyone in it must lock it with a PIN of their own first.
+    /// `lock`, `pin` and `hidden` are this account's own, as each member's lock is theirs.
+    public var members_need_pin: Bool?
+    /// True while this account is a member who hasn't yet set the PIN the owner asks for, or hasn't been let in to an
+    /// encrypted vault: the server sends none of its cards.
+    public var withheld: Bool?
 
     public var isPrivate: Bool { lock == .pin }
     public var isEncrypted: Bool { encryption.map { !$0.isNull } ?? false }
     public var isOwner: Bool { (role ?? .owner) == .owner }
+    public var isWithheld: Bool { withheld ?? false }
+    public var needsMemberPins: Bool { members_need_pin ?? false }
+    /// This account's copy of the key is a member's, not the owner's.
+    public var isMemberCopy: Bool { encryption?.objectValue?.keys.contains("member") ?? false }
+    /// Every account's diary is a vault like any other, made at its first sign-in.
+    public func isDiary(of userId: String) -> Bool { id == "diary-\(userId)" }
+    public func isDefault(of userId: String) -> Bool { id == "vault-\(userId)" }
 }
 
 public struct Account: Codable, Sendable, Hashable {
     public var id: String
     public var email: String
     public var name: String
+    /// The Google profile photo's address, when there is one.
+    public var picture: String?
 }
 
 public struct SessionInfo: Codable, Sendable {
@@ -64,10 +82,44 @@ public struct SharedCard: Codable, Sendable, Hashable {
     public var shared_by: String
 }
 
+/// A card shared with everyone in one of this account's vaults. It shows in that vault as well as its own.
+public struct VaultShare: Codable, Sendable, Hashable {
+    public var card_id: String
+    public var vault_id: String
+}
+
+/// How many comments on a card are still open.
+public struct CommentCount: Codable, Sendable, Hashable {
+    public var card_id: String
+    public var open: Int
+}
+
+/// What `/shared` answers. Servers from before vault shares and comment counts leave them out.
+public struct SharedResponse: Codable, Sendable {
+    public var cards: [SharedCard]
+    public var vaults: [VaultShare]?
+    public var comments: [CommentCount]?
+
+    public init(cards: [SharedCard], vaults: [VaultShare]? = nil, comments: [CommentCount]? = nil) {
+        self.cards = cards
+        self.vaults = vaults
+        self.comments = comments
+    }
+}
+
 public struct PullResponse: Codable, Sendable {
     public var records: [CardRecord]
+    /// Cards that moved out of this account's reach, to remove from the device.
+    public var gone: [String]?
     public var next: Int64
     public var more: Bool
+
+    public init(records: [CardRecord], gone: [String]? = nil, next: Int64, more: Bool) {
+        self.records = records
+        self.gone = gone
+        self.next = next
+        self.more = more
+    }
 }
 
 public enum PushResult: Sendable {

@@ -33,14 +33,9 @@ public actor Repository {
 
     func decode(_ r: CardRecord) -> Card {
         if let payload = keyring.decode(r.payload, id: r.id, vaultId: r.vault_id) {
-            return Card(id: r.id, vaultId: r.vault_id, updatedAt: r.updated_at, deleted: r.deleted, seq: r.seq, payload: payload)
+            return Card(id: r.id, vaultId: r.vault_id, updatedAt: r.updated_at, deleted: r.deleted, seq: r.seq, payload: modernPayload(payload))
         }
-        // Diary IDs carry their date, so a locked day still knows it has an entry.
-        var payload: [String: JSONValue] = ["type": "note", "title": "", "tags": [], "content": Doc.empty]
-        if r.id.hasPrefix("diary:"), let date = r.id.split(separator: ":").last {
-            payload["type"] = "diary"
-            payload["date"] = .string(String(date))
-        }
+        let payload: [String: JSONValue] = ["type": "note", "title": "", "tags": [], "content": Doc.empty]
         return Card(id: r.id, vaultId: r.vault_id, updatedAt: r.updated_at, deleted: r.deleted, seq: r.seq, payload: payload, sealed: true)
     }
 
@@ -111,20 +106,6 @@ public actor Repository {
         }
     }
 
-    /// Diary entries are created on first write. Their ID comes from the date, so two devices can't make two for one day.
-    @discardableResult
-    public func saveDiary(date: String, content: JSONValue, existingId: String? = nil, vaultId: String? = nil) throws -> Card {
-        let target = try vaultId ?? defaultVaultId()
-        let id = existingId ?? diaryId(vaultId: target, date: date)
-        if var card = try card(id), !card.deleted, !card.sealed {
-            guard card.content != content else { return card }
-            card.content = content
-            card.updatedAt = now()
-            return try write(card)
-        }
-        return try write(newCard(id: id, vaultId: target, ["type": "diary", "date": .string(date), "content": content]))
-    }
-
     public func setDeleted(_ id: String, _ deleted: Bool) throws {
         try update(id) { $0.deleted = deleted }
     }
@@ -163,15 +144,33 @@ public actor Repository {
 
     public func pendingCount() throws -> Int { try pushable().count }
 
-    /// Takes the server's word on what this account can see. Cards it can no longer see leave the device.
-    /// Returns true if access grew, so everything should be pulled again.
-    public func applyAccess(vaults: [Vault], shared: [SharedCard]) throws -> Bool {
-        let oldShared = try store.getMeta("shared", as: [SharedCard].self) ?? []
-        let before = Set(try store.listVaults().map { "v:\($0.id)" } + oldShared.map { "c:\($0.card_id)" })
-        let after = vaults.map { "v:\($0.id)" } + shared.map { "c:\($0.card_id)" }
-        let vaultIds = Set(vaults.map(\.id))
+    /// Takes the server's word on what this account can see: its vaults, cards shared with it, and cards shared into
+    /// its vaults, which show there too. Cards it can no longer see leave the device. Returns true if access grew, so
+    /// everything should be pulled again.
+    public func applyAccess(vaults: [Vault], shared: [SharedCard], vaultShares: [VaultShare] = []) throws -> Bool {
+        if (try store.getMeta("vaultShares", as: [VaultShare].self) ?? []) != vaultShares { try store.setMeta("vaultShares", vaultShares) }
+        let known = try store.listVaults()
+        let knownShared = try store.getMeta("shared", as: [SharedCard].self) ?? []
+        // A vault withheld until this account sets the PIN its owner asks for is listed, but its cards aren't here.
+        let vaultIds = Set(vaults.filter { !$0.isWithheld }.map(\.id))
         let sharedIds = Set(shared.map(\.card_id))
-        let gone = try store.listCards().filter { !vaultIds.contains($0.vault_id) && !sharedIds.contains($0.id) }.map(\.id)
+        let outOfReach = { (r: CardRecord) in !vaultIds.contains(r.vault_id) && !sharedIds.contains(r.id) }
+
+        // Most syncs change nothing here; then only cards made here and not yet accepted can be out of reach.
+        if Set(known) == Set(vaults) && Set(knownShared) == Set(shared) {
+            let stray = try store.listDirty().filter(outOfReach).map(\.id)
+            if !stray.isEmpty {
+                try store.deleteCards(stray)
+                changeHandler?()
+            }
+            keyring.setVaults(vaults)
+            return false
+        }
+        // A withheld vault counts as reached once it no longer is, so its cards, older than the cursor, are pulled again.
+        let reached = { (list: [Vault]) in list.filter { !$0.isWithheld }.map { "v:\($0.id)" } }
+        let before = Set(reached(known) + knownShared.map { "c:\($0.card_id)" })
+        let after = reached(vaults) + shared.map { "c:\($0.card_id)" }
+        let gone = try store.listCards().filter(outOfReach).map(\.id)
         try store.replaceVaults(vaults)
         try store.setMeta("shared", shared)
         keyring.setVaults(vaults)
@@ -182,14 +181,38 @@ public actor Repository {
 
     public func sharedCards() throws -> [SharedCard] { try store.getMeta("shared", as: [SharedCard].self) ?? [] }
 
+    /// Cards shared into this account's vaults: each shows in that vault as well as its own.
+    public func vaultShares() throws -> [VaultShare] { try store.getMeta("vaultShares", as: [VaultShare].self) ?? [] }
+
+    /// Open comments on each card, from the last sync.
+    public func putCommentCounts(_ counts: [CommentCount]) throws {
+        if (try store.getMeta("commentCounts", as: [CommentCount].self) ?? []) != counts {
+            try store.setMeta("commentCounts", counts)
+            changeHandler?()
+        }
+    }
+
+    public func commentCounts() throws -> [String: Int] {
+        Dictionary((try store.getMeta("commentCounts", as: [CommentCount].self) ?? []).map { ($0.card_id, $0.open) }) { a, _ in a }
+    }
+
+    /// Removes cards that someone moved out of this account's reach.
+    public func dropCards(_ ids: [String]) throws {
+        try store.deleteCards(ids)
+        changeHandler?()
+    }
+
     public func applyRemote(_ records: [CardRecord]) throws {
         try store.applyRemote(records)
         if !records.isEmpty { changeHandler?() }
     }
 
-    public func forceRemote(_ record: CardRecord) throws {
-        try store.forceRemote(record)
-        changeHandler?()
+    /// Takes the server's version of a card. Given `ifUpdatedAt`, an edit made since then stays instead, and this says false.
+    @discardableResult
+    public func forceRemote(_ record: CardRecord, ifUpdatedAt: Int64? = nil) throws -> Bool {
+        let taken = try store.forceRemote(record, ifUpdatedAt: ifUpdatedAt)
+        if taken { changeHandler?() }
+        return taken
     }
 
     public func markSynced(id: String, updatedAt: Int64, seq: Int64) throws {
@@ -205,7 +228,7 @@ public actor Repository {
         let winner = decode(winnerRecord)
         if loser.sealed || loser.deleted || loser.type == .tag || loser.isBlank { return }
         if loser.title == winner.title && loser.content == winner.content { return }
-        let title = loser.type == .diary ? "Diary \(loser.date) (conflict copy)" : "\(loser.displayTitle) (conflict copy)"
+        let title = "\(loser.displayTitle) (conflict copy)"
         var fields: [String: JSONValue] = ["type": "note", "title": .string(title), "content": loser.content, "tags": .array(loser.tags.map(JSONValue.string))]
         fields["createdAt"] = .int(loser.createdAt)
         if loser.type == .todo {

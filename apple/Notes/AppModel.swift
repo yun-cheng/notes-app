@@ -136,24 +136,6 @@ final class AppModel {
 
     func card(_ id: String) -> Card? { cards.first { $0.id == id } }
 
-    /// The newest diary entry for each day.
-    var diary: [String: Card] {
-        var out: [String: Card] = [:]
-        for card in live where card.type == .diary {
-            if let seen = out[card.date], seen.updatedAt >= card.updatedAt { continue }
-            out[card.date] = card
-        }
-        return out
-    }
-
-    /// The vault new diary entries go into: this account's first private one, if there is one.
-    var diaryVault: Vault? {
-        vaults.filter { $0.isPrivate && $0.isOwner }.min { $0.created_at < $1.created_at }
-    }
-
-    /// The diary is locked when its vault is.
-    var diaryLocked: Bool { diaryVault.map { lockedVaults.contains($0.id) } ?? false }
-
     func vault(_ id: String) -> Vault? { vaults.first { $0.id == id } }
 
     /// Whether this account may change the card: its role in the card's vault, or the share that reached it.

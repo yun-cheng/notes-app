@@ -64,12 +64,17 @@ final class CardStore {
         }
     }
 
-    /// The server's version wins outright.
-    func forceRemote(_ record: CardRecord) throws {
+    /// The server's version wins. Given `ifUpdatedAt`, an edit made since then stays instead, and this says false.
+    @discardableResult
+    func forceRemote(_ record: CardRecord, ifUpdatedAt: Int64? = nil) throws -> Bool {
+        var taken = false
         try db.transaction {
+            if let ifUpdatedAt, try getCard(record.id)?.updated_at != ifUpdatedAt { return }
             try put(record)
             try db.execute("DELETE FROM dirty WHERE id = ?", [.text(record.id)])
+            taken = true
         }
+        return taken
     }
 
     /// The server has the version written at `updatedAt`. If the card changed again since, it stays dirty.

@@ -119,7 +119,10 @@ export class AttachmentKeeper {
   async replaced(pairs: Replaced[]): Promise<void> {
     if (!pairs.length) return;
     const kept = await this.pendingReplaced();
-    await this.meta.set(REPLACED, [...kept.filter((k) => !pairs.some((p) => p.id === k.id)), ...pairs]);
+    // A copy replaced in turn (encrypted, then not, before the first copy went up): the first waits for the newest.
+    const newest = new Map(pairs.map((p) => [p.id, p.by]));
+    const followed = kept.map((k) => (newest.has(k.by) ? { ...k, by: newest.get(k.by)! } : k));
+    await this.meta.set(REPLACED, [...followed.filter((k) => !newest.has(k.id)), ...pairs]);
   }
 
   private async pendingReplaced(): Promise<Replaced[]> {

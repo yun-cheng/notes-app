@@ -43,7 +43,9 @@ describe('AttachmentKeeper', () => {
   it('deletes one replaced by a sealed copy at once, once the copy is up and no entry holds it', async () => {
     const t = setup([holding('n', 'b2'), holding('m', 'b'), holding('k', 'a2')]);
     t.rows.push({ ...row('a2'), sealed: 1 });
-    await t.keeper.replaced([{ id: 'a', by: 'a2' }, { id: 'b', by: 'b2' }]);
+    // b was copied to b1, and b1, which never went up, to b2: b waits for b2.
+    await t.keeper.replaced([{ id: 'b', by: 'b1' }]);
+    await t.keeper.replaced([{ id: 'a', by: 'a2' }, { id: 'b1', by: 'b2' }]);
     await t.keeper.sweep(true);
     // a's copy is up and nothing holds a; b's copy isn't up yet, and an entry still holds b.
     expect(t.server.removed).toEqual(['a']);

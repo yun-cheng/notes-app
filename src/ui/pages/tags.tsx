@@ -12,6 +12,7 @@ import { useToast } from '../Toast';
 import { useUndo } from '../useUndo';
 import { usePopover } from '../usePopover';
 import { composing } from '../composing';
+import { usePermissions } from '../viewOnly';
 
 /** Moving tags in and out of groups, and making groups. A tag is in one group at most. */
 function useGroupEdits() {
@@ -131,6 +132,7 @@ export function TagsPage() {
                 >
                   <Icon name="pin" />
                 </button>
+                <TrashTag tag={t} />
               </div>
             ))}
           </div>
@@ -161,6 +163,29 @@ function TagColor({ tag }: { tag: TagCard }) {
         </div>
       )}
     </div>
+  );
+}
+
+/**
+ * Moves a tag to the Trash, with an undo. Entries keep it, unseen, so restoring it from the Trash puts it back on
+ * them; emptying the Trash takes it off for good.
+ */
+function TrashTag({ tag }: { tag: TagCard }) {
+  const { index, repo } = useCards();
+  const can = usePermissions();
+  const toast = useToast();
+  const { undoAction } = useUndo();
+  if (!can(tag).manage) return null;
+  const trash = () => {
+    const count = tagCount(index, tag.id);
+    const action = repo.action();
+    void repo.setDeleted(tag.id, true);
+    toast(`Moved ${tag.title} to Trash${count ? `, off ${count} ${count === 1 ? 'entry' : 'entries'}` : ''}`, { action: { label: 'Undo', run: () => void undoAction(action) } });
+  };
+  return (
+    <button type="button" className="icon-btn" aria-label={`Move ${tag.title} to Trash`} title="Move to Trash" onClick={trash}>
+      <Icon name="trash" />
+    </button>
   );
 }
 
@@ -242,6 +267,7 @@ function GroupBlock({ group }: { group: TagGroup }) {
               <button type="button" className="icon-btn" aria-label={`Take ${t.title} out of ${group.title}`} title="Take out of the group (the tag stays)" onClick={() => edits.removeFrom(group, t.id)}>
                 ×
               </button>
+              <TrashTag tag={t} />
             </div>
           ))}
         </div>

@@ -71,6 +71,17 @@ public struct ServerAPI: SyncAPI {
 
     public func shared() async throws -> SharedResponse { try await json(SharedResponse.self, "/shared") }
 
+    // MARK: Photos and files
+
+    /// A photo's or file's bytes, as stored (sealed, in an encrypted vault). Nil when the server has none.
+    public func attachment(_ id: String) async throws -> Data? {
+        let path = "/attachments/" + (id.addingPercentEncoding(withAllowedCharacters: .urlPathAllowed) ?? id)
+        let (data, status) = try await send(path)
+        if [404, 409, 503].contains(status) { return nil }
+        guard (200..<300).contains(status) else { throw APIError.status(status) }
+        return data
+    }
+
     // MARK: Signing in through the browser
 
     public struct Pairing: Decodable, Sendable {

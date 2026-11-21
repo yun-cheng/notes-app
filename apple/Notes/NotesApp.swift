@@ -1,5 +1,8 @@
 import NotesKit
 import SwiftUI
+#if os(macOS)
+import AppKit
+#endif
 
 @main
 struct NotesApp: App {
@@ -20,7 +23,26 @@ struct NotesApp: App {
         .defaultSize(width: 1100, height: 740)
         .commands {
             CommandGroup(replacing: .newItem) {
-                Button("New Note") { model.requestNewNote() }.keyboardShortcut("n")
+                Button("New Note") {
+                    model.page = .journal(StreamFilter())
+                    model.focusBox += 1
+                }
+                .keyboardShortcut("n")
+            }
+            // Cmd+Z undoes the last change anywhere in the app, as on the web, except while typing in a text field,
+            // which keeps its own undo.
+            CommandGroup(replacing: .undoRedo) {
+                Button("Undo") {
+                    if let text = NSApp.keyWindow?.firstResponder as? NSTextView, text.isEditable { text.undoManager?.undo() } else { model.undo() }
+                }
+                .keyboardShortcut("z")
+                Button("Redo") {
+                    if let text = NSApp.keyWindow?.firstResponder as? NSTextView, text.isEditable { text.undoManager?.redo() } else { model.redo() }
+                }
+                .keyboardShortcut("z", modifiers: [.command, .shift])
+            }
+            CommandGroup(after: .textEditing) {
+                Button("Search…") { model.showPalette = true }.keyboardShortcut("k")
             }
         }
         #endif
@@ -35,16 +57,6 @@ struct RootView: View {
         case .loading: ProgressView()
         case .signedOut: SignInView()
         case .signedIn: MainView().task { await model.syncPeriodically() }
-        }
-    }
-}
-
-extension AppModel {
-    /// Once a minute while the app is open.
-    func syncPeriodically() async {
-        while !Task.isCancelled {
-            try? await Task.sleep(for: .seconds(60))
-            await sync?.sync()
         }
     }
 }

@@ -2,7 +2,7 @@ import Foundation
 import NotesKit
 import Observation
 
-/// Everything the app's screens read: the account, its vaults and cards, and sync.
+/// Everything the app's screens read: the account, its vaults and cards, and sync. As the web app's `CardsContext`.
 @MainActor
 @Observable
 final class AppModel {
@@ -12,13 +12,33 @@ final class AppModel {
     private(set) var account: Account?
     private(set) var vaults: [Vault] = []
     private(set) var shared: [SharedCard] = []
-    /// Every card on the device that isn't in a locked vault.
+    /// Every card on the device, sealed ones too: `index` keeps locked ones out of every list.
     private(set) var cards: [Card] = []
+    /// Derived from the cards, with locked vaults' cards left out.
+    private(set) var index = CardIndex()
+    /// The vaults each card is shared into besides its own.
+    private(set) var sharedInto: SharedInto = [:]
+    /// Open comments on each card.
+    private(set) var commentCounts: [String: Int] = [:]
     /// Private vaults opened with their PIN on this device, until the app locks them again.
     private(set) var openVaults: Set<String> = []
     private(set) var sync: SyncEngine?
-    /// Bumped by the Mac's New Note command.
-    var newNoteRequests = 0
+    /// What a toast says, with an action to undo, for a moment.
+    var toast: Toast?
+    /// The page shown, and the entry open over it.
+    var page: Page = .journal(StreamFilter())
+    var openEntry: String?
+    /// A panel an entry's menu opened: its tags, due date, vaults or sharing.
+    var panel: EntryPanel?
+    /// The entry the journal box saved last, to scroll to.
+    var lastSaved: String?
+    /// Set by the Mac's New Note command and the sidebar's button: the journal box takes focus.
+    var focusBox = 0
+    /// The search over everything (Cmd+K).
+    var showPalette = false
+    /// View only, for reading without changing anything by mistake.
+    var viewOnly = false
+    private(set) var today = DateKey.today()
 
     let repo: Repository
     private let site: URL
@@ -74,8 +94,10 @@ final class AppModel {
         account = nil
         sync = nil
         cards = []
+        index = CardIndex()
         vaults = []
         openVaults = []
+        page = .journal(StreamFilter())
         phase = .signedOut
         Task {
             if let token { await ServerAPI(site: site, token: token).signOut() }
@@ -84,6 +106,8 @@ final class AppModel {
     }
 
     var api: ServerAPI { ServerAPI(site: site, token: Keychain.token()) }
+    var siteURL: URL { site }
+    var accountId: String { account?.id ?? "" }
 
     // MARK: Cards
 
@@ -100,12 +124,18 @@ final class AppModel {
 
     func refresh() async {
         guard let all = try? await repo.allCards(), let vaults = try? await repo.vaults() else { return }
+        today = DateKey.today()
         self.vaults = vaults.sorted { ($0.created_at, $0.id) < ($1.created_at, $1.id) }
         shared = (try? await repo.sharedCards()) ?? []
-        let locked = lockedVaults
-        cards = all.filter { !locked.contains($0.vaultId) && !$0.sealed }
+        var into: SharedInto = [:]
+        for share in (try? await repo.vaultShares()) ?? [] { into[share.card_id, default: []].append(share.vault_id) }
+        sharedInto = into
+        commentCounts = (try? await repo.commentCounts()) ?? [:]
+        cards = all
+        index = CardIndex(all, locked: lockedVaults)
     }
 
+    /// Opens a private vault on this device: its cards show until the app locks again.
     func open(_ vaultId: String) async {
         openVaults.insert(vaultId)
         // Edits made before this device knew the vault's key are encrypted and pushed now.
@@ -125,28 +155,39 @@ final class AppModel {
         Set(vaults.filter { $0.isPrivate && !openVaults.contains($0.id) }.map(\.id))
     }
 
-    var live: [Card] {
-        cards.filter { !$0.deleted && !$0.isBlank }.sorted { $0.updatedAt > $1.updatedAt }
+    func card(_ id: String) -> Card? { index.byId[id] }
+    func vault(_ id: String) -> Vault? { vaults.first { $0.id == id } }
+    var mainVault: Vault? { vaults.first { $0.isDefault(of: accountId) } ?? vaults.first }
+    var diaryVault: Vault? { vaults.first { $0.isDiary(of: accountId) } }
+
+    /// Whether this account may change the card: its role in the card's vault, or the share that reached it, and not
+    /// set to view only.
+    func canEdit(_ card: Card) -> Bool {
+        if viewOnly || card.viewOnly { return false }
+        return canWrite(card)
     }
 
-    var notes: [Card] { live.filter { $0.type == .note } }
-    var todos: [Card] { live.filter { $0.type == .todo } }
-    var tags: [Card] { live.filter { $0.type == .tag }.sorted { $0.title.localizedCompare($1.title) == .orderedAscending } }
-    var trash: [Card] { cards.filter(\.deleted).sorted { $0.updatedAt > $1.updatedAt } }
-
-    func card(_ id: String) -> Card? { cards.first { $0.id == id } }
-
-    func vault(_ id: String) -> Vault? { vaults.first { $0.id == id } }
-
-    /// Whether this account may change the card: its role in the card's vault, or the share that reached it.
-    func canEdit(_ card: Card) -> Bool {
+    /// Whether this account could change it, view only aside: who may turn the card's view only on and off.
+    func canWrite(_ card: Card) -> Bool {
         if let vault = vault(card.vaultId) { return vault.role != .viewer }
         return shared.first { $0.card_id == card.id }?.role == .edit
     }
 
-    func title(of id: String, fallback: String) -> String {
-        guard let card = card(id) else { return "Not shared" }
-        return card.deleted ? fallback : card.displayTitle
+    /// Trash it or move it to another vault: members of its vault only.
+    func canManage(_ card: Card) -> Bool {
+        guard !viewOnly, !card.viewOnly, let vault = vault(card.vaultId) else { return false }
+        return vault.role != .viewer
+    }
+
+    func title(of id: String, fallback: String) -> String { index.linkTitle(id, fallback: fallback) }
+
+    /// The names of the vaults an entry is in: its own, then those it's shared into.
+    func vaultNames(_ card: Card) -> [String] {
+        ([card.vaultId] + (sharedInto[card.id] ?? [])).compactMap { vault($0)?.name }
+    }
+
+    var saveContext: SaveContext {
+        SaveContext(accountId: accountId, vaults: vaults, locked: lockedVaults, index: index, sharedInto: sharedInto)
     }
 
     // MARK: Changes
@@ -154,6 +195,87 @@ final class AppModel {
     func perform(_ work: @escaping @Sendable (Repository) async throws -> Void) {
         Task {
             do { try await work(repo) } catch { print("Change failed: \(error)") }
+        }
+    }
+
+    /// Shows a toast, with Undo when `undoable`, which takes back the last action.
+    func say(_ message: String, undoable: Bool = false) {
+        toast = Toast(message: message, undo: undoable)
+    }
+
+    func undo() {
+        perform { repo in
+            let n = try await repo.undo()
+            await MainActor.run { if n == 0 { self.say("Nothing to undo") } }
+        }
+    }
+
+    func redo() {
+        perform { repo in
+            let n = try await repo.redo()
+            await MainActor.run { if n == 0 { self.say("Nothing to redo") } }
+        }
+    }
+
+    /// Ticks a todo or opens it again, saying when a repeating one is due next.
+    func setDone(_ card: Card, _ done: Bool) {
+        let id = card.id
+        let today = today
+        perform { repo in
+            if let next = try await repo.setDone(id, done, today: today) {
+                await MainActor.run { self.say("Next due \(DateKey.relativeDayInSentence(next, today: today))", undoable: true) }
+            }
+        }
+    }
+
+    /// Saves typed text as entries. Returns false when a vault they need is locked, leaving the text to keep.
+    func save(_ entries: [Entry], _ opts: SaveOptions) async -> SaveResult {
+        guard !viewOnly else {
+            say("View only is on. Turn it off to change anything.")
+            return .nothing
+        }
+        let context = saveContext
+        do {
+            return try await repo.save(entries, opts, in: context)
+        } catch {
+            say("Couldn't save: \(error.localizedDescription)")
+            return .nothing
+        }
+    }
+}
+
+struct Toast: Equatable, Identifiable {
+    let id = UUID()
+    var message: String
+    var undo: Bool
+}
+
+/// What the main column shows.
+enum Page: Hashable {
+    case journal(StreamFilter)
+    case trash
+    case history
+    case calendar
+    case timeline
+    case photos
+    case links
+    case files
+    case tags
+    case vaults
+    case settings
+
+    var filter: StreamFilter? {
+        if case .journal(let f) = self { return f }
+        return nil
+    }
+}
+
+extension AppModel {
+    /// Once a minute while the app is open.
+    func syncPeriodically() async {
+        while !Task.isCancelled {
+            try? await Task.sleep(for: .seconds(60))
+            await sync?.sync()
         }
     }
 }

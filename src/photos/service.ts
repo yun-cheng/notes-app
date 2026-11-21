@@ -74,8 +74,8 @@ export class PhotoService {
   private urls = new Map<string, Promise<string | null>>();
   /** The vault each sealed one shown here is in, so it stops showing once that vault locks. */
   private opened = new Map<string, string>();
-  /** Whether each the server has, not here, is sealed, as found from its start. */
-  private sealedThere = new Map<string, Promise<boolean>>();
+  /** Whether each the server has is sealed, from the server's list or else its start. */
+  private sealedThere = new Map<string, boolean>();
 
   constructor(
     private store: PhotoStore,
@@ -120,6 +120,8 @@ export class PhotoService {
     if (!key) return null;
     const opened = await openAttachment(key, blob, id);
     if (!opened) return blob;
+    // Locked while it was being opened: it isn't shown, or kept in memory.
+    if (!this.keys?.key(vaultId)) return null;
     this.opened.set(id, vaultId);
     return opened.blob;
   }
@@ -161,18 +163,24 @@ export class PhotoService {
     return true;
   }
 
-  /** Whether one the server has, and this device doesn't, is sealed: from its first bytes, asked once. */
-  private isSealedThere(id: string): Promise<boolean> {
-    if (!this.keys?.anyEncrypted() || !this.transport.start) return Promise.resolve(false);
-    let found = this.sealedThere.get(id);
-    if (!found) {
-      found = this.transport.start(id, HEADER_BYTES).then(
-        (start) => !!start && !!readHeader(start),
-        () => false,
-      );
-      this.sealedThere.set(id, found);
-    }
-    return found;
+  /** Notes which of the server's are sealed (`GET /attachments`), so a video's start needn't be fetched to tell. */
+  learn(stored: readonly { id: string; sealed?: number }[]) {
+    for (const a of stored) this.sealedThere.set(a.id, !!a.sealed);
+  }
+
+  /**
+   * Whether one the server has, and this device doesn't, is sealed: from the server's list, or else its first bytes.
+   * Only an answer the server gave is kept: offline, or not uploaded yet, it's asked again next time.
+   */
+  private async isSealedThere(id: string): Promise<boolean> {
+    if (!this.keys?.anyEncrypted() || !this.transport.start) return false;
+    const known = this.sealedThere.get(id);
+    if (known !== undefined) return known;
+    const start = await this.transport.start(id, HEADER_BYTES).catch(() => null);
+    if (!start) return false;
+    const sealed = !!readHeader(start);
+    this.sealedThere.set(id, sealed);
+    return sealed;
   }
 
   /**

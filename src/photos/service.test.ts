@@ -90,6 +90,25 @@ describe('PhotoService in an encrypted vault', () => {
   });
 });
 
+describe('telling a sealed video on the server', () => {
+  it('asks again after no answer, and not at all for one the server listed', async () => {
+    const { keys } = await diaryKeys();
+    const starts: string[] = [];
+    let answer: Uint8Array | null = null;
+    const transport = { upload: async () => 'ok' as const, download: async () => null, start: async (id: string) => (starts.push(id), answer), address: (id: string) => `/api/attachments/${id}` };
+    const photos = new PhotoService(new MemoryPhotoStore(), transport, async () => ({ blob: image(), mime: 'image/jpeg', width: 1, height: 1 }), undefined, undefined, undefined, keys);
+    // Not uploaded yet: streamed for now, and asked again next time rather than taken as not sealed for good.
+    expect(await photos.playAddress('v1')).toBe('/api/attachments/v1');
+    answer = new Uint8Array([1, 2, 3]);
+    expect(await photos.playAddress('v1')).toBe('/api/attachments/v1');
+    expect(await photos.playAddress('v1')).toBe('/api/attachments/v1');
+    expect(starts).toEqual(['v1', 'v1']);
+    photos.learn([{ id: 'v2', sealed: 0 }]);
+    expect(await photos.playAddress('v2')).toBe('/api/attachments/v2');
+    expect(starts).toEqual(['v1', 'v1']);
+  });
+});
+
 describe('PhotoService', () => {
   it('keeps a file as it is, under its name, and uploads it with the photos', async () => {
     const { photos, store, uploads } = fixture();

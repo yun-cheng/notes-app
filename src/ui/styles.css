@@ -1257,7 +1257,9 @@ button.reaction:hover { border-color: var(--muted); color: var(--text); }
 .note-sheet__reactions { display: flex; margin: 8px 0 0; }
 .note-sheet__reactions .reaction { height: 28px; padding: 0 10px 0 8px; border-radius: 14px; font-size: 13px; }
 .note-sheet__reactions .reaction__emoji { font-size: 16px; }
-.reaction--add { padding: 0 8px; border-style: dashed; color: var(--muted); }
+/* The sheet's smiley that adds one: round and borderless, as a bubble's is, not a dashed chip. */
+.note-sheet__reactions .reaction--add { justify-content: center; width: 28px; padding: 0; border-color: transparent; border-radius: 50%; background: none; color: var(--muted); }
+.note-sheet__reactions .reaction--add:hover, .note-sheet__reactions .is-open > .reaction--add { border-color: transparent; background: color-mix(in srgb, var(--text) 12%, transparent); color: var(--text); }
 .style-menu.reaction-menu { width: 296px; padding: 6px; }
 .reaction-picker { display: flex; flex-direction: column; gap: 6px; }
 .reaction-picker__quick { display: flex; justify-content: space-between; }

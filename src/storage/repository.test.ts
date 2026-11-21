@@ -290,3 +290,15 @@ describe('device', () => {
     expect(await repo.deviceId()).toMatch(/^id\d+$/);
   });
 });
+
+describe('rewrite', () => {
+  it('changes a card from what it holds when it lands, as upkeep that leaves nothing to undo', async () => {
+    const card = await repo.createNote({ title: 'Lake', content: doc('old photo') });
+    // An edit on its way lands first; the rewrite sees it, and changes only what it means to.
+    void repo.update(card.id, { title: 'Lake day' });
+    const after = await repo.rewrite(card.id, () => ({ content: doc('new photo') }));
+    expect(after).toMatchObject({ title: 'Lake day', content: doc('new photo') });
+    expect(JSON.stringify(await store.listChanges())).not.toContain('new photo');
+    expect(await repo.rewrite(card.id, () => null)).toMatchObject({ content: doc('new photo') });
+  });
+});

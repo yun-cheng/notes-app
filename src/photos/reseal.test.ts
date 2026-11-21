@@ -13,7 +13,7 @@ const video = (id: string, poster: string | null) => ({ type: 'file', attrs: { i
 function setup(cards: Card[], server: StoredAttachment[], local: PhotoRecord[] = [], refuse: string[] = []) {
   const copies: [string, string, boolean, unknown][] = [];
   const updates: [string, CardPatch][] = [];
-  const replaced: { id: string; by: string }[] = [];
+  const replaced: { id: string; by: string | null }[] = [];
   const forgotten: string[] = [];
   let n = 0;
   const deps: ResealDeps = {
@@ -25,7 +25,10 @@ function setup(cards: Card[], server: StoredAttachment[], local: PhotoRecord[] =
       copies.push([id, by, seal, facts]);
       return true;
     },
-    update: async (id, patch) => void updates.push([id, patch]),
+    rewrite: async (id, change) => {
+      const patch = change(cards.find((c) => c.id === id)!);
+      if (patch) updates.push([id, patch]);
+    },
     replaced: async (pairs) => void replaced.push(...pairs),
     forget: async (id) => void forgotten.push(id),
     newId: () => `new-${++n}`,
@@ -62,6 +65,20 @@ describe('resealing a vault’s photos and files', () => {
     // One kept only here, never uploaded, is forgotten for its copy, so it never goes up sealed.
     expect(t.forgotten).toEqual(['p5']);
     expect(t.updates).toEqual([['n1', { content: doc(photo('new-1'), photo('p2'), photo('p3'), photo('p4'), photo('new-3')) }]]);
+  });
+
+  it('keeps an edit made to an entry while its photos were being copied', async () => {
+    const swam = { type: 'paragraph', content: [{ type: 'text', text: 'Swam to the island.' }] };
+    const cards: Card[] = [note('n1', 'Day', { vaultId: 'diary', content: doc(photo('p1')) })];
+    const t = setup(cards, [stored('p1')]);
+    const copy = t.deps.copyAs;
+    t.deps.copyAs = async (...args) => {
+      // Typed while a long video was being sealed.
+      cards[0] = { ...cards[0], content: doc(photo('p1'), swam) };
+      return copy(...args);
+    };
+    await resealVaults(t.deps, [{ vaultId: 'diary', seal: true }]);
+    expect(t.updates).toEqual([['n1', { content: doc(photo('new-1'), swam) }]]);
   });
 
   it('counts one sealed for another vault as not sealed for this one', async () => {

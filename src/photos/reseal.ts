@@ -20,9 +20,10 @@ export interface ResealDeps {
   stored: () => Promise<StoredAttachment[]>;
   local: (id: string) => Promise<PhotoRecord | undefined>;
   copyAs: (id: string, by: string, vaultId: string, seal: boolean, facts: { file: boolean } & Partial<Omit<SealedFacts, 'size'>>) => Promise<boolean>;
-  update: (id: string, patch: CardPatch) => Promise<unknown>;
-  /** Notes the old ones, each with the copy that replaced it, to delete once the copy is up. */
-  replaced: (pairs: { id: string; by: string }[]) => Promise<void>;
+  /** Changes a card from what's stored at that moment, not from what was read before (`CardRepository.rewrite`). */
+  rewrite: (id: string, change: (card: Card) => CardPatch | null) => Promise<unknown>;
+  /** Notes the old ones, each with the copy that replaced it (null for a still dropped), to delete once the copy is up. */
+  replaced: (pairs: { id: string; by: string | null }[]) => Promise<void>;
   /** Forgets one kept only here, never uploaded: the copy replaces it, and it mustn't go up as it was. */
   forget: (id: string) => Promise<void>;
   newId?: () => string;
@@ -53,6 +54,15 @@ export function withCopies(doc: JSONNode, renamed: ReadonlyMap<string, string | 
   return copy;
 }
 
+/** A card's change to hold the copies in `renamed`, on every page; null when it holds none of them. */
+function withCopiesIn(card: Card, renamed: ReadonlyMap<string, string | null>): CardPatch | null {
+  if (card.type === 'tag') return null;
+  const content = withCopies(card.content, renamed);
+  const pages = storedPages(card).map((p) => withCopies(p, renamed));
+  if (JSON.stringify([content, pages]) === JSON.stringify([card.content, storedPages(card)])) return null;
+  return { content, ...(Array.isArray(card.pages) ? { pages } : pages.length ? { back: pages[0] } : {}) };
+}
+
 /** What's left of a vault to do: ones that need copying but couldn't be had now, and ones whose kind can't be told yet. */
 export interface ResealLeft {
   /** Known to need copying, but not to be had now: offline, or sealed in a vault locked here. */
@@ -73,17 +83,17 @@ export async function resealVaults(deps: ResealDeps, vaults: { vaultId: string; 
   let stored: Map<string, StoredAttachment> | null = null;
   for (const { vaultId, seal } of vaults) {
     const cards = all.filter((c) => c.vaultId === vaultId);
-    if (!heldIn(cards).size) continue;
+    const held = heldIn(cards);
+    if (!held.size) continue;
     stored ??= new Map((await deps.stored()).map((a) => [a.id, a]));
-    const done = await resealOne(deps, cards, stored, vaultId, seal);
+    const done = await resealOne(deps, cards, held, stored, vaultId, seal);
     left.failed += done.failed;
     left.unknown += done.unknown;
   }
   return left;
 }
 
-async function resealOne(deps: ResealDeps, cards: Card[], stored: ReadonlyMap<string, StoredAttachment>, vaultId: string, seal: boolean): Promise<ResealLeft> {
-  const held = heldIn(cards);
+async function resealOne(deps: ResealDeps, cards: Card[], held: Map<string, FileInfo | null>, stored: ReadonlyMap<string, StoredAttachment>, vaultId: string, seal: boolean): Promise<ResealLeft> {
   /** Whether it needs copying; null when that can't be told now. */
   const wrong = async (id: string): Promise<boolean | null> => {
     const local = await deps.local(id);
@@ -112,15 +122,9 @@ async function resealOne(deps: ResealDeps, cards: Card[], stored: ReadonlyMap<st
     if (file?.poster) renamed.set(file.poster, (await deps.copyAs(file.poster, posterId(by), vaultId, seal, { file: false })) ? posterId(by) : null);
   }
   if (!renamed.size) return left;
-  for (const card of cards) {
-    if (card.type === 'tag') continue;
-    const content = withCopies(card.content, renamed);
-    const pages = storedPages(card).map((p) => withCopies(p, renamed));
-    const same = JSON.stringify([content, pages]) === JSON.stringify([card.content, storedPages(card)]);
-    if (same) continue;
-    await deps.update(card.id, { content, ...(Array.isArray(card.pages) ? { pages } : pages.length ? { back: pages[0] } : {}) });
-  }
-  await deps.replaced([...renamed].map(([id, by]) => ({ id, by: by ?? '' })));
+  // Copying can take minutes (a long video), so each card changes from what it holds then, with any edit made meanwhile.
+  for (const { id } of cards) await deps.rewrite(id, (card) => withCopiesIn(card, renamed));
+  await deps.replaced([...renamed].map(([id, by]) => ({ id, by })));
   for (const id of renamed.keys()) if ((await deps.local(id))?.uploaded === 0) await deps.forget(id);
   return left;
 }

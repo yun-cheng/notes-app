@@ -178,6 +178,20 @@ export class CardRepository {
     return this.encryptedIds.has(id) || (!!vaultId && !!this.codec.isEncrypted?.(vaultId));
   }
 
+  /**
+   * Changes a card as `change` says of it as it's stored at that moment, in turn with every other write, so nothing
+   * written meanwhile is lost; and not as anyone's action: it's the app's own upkeep (holding a photo's copy in place
+   * of the photo), not a change to undo. `change` answers null to leave it as it is.
+   */
+  rewrite(id: string, change: (card: Card) => CardPatch | null): Promise<Card | undefined> {
+    return this.enqueue(async () => {
+      const card = await this.read(id);
+      if (!card || isSealed(card)) return card;
+      const patch = change(card);
+      return patch ? this.write({ ...card, ...patch, updatedAt: this.now() } as Card) : card;
+    });
+  }
+
   /** Stores every readable card in a vault again, after its encryption was turned on or off. */
   recodeVault(vaultId: string): Promise<number> {
     return this.enqueue(async () => {

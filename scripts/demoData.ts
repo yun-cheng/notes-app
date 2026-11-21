@@ -4,7 +4,7 @@
  * Topics), todos for the board by todo state, notes with headings, lists, checklists, quotes, code, web links and links to each other, todos
  * overdue, due today at a time, upcoming, undated, repeating, waiting, done and archived, entries tinted, set to view
  * only or with their own preview style, photos of every shape, one on a card's back page (served by the dev server from scripts/demoPhotos),
- * files attached (a PDF, a CSV, and a text file on the publicly linked recipe, from scripts/demoFiles), videos with their stills (one in the coast trip, one on the recipe, one in the Trash), voice messages (one transcribed with a quiet one just after it, one not yet, one in the Diary, which isn't sent to be), a private and encrypted Diary vault (its photo and voice message sealed with its key), a Health vault locked by the PIN but not encrypted and shared with Sam, who needs a PIN of their own to see it, Sam's Surprise party vault, which shows nothing until you set your own PIN, a vault shared with Sam and one Sam
+ * files attached (a PDF, a CSV, and a text file on the publicly linked recipe, from scripts/demoFiles), videos with their stills (one in the coast trip, one on the recipe, one in the Trash), voice messages (one transcribed with a quiet one just after it, one not yet, one in the Diary, which isn't sent to be), a private and encrypted Diary vault (its photo and voice message sealed with its key), a Health vault locked by the PIN but not encrypted and shared with Sam, who needs a PIN of their own to see it, Sam's Surprise party vault, which shows nothing until you set your own PIN, encrypted vaults shared both ways (Sam's Just us, which let you in, and your Gift ideas, where Sam waits to be let in), a vault shared with Sam and one Sam
  * shares to view, a card also in another vault, a note Sam shares, a public link, comments open and resolved, and
  * version history from more than one device, and entries going back three years. Two entries carry nearly all of it at once, to see how a full one looks:
  * a launch plan note and a moving todo.
@@ -14,7 +14,7 @@
 import { execFileSync } from 'node:child_process';
 import { mkdirSync, readdirSync, readFileSync, statSync, writeFileSync } from 'node:fs';
 import { sealAttachment } from '../src/crypto/attachmentSeal';
-import { createVaultKey, encryptPayload, unlockWithPin } from '../src/crypto/vaultKeys';
+import { createVaultKey, encryptComment, encryptPayload, grantVaultKey, requestVaultKey, unlockWithPin } from '../src/crypto/vaultKeys';
 import { addDays, toDateKey } from '../src/domain/dates';
 import { hashPin } from '../src/domain/pin';
 import type { CardColor, CardPayload, CardRecord, JSONNode, NoteCard, Repeat, Vault } from '../src/domain/types';
@@ -256,6 +256,81 @@ const RETIRED: [string, string][] = [
   ['demo-tag-doing', 'Doing'],
   ['demo-tag-done', 'Done'],
 ];
+
+/**
+ * An encrypted vault of `owner`'s, made with the demo PIN, and its key. One whose PIN was changed by hand is left as it
+ * is, without the demo's entries (null).
+ */
+async function encryptedVault(owner: Person, name: string): Promise<{ vault: Vault; key: CryptoKey } | null> {
+  const { vaults } = await call<SessionInfo>(owner, '/me');
+  const found = vaults.find((v) => v.name === name && v.owner_id === owner.id);
+  if (found?.encryption) {
+    const key = await unlockWithPin(found.encryption, DEMO_PIN, found.id);
+    return key && { vault: found, key };
+  }
+  const sealed = await createVaultKey(DEMO_PIN);
+  const vault = found
+    ? await call<Vault>(owner, `/vaults/${found.id}`, { pin: await hashPin(DEMO_PIN), encryption: sealed.encryption }, 'PATCH')
+    : await call<Vault>(owner, '/vaults', { name, pin: await hashPin(DEMO_PIN), encryption: sealed.encryption });
+  return { vault, key: sealed.key };
+}
+
+/** `member` sets the demo PIN as their own in an encrypted vault, which asks its owner for its key. */
+async function askForKey(member: Person, vaultId: string) {
+  const asked = await requestVaultKey(DEMO_PIN);
+  await call(member, `/vaults/${vaultId}`, { pin: await hashPin(DEMO_PIN), encryption: { version: 1, member: asked } }, 'PATCH');
+  return asked;
+}
+
+/**
+ * Encrypted vaults shared both ways. Sam's "Just us" has let you in, with your own copy of its key under the demo
+ * PIN, an entry of Sam's and a comment sealed with its key. Your "Gift ideas" has Sam waiting to be let in, so its
+ * page shows the code to compare and Let in. A rerun asks for both keys again.
+ */
+async function sharedEncrypted(samDraft: (id: string, vaultId: string, when: number, payload: CardPayload) => Draft) {
+  const justUs = await encryptedVault(SAM, 'Just us');
+  if (justUs) {
+    const { vault, key } = justUs;
+    await call(SAM, `/vaults/${vault.id}/members`, { email: DEMO.email, role: 'editor' });
+    const asked = await askForKey(DEMO, vault.id);
+    await call(SAM, `/vaults/${vault.id}/members/${DEMO.id}/key`, { public: asked.public, grant: await grantVaultKey(key, asked.public, vault.id) }, 'PUT');
+    await push(
+      SAM,
+      [
+        samDraft('demo-sam-anniversary', vault.id, at(2, 21, 0), {
+          type: 'note',
+          title: 'Anniversary',
+          tags: [],
+          createdAt: at(2, 21, 0),
+          content: doc(p('Table booked at the harbour place, 8 pm on the 14th.'), checklist(['Pick up the frame from the shop', false], ['Card', true])),
+        }),
+      ],
+      new Map([[vault.id, key]]),
+    );
+    const sealedComment = await encryptComment(key, 'Don’t tell anyone about the frame!', 'demo-sam-anniversary', vault.id);
+    const { comments } = await call<{ comments: { body: string }[] }>(SAM, '/cards/demo-sam-anniversary/comments');
+    if (!comments.length) await call(SAM, '/cards/demo-sam-anniversary/comments', { body: sealedComment });
+  }
+
+  const gifts = await encryptedVault(DEMO, 'Gift ideas');
+  if (gifts) {
+    const { vault, key } = gifts;
+    await push(
+      DEMO,
+      [
+        {
+          id: 'demo-gift-ideas',
+          vaultId: vault.id,
+          at: at(5, 20, 0),
+          payload: { type: 'note', title: 'For Mum', tags: [], createdAt: at(5, 20, 0), content: doc(bullets('Silk scarf, the green one', 'Concert tickets in March')) },
+        },
+      ],
+      new Map([[vault.id, key]]),
+    );
+    await call(DEMO, `/vaults/${vault.id}/members`, { email: SAM.email, role: 'editor' });
+    await askForKey(SAM, vault.id);
+  }
+}
 
 // ---- The demo ----
 
@@ -730,6 +805,8 @@ export async function seed() {
   await call(SAM, `/cards/${launch}/comments`, { body: 'Who writes the help center articles?' });
   await call(DEMO, `/cards/${launch}/comments`, { body: 'Mia offered. I\'ll confirm on Monday.' });
 
+  await sharedEncrypted(samDraft);
+
   trashedAttachments(DEMO.id, family.id, personal);
   heldAttachments();
   if (diaryKey) await sealedDiaryFiles(DEMO.id, diaryVault, diaryKey);
@@ -749,6 +826,7 @@ export async function seed() {
     'PUT',
   );
 
-  writeFileSync(SESSION_FILE, JSON.stringify({ token: DEMO.token, user: { id: DEMO.id, email: DEMO.email, name: DEMO.name } }));
+  const signIn = (u: Person) => ({ token: u.token, user: { id: u.id, email: u.email, name: u.name } });
+  writeFileSync(SESSION_FILE, JSON.stringify({ ...signIn(DEMO), sam: signIn(SAM) }));
   return { cards: mine.length + 3, pin: DEMO_PIN, recoveryKey, diaryOpen: !!diaryKey };
 }

@@ -6,8 +6,9 @@ import { VitePWA } from 'vite-plugin-pwa';
 
 /**
  * Only in `npm run dev`, never in a build: /demo signs this browser in to the demo account that
- * `npm run demo` made on the local server, alongside any accounts it is already signed in to, and the demo's
- * photos and files are served from scripts/demoPhotos and scripts/demoFiles.
+ * `npm run demo` made on the local server, alongside any accounts it is already signed in to (/demo/sam to Sam's, the
+ * other side of what it shares), and the demo's photos and files are served from scripts/demoPhotos and
+ * scripts/demoFiles.
  */
 const DEMO_FILE_TYPES: Record<string, string> = { pdf: 'application/pdf', csv: 'text/csv', txt: 'text/plain', mp4: 'video/mp4', m4a: 'audio/mp4', jpg: 'image/jpeg' };
 
@@ -16,14 +17,17 @@ function demoSignIn(): Plugin {
     name: 'demo-sign-in',
     apply: 'serve',
     configureServer(server) {
-      const session = () => {
+      type Session = { token: string; user: { id: string } };
+      const session = (who?: string) => {
         const file = '.wrangler/demo-session.json';
-        return existsSync(file) ? (JSON.parse(readFileSync(file, 'utf8')) as { token: string; user: { id: string } }) : null;
+        const kept = existsSync(file) ? (JSON.parse(readFileSync(file, 'utf8')) as Session & { sam?: Session }) : null;
+        return who === 'sam' ? (kept?.sam ?? null) : kept;
       };
+      const who = (url: string | undefined) => (/(?:^\/sam\b|[?&]as=sam\b)/.test(url ?? '') ? 'sam' : undefined);
       // Adds the demo account to the accounts this browser is signed in to, the way the API adds a sign-in, keeping
       // the others. Under /api, since the session cookie is only sent there.
       server.middlewares.use('/api/demo-session', (req, res) => {
-        const demo = session();
+        const demo = session(who(req.url));
         if (!demo || req.method !== 'POST') {
           res.statusCode = 404;
           res.end();
@@ -87,16 +91,17 @@ function demoSignIn(): Plugin {
         res.setHeader('content-range', `bytes ${start}-${end}/${bytes.length}`);
         res.end(bytes.subarray(start, end + 1));
       });
-      server.middlewares.use('/demo', (_req, res) => {
+      server.middlewares.use('/demo', (req, res) => {
         res.setHeader('content-type', 'text/html; charset=utf-8');
-        const demo = session();
+        const as = who(req.url);
+        const demo = session(as);
         if (!demo) {
           res.end('<p>Run <code>npm run demo</code> first, with <code>npm run dev:api</code> running.</p>');
           return;
         }
         res.end(`<!doctype html><meta charset="utf-8"><title>Demo</title><p>Signing in to the demo…</p><script>
 (async () => {
-  await fetch('/api/demo-session', { method: 'POST' });
+  await fetch('/api/demo-session${as ? `?as=${as}` : ''}', { method: 'POST' });
   localStorage.setItem('notes-app:account', JSON.stringify(${JSON.stringify(demo.user)}));
   location.replace('/journal');
 })();

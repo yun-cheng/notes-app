@@ -11,6 +11,10 @@ import { fromBase64, toBase64 } from '../domain/base64';
  * and a 1 GB video is sealed and opened a piece at a time, gathered into a Blob in batches, never held whole. Its own key per file leaves room to give
  * one file to someone without the vault.
  *
+ * Its size is hidden too, near enough: the file is padded with zeros to a rounder size before it's sealed (`padded`),
+ * and what it says of itself to a multiple of 128 bytes, so a name's length doesn't show either. Its real size is
+ * in what it says of itself, and opening it cuts the padding off. One sealed before padding opens as it is.
+ *
  * Layout: "nae1", the piece size (u32), the vault ID's length (u16) and the vault ID, the sealed facts' length
  * (u32) and the sealed facts (IV then ciphertext), then the pieces. Numbers are big-endian.
  */
@@ -44,6 +48,21 @@ export interface SealedHeader {
   bodyAt: number;
   facts: Bytes;
 }
+
+/**
+ * A file's size rounded up as Padmé does (Nikitin et al., 2019): to a multiple of a power of two that's about 1/32 of
+ * it for a big file, 1/8 for a small one, so many sizes look the same while padding adds at most 12%, and mostly a
+ * few percent. A size within a server limit that's a multiple of 512 KB (25 MB, 1 GB) stays within it.
+ */
+export function padded(size: number): number {
+  if (size < 2) return size;
+  const e = Math.floor(Math.log2(size));
+  const s = Math.floor(Math.log2(e)) + 1;
+  const step = 2 ** (e - s);
+  return Math.ceil(size / step) * step;
+}
+
+const FACTS_STEP = 128;
 
 /** How much of a file is gathered in memory before it goes into the Blob being built (`Gathered`). */
 export const BATCH_BYTES = 16 * 1024 * 1024;
@@ -134,7 +153,10 @@ export async function sealAttachment(vaultKey: CryptoKey, blob: Blob, id: string
   const raw = crypto.getRandomValues(new Uint8Array(32));
   const key = await crypto.subtle.importKey('raw', raw, 'AES-GCM', false, ['encrypt']);
   const iv = crypto.getRandomValues(new Uint8Array(12));
-  const told = new TextEncoder().encode(JSON.stringify({ ...facts, size: blob.size, k: toBase64(raw) }));
+  const json = JSON.stringify({ ...facts, size: blob.size, k: toBase64(raw) });
+  // Spaces after the JSON, which it reads past, so how long a name is doesn't show in the header's length.
+  const length = new TextEncoder().encode(json).length;
+  const told = new TextEncoder().encode(json + ' '.repeat(Math.ceil(length / FACTS_STEP) * FACTS_STEP - length));
   const sealedFacts = new Uint8Array(await crypto.subtle.encrypt({ name: 'AES-GCM', iv, additionalData: factsAad(id, vaultId) }, vaultKey, told));
   const vault = new TextEncoder().encode(vaultId);
   const head = new Uint8Array(10 + vault.length + 4 + 12 + sealedFacts.length);
@@ -148,9 +170,10 @@ export async function sealAttachment(vaultKey: CryptoKey, blob: Blob, id: string
   head.set(sealedFacts, 26 + vault.length);
   const out = new Gathered('application/octet-stream');
   out.add(head);
-  const count = Math.max(1, Math.ceil(blob.size / PIECE_BYTES));
+  const plain = new Blob([blob, new Uint8Array(padded(blob.size) - blob.size)]);
+  const count = Math.max(1, Math.ceil(plain.size / PIECE_BYTES));
   for (let i = 0; i < count; i++) {
-    const piece = await blob.slice(i * PIECE_BYTES, (i + 1) * PIECE_BYTES).arrayBuffer();
+    const piece = await plain.slice(i * PIECE_BYTES, (i + 1) * PIECE_BYTES).arrayBuffer();
     out.add(new Uint8Array(await crypto.subtle.encrypt({ name: 'AES-GCM', iv: nonce(i, i === count - 1) }, key, piece)));
   }
   return out.done();
@@ -175,5 +198,8 @@ export async function openAttachment(vaultKey: CryptoKey, blob: Blob, id: string
     return null;
   }
   const out = gathered.done();
-  return out.size === opened.facts.size ? { blob: out, facts: opened.facts } : null;
+  const { size, mime } = opened.facts;
+  // Padded, or sealed before padding was.
+  if (out.size !== padded(size) && out.size !== size) return null;
+  return { blob: out.size === size ? out : out.slice(0, size, mime), facts: opened.facts };
 }

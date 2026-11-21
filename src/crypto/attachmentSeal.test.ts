@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { BATCH_BYTES, HEADER_BYTES, openAttachment, PIECE_BYTES, sealAttachment, sealedFacts, sealedVault } from './attachmentSeal';
+import { BATCH_BYTES, HEADER_BYTES, openAttachment, padded, PIECE_BYTES, sealAttachment, sealedFacts, sealedVault } from './attachmentSeal';
 
 const vaultKey = () => crypto.subtle.generateKey({ name: 'AES-GCM', length: 256 }, true, ['encrypt', 'decrypt']);
 const bytes = async (blob: Blob) => new Uint8Array(await blob.arrayBuffer());
@@ -36,7 +36,7 @@ describe('sealed photos and files', () => {
     expect(await sealedFacts(key, await bytes(sealed.slice(0, HEADER_BYTES)), 'v1')).toMatchObject({ mime: 'video/mp4', size: data.length });
 
     const all = await bytes(sealed);
-    const body = all.length - (PIECE_BYTES * 2 + 1000 + 3 * 16);
+    const body = all.length - (padded(PIECE_BYTES * 2 + 1000) + 3 * 16);
     const piece = PIECE_BYTES + 16;
     const head = all.slice(0, body);
     const [p0, p1, p2] = [0, 1, 2].map((i) => all.slice(body + i * piece, body + (i + 1) * piece));
@@ -51,6 +51,27 @@ describe('sealed photos and files', () => {
     const sealed = await sealAttachment(key, new Blob([data]), 'big', 'diary', { mime: 'video/mp4' });
     expect(sealed.size).toBeGreaterThan(data.length);
     expect(await bytes((await openAttachment(key, sealed, 'big'))!.blob)).toEqual(data);
+  });
+
+  it('hides its size and its name’s length, near enough, and opens to its own size', async () => {
+    const key = await vaultKey();
+    const seal = (size: number, name: string) => sealAttachment(key, new Blob([new Uint8Array(size)]), 'f', 'diary', { mime: 'application/pdf', name });
+    const [a, b] = await Promise.all([seal(1_000_001, 'a.pdf'), seal(1_010_000, 'Budget for the flat.pdf')]);
+    expect(a.size).toBe(b.size);
+    const opened = await openAttachment(key, a, 'f');
+    expect(opened!.blob.size).toBe(1_000_001);
+    expect(opened!.blob.type).toBe('application/pdf');
+    expect(opened!.facts.size).toBe(1_000_001);
+  });
+
+  it('rounds sizes up by at most 12%, and keeps the servers’ limits', () => {
+    for (const size of [2, 3, 100, 1000, 4097, 123_456, 9_999_999, 300_000_000]) {
+      expect(padded(size)).toBeGreaterThanOrEqual(size);
+      expect(padded(size)).toBeLessThanOrEqual(size * 1.12 + 1);
+    }
+    expect(padded(25 * 1024 * 1024 - 7)).toBe(25 * 1024 * 1024);
+    expect(padded(1024 ** 3 - 7)).toBe(1024 ** 3);
+    expect(padded(0)).toBe(0);
   });
 
   it('seals an empty one too', async () => {

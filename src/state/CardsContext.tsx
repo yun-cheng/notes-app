@@ -64,7 +64,7 @@ function openAccount(accountId: string) {
     forget: (id) => keyring.forget(id),
     forgetAll: () => keyring.forgetAll(),
   };
-  const photos = new PhotoService(store, photoTransport, preparePhoto, undefined, undefined, probeVideo);
+  const photos = new PhotoService(store, photoTransport, preparePhoto, undefined, undefined, probeVideo, keyring);
   return {
     store,
     repo,
@@ -76,6 +76,11 @@ function openAccount(accountId: string) {
       { list: listAttachments, mark: markAttachments, remove: deleteAttachment },
       { get: (key) => repo.getMeta(key), set: (key, value) => repo.setMeta(key, value) },
       (id) => photos.forget(id),
+      undefined,
+      async (id) => {
+        const facts = await photos.sealedFacts(id);
+        return facts && { mime: facts.mime, name: facts.name ?? null, size: facts.size, width: facts.width ?? null, height: facts.height ?? null, duration: facts.duration ?? null };
+      },
     ),
     unsynced: new Unsynced(),
     drafts: new Drafts(accountId, { fetch: fetchDrafts, send: sendDrafts }),

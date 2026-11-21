@@ -1,4 +1,4 @@
-import { describe, expect, it } from 'vitest';
+import { describe, expect, it, vi } from 'vitest';
 import type { StoredAttachment } from '../domain/attachments';
 import { doc, note } from '../domain/testFixtures';
 import type { Card } from '../domain/types';
@@ -40,6 +40,22 @@ function setup(cards: Card[]) {
 }
 
 describe('AttachmentKeeper', () => {
+  it('says what a sealed one in the Trash is, from the device, and sends the server no name for it', async () => {
+    const clock = { now: DAY };
+    const rows = [{ ...row('s'), mime: 'application/octet-stream', size: 90, sealed: 1 }];
+    const marked: unknown[] = [];
+    const server = fakeServer(rows, clock);
+    const api: AttachmentApi = { ...server.api, mark: async (change) => (marked.push(change), server.api.mark(change)) };
+    const meta = new Map<string, unknown>([['attachmentHolders', { s: { card: 'n', name: 'Lease.pdf' } }]]);
+    const keeper = new AttachmentKeeper(api, { get: async (k) => meta.get(k), set: async (k, v) => void meta.set(k, v) }, async () => undefined, () => clock.now, async (id) =>
+      id === 's' ? { mime: 'application/pdf', name: 'Lease.pdf', size: 60, width: null, height: null, duration: null } : null,
+    );
+    keeper.watch(() => ({ ready: true, cards: () => [], fresh: async () => [], judges: () => true, mayDelete: true }));
+    await keeper.sweep();
+    expect(marked).toEqual([{ trash: [{ id: 's', from: 'n', name: null }], keep: [] }]);
+    await vi.waitFor(() => expect(keeper.getState().trash![0]).toMatchObject({ id: 's', mime: 'application/pdf', name: 'Lease.pdf', size: 60, trashed_from: 'n' }));
+  });
+
   it('sends a photo taken out of its entry to the Trash, naming the entry, and deletes it 30 days on', async () => {
     const t = setup([holding('n', 'a'), holding('m', 'b')]);
     await t.keeper.sweep();

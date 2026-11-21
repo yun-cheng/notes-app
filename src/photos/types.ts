@@ -11,6 +11,11 @@ export interface PhotoRecord {
   height: number | null;
   /** A video's length in seconds, sent with it so the server can tell it while it's in the Trash. */
   duration?: number | null;
+  /**
+   * 1 for one in an encrypted vault, kept here and sent only sealed (`src/crypto/attachmentSeal.ts`): `blob` is the
+   * sealed bytes, `mime` says nothing, and its name, shape and length are sealed in it.
+   */
+  sealed?: 1;
   /** 0 until the server has it. A number, so IndexedDB can index it. */
   uploaded: 0 | 1;
   addedAt: number;
@@ -32,6 +37,8 @@ export interface PhotoTransport {
   upload(photo: PhotoRecord, sent?: (done: number) => void): Promise<UploadResult>;
   /** The photo, or null if the server doesn't have it yet. */
   download(id: string): Promise<Blob | null>;
+  /** Its first `bytes`, to tell whether it's sealed and what it is, or null if the server doesn't have it yet. */
+  start?(id: string, bytes: number): Promise<Uint8Array | null>;
   /** Where a video plays from on the server, a range at a time, rather than fetched whole first. */
   address?(id: string): string;
 }

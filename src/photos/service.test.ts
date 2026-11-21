@@ -1,9 +1,9 @@
 import { describe, expect, it } from 'vitest';
 import { SyncAuthExpired, SyncOffline } from '../sync/engine';
-import { fileSize, MAX_FILE_BYTES, MAX_VIDEO_BYTES, PhotoService } from './service';
+import { fileSize, MAX_FILE_BYTES, MAX_VIDEO_BYTES, PhotoService, VaultClosed, type VaultKeys } from './service';
 import { MemoryPhotoStore, type PhotoRecord, type PhotoTransport, type UploadResult, type VideoFacts } from './types';
 
-function fixture(answers: (UploadResult | 'offline' | 'expired')[] = [], facts: VideoFacts | null = null) {
+function fixture(answers: (UploadResult | 'offline' | 'expired')[] = [], facts: VideoFacts | null = null, keys: VaultKeys | null = null) {
   const store = new MemoryPhotoStore();
   const server = new Map<string, Blob>();
   const uploads: string[] = [];
@@ -20,17 +20,75 @@ function fixture(answers: (UploadResult | 'offline' | 'expired')[] = [], facts: 
       return answer;
     },
     download: async (id) => server.get(id) ?? null,
+    start: async (id, bytes) => {
+      const blob = server.get(id);
+      return blob ? new Uint8Array(await blob.slice(0, bytes).arrayBuffer()) : null;
+    },
     address: (id) => `/api/attachments/${id}`,
   };
   let n = 0;
   const photos = new PhotoService(store, transport, async (file) => ({ blob: file, mime: 'image/jpeg', width: 10, height: 5 }), () => `photo-${String(++n).padStart(4, '0')}`, () => 1000, async () => {
     if (!facts) throw new Error("Can't read it");
     return facts;
-  });
+  }, keys);
   return { store, server, uploads, photos };
 }
 
 const image = () => new Blob([new Uint8Array([1, 2, 3])], { type: 'image/jpeg' });
+
+/** A keyring with the diary encrypted, opened and locked by hand. */
+async function diaryKeys() {
+  const key = await crypto.subtle.generateKey({ name: 'AES-GCM', length: 256 }, true, ['encrypt', 'decrypt']);
+  let open = true;
+  const listeners = new Set<() => void>();
+  const keys: VaultKeys = {
+    isEncrypted: (v) => v === 'diary',
+    key: (v) => (v === 'diary' && open ? key : undefined),
+    anyEncrypted: () => true,
+    subscribe: (l) => (listeners.add(l), () => void listeners.delete(l)),
+  };
+  const lock = (locked: boolean) => {
+    open = !locked;
+    listeners.forEach((l) => l());
+  };
+  return { keys, lock };
+}
+
+describe('PhotoService in an encrypted vault', () => {
+  it('keeps and sends a photo or file only sealed, and opens it again here and on another device', async () => {
+    const { keys, lock } = await diaryKeys();
+    const { photos, store, server } = fixture([], null, keys);
+    const pdf = new File(['%PDF secret lease'], 'Lease.pdf', { type: 'application/pdf' });
+    const { id } = await photos.addFile(pdf, 'diary');
+    const kept = (await store.getPhoto(id))!;
+    expect(kept).toMatchObject({ vaultId: 'diary', sealed: 1, mime: 'application/octet-stream' });
+    expect(kept.file).toBeUndefined();
+    expect(await kept.blob.text()).not.toContain('secret');
+    await photos.upload();
+    expect(await server.get(id)!.text()).not.toContain('Lease');
+    expect(await (await photos.blob(id))!.text()).toBe('%PDF secret lease');
+    expect(await photos.sealedFacts(id)).toEqual({ mime: 'application/pdf', name: 'Lease.pdf', size: pdf.size });
+
+    // Another device fetches it, keeps it sealed and opens it; a video sealed on the server is fetched whole to play.
+    const other = new PhotoService(new MemoryPhotoStore(), { upload: async () => 'ok', download: async (i) => server.get(i) ?? null, start: async (i, n) => new Uint8Array(await server.get(i)!.slice(0, n).arrayBuffer()), address: (i) => `/api/attachments/${i}` }, async () => ({ blob: image(), mime: 'image/jpeg', width: 1, height: 1 }), undefined, undefined, undefined, keys);
+    expect((await other.playAddress(id))!.startsWith('blob:')).toBe(true);
+    expect(await (await other.blob(id))!.text()).toBe('%PDF secret lease');
+    expect(await photos.url(id)).toMatch(/^blob:/);
+    // Locked, nothing opens, and what was shown is forgotten.
+    lock(true);
+    expect(await other.blob(id)).toBeNull();
+    expect(await photos.url(id)).toBeNull();
+    expect(await photos.sealedFacts(id)).toBeNull();
+    // A vault locked here takes nothing new.
+    await expect(photos.add(image(), 'diary')).rejects.toBeInstanceOf(VaultClosed);
+    // Any other vault's stay as they are, and stream.
+    lock(false);
+    const plain = await photos.add(image(), 'v1');
+    expect((await store.getPhoto(plain))!.sealed).toBeUndefined();
+    await photos.upload();
+    expect(await other.playAddress(plain)).toBe(`/api/attachments/${plain}`);
+  });
+});
 
 describe('PhotoService', () => {
   it('keeps a file as it is, under its name, and uploads it with the photos', async () => {

@@ -35,6 +35,8 @@ export class Keyring implements PayloadCodec {
 
   isEncrypted = (vaultId: string) => this.encrypted.has(vaultId);
 
+  anyEncrypted = () => this.encrypted.size > 0;
+
   key(vaultId: string): CryptoKey | undefined {
     return this.keys.get(vaultId);
   }

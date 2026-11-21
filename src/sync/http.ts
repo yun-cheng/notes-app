@@ -197,20 +197,30 @@ async function uploadInPieces(photo: PhotoRecord, query: URLSearchParams, sent?:
 export const photoTransport: PhotoTransport = {
   async upload(photo, sent) {
     const query = new URLSearchParams({ vault: photo.vaultId });
-    if (photo.file) {
+    // A sealed one says nothing of what it is: its name, type and shape are sealed in it.
+    if (photo.sealed) query.set('sealed', '1');
+    else if (photo.file) {
       query.set('kind', 'file');
       query.set('name', photo.file.name);
     }
-    if (photo.width) query.set('w', String(photo.width));
-    if (photo.height) query.set('h', String(photo.height));
-    if (photo.duration) query.set('d', String(photo.duration));
-    if (photo.file && photo.blob.size > WHOLE_BYTES) return uploadInPieces(photo, query, sent);
+    if (!photo.sealed) {
+      if (photo.width) query.set('w', String(photo.width));
+      if (photo.height) query.set('h', String(photo.height));
+      if (photo.duration) query.set('d', String(photo.duration));
+    }
+    if ((photo.file || photo.sealed) && photo.blob.size > WHOLE_BYTES) return uploadInPieces(photo, query, sent);
     const res = await rawRequest(`/attachments/${encodeURIComponent(photo.id)}?${query}`, { method: 'PUT', body: photo.blob, headers: { 'content-type': photo.mime } });
     return res.ok ? 'ok' : refused(res);
   },
   async download(id) {
     const res = await rawRequest(`/attachments/${encodeURIComponent(id)}`);
     if (res.ok) return res.blob();
+    if (res.status === 404 || res.status === 409 || res.status === 503) return null;
+    throw new Error(`Photo download failed with ${res.status}`);
+  },
+  async start(id, bytes) {
+    const res = await rawRequest(`/attachments/${encodeURIComponent(id)}`, { headers: { range: `bytes=0-${bytes - 1}` } });
+    if (res.ok) return new Uint8Array(await res.arrayBuffer()).slice(0, bytes);
     if (res.status === 404 || res.status === 409 || res.status === 503) return null;
     throw new Error(`Photo download failed with ${res.status}`);
   },

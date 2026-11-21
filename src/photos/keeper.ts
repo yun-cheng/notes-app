@@ -21,6 +21,9 @@ export interface SweepView {
   mayDelete: boolean;
 }
 
+/** What a sealed one is, as the Trash shows it, which the server's list can't say. */
+export type Described = Pick<StoredAttachment, 'mime' | 'name' | 'size' | 'width' | 'height' | 'duration'>;
+
 export interface KeeperState {
   /** Photos and files in the Trash, newest there first; null until the server's been asked. */
   trash: StoredAttachment[] | null;
@@ -43,12 +46,16 @@ export class AttachmentKeeper {
   private running: Promise<void> | null = null;
   private last = 0;
   private view: (() => SweepView) | null = null;
+  /** What each sealed one turned out to be, opened here. */
+  private described = new Map<string, Described>();
 
   constructor(
     private api: AttachmentApi,
     private meta: { get: (key: string) => Promise<unknown>; set: (key: string, value: unknown) => Promise<void> },
     private forget: (id: string) => Promise<void>,
     private now: () => number = Date.now,
+    /** What a sealed one is, from its start (`PhotoService.sealedFacts`); null in a vault locked here. */
+    private describe: (id: string) => Promise<Described | null> = async () => null,
   ) {}
 
   getState = () => this.state;
@@ -63,8 +70,27 @@ export class AttachmentKeeper {
     this.listeners.forEach((l) => l());
   }
 
+  /**
+   * Shows the Trash. The server knows nothing of a sealed one but its size, so each is opened here to say what it is,
+   * and shown again once it's known.
+   */
   private show(all: StoredAttachment[]) {
-    this.publish({ trash: all.filter((a) => a.trashed_at !== null).sort((a, b) => b.trashed_at! - a.trashed_at!), problem: null });
+    const trash = all.filter((a) => a.trashed_at !== null).sort((a, b) => b.trashed_at! - a.trashed_at!);
+    const told = () => trash.map((a) => (a.sealed ? { ...a, ...this.described.get(a.id) } : a));
+    this.publish({ trash: told(), problem: null });
+    const shown = this.state.trash;
+    const unknown = trash.filter((a) => a.sealed && !this.described.has(a.id));
+    if (!unknown.length) return;
+    void Promise.all(
+      unknown.map(async (a) => {
+        const facts = await this.describe(a.id).catch(() => null);
+        if (facts) this.described.set(a.id, facts);
+        return !!facts;
+      }),
+    ).then((found) => {
+      // Unless a newer list has been shown since.
+      if (found.some(Boolean) && this.state.trash === shown) this.publish({ trash: told() });
+    });
   }
 
   /** Where the entries come from, kept current by whoever has them. */
@@ -98,7 +124,10 @@ export class AttachmentKeeper {
         plan.keep.push(...plan.remove.filter((id) => held.has(id)));
         plan.remove = plan.remove.filter((id) => !held.has(id));
       }
-      if (plan.trash.length || plan.keep.length) await this.api.mark({ trash: plan.trash, keep: plan.keep });
+      // A sealed one's name stays on the device: the server keeps none for it.
+      const sealed = new Set(stored.filter((a) => a.sealed).map((a) => a.id));
+      const trash = plan.trash.map((t) => (sealed.has(t.id) ? { ...t, name: null } : t));
+      if (trash.length || plan.keep.length) await this.api.mark({ trash, keep: plan.keep });
       for (const id of plan.remove) {
         const result = await this.api.remove(id);
         if (result === 'ok' || result === 'gone') await this.forget(id);

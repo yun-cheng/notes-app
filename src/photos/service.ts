@@ -1,6 +1,7 @@
+import { HEADER_BYTES, openAttachment, readHeader, sealAttachment, sealedFacts, sealedVault, type SealedFacts } from '../crypto/attachmentSeal';
 import { SyncAuthExpired, SyncOffline } from '../sync/engine';
 import { posterId } from '../domain/content';
-import type { PhotoStore, PhotoTransport, PreparedPhoto, VideoFacts } from './types';
+import type { PhotoRecord, PhotoStore, PhotoTransport, PreparedPhoto, VideoFacts } from './types';
 import { videoType } from './video';
 
 export type PhotoProblem = 'needs_drive' | 'not_configured' | 'offline' | 'expired' | 'error' | null;
@@ -31,6 +32,19 @@ const RETRY_MS = 60_000;
 export const MAX_FILE_BYTES = 25 * 1024 * 1024;
 export const MAX_VIDEO_BYTES = 1024 * 1024 * 1024;
 const NOTHING_KNOWN: VideoFacts = { poster: null, width: null, height: null, duration: null };
+const SEALED_TYPE = 'application/octet-stream';
+
+/** The vault keys open on this device (the `Keyring`), to seal what's added to an encrypted vault and open it again. */
+export interface VaultKeys {
+  isEncrypted(vaultId: string): boolean;
+  key(vaultId: string): CryptoKey | undefined;
+  /** Whether any of the account's vaults is encrypted: until one is, nothing on the server is sealed. */
+  anyEncrypted(): boolean;
+  subscribe(listener: () => void): () => void;
+}
+
+/** Thrown adding to an encrypted vault that isn't open here, as what's added to it is sealed with its key. */
+export class VaultClosed extends Error {}
 
 /** A file's size for people: "820 KB", "3.4 MB". */
 export function fileSize(bytes: number): string {
@@ -58,6 +72,10 @@ export class PhotoService {
   private running: Promise<void> | null = null;
   private again = false;
   private urls = new Map<string, Promise<string | null>>();
+  /** The vault each sealed one shown here is in, so it stops showing once that vault locks. */
+  private opened = new Map<string, string>();
+  /** Whether each the server has, not here, is sealed, as found from its start. */
+  private sealedThere = new Map<string, Promise<boolean>>();
 
   constructor(
     private store: PhotoStore,
@@ -66,7 +84,71 @@ export class PhotoService {
     private newId: () => string = () => crypto.randomUUID(),
     private now: () => number = Date.now,
     private probe: (file: Blob) => Promise<VideoFacts> = async () => NOTHING_KNOWN,
-  ) {}
+    private keys: VaultKeys | null = null,
+  ) {
+    keys?.subscribe(() => this.dropLocked());
+  }
+
+  /** Forgets the addresses of sealed ones whose vault is locked now, so nothing of a locked vault stays readable in memory. */
+  private dropLocked() {
+    for (const [id, vaultId] of this.opened) {
+      if (this.keys?.key(vaultId)) continue;
+      this.opened.delete(id);
+      const url = this.urls.get(id);
+      this.urls.delete(id);
+      void url?.then((u) => u && URL.revokeObjectURL(u), () => undefined);
+    }
+  }
+
+  /**
+   * Keeps one added here, to upload: sealed with its vault's key when that vault is encrypted, so neither this
+   * device's storage nor the server holds it readable. Its name, type and shape go in the seal.
+   */
+  private async keep(record: PhotoRecord, facts: Omit<SealedFacts, 'size'>): Promise<void> {
+    if (!this.keys?.isEncrypted(record.vaultId)) return this.store.putPhoto(record);
+    const key = this.keys.key(record.vaultId);
+    if (!key) throw new VaultClosed('Open the vault first.');
+    const blob = await sealAttachment(key, record.blob, record.id, record.vaultId, facts);
+    await this.store.putPhoto({ id: record.id, vaultId: record.vaultId, blob, mime: SEALED_TYPE, width: null, height: null, sealed: 1, uploaded: 0, addedAt: record.addedAt });
+  }
+
+  /** A sealed one opened with its vault's key; null while that vault is locked here. One that only looked sealed is itself. */
+  private async open(blob: Blob, id: string): Promise<Blob | null> {
+    const vaultId = await sealedVault(blob);
+    if (!vaultId) return blob;
+    const key = this.keys?.key(vaultId);
+    if (!key) return null;
+    const opened = await openAttachment(key, blob, id);
+    if (!opened) return blob;
+    this.opened.set(id, vaultId);
+    return opened.blob;
+  }
+
+  /** Whether one the server has, and this device doesn't, is sealed: from its first bytes, asked once. */
+  private isSealedThere(id: string): Promise<boolean> {
+    if (!this.keys?.anyEncrypted() || !this.transport.start) return Promise.resolve(false);
+    let found = this.sealedThere.get(id);
+    if (!found) {
+      found = this.transport.start(id, HEADER_BYTES).then(
+        (start) => !!start && !!readHeader(start),
+        () => false,
+      );
+      this.sealedThere.set(id, found);
+    }
+    return found;
+  }
+
+  /**
+   * What a sealed one is (its type, name, size and shape), from its start, here or on the server; null for one not
+   * sealed, or in a vault locked here. The server knows none of it.
+   */
+  async sealedFacts(id: string): Promise<SealedFacts | null> {
+    const local = await this.store.getPhoto(id);
+    const start = local ? (local.sealed ? new Uint8Array(await local.blob.slice(0, HEADER_BYTES).arrayBuffer()) : null) : await this.transport.start?.(id, HEADER_BYTES);
+    const header = start && readHeader(start);
+    const key = header && this.keys?.key(header.vaultId);
+    return key ? sealedFacts(key, start, id) : null;
+  }
 
   getState = () => this.state;
 
@@ -84,7 +166,7 @@ export class PhotoService {
   async add(file: Blob, vaultId: string): Promise<string> {
     const prepared = await this.prepare(file);
     const id = this.newId();
-    await this.store.putPhoto({ id, vaultId, ...prepared, uploaded: 0, addedAt: this.now() });
+    await this.keep({ id, vaultId, ...prepared, uploaded: 0, addedAt: this.now() }, { mime: prepared.mime, width: prepared.width, height: prepared.height });
     this.publish({ pending: this.state.pending + 1 });
     void this.upload();
     return id;
@@ -101,7 +183,7 @@ export class PhotoService {
     const name = file.name || 'Untitled';
     // Without what a recorder adds to its type ("audio/webm;codecs=opus").
     const mime = file.type.split(';')[0].trim() || 'application/octet-stream';
-    await this.store.putPhoto({ id, vaultId, file: { name }, blob: file, mime, width: null, height: null, ...(duration ? { duration } : {}), uploaded: 0, addedAt: this.now() });
+    await this.keep({ id, vaultId, file: { name }, blob: file, mime, width: null, height: null, ...(duration ? { duration } : {}), uploaded: 0, addedAt: this.now() }, { mime, name, ...(duration ? { duration } : {}) });
     this.publish({ pending: this.state.pending + 1 });
     void this.upload();
     return { id, name, mime, size: file.size, ...(duration ? { duration } : {}) };
@@ -125,11 +207,14 @@ export class PhotoService {
       const prepared = await this.prepare(facts.poster).catch(() => null);
       if (prepared) {
         poster = posterId(id);
-        await this.store.putPhoto({ id: poster, vaultId, ...prepared, uploaded: 0, addedAt: at });
+        await this.keep({ id: poster, vaultId, ...prepared, uploaded: 0, addedAt: at }, { mime: prepared.mime, width: prepared.width, height: prepared.height });
         added++;
       }
     }
-    await this.store.putPhoto({ id, vaultId, file: { name }, blob: file, mime, width: facts.width, height: facts.height, duration: facts.duration, uploaded: 0, addedAt: at + 1 });
+    await this.keep(
+      { id, vaultId, file: { name }, blob: file, mime, width: facts.width, height: facts.height, duration: facts.duration, uploaded: 0, addedAt: at + 1 },
+      { mime, name, width: facts.width, height: facts.height, duration: facts.duration },
+    );
     this.publish({ pending: this.state.pending + added });
     void this.upload();
     return { id, name, mime, size: file.size, poster, width: facts.width, height: facts.height, duration: facts.duration };
@@ -137,20 +222,26 @@ export class PhotoService {
 
   /**
    * Where a video plays from: this device's copy when it has one (added here, or fetched whole before), else the
-   * server, a range at a time, so a long one starts at once and isn't kept whole on every device.
+   * server, a range at a time, so a long one starts at once and isn't kept whole on every device. A sealed one is
+   * fetched whole and opened first, as only this device can read it.
    */
   async playAddress(id: string): Promise<string | null> {
-    if ((await this.store.getPhoto(id)) || !this.transport.address) return this.url(id);
+    if ((await this.store.getPhoto(id)) || !this.transport.address || (await this.isSealedThere(id))) return this.url(id);
     return this.transport.address(id);
   }
 
-  /** The photo or file itself, from this device or else the server. Null if the server doesn't have it yet. */
+  /**
+   * The photo or file itself, from this device or else the server, opened if it's sealed. Null if the server doesn't
+   * have it yet, or it's sealed in a vault locked here. A sealed one is kept here as it came, sealed.
+   */
   async blob(id: string): Promise<Blob | null> {
     const local = await this.store.getPhoto(id);
-    if (local) return local.blob;
+    if (local) return local.sealed ? this.open(local.blob, id) : local.blob;
     const blob = await this.transport.download(id);
-    if (blob) await this.store.putPhoto({ id, vaultId: '', blob, mime: blob.type, width: null, height: null, uploaded: 1, addedAt: this.now() });
-    return blob;
+    if (!blob) return null;
+    const vaultId = await sealedVault(blob);
+    await this.store.putPhoto({ id, vaultId: vaultId ?? '', blob, mime: vaultId ? SEALED_TYPE : blob.type, width: null, height: null, ...(vaultId ? { sealed: 1 as const } : {}), uploaded: 1, addedAt: this.now() });
+    return vaultId ? this.open(blob, id) : blob;
   }
 
   /** An object URL for showing the photo, or opening the file, shared by every view of it. */
@@ -176,6 +267,8 @@ export class PhotoService {
   async forget(id: string): Promise<void> {
     const url = this.urls.get(id);
     this.urls.delete(id);
+    this.opened.delete(id);
+    this.sealedThere.delete(id);
     void url?.then((u) => u && URL.revokeObjectURL(u), () => undefined);
     await this.store.deletePhoto(id);
   }

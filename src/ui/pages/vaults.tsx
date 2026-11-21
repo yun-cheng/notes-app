@@ -36,7 +36,7 @@ function useVaultSaver() {
 }
 
 const ENCRYPTED_NOTE =
-  "Only devices where the PIN is entered can read it, and you'll get a recovery key in case you forget the PIN. As the server can't read it, its todos get no reminders, its voice messages aren't transcribed, its links get no previews and its entries can't be shared.";
+  "Only devices where the PIN is entered can read it, its photos and files too, and you'll get a recovery key in case you forget the PIN. As the server can't read it, its voice messages aren't transcribed, its links get no previews and its entries can't be shared. Its todos still remind you, once it's been open on one of your devices.";
 const LOCKED_NOTE = 'The PIN keeps it out of sight in the app, but the server can read it, as it can your other vaults, so everything works in it.';
 
 /** Whether a vault with a PIN is end-to-end encrypted too, and what each way gives up. */
@@ -242,7 +242,7 @@ function VaultSettings({ vault }: { vault: Vault }) {
     });
 
   const removePin = async () => {
-    if (encrypted && !confirm(`Remove the PIN from ${vault.name}? Its cards will be decrypted and stored readable again.`)) return;
+    if (encrypted && !confirm(`Remove the PIN from ${vault.name}? Its cards, photos and files will be decrypted and stored readable again.`)) return;
     if (encrypted) await step('Decrypting…', async () => (await crypt.decrypt(vault), toast('Vault is no longer private')));
     else await change({ pin: null }, owner ? 'Vault is no longer private' : 'Your PIN is removed');
   };
@@ -305,7 +305,7 @@ function VaultSettings({ vault }: { vault: Vault }) {
           {stopping ? (
             <>
               <p className="prose-note">
-                Its cards will be stored readable again, on the server too. The PIN still locks it in the app, and reminders, voice transcripts, link previews and sharing start working in it.
+                Its cards, photos and files will be stored readable again, on the server and in Google Drive too. The PIN still locks it in the app, and voice transcripts, link previews and sharing start working in it.
               </p>
               <div className="lock-panel__row">
                 <button type="button" className="btn btn--primary" disabled={!!busy} onClick={() => void stopEncrypting()}>
@@ -325,7 +325,7 @@ function VaultSettings({ vault }: { vault: Vault }) {
       )}
       {isPrivate && !encrypted && owner && alone && (
         <form className="encrypt-box vault-gap" onSubmit={(e) => void encryptNow(e)}>
-          <p className="prose-note">Locked by its PIN, not encrypted: the PIN keeps it out of sight in the app, but the server can read its cards, so everything works in it. Encrypting it makes it readable only where the PIN is entered, and turns off reminders, voice transcripts, link previews and sharing in it.</p>
+          <p className="prose-note">Locked by its PIN, not encrypted: the PIN keeps it out of sight in the app, but the server can read its cards, so everything works in it. Encrypting it makes it readable only where the PIN is entered, its photos and files too, and turns off voice transcripts, link previews and sharing in it.</p>
           <div className="lock-panel__row">
             <PinInput value={currentPin} placeholder="Current PIN" aria-label="Current PIN to encrypt with" onChange={(e) => setCurrentPin(e.target.value)} />
             <button type="submit" className="btn btn--primary" disabled={!currentPin || !!busy}>

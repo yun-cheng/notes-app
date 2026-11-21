@@ -139,7 +139,7 @@ const subscribe = (l: () => void) => (listeners.add(l), () => void listeners.del
 export const recordedHere = new Map<string, Float32Array | null>();
 
 const PROBLEM: Record<Exclude<TranscribeResult, { text: string }>['error'], string> = {
-  encrypted: 'Voice in an encrypted vault isn’t sent to the server, so it isn’t transcribed.',
+  encrypted: 'Voice in an encrypted vault reaches the server only encrypted, so it isn’t transcribed.',
   limit: 'That’s an hour of voice transcribed today, as much as a day has. Try again tomorrow.',
   not_set_up: 'This server can’t transcribe voice.',
   offline: 'Transcribing needs a connection. Try again once you’re online.',

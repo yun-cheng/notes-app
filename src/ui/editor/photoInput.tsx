@@ -108,7 +108,7 @@ export function usePhotoInput(editor: RefObject<TiptapEditor | null>, vaultId: (
     if (problem) throw new Error(problem);
     const facts = await probeAudio(file);
     const attrs = await photos.addFile(file, vaultId()!, facts.duration ?? recorded?.seconds ?? null);
-    // Held for transcribing only where it will be: not in an encrypted vault, whose sound stays on the device.
+    // Held for transcribing only where it will be: not in an encrypted vault, whose sound reaches the server only sealed.
     if (recorded && canChangeInTheOpen(vaults.find((v) => v.id === vaultId()))) recordedHere.set(attrs.id, facts.samples);
     return { type: 'file', attrs: { ...attrs, ...(facts.peaks.length ? { peaks: facts.peaks } : {}) } };
   };

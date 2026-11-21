@@ -87,7 +87,7 @@ const matches = (words: string, query: string) => words.toLowerCase().includes(q
  * vault, a todo when it shows todos (due today when it shows what's due today), and the day it shows.
  */
 export function JournalBox({ filter }: { filter: StreamFilter }) {
-  const { index, vaults, accountId, locked, drafts } = useCards();
+  const { index, vaults, accountId, locked, drafts, sharedInto } = useCards();
   const today = useToday();
   const toast = useToast();
   const { saveEntries } = useSaveEntries();
@@ -102,8 +102,8 @@ export function JournalBox({ filter }: { filter: StreamFilter }) {
   const diary = !!diaryId && filter.vaultId === diaryId;
   const start = todoFirst ? EMPTY_TODO : EMPTY;
   const photoVault = filter.vaultId ?? mainVault(vaults, accountId)?.id;
-  const latest = useRef({ index, today, photoVault, diary, filter, saving, vaults });
-  latest.current = { index, today, photoVault, diary, filter, saving, vaults };
+  const latest = useRef({ index, today, photoVault, diary, filter, saving, vaults, sharedInto });
+  latest.current = { index, today, photoVault, diary, filter, saving, vaults, sharedInto };
   // What's written is kept as it's typed, one draft for each view of the journal, as the box is new in each, and
   // follows the account to its other devices.
   const draftKey = journalPath({ ...filter, sort: undefined });
@@ -173,7 +173,7 @@ export function JournalBox({ filter }: { filter: StreamFilter }) {
   const tagItems = (query: string): MenuItem[] => {
     const q = query.trim().toLowerCase();
     // Those offered where the box writes; a `#diary` line still finds its own when saved (`useSaveEntry`).
-    const tags = tagsFor(latest.current.index.tags, latest.current.photoVault);
+    const tags = tagsFor(latest.current.index.tags, latest.current.photoVault, latest.current.sharedInto);
     const found = tags
       .filter((t) => t.title.toLowerCase().includes(q))
       .sort((a, b) => Number(b.title.toLowerCase().startsWith(q)) - Number(a.title.toLowerCase().startsWith(q)) || Number(b.pinned) - Number(a.pinned))

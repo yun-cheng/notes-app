@@ -179,13 +179,13 @@ export function BatchBar({ selection }: { selection: Selection }) {
 
 /** Tags on the picked entries, removable from all of them, and a box to add one to all of them. */
 function BatchTags({ cards, onEdit }: { cards: Card[]; onEdit: (edit: BatchEdit, done: (n: number) => string) => Promise<void> }) {
-  const { index, repo } = useCards();
+  const { index, repo, sharedInto } = useCards();
   const [query, setQuery] = useState('');
   const counts = tagCounts(cards);
   const q = query.trim().toLowerCase();
   // Only tags every picked entry may take; a new one is kept to their vault when they share one, else for every vault.
   const vaultIds = [...new Set(cards.map((c) => c.vaultId))];
-  const offered = tagsForAll(index.tags, vaultIds);
+  const offered = tagsForAll(index.tags, vaultIds, sharedInto);
   const exact = offered.find((t) => t.title.toLowerCase() === q);
   const options = q ? offered.filter((t) => t.title.toLowerCase().includes(q)).slice(0, 6) : [];
   const title = (id: string) => index.tags.find((t) => t.id === id)?.title ?? 'tag';

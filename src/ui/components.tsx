@@ -323,14 +323,14 @@ export function TitleField({ value, onSave, autoFocus, readOnly }: { value: stri
  * a new one is made, kept to it.
  */
 export function TagPicker({ tagIds, vaultId, onChange, autoFocus = false, inMenu = false }: { tagIds: string[]; vaultId: string; onChange: (tags: string[]) => void; autoFocus?: boolean; inMenu?: boolean }) {
-  const { index, repo } = useCards();
+  const { index, repo, sharedInto } = useCards();
   const [query, setQuery] = useState('');
   const [open, setOpen] = useState(false);
   const [shown, setShown] = useState<string | null>(null);
   const { groupOf, groups } = index.tagGroups;
   const current = resolveTags(index, inMenu ? orderTags(tagIds, index.tagGroups) : tagIds);
   const q = query.trim().toLowerCase();
-  const offered = tagsFor(index.tags, vaultId);
+  const offered = tagsFor(index.tags, vaultId, sharedInto);
   const options = offered.filter((t) => !tagIds.includes(t.id) && t.title.toLowerCase().includes(q)).slice(0, 6);
   const unset = inMenu ? groups.filter((g) => g.choice === 'one' && g.members.length && !g.members.some((m) => tagIds.includes(m.id))) : [];
   const group = groups.find((g) => g.id === shown);

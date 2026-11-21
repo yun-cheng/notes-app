@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { offeredIn, tagNamedIn, tagsFor, tagsForAll } from './tagScope';
+import { offeredIn, tagNamedIn, tagsFor, tagsForAll, tagVaults } from './tagScope';
 import { EMPTY_DOC, type TagCard } from './types';
 
 const tag = (id: string, title: string, vaultId: string, kept = false): TagCard => ({
@@ -24,6 +24,15 @@ describe('tag scope', () => {
     expect(tagNamedIn(tags, 'home', 'family')?.id).toBe('home-family');
     expect(tagNamedIn(tags, 'HOME', 'personal')?.id).toBe('home');
     expect(tagNamedIn(tags, 'trip', 'personal')).toBeUndefined();
+  });
+  it('offers a tag kept to several vaults in each of them: its own and those it is in besides', () => {
+    const into = new Map([['trip', ['health', 'family']]]);
+    expect(tagVaults(trip, into)).toEqual(['family', 'health']);
+    expect(tagVaults(work, into)).toBeNull();
+    expect(offeredIn(trip, 'health', into)).toBe(true);
+    expect(offeredIn(trip, 'personal', into)).toBe(false);
+    expect(tagNamedIn(tags, 'trip', 'health', into)?.id).toBe('trip');
+    expect(tagsForAll(tags, ['family', 'health'], into).map((t) => t.id)).toEqual(['work', 'home', 'trip']);
   });
   it('offers several entries only the tags every one of them may take', () => {
     expect(tagsForAll(tags, ['family', 'personal']).map((t) => t.id)).toEqual(['work', 'home']);

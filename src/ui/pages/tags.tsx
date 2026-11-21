@@ -1,4 +1,4 @@
-import { useState, type FormEvent } from 'react';
+import { useRef, useState, type FormEvent } from 'react';
 import { Link } from 'react-router';
 import { displayTitle } from '../../domain/content';
 import { isGroupName, type TagGroup } from '../../domain/tagGroups';
@@ -14,7 +14,9 @@ import { usePopover } from '../usePopover';
 import { composing } from '../composing';
 import { usePermissions } from '../viewOnly';
 import { mainVault } from '../../domain/access';
-import { tagNamedIn } from '../../domain/tagScope';
+import { tagNamedIn, tagVaults } from '../../domain/tagScope';
+import { SyncOffline } from '../../sync/engine';
+import { shareCard, unshareCard } from '../../sync/http';
 import type { Vault } from '../../domain/types';
 
 /** Moving tags in and out of groups, and making groups. A tag is in one group at most. */
@@ -117,7 +119,7 @@ export function TagsPage() {
       </Section>
 
       <Section title={groups.length ? 'Other tags' : 'Tags'}>
-        <p className="prose-note">A tag is kept to its vault: it's offered only on entries there, and everyone in the vault has it. One for all vaults is offered everywhere, and only you see it.</p>
+        <p className="prose-note">A tag is kept to the vaults you pick: it's offered only on entries there, and everyone in them has it. One for all vaults is offered everywhere, and only you see it.</p>
         <form className="quick-add" onSubmit={submit}>
           <input value={title} onChange={(e) => setTitle(e.target.value)} placeholder="New tag" aria-label="New tag" enterKeyHint="done" />
           {homes.length > 0 && <ScopeSelect value={scope} vaults={homes} label="Where the new tag can go" onChange={setScope} />}
@@ -195,26 +197,98 @@ function ScopeSelect({ value, vaults, label, onChange }: { value: string; vaults
   );
 }
 
-/** Where a tag can go: kept to a vault, moving it there, or every vault. With an undo. */
+/** A vault a tag kept to it can't share with another: what's in it is sealed or behind a PIN there. */
+const keptAlone = (v: Vault) => !!v.encryption || v.lock === 'pin';
+
+/**
+ * Sets the vaults a tag is offered in (null: every vault): it lives in one of them, the one it's in now if it stays,
+ * and is in the others besides, as an entry can be, so their members see it. Being in another vault needs a
+ * connection, and the tag synced first. Undo sets back what it was.
+ */
+function useSetTagVaults() {
+  const { index, repo, engine, sharedInto, vaults } = useCards();
+  const toast = useToast();
+  const latest = useRef({ index, sharedInto, vaults });
+  latest.current = { index, sharedInto, vaults };
+  const names = (ids: string[] | null) => (ids ? ids.map((id) => latest.current.vaults.find((v) => v.id === id)?.name ?? 'a vault').join(', ') : 'all vaults');
+
+  const change = async (id: string, next: string[] | null) => {
+    const tag = latest.current.index.byId.get(id);
+    if (tag?.type !== 'tag') return;
+    const shared = latest.current.sharedInto.get(id) ?? [];
+    const home = next ? (next.includes(tag.vaultId) ? tag.vaultId : next[0]) : null;
+    const besides = next ? next.filter((v) => v !== home) : [];
+    for (const v of shared) if (!besides.includes(v)) await unshareCard(id, 'vault', v);
+    await repo.setTagScope(id, home);
+    if (besides.some((v) => !shared.includes(v))) {
+      // The server must have it where it now lives before it can be in other vaults besides.
+      await engine.sync();
+      for (const v of besides) if (!shared.includes(v)) await shareCard(id, { vault_id: v }, 'edit');
+    }
+    await engine.sync();
+  };
+  const failed = (err: unknown) =>
+    toast(err instanceof SyncOffline ? 'Offering a tag in more than one vault needs a connection.' : "That didn't work. A new tag can go in more vaults once it has synced.");
+
+  return async (tag: TagCard, next: string[] | null) => {
+    const before = tagVaults(tag, latest.current.sharedInto);
+    try {
+      await change(tag.id, next);
+      toast(`${tag.title} is offered in ${names(next)}`, { action: { label: 'Undo', run: () => void change(tag.id, before).catch(failed) } });
+    } catch (err) {
+      failed(err);
+    }
+  };
+}
+
+/** Which vaults a tag is offered in, ticked in a menu, or all of them. */
 function TagScope({ tag }: { tag: TagCard }) {
-  const { repo, vaults } = useCards();
+  const { vaults, sharedInto } = useCards();
   const can = usePermissions();
   const homes = useTagHomes();
-  const toast = useToast();
-  const { undoAction } = useUndo();
-  const value = tag.scope === 'vault' ? tag.vaultId : '';
-  if (!can(tag).manage || !homes.length || (value && !homes.some((v) => v.id === value))) {
-    const name = value ? vaults.find((v) => v.id === value)?.name : 'All vaults';
-    return name ? <span className="tag-scope tag-scope--fixed">{name}</span> : null;
-  }
-  const change = (vaultId: string) => {
-    if (vaultId === value) return;
-    const action = repo.action();
-    void repo.setTagScope(tag.id, vaultId || null);
-    const where = vaultId ? `kept to ${vaults.find((v) => v.id === vaultId)?.name ?? 'its vault'}` : 'for all vaults';
-    toast(`${tag.title} is ${where}`, { action: { label: 'Undo', run: () => void undoAction(action) } });
+  const setVaults = useSetTagVaults();
+  const { open, root, toggle, close } = usePopover();
+  const current = tagVaults(tag, sharedInto);
+  const vaultOf = (id: string) => vaults.find((v) => v.id === id);
+  const label = current ? current.map((id) => vaultOf(id)?.name ?? 'a vault').join(', ') : 'All vaults';
+  if (!can(tag).manage || !homes.length || current?.some((id) => !homes.some((v) => v.id === id))) return <span className="tag-scope tag-scope--fixed">{label}</span>;
+
+  const pick = (v: Vault) => {
+    const on = !!current?.includes(v.id);
+    if (on && current!.length === 1) return;
+    // A vault whose things are sealed or behind a PIN keeps the tag to itself.
+    const alone = keptAlone(v) || !!current?.some((id) => { const c = vaultOf(id); return !!c && keptAlone(c); });
+    void setVaults(tag, on ? current!.filter((id) => id !== v.id) : alone || !current ? [v.id] : [...current, v.id]);
   };
-  return <ScopeSelect value={value} vaults={homes} label={`Where ${tag.title} can go`} onChange={change} />;
+  return (
+    <div ref={root} className="tag-color tag-scope-menu">
+      <button type="button" className="vault-select tag-scope" aria-haspopup="menu" aria-expanded={!!open} aria-label={`Where ${tag.title} is offered: ${label}`} title="Which vaults offer it" onClick={toggle}>
+        {label}
+      </button>
+      {open && (
+        <div className={`style-menu tag-color__menu vault-choices${open === 'up' ? ' style-menu--up' : ''}`} role="menu" aria-label={`Where ${tag.title} is offered`}>
+          <div className="style-menu__group" role="group" aria-label="Offered in">
+            <span className="style-menu__label">Offered in</span>
+            {homes.map((v) => {
+              const on = !!current?.includes(v.id);
+              return (
+                <button key={v.id} type="button" role="menuitemcheckbox" aria-checked={on} disabled={on && current!.length === 1} onClick={() => pick(v)}>
+                  {on && <Icon name="check" size={14} />}
+                  {v.name}
+                  {keptAlone(v) && <Icon name="lock" size={12} />}
+                </button>
+              );
+            })}
+          </div>
+          <div className="style-menu__group">
+            <button type="button" role="menuitemradio" aria-checked={!current} onClick={() => { if (current) void setVaults(tag, null); close(); }}>
+              All vaults
+            </button>
+          </div>
+        </div>
+      )}
+    </div>
+  );
 }
 
 /**
@@ -246,7 +320,7 @@ function TrashTag({ tag }: { tag: TagCard }) {
  * another tag already has where this one can go, or a group's, is refused.
  */
 function TagLink({ tag }: { tag: TagCard }) {
-  const { index, repo } = useCards();
+  const { index, repo, sharedInto } = useCards();
   const can = usePermissions();
   const toast = useToast();
   const { undoAction } = useUndo();
@@ -258,8 +332,8 @@ function TagLink({ tag }: { tag: TagCard }) {
     setEditing(null);
     const name = editing.trim().replace(/^#/, '');
     if (!name || name === tag.title) return;
-    const other = tagNamedIn(index.tags, name, tag.scope === 'vault' ? tag.vaultId : undefined);
-    if (other && other.id !== tag.id) return toast(`There's a ${other.title} tag already.`);
+    const other = (tagVaults(tag, sharedInto) ?? [undefined]).map((v) => tagNamedIn(index.tags, name, v, sharedInto)).find((t) => t && t.id !== tag.id);
+    if (other) return toast(`There's a ${other.title} tag already.`);
     if (isGroupName(name, index.tagGroups.groups)) return toast(`${name} is a group's name.`);
     const action = repo.action();
     void repo.update(tag.id, { title: name });

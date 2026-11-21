@@ -49,7 +49,7 @@ function onDay(date: string, now = new Date()): number {
 
 /** Saves entries read from the journal box, or typed text read the same way (`saveText`). */
 export function useSaveEntries() {
-  const { repo, index, vaults, locked, accountId } = useCards();
+  const { repo, index, vaults, locked, accountId, sharedInto } = useCards();
   const today = useToday();
   const viewOnly = useViewOnly();
   const toast = useToast();
@@ -78,7 +78,7 @@ export function useSaveEntries() {
       for (const name of names) {
         if (isGroupName(name, groups)) continue;
         const key = `${vaultId}:${name.toLowerCase()}`;
-        let id = tagNamedIn(index.tags, name, vaultId)?.id ?? made.get(key);
+        let id = tagNamedIn(index.tags, name, vaultId, sharedInto)?.id ?? made.get(key);
         if (!id) {
           id = repo.newId();
           made.set(key, id);

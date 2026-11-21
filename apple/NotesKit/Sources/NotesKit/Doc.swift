@@ -20,6 +20,8 @@ public enum Doc {
                 let id = n["attrs"]?["id"]?.stringValue ?? ""
                 parts.append(titleOf?(id, label) ?? label)
             case "hardBreak": parts.append(" ")
+            // A voice message's words are the entry's words too, to be found by.
+            case "file": if let t = n["attrs"]?["transcript"]?.stringValue { parts.append(" \(t) ") }
             default: break
             }
             if let children = n["content"]?.arrayValue {

@@ -218,12 +218,13 @@ public struct Card: Identifiable, Sendable, Hashable {
     /// Kept to its vault, rather than for every vault.
     public var keptToVault: Bool { payload["scope"]?.stringValue == "vault" }
 
+    /// The title, or for a card without one, its first line of text; a stack with neither is a Stack.
     public var displayTitle: String {
         let t = title.trimmingCharacters(in: .whitespacesAndNewlines)
         if !t.isEmpty { return t }
-        let text = Doc.plainText(content).trimmingCharacters(in: .whitespacesAndNewlines)
-        if let line = text.split(separator: "\n").first { return String(line.prefix(80)) }
-        return "Untitled"
+        let line = Doc.firstLine(content)
+        if !line.isEmpty { return line }
+        return isStack ? "Stack" : "Untitled"
     }
 
     /// A note or todo the user opened but never wrote anything in. A photo counts as something.

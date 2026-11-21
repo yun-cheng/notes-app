@@ -1,7 +1,7 @@
 import { useState, type FormEvent } from 'react';
 import { Link } from 'react-router';
 import { displayTitle } from '../../domain/content';
-import type { TagGroup } from '../../domain/tagGroups';
+import { isGroupName, type TagGroup } from '../../domain/tagGroups';
 import type { TagCard } from '../../domain/types';
 import { useCards } from '../../state/CardsContext';
 import { Empty, Page, Section } from '../components';
@@ -240,16 +240,73 @@ function TrashTag({ tag }: { tag: TagCard }) {
   );
 }
 
+/**
+ * A tag's name, leading to its entries, and its count; the pencil renames it in place (Enter or leaving the field
+ * keeps it, Escape doesn't), with an undo. Entries hold the tag itself, not its name, so they all follow. A name
+ * another tag already has where this one can go, or a group's, is refused.
+ */
 function TagLink({ tag }: { tag: TagCard }) {
-  const { index } = useCards();
+  const { index, repo } = useCards();
+  const can = usePermissions();
+  const toast = useToast();
+  const { undoAction } = useUndo();
+  const [editing, setEditing] = useState<string | null>(null);
   const count = tagCount(index, tag.id);
-  return (
-    <Link className="row__body" to={journalPath({ tagId: tag.id })}>
-      <span className="row__title">{displayTitle(tag)}</span>
-      <span className="row__preview">
-        {count} {count === 1 ? 'entry' : 'entries'}
+
+  const save = () => {
+    if (editing === null) return;
+    setEditing(null);
+    const name = editing.trim().replace(/^#/, '');
+    if (!name || name === tag.title) return;
+    const other = tagNamedIn(index.tags, name, tag.scope === 'vault' ? tag.vaultId : undefined);
+    if (other && other.id !== tag.id) return toast(`There's a ${other.title} tag already.`);
+    if (isGroupName(name, index.tagGroups.groups)) return toast(`${name} is a group's name.`);
+    const action = repo.action();
+    void repo.update(tag.id, { title: name });
+    toast(`Renamed ${tag.title} to ${name}`, { action: { label: 'Undo', run: () => void undoAction(action) } });
+  };
+
+  if (editing !== null) {
+    return (
+      <span className="row__body">
+        <input
+          className="tag-group__name"
+          value={editing}
+          autoFocus
+          // The whole name is picked, so typing replaces it, as renaming a file does.
+          onFocus={(e) => e.currentTarget.select()}
+          aria-label={`New name for ${tag.title}`}
+          enterKeyHint="done"
+          onChange={(e) => setEditing(e.target.value)}
+          onBlur={save}
+          onKeyDown={(e) => {
+            if (e.key === 'Enter' && !composing(e)) {
+              e.preventDefault();
+              save();
+            } else if (e.key === 'Escape') {
+              e.preventDefault();
+              e.stopPropagation();
+              setEditing(null);
+            }
+          }}
+        />
       </span>
-    </Link>
+    );
+  }
+  return (
+    <>
+      <Link className="row__body" to={journalPath({ tagId: tag.id })}>
+        <span className="row__title">{displayTitle(tag)}</span>
+        <span className="row__preview">
+          {count} {count === 1 ? 'entry' : 'entries'}
+        </span>
+      </Link>
+      {can(tag).edit && (
+        <button type="button" className="icon-btn" aria-label={`Rename ${tag.title}`} title="Rename" onClick={() => setEditing(tag.title)}>
+          <Icon name="edit" />
+        </button>
+      )}
+    </>
   );
 }
 

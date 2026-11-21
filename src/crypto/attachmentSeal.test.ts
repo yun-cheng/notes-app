@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { HEADER_BYTES, openAttachment, PIECE_BYTES, sealAttachment, sealedFacts, sealedVault } from './attachmentSeal';
+import { BATCH_BYTES, HEADER_BYTES, openAttachment, PIECE_BYTES, sealAttachment, sealedFacts, sealedVault } from './attachmentSeal';
 
 const vaultKey = () => crypto.subtle.generateKey({ name: 'AES-GCM', length: 256 }, true, ['encrypt', 'decrypt']);
 const bytes = async (blob: Blob) => new Uint8Array(await blob.arrayBuffer());
@@ -43,6 +43,14 @@ describe('sealed photos and files', () => {
     for (const broken of [[head, p0, p1], [head, p1, p0, p2], [head, p0, p2], [all.slice(0, all.length - 1)]]) {
       expect(await openAttachment(key, new Blob(broken), 'v1')).toBeNull();
     }
+  });
+
+  it('gathers one bigger than a batch, whole and in order', async () => {
+    const key = await vaultKey();
+    const data = new Uint8Array(BATCH_BYTES + PIECE_BYTES + 5).map((_, i) => (i * 7) % 256);
+    const sealed = await sealAttachment(key, new Blob([data]), 'big', 'diary', { mime: 'video/mp4' });
+    expect(sealed.size).toBeGreaterThan(data.length);
+    expect(await bytes((await openAttachment(key, sealed, 'big'))!.blob)).toEqual(data);
   });
 
   it('seals an empty one too', async () => {

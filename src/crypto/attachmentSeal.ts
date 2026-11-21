@@ -8,7 +8,7 @@ import { fromBase64, toBase64 } from '../domain/base64';
  * size in pixels and a clip's length) is sealed with the vault key, bound to the attachment's ID and vault, in a
  * header at its start. The rest is the file in pieces of 1 MiB, each sealed with the file's key under a nonce made
  * of the piece's number and whether it's the last, so pieces can't be reordered, dropped or cut short unnoticed,
- * and a 1 GB video is encrypted a piece at a time rather than held whole. Its own key per file leaves room to give
+ * and a 1 GB video is sealed and opened a piece at a time, gathered into a Blob in batches, never held whole. Its own key per file leaves room to give
  * one file to someone without the vault.
  *
  * Layout: "nae1", the piece size (u32), the vault ID's length (u16) and the vault ID, the sealed facts' length
@@ -43,6 +43,42 @@ export interface SealedHeader {
   /** Where the pieces start. */
   bodyAt: number;
   facts: Bytes;
+}
+
+/** How much of a file is gathered in memory before it goes into the Blob being built (`Gathered`). */
+export const BATCH_BYTES = 16 * 1024 * 1024;
+
+/**
+ * A Blob built a batch at a time from pieces as they're sealed or opened, so a 1 GB video is never held whole in the
+ * page's memory: each batch goes into the browser's own storage for Blobs, which keeps big ones on disk, and the
+ * Blob so far is only referred to, not copied.
+ */
+class Gathered {
+  private blob: Blob;
+  private batch: Uint8Array<ArrayBuffer>[] = [];
+  private size = 0;
+
+  constructor(private type: string) {
+    this.blob = new Blob([], { type });
+  }
+
+  add(bytes: Uint8Array<ArrayBuffer>) {
+    this.batch.push(bytes);
+    this.size += bytes.length;
+    if (this.size >= BATCH_BYTES) this.flush();
+  }
+
+  private flush() {
+    if (!this.batch.length) return;
+    this.blob = new Blob([this.blob, ...this.batch], { type: this.type });
+    this.batch = [];
+    this.size = 0;
+  }
+
+  done(): Blob {
+    this.flush();
+    return this.blob;
+  }
 }
 
 const factsAad = (id: string, vaultId: string): Bytes => new TextEncoder().encode(`notes-app attachment v1|${id}|${vaultId}`);
@@ -110,13 +146,14 @@ export async function sealAttachment(vaultKey: CryptoKey, blob: Blob, id: string
   view.setUint32(10 + vault.length, 12 + sealedFacts.length);
   head.set(iv, 14 + vault.length);
   head.set(sealedFacts, 26 + vault.length);
-  const parts: BlobPart[] = [head];
+  const out = new Gathered('application/octet-stream');
+  out.add(head);
   const count = Math.max(1, Math.ceil(blob.size / PIECE_BYTES));
   for (let i = 0; i < count; i++) {
     const piece = await blob.slice(i * PIECE_BYTES, (i + 1) * PIECE_BYTES).arrayBuffer();
-    parts.push(new Uint8Array(await crypto.subtle.encrypt({ name: 'AES-GCM', iv: nonce(i, i === count - 1) }, key, piece)));
+    out.add(new Uint8Array(await crypto.subtle.encrypt({ name: 'AES-GCM', iv: nonce(i, i === count - 1) }, key, piece)));
   }
-  return new Blob(parts, { type: 'application/octet-stream' });
+  return out.done();
 }
 
 /** A sealed photo or file opened, as its own type, with what it says of itself; null if it isn't sealed, or this key doesn't open it. */
@@ -127,16 +164,16 @@ export async function openAttachment(vaultKey: CryptoKey, blob: Blob, id: string
   const sealedPiece = header.pieceBytes + TAG_BYTES;
   const body = blob.size - header.bodyAt;
   const count = Math.max(1, Math.ceil(body / sealedPiece));
-  const parts: BlobPart[] = [];
+  const gathered = new Gathered(opened.facts.mime);
   try {
     for (let i = 0; i < count; i++) {
       const at = header.bodyAt + i * sealedPiece;
       const piece = await blob.slice(at, at + sealedPiece).arrayBuffer();
-      parts.push(new Uint8Array(await crypto.subtle.decrypt({ name: 'AES-GCM', iv: nonce(i, i === count - 1) }, opened.key, piece)));
+      gathered.add(new Uint8Array(await crypto.subtle.decrypt({ name: 'AES-GCM', iv: nonce(i, i === count - 1) }, opened.key, piece)));
     }
   } catch {
     return null;
   }
-  const out = new Blob(parts, { type: opened.facts.mime });
+  const out = gathered.done();
   return out.size === opened.facts.size ? { blob: out, facts: opened.facts } : null;
 }

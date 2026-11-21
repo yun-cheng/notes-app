@@ -1,7 +1,7 @@
 import { useMemo, useRef, useState, type MouseEvent, type ReactNode } from 'react';
 import { createPortal } from 'react-dom';
 import { useLocation, useNavigate, useSearchParams } from 'react-router';
-import { displayTitle, type FileInfo } from '../../domain/content';
+import { displayTitle, isAudio, type FileInfo } from '../../domain/content';
 import { relativeDay } from '../../domain/dates';
 import { FILE_KINDS, fileDays, fileKind, fileKindIn, linkDays, type DayItem, type ItemDay, type LinkInfo } from '../../domain/library';
 import { entryMatcher, filterParams, isFiltered } from '../../domain/stream';
@@ -19,6 +19,7 @@ import { useShowInJournal } from '../showInJournal';
 import { ScrollRail } from '../ScrollRail';
 import { useInView } from '../useInView';
 import { holdsWords, usePageSearch } from '../PageSearch';
+import { VoiceMessage } from '../voice';
 
 /**
  * What the journal's entries hold, by day, for the Photos, Links or Files page: the notes and todos the journal's
@@ -235,8 +236,8 @@ function LinkRow({ url, card }: { url: string; card: Card }) {
 }
 
 /**
- * Every file attached to the journal's entries, as chips that open the file or download it. A file in two entries
- * (a template's copy) shows once, with the newer.
+ * Every file attached to the journal's entries, as chips that open the file or download it, and a voice message (a
+ * sound) as it plays in its entry, with its transcript. A file in two entries (a template's copy) shows once, with the newer.
  */
 export function FilesPage() {
   const { days: every, filter } = useLibrary<FileInfo>(fileDays);
@@ -273,7 +274,7 @@ export function FilesPage() {
       }
       render={(item) => (
         <span className="held__thing">
-          <FileChip file={item} vaultId={item.card.vaultId} />
+          {isAudio(item) ? <VoiceMessage file={item} vaultId={item.card.vaultId} /> : <FileChip file={item} vaultId={item.card.vaultId} />}
         </span>
       )}
       menuLabel="File"

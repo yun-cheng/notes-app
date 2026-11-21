@@ -88,7 +88,7 @@ function openAccount(accountId: string) {
     const run = resealing.then(() =>
       resealVaults(
         {
-          cards: async () => (await repo.exportAll()).cards,
+          cards: (vaultIds) => repo.cardsIn(vaultIds),
           stored: listed,
           local: photos.local,
           copyAs: (...args) => photos.copyAs(...args),

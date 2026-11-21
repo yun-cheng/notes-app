@@ -229,6 +229,13 @@ describe('vaults', () => {
     expect(cards.map((c) => c.title)).toEqual(['open']);
     expect(vaults.map((v) => v.id)).not.toContain('private');
   });
+  it('reads the cards of some vaults alone', async () => {
+    await store.putVaults([vault('private', 5000)]);
+    await repo.createNote({ title: 'open' });
+    const gone = await repo.createNote({ title: 'secret', vaultId: 'private' });
+    await repo.setDeleted(gone.id, true);
+    expect((await repo.cardsIn(['private'])).map((c) => [c.title, c.deleted])).toEqual([['secret', true]]);
+  });
   it('tells subscribers when vaults change', async () => {
     const seen: number[] = [];
     const stop = store.subscribeVaults((v) => seen.push(v.length));

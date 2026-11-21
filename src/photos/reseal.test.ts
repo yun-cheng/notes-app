@@ -17,7 +17,7 @@ function setup(cards: Card[], server: StoredAttachment[], local: PhotoRecord[] =
   const forgotten: string[] = [];
   let n = 0;
   const deps: ResealDeps = {
-    cards: async () => cards,
+    cards: async (vaultIds) => cards.filter((c) => vaultIds.includes(c.vaultId)),
     stored: async () => server,
     local: async (id) => local.find((l) => l.id === id),
     copyAs: async (id, by, _vault, seal, facts) => {

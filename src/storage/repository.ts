@@ -545,6 +545,13 @@ export class CardRepository {
     return { vaults: vaults.filter((v) => !locked.has(v.id)), cards };
   }
 
+  /** The cards in these vaults, the Trash's too, read and opened without opening any other vault's. */
+  async cardsIn(vaultIds: readonly string[]): Promise<Card[]> {
+    await this.queue;
+    const wanted = new Set(vaultIds);
+    return Promise.all((await this.store.listCards()).filter((r) => wanted.has(r.vault_id)).map((r) => this.decode(r)));
+  }
+
   /** Merges a backup, keeping whichever version of each card is newest. Cards from other vaults move into this account's. */
   importBackup(backup: Backup): Promise<ImportResult> {
     return this.enqueue(async () => {

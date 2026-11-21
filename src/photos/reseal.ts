@@ -14,8 +14,8 @@ import type { PhotoRecord } from './types';
  */
 
 export interface ResealDeps {
-  /** Every card readable here, the Trash's too. */
-  cards: () => Promise<Card[]>;
+  /** The cards in these vaults, the Trash's too: no other vault's are opened. */
+  cards: (vaultIds: string[]) => Promise<Card[]>;
   /** The server's photos and files (`GET /attachments`), to tell which are sealed without fetching each. */
   stored: () => Promise<StoredAttachment[]>;
   local: (id: string) => Promise<PhotoRecord | undefined>;
@@ -79,7 +79,7 @@ export interface ResealLeft {
 export async function resealVaults(deps: ResealDeps, vaults: { vaultId: string; seal: boolean }[]): Promise<ResealLeft> {
   const left: ResealLeft = { failed: 0, unknown: 0 };
   if (!vaults.length) return left;
-  const all = await deps.cards();
+  const all = await deps.cards(vaults.map((v) => v.vaultId));
   let stored: Map<string, StoredAttachment> | null = null;
   for (const { vaultId, seal } of vaults) {
     const cards = all.filter((c) => c.vaultId === vaultId);

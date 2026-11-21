@@ -4,7 +4,7 @@ import { useCards } from '../state/CardsContext';
 import { usePermissions } from './viewOnly';
 import { SyncOffline } from '../sync/engine';
 import { addComment, deleteComment, fetchComments, resolveComment, type CardComment } from '../sync/http';
-import { decryptComment, encryptComment, isEncryptedPayload } from '../crypto/vaultKeys';
+import { decryptComment, encryptComment } from '../crypto/vaultKeys';
 import type { Keyring } from '../crypto/keyring';
 import { useToast } from './Toast';
 
@@ -27,12 +27,18 @@ export function useCanComment(card: Card): boolean {
 /** Shown for a sealed comment this device can't open: its vault is locked here, or it was sealed in another. */
 const SEALED_TEXT = 'Sealed: it can’t be read here.';
 
+/**
+ * What a sealed comment looks like: `e1:` and base64 of at least a nonce and a tag. One written out that merely starts
+ * with `e1:` is shown as written.
+ */
+const looksSealed = (body: string) => /^e1:[A-Za-z0-9+/]{38,}={0,2}$/.test(body);
+
 /** Comments as the server sent them, with those sealed in an encrypted vault opened by its key, if it's here. */
 async function opened(comments: CardComment[], card: Card, keyring: Keyring): Promise<CardComment[]> {
   const key = keyring.key(card.vaultId);
   return Promise.all(
     comments.map(async (c) => {
-      if (!isEncryptedPayload(c.body)) return c;
+      if (!looksSealed(c.body)) return c;
       const body = key && (await decryptComment(key, c.body, card.id, card.vaultId));
       return { ...c, body: body ?? SEALED_TEXT };
     }),

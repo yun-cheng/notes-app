@@ -66,8 +66,14 @@ function openAccount(accountId: string) {
     forgetAll: () => keyring.forgetAll(),
   };
   const photos = new PhotoService(store, photoTransport, preparePhoto, undefined, undefined, probeVideo, keyring);
+  // The server's list says which are sealed, so a sealed video is known without fetching its start.
+  const listed = async () => {
+    const stored = await listAttachments();
+    photos.learn(stored);
+    return stored;
+  };
   const attachments = new AttachmentKeeper(
-    { list: listAttachments, mark: markAttachments, remove: deleteAttachment },
+    { list: listed, mark: markAttachments, remove: deleteAttachment },
     { get: (key) => repo.getMeta(key), set: (key, value) => repo.setMeta(key, value) },
     (id) => photos.forget(id),
     undefined,
@@ -76,19 +82,26 @@ function openAccount(accountId: string) {
       return facts && { mime: facts.mime, name: facts.name ?? null, size: facts.size, width: facts.width ?? null, height: facts.height ?? null, duration: facts.duration ?? null };
     },
   );
-  const reseal = (vaults: { vaultId: string; seal: boolean }[]) =>
-    resealVaults(
-      {
-        cards: async () => (await repo.exportAll()).cards,
-        stored: listAttachments,
-        local: photos.local,
-        copyAs: (...args) => photos.copyAs(...args),
-        update: (id, patch) => repo.update(id, patch),
-        replaced: (pairs) => attachments.replaced(pairs),
-        forget: (id) => photos.forget(id),
-      },
-      vaults,
+  // One at a time: encrypting a vault starts one, and so does opening it, and two would copy the same photos twice.
+  let resealing: Promise<unknown> = Promise.resolve();
+  const reseal = (vaults: { vaultId: string; seal: boolean }[]) => {
+    const run = resealing.then(() =>
+      resealVaults(
+        {
+          cards: async () => (await repo.exportAll()).cards,
+          stored: listed,
+          local: photos.local,
+          copyAs: (...args) => photos.copyAs(...args),
+          rewrite: (id, change) => repo.rewrite(id, change),
+          replaced: (pairs) => attachments.replaced(pairs),
+          forget: (id) => photos.forget(id),
+        },
+        vaults,
+      ),
     );
+    resealing = run.catch(() => undefined);
+    return run;
+  };
   return {
     store,
     repo,
@@ -216,13 +229,19 @@ export function CardsProvider({ accountId, children }: { accountId: string; chil
   // Photos and files kept as each vault open here keeps them: sealed in an encrypted vault (one encrypted before
   // photos were, or an entry moved in), as they are in any other (an entry moved out of one). Once a session for
   // each, after a sync, and again while some couldn't be done. Without an encrypted vault, nothing is sealed.
+  // Keyed by what's due, not the vault list itself, which every sync stores again: that would put it off and off.
+  const resealing = useMemo(
+    () =>
+      JSON.stringify(
+        vaults?.some((v) => v.encryption)
+          ? vaults.filter((v) => !locked.has(v.id) && !v.withheld && (v.role ?? 'owner') !== 'viewer').map((v) => ({ vaultId: v.id, seal: !!v.encryption }))
+          : [],
+      ),
+    [vaults, locked],
+  );
   const resealed = useRef(new Set<string>());
   useEffect(() => {
-    if (!vaults?.some((v) => v.encryption)) return;
-    const due = vaults
-      .filter((v) => !locked.has(v.id) && !v.withheld && (v.role ?? 'owner') !== 'viewer')
-      .map((v) => ({ vaultId: v.id, seal: !!v.encryption }))
-      .filter((t) => !resealed.current.has(`${t.vaultId}:${t.seal}`));
+    const due = (JSON.parse(resealing) as { vaultId: string; seal: boolean }[]).filter((t) => !resealed.current.has(`${t.vaultId}:${t.seal}`));
     if (!due.length) return;
     const timer = setTimeout(() => {
       const keys = due.map((t) => `${t.vaultId}:${t.seal}`);
@@ -241,7 +260,7 @@ export function CardsProvider({ accountId, children }: { accountId: string; chil
         );
     }, 5000);
     return () => clearTimeout(timer);
-  }, [vaults, locked, engine, reseal]);
+  }, [resealing, engine, reseal]);
 
   // Reminders for todos in encrypted vaults open here, sealed for each of this account's browsers: a moment after their
   // cards change, and every half hour, as browsers turn reminders on elsewhere and reminders pass.

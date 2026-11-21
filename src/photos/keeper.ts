@@ -35,7 +35,8 @@ const HOLDERS = 'attachmentHolders';
 /** Photos and files copied to be sealed or opened (`resealVault`), each with its copy, waiting to be deleted. */
 const REPLACED = 'replacedAttachments';
 
-type Replaced = { id: string; by: string };
+/** One replaced, and its copy: null for a video's still that couldn't be copied, which no copy waits for. */
+type Replaced = { id: string; by: string | null };
 /** A sweep after a sync at most this often; the Trash asks for one whenever it opens. */
 const EVERY_MS = 10 * 60_000;
 
@@ -121,7 +122,7 @@ export class AttachmentKeeper {
     const kept = await this.pendingReplaced();
     // A copy replaced in turn (encrypted, then not, before the first copy went up): the first waits for the newest.
     const newest = new Map(pairs.map((p) => [p.id, p.by]));
-    const followed = kept.map((k) => (newest.has(k.by) ? { ...k, by: newest.get(k.by)! } : k));
+    const followed = kept.map((k) => (k.by && newest.has(k.by) ? { ...k, by: newest.get(k.by)! } : k));
     await this.meta.set(REPLACED, [...followed.filter((k) => !newest.has(k.id)), ...pairs]);
   }
 
@@ -139,8 +140,10 @@ export class AttachmentKeeper {
     const pairs = await this.pendingReplaced();
     if (!pairs.length || !view.mayDelete) return false;
     const there = new Map(stored.map((a) => [a.id, a]));
-    const held = new Set([...(await view.fresh())].flatMap((c) => heldBy(c).map((h) => h.id)));
     const ready = pairs.filter((p) => !p.by || there.has(p.by));
+    // Reading every card is for those whose copies are up, not for every sweep while one waits.
+    if (!ready.length) return false;
+    const held = new Set([...(await view.fresh())].flatMap((c) => heldBy(c).map((h) => h.id)));
     const done = new Set(ready.filter((p) => held.has(p.id) || !there.has(p.id)).map((p) => p.id));
     const going = ready.filter((p) => !done.has(p.id)).map((p) => p.id);
     const toTrash = going.filter((id) => there.get(id)!.trashed_at === null);

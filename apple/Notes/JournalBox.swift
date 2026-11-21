@@ -95,6 +95,8 @@ struct JournalBox: View {
             switch await model.save(entries, opts) {
             case .saved(let ids, _):
                 if text == typed { text = "" }
+                // Once the stream has it, so there's somewhere to scroll to.
+                await model.refresh()
                 model.lastSaved = ids.last
             case .unlock(let vaultId):
                 unlock = model.vault(vaultId)

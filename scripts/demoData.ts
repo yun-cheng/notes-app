@@ -4,7 +4,7 @@
  * Topics), todos for the board by todo state, notes with headings, lists, checklists, quotes, code, web links and links to each other, todos
  * overdue, due today at a time, upcoming, undated, repeating, waiting, done and archived, entries tinted, set to view
  * only or with their own preview style, photos of every shape, one on a card's back page (served by the dev server from scripts/demoPhotos),
- * files attached (a PDF, a CSV, and a text file on the publicly linked recipe, from scripts/demoFiles), videos with their stills (one in the coast trip, one on the recipe, one in the Trash), voice messages (one transcribed with a quiet one just after it, one not yet, one in the Diary, which isn't sent to be), a private and encrypted Diary vault, a Health vault locked by the PIN but not encrypted and shared with Sam, who needs a PIN of their own to see it, Sam's Surprise party vault, which shows nothing until you set your own PIN, a vault shared with Sam and one Sam
+ * files attached (a PDF, a CSV, and a text file on the publicly linked recipe, from scripts/demoFiles), videos with their stills (one in the coast trip, one on the recipe, one in the Trash), voice messages (one transcribed with a quiet one just after it, one not yet, one in the Diary, which isn't sent to be), a private and encrypted Diary vault (its photo and voice message sealed with its key), a Health vault locked by the PIN but not encrypted and shared with Sam, who needs a PIN of their own to see it, Sam's Surprise party vault, which shows nothing until you set your own PIN, a vault shared with Sam and one Sam
  * shares to view, a card also in another vault, a note Sam shares, a public link, comments open and resolved, and
  * version history from more than one device, and entries going back three years. Two entries carry nearly all of it at once, to see how a full one looks:
  * a launch plan note and a moving todo.
@@ -13,6 +13,7 @@
  */
 import { execFileSync } from 'node:child_process';
 import { mkdirSync, readdirSync, readFileSync, statSync, writeFileSync } from 'node:fs';
+import { sealAttachment } from '../src/crypto/attachmentSeal';
 import { createVaultKey, encryptPayload, unlockWithPin } from '../src/crypto/vaultKeys';
 import { addDays, toDateKey } from '../src/domain/dates';
 import { hashPin } from '../src/domain/pin';
@@ -136,6 +137,30 @@ function trashedAttachments(owner: string, family: string, personal: string) {
     row('demo-file-lake-pan', family, 'video/mp4', statSync('scripts/demoFiles/lake-pan.mp4').size, at(1, 9, 30), ago(140), 'demo-family-trip', 'lake-pan.mp4', [960, 540, 6]),
     row('demo-file-lake-pan-poster', family, 'image/jpeg', statSync('scripts/demoFiles/lake-pan-poster.jpg').size, at(1, 9, 30), ago(140), 'demo-family-trip', null),
   ]);
+}
+
+/**
+ * The Diary's photo and voice message are sealed with its key, as a device seals what's added to an encrypted vault
+ * (`src/crypto/attachmentSeal.ts`), into .wrangler/demo-sealed, which the dev server serves as the API serves a sealed
+ * one: bytes that say nothing of themselves. Sealed afresh each run; their records have no name, type or shape.
+ */
+const SEALED_DIR = '.wrangler/demo-sealed';
+async function sealedDiaryFiles(owner: string, vaultId: string, key: CryptoKey) {
+  mkdirSync(SEALED_DIR, { recursive: true });
+  const voices = JSON.parse(readFileSync('scripts/demoFiles/voices.json', 'utf8')) as Record<string, { duration: number }>;
+  const files = [
+    { id: 'demo-sealed-curry', from: 'scripts/demoPhotos/curry.jpg', facts: { mime: 'image/jpeg' } },
+    { id: 'demo-sealed-diary-voice', from: 'scripts/demoFiles/diary-voice.m4a', facts: { mime: 'audio/mp4', name: 'diary-voice.m4a', duration: voices['diary-voice'].duration } },
+  ];
+  const rows: string[] = [];
+  for (const { id, from, facts } of files) {
+    const sealed = new Uint8Array(await (await sealAttachment(key, new Blob([readFileSync(from)]), id, vaultId, facts)).arrayBuffer());
+    writeFileSync(`${SEALED_DIR}/${id}`, sealed);
+    rows.push(
+      `INSERT OR REPLACE INTO attachments (id, owner_id, vault_id, drive_file_id, mime, size, created_at, sealed) VALUES (${[id, owner, vaultId, '', 'application/octet-stream'].map(sql).join(', ')}, ${sealed.length}, ${at(3, 22, 0)}, 1)`,
+    );
+  }
+  runSql(rows);
 }
 
 /** What the demo's files are, by their ending. */
@@ -331,12 +356,12 @@ export async function seed() {
    * them when one is added, and its transcript, timed by sentence, when `transcribed`, as the server gives it.
    */
   const voices = JSON.parse(readFileSync('scripts/demoFiles/voices.json', 'utf8')) as Record<string, { duration: number; peaks: number[]; cues: { start: number; text: string }[] }>;
-  const voice = (name: string, transcribed: boolean): JSONNode => {
+  const voice = (name: string, transcribed: boolean, id = `demo-file-${name}`): JSONNode => {
     const { duration, peaks, cues } = voices[name];
     return {
       type: 'file',
       attrs: {
-        id: `demo-file-${name}`,
+        id,
         name: `${name}.m4a`,
         mime: 'audio/mp4',
         size: statSync(`scripts/demoFiles/${name}.m4a`).size,
@@ -604,8 +629,9 @@ export async function seed() {
 
   // Diary entries are notes in the Diary vault, which needs the PIN.
   // A voice message in the private Diary: it plays, but its sound never goes to the server to be transcribed.
-  note('demo-diary-3', at(3, 22, 0), doc(p('Quiet day.'), voice('diary-voice', false)), [], '', diaryVault);
-  note('demo-diary-2', at(2, 22, 0), lines('Tried the curry recipe. Too much ginger, but good.'), [], '', diaryVault);
+  // Its voice message and photo are sealed with the Diary's key (`sealedDiaryFiles`), as a device seals them.
+  note('demo-diary-3', at(3, 22, 0), doc(p('Quiet day.'), voice('diary-voice', false, 'demo-sealed-diary-voice')), [], '', diaryVault);
+  note('demo-diary-2', at(2, 22, 0), doc(p('Tried the curry recipe. Too much ginger, but good.'), { type: 'photo', attrs: { id: 'demo-sealed-curry', alt: 'The curry' } }), [], '', diaryVault);
   // A todo in the encrypted Diary with a date: a device with the Diary open seals its reminder for each browser.
   todo('demo-diary-todo', 'Write to Grandma', addDays(today, 2), { dueTime: '19:00', when: at(1, 22, 30), vaultId: diaryVault });
   note('demo-diary-1', at(1, 22, 0), doc(p('Design review went well.'), p('Grateful for:'), bullets('Sunny weather', 'A good book', 'Dinner with Sam')), [], '', diaryVault);
@@ -706,6 +732,7 @@ export async function seed() {
 
   trashedAttachments(DEMO.id, family.id, personal);
   heldAttachments();
+  if (diaryKey) await sealedDiaryFiles(DEMO.id, diaryVault, diaryKey);
 
   // Drafts, left as if typed on another device: one in the journal box when it shows #travel, and a reply under
   // Kyoto to Sam's open question. Each shows in its box until sent or emptied.

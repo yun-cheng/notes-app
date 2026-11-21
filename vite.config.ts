@@ -68,6 +68,25 @@ function demoSignIn(): Plugin {
         res.setHeader('content-range', `bytes ${start}-${end}/${bytes.length}`);
         res.end(bytes.subarray(start, end + 1));
       });
+      // The Diary's sealed photo and voice message (`demo-sealed-<name>`), sealed by `npm run demo` into
+      // .wrangler/demo-sealed, sent as the API sends a sealed one: bytes that say nothing, a range at a time if asked.
+      server.middlewares.use((req, res, next) => {
+        const id = /^\/api\/attachments\/(demo-sealed-[a-z-]+)$/.exec(req.url?.split('?')[0] ?? '')?.[1];
+        const file = id && `.wrangler/demo-sealed/${id}`;
+        if (req.method !== 'GET' || !file || !existsSync(file)) return next();
+        res.setHeader('content-type', 'application/octet-stream');
+        res.setHeader('content-disposition', 'attachment');
+        res.setHeader('x-content-type-options', 'nosniff');
+        res.setHeader('accept-ranges', 'bytes');
+        const bytes = readFileSync(file);
+        const range = /^bytes=(\d+)-(\d*)$/.exec(req.headers.range ?? '');
+        if (!range) return res.end(bytes);
+        const start = Number(range[1]);
+        const end = range[2] ? Math.min(Number(range[2]), bytes.length - 1) : bytes.length - 1;
+        res.statusCode = 206;
+        res.setHeader('content-range', `bytes ${start}-${end}/${bytes.length}`);
+        res.end(bytes.subarray(start, end + 1));
+      });
       server.middlewares.use('/demo', (_req, res) => {
         res.setHeader('content-type', 'text/html; charset=utf-8');
         const demo = session();

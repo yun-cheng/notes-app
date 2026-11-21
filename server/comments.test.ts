@@ -42,8 +42,8 @@ describe('comments', () => {
     expect((await json<SharedResponse>(send(ben.cookie, 'GET', '/api/shared'))).comments).toEqual([{ card_id: 'a1', open: 1 }]);
   });
 
-  it('takes only sealed comments in an encrypted vault, and lets its owner store them again either way', async () => {
-    const { ann, ben, push, send, json } = await people();
+  it('takes only sealed comments in an encrypted vault, and lets those who can change it store them again either way', async () => {
+    const { ann, ben, push, send, json, signIn } = await people();
     const family = await json<Vault>(send(ann.cookie, 'POST', '/api/vaults', { name: 'Family' }));
     await push(ann.cookie, [rec(family.id, 'f1')]);
     await send(ann.cookie, 'POST', `/api/vaults/${family.id}/members`, { email: 'ben@example.com', role: 'editor' });
@@ -55,7 +55,15 @@ describe('comments', () => {
     // Its owner's device seals the ones from before; only the owner, and only sealed.
     const listed = await json<{ comments: { id: string; card_id: string; body: string }[] }>(send(ann.cookie, 'GET', `/api/vaults/${family.id}/comments`));
     expect(listed.comments.map((k) => k.body).sort()).toEqual(['Readable', 'e1:c2VhbGVk']);
+    // Ben can't, until he's let in, nor can anyone outside it.
     expect((await send(ben.cookie, 'GET', `/api/vaults/${family.id}/comments`)).status).toBe(404);
+    const cat = await signIn('cat');
+    expect((await send(cat.cookie, 'GET', `/api/vaults/${family.id}/comments`)).status).toBe(404);
+    const asked = { kdf: encryption.kdf, wrapped: 'cHJpdmF0ZQ==', public: 'cHVibGlj' };
+    await send(ben.cookie, 'PATCH', `/api/vaults/${family.id}`, { pin, encryption: { version: 1, member: asked } });
+    await send(ann.cookie, 'PUT', `/api/vaults/${family.id}/members/${ben.user.id}/key`, { public: asked.public, grant: 'Z3JhbnQ=' });
+    // Let in, as an editor he can: an entry he moves in has its comments sealed from his device.
+    expect((await send(ben.cookie, 'GET', `/api/vaults/${family.id}/comments`)).status).toBe(200);
     expect((await send(ann.cookie, 'PUT', `/api/vaults/${family.id}/comments`, { comments: [{ id: comments[0].id, body: 'Still plain' }] })).status).toBe(400);
     expect((await send(ann.cookie, 'PUT', `/api/vaults/${family.id}/comments`, { comments: [{ id: comments[0].id, body: 'e1:bm93' }] })).status).toBe(200);
     const sealed = await json<{ comments: { body: string }[] }>(send(ann.cookie, 'GET', `/api/vaults/${family.id}/comments`));

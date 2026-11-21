@@ -21,6 +21,7 @@ import { Keyring } from '../crypto/keyring';
 import { unlockWithPin } from '../crypto/vaultKeys';
 import { forgetTranslations, keepTranslationsIn } from '../ui/translate';
 import { Drafts, forgetDrafts } from './drafts';
+import { sealComments } from './sealedComments';
 import { finishEncrypting } from './encrypting';
 import { Unsynced } from './unsynced';
 
@@ -225,6 +226,40 @@ export function CardsProvider({ accountId, children }: { accountId: string; chil
       if (vault.encryption && !locked.has(vault.id)) void finishEncrypting(repo, engine, keyring, vault.id).catch(() => false);
     }
   }, [vaults, locked, repo, engine, keyring]);
+
+  // Comments sealed as each encrypted vault open here seals its cards: once a session for each (an entry moved in
+  // from another device, or while this one was away), and again a moment after an entry moves into one, once the
+  // move has reached the server. Turning encryption on seals them too (see `finishEncrypting`).
+  const commentHomes = useRef(new Map<string, string>());
+  const commentsSealed = useRef(new Set<string>());
+  useEffect(() => {
+    if (!index || !vaults) return;
+    const open = new Set(vaults.filter((v) => v.encryption && !locked.has(v.id) && !v.withheld && (v.role ?? 'owner') !== 'viewer').map((v) => v.id));
+    const due = new Set([...open].filter((id) => !commentsSealed.current.has(id)));
+    const homes = commentHomes.current;
+    for (const [id, card] of index.byId) {
+      const was = homes.get(id);
+      if (was !== undefined && was !== card.vaultId && open.has(card.vaultId)) due.add(card.vaultId);
+      homes.set(id, card.vaultId);
+    }
+    if (!due.size) return;
+    due.forEach((id) => commentsSealed.current.add(id));
+    // Not cancelled by the next change: what's due is already marked, so it must run.
+    // One that couldn't be done (locked since, offline) is tried again at the next change.
+    const retry = (id: string) => commentsSealed.current.delete(id);
+    setTimeout(() => {
+      void engine.sync().then(
+        async () => {
+          for (const id of due) {
+            const key = keyring.key(id);
+            if (!key) retry(id);
+            else await sealComments(id, key).catch(() => retry(id));
+          }
+        },
+        () => due.forEach(retry),
+      );
+    }, 3000);
+  }, [index, vaults, locked, engine, keyring]);
 
   // Photos and files kept as each vault open here keeps them: sealed in an encrypted vault (one encrypted before
   // photos were, or an entry moved in), as they are in any other (an entry moved out of one). Once a session for

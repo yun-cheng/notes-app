@@ -106,12 +106,12 @@ export function commentRoutes(app: Hono<AppEnv>, now: () => number) {
   });
 
   /**
-   * Every comment in a vault, for its owner's device to store again as the vault's encryption is turned on or off:
-   * sealed with its key, or written out, as the vault's cards are.
+   * Every comment in a vault, for a device of someone who can change it to store again sealed with its key, or written
+   * out, as its cards are: its owner's as its encryption is turned on or off, and anyone's as an entry moves into it.
    */
   app.get('/vaults/:id/comments', async (c) => {
     const vaultId = c.req.param('id');
-    if (!(await ownsVault(c.env.DB, vaultId, c.get('user').id))) return c.json({ error: 'Vault not found' }, 404);
+    if (!(await writableVault(c.env.DB, vaultId, c.get('user').id))) return c.json({ error: 'Vault not found' }, 404);
     const { results } = await c.env.DB.prepare(`SELECT k.id, k.card_id, k.body FROM comments k JOIN cards c ON c.id = k.card_id WHERE c.vault_id = ? ORDER BY k.id`)
       .bind(vaultId)
       .all<{ id: string; card_id: string; body: string }>();
@@ -120,7 +120,7 @@ export function commentRoutes(app: Hono<AppEnv>, now: () => number) {
 
   app.put('/vaults/:id/comments', async (c) => {
     const vaultId = c.req.param('id');
-    const vault = await ownsVault(c.env.DB, vaultId, c.get('user').id);
+    const vault = await writableVault(c.env.DB, vaultId, c.get('user').id);
     if (!vault) return c.json({ error: 'Vault not found' }, 404);
     const body = await c.req.json<{ comments?: unknown }>().catch(() => null);
     const list = Array.isArray(body?.comments) ? (body.comments as { id?: unknown; body?: unknown }[]) : null;
@@ -132,7 +132,11 @@ export function commentRoutes(app: Hono<AppEnv>, now: () => number) {
   });
 }
 
-async function ownsVault(db: Database, vaultId: string, userId: string): Promise<{ encrypted: boolean } | null> {
-  const row = await db.prepare(`SELECT encryption FROM vaults WHERE id = ? AND owner_id = ?`).bind(vaultId, userId).first<{ encryption: string | null }>();
+/** A vault this account can change (as its owner or an editor let in), and whether it's encrypted. */
+async function writableVault(db: Database, vaultId: string, userId: string): Promise<{ encrypted: boolean } | null> {
+  const row = await db
+    .prepare(`SELECT v.encryption FROM vaults v JOIN vault_access m ON m.vault_id = v.id WHERE v.id = ? AND m.user_id = ? AND m.role IN ('owner', 'editor')`)
+    .bind(vaultId, userId)
+    .first<{ encryption: string | null }>();
   return row ? { encrypted: !!row.encryption } : null;
 }

@@ -13,6 +13,21 @@ export interface Comment {
 }
 
 const MAX_BODY = 5000;
+/**
+ * A comment in an encrypted vault, sealed on the device with the vault key: `e1:` and base64 of a nonce, up to 5000
+ * characters of up to 3 bytes each, and a tag.
+ */
+const MAX_SEALED = 20_100;
+const isSealed = (body: string) => body.startsWith('e1:');
+
+/** Whether a comment's body is what its card's vault takes: sealed in an encrypted vault, written out in any other. */
+function fits(body: string, encrypted: boolean): boolean {
+  if (encrypted) return isSealed(body) && body.length <= MAX_SEALED && /^e1:[A-Za-z0-9+/]+=*$/.test(body);
+  return !!body && body.length <= MAX_BODY;
+}
+
+const homeEncrypted = async (db: Database, cardId: string) =>
+  !!(await db.prepare(`SELECT 1 AS yes FROM cards c JOIN vaults v ON v.id = c.vault_id WHERE c.id = ? AND v.encryption IS NOT NULL`).bind(cardId).first());
 
 async function listComments(db: Database, cardId: string): Promise<Comment[]> {
   const { results } = await db
@@ -58,7 +73,8 @@ export function commentRoutes(app: Hono<AppEnv>, now: () => number) {
     if (!allows(await cardAccess(c.env.DB, me, cardId), 'comment')) return c.json({ error: 'Card not found' }, 404);
     const body = await c.req.json<{ body?: unknown }>().catch(() => null);
     const text = typeof body?.body === 'string' ? body.body.trim() : '';
-    if (!text || text.length > MAX_BODY) return c.json({ error: `Write 1 to ${MAX_BODY} characters` }, 400);
+    const encrypted = await homeEncrypted(c.env.DB, cardId);
+    if (!fits(text, encrypted)) return c.json({ error: encrypted ? 'A comment in an encrypted vault comes sealed' : `Write 1 to ${MAX_BODY} characters` }, 400);
     await c.env.DB.prepare(`INSERT INTO comments (id, card_id, author_id, body, created_at) VALUES (?, ?, ?, ?, ?)`)
       .bind(crypto.randomUUID(), cardId, me, text, now())
       .run();
@@ -88,4 +104,35 @@ export function commentRoutes(app: Hono<AppEnv>, now: () => number) {
     await sql.run();
     return c.json({ comments: await listComments(c.env.DB, cardId) });
   });
+
+  /**
+   * Every comment in a vault, for its owner's device to store again as the vault's encryption is turned on or off:
+   * sealed with its key, or written out, as the vault's cards are.
+   */
+  app.get('/vaults/:id/comments', async (c) => {
+    const vaultId = c.req.param('id');
+    if (!(await ownsVault(c.env.DB, vaultId, c.get('user').id))) return c.json({ error: 'Vault not found' }, 404);
+    const { results } = await c.env.DB.prepare(`SELECT k.id, k.card_id, k.body FROM comments k JOIN cards c ON c.id = k.card_id WHERE c.vault_id = ? ORDER BY k.id`)
+      .bind(vaultId)
+      .all<{ id: string; card_id: string; body: string }>();
+    return c.json({ comments: results });
+  });
+
+  app.put('/vaults/:id/comments', async (c) => {
+    const vaultId = c.req.param('id');
+    const vault = await ownsVault(c.env.DB, vaultId, c.get('user').id);
+    if (!vault) return c.json({ error: 'Vault not found' }, 404);
+    const body = await c.req.json<{ comments?: unknown }>().catch(() => null);
+    const list = Array.isArray(body?.comments) ? (body.comments as { id?: unknown; body?: unknown }[]) : null;
+    if (!list || list.length > 2000 || !list.every((k) => typeof k?.id === 'string' && typeof k.body === 'string' && fits(k.body, vault.encrypted)))
+      return c.json({ error: vault.encrypted ? 'Comments in an encrypted vault come sealed' : 'Comments in this vault are written out' }, 400);
+    const update = c.env.DB.prepare(`UPDATE comments SET body = ? WHERE id = ? AND card_id IN (SELECT id FROM cards WHERE vault_id = ?)`);
+    if (list.length) await c.env.DB.batch(list.map((k) => update.bind(k.body as string, k.id as string, vaultId)));
+    return c.json({ ok: true });
+  });
+}
+
+async function ownsVault(db: Database, vaultId: string, userId: string): Promise<{ encrypted: boolean } | null> {
+  const row = await db.prepare(`SELECT encryption FROM vaults WHERE id = ? AND owner_id = ?`).bind(vaultId, userId).first<{ encryption: string | null }>();
+  return row ? { encrypted: !!row.encryption } : null;
 }

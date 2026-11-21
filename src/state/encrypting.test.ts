@@ -4,8 +4,10 @@ import type { CardRepository } from '../storage/repository';
 import type { SyncEngine } from '../sync/engine';
 import { purgePlaintextHistory } from '../sync/http';
 import { encryptingName, finishEncrypting } from './encrypting';
+import { sealComments } from './sealedComments';
 
 vi.mock('../sync/http', () => ({ purgePlaintextHistory: vi.fn(async () => ({})) }));
+vi.mock('./sealedComments', () => ({ sealComments: vi.fn(async () => undefined) }));
 
 function setup(opts: { noted?: boolean; open?: boolean; state?: string; unsent?: boolean } = {}) {
   const meta = new Map<string, unknown>(opts.noted === false ? [] : [[encryptingName('v'), true]]);
@@ -30,6 +32,7 @@ describe('finishEncrypting', () => {
     expect(repo.recodeVault).toHaveBeenCalledWith('v');
     expect(engine.sync).toHaveBeenCalled();
     expect(purgePlaintextHistory).toHaveBeenCalledWith('v');
+    expect(sealComments).toHaveBeenCalledWith('v', expect.anything());
     expect(meta.has(encryptingName('v'))).toBe(false);
   });
 

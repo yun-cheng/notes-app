@@ -363,6 +363,11 @@ export const sendDrafts = async (drafts: DraftChange[]) => void (await request<u
 export const fetchComments = async (cardId: string) => (await request<{ comments: CardComment[] }>(`${cardPath(cardId)}/comments`)).comments;
 export const addComment = async (cardId: string, body: string) =>
   (await request<{ comments: CardComment[] }>(`${cardPath(cardId)}/comments`, { method: 'POST', body: JSON.stringify({ body }) })).comments;
+/** Every comment in a vault, for its owner to store again sealed or written out as its encryption changes. */
+export const fetchVaultComments = async (vaultId: string) =>
+  (await request<{ comments: { id: string; card_id: string; body: string }[] }>(`${vaultPath(vaultId)}/comments`)).comments;
+export const putVaultComments = (vaultId: string, comments: { id: string; body: string }[]) =>
+  request<{ ok: true }>(`${vaultPath(vaultId)}/comments`, { method: 'PUT', body: JSON.stringify({ comments }) });
 export const resolveComment = async (cardId: string, id: string, resolved: boolean) =>
   (await request<{ comments: CardComment[] }>(`${cardPath(cardId)}/comments/${id}`, { method: 'PATCH', body: JSON.stringify({ resolved }) })).comments;
 export const deleteComment = async (cardId: string, id: string) =>

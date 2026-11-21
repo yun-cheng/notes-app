@@ -4,6 +4,8 @@ import { useCards } from '../state/CardsContext';
 import { usePermissions } from './viewOnly';
 import { SyncOffline } from '../sync/engine';
 import { addComment, deleteComment, fetchComments, resolveComment, type CardComment } from '../sync/http';
+import { decryptComment, encryptComment, isEncryptedPayload } from '../crypto/vaultKeys';
+import type { Keyring } from '../crypto/keyring';
 import { useToast } from './Toast';
 
 function when(at: number) {
@@ -22,12 +24,29 @@ export function useCanComment(card: Card): boolean {
   return card.seq > 0 && can.comment && ((home?.members ?? 1) > 1 || !!can.sharedBy);
 }
 
+/** Shown for a sealed comment this device can't open: its vault is locked here, or it was sealed in another. */
+const SEALED_TEXT = 'Sealed: it can’t be read here.';
+
+/** Comments as the server sent them, with those sealed in an encrypted vault opened by its key, if it's here. */
+async function opened(comments: CardComment[], card: Card, keyring: Keyring): Promise<CardComment[]> {
+  const key = keyring.key(card.vaultId);
+  return Promise.all(
+    comments.map(async (c) => {
+      if (!isEncryptedPayload(c.body)) return c;
+      const body = key && (await decryptComment(key, c.body, card.id, card.vaultId));
+      return { ...c, body: body ?? SEALED_TEXT };
+    }),
+  );
+}
+
 /**
  * Comments live on the server only, so they need a connection. A card never synced has none yet. `focus` (opened
  * from a bubble's comment button or count) brings them into view once they've come, with the box focused.
  */
 export function Comments({ card, focus = false }: { card: Card; focus?: boolean }) {
-  const { accountId, engine, drafts } = useCards();
+  const { accountId, engine, drafts, keyring } = useCards();
+  // In an encrypted vault they're sealed with its key before they're sent, and a draft never leaves this device.
+  const sealed = keyring.isEncrypted(card.vaultId);
   const may = usePermissions();
   const toast = useToast();
   const can = may(card);
@@ -42,7 +61,7 @@ export function Comments({ card, focus = false }: { card: Card; focus?: boolean 
   const draft = kept.card === card.id ? kept.text : stored(card.id);
   const setDraft = (text: string) => {
     setKept({ card: card.id, text });
-    drafts.set('comment', card.id, text.trim() ? text : null);
+    drafts.set('comment', card.id, text.trim() ? text : null, sealed);
   };
   const [showResolved, setShowResolved] = useState(false);
   const synced = card.seq > 0;
@@ -62,12 +81,19 @@ export function Comments({ card, focus = false }: { card: Card; focus?: boolean 
 
   useEffect(() => {
     if (!synced) return;
-    fetchComments(card.id).then(setComments, () => setOffline(true));
-  }, [card.id, synced]);
+    let live = true;
+    fetchComments(card.id)
+      .then((got) => opened(got, card, keyring))
+      .then((got) => live && setComments(got), () => live && setOffline(true));
+    return () => {
+      live = false;
+    };
+    // The card's vault, not every change to the card, decides how they're opened.
+  }, [card.id, card.vaultId, synced, keyring]);
 
   const run = async (work: () => Promise<CardComment[]>) => {
     try {
-      setComments(await work());
+      setComments(await opened(await work(), card, keyring));
       // The count on the entry's card comes with the next sync: ask for it now.
       void engine.sync();
       return true;
@@ -80,7 +106,10 @@ export function Comments({ card, focus = false }: { card: Card; focus?: boolean 
   const submit = async (e: FormEvent) => {
     e.preventDefault();
     const cardId = card.id;
-    if (draft.trim() && (await run(() => addComment(cardId, draft.trim())))) {
+    const text = draft.trim();
+    const key = keyring.key(card.vaultId);
+    if (sealed && !key) return toast('Unlock the vault to comment in it.');
+    if (text && (await run(async () => addComment(cardId, key && sealed ? await encryptComment(key, text, cardId, card.vaultId) : text)))) {
       // The entry shown may have changed while it was sending: drop the sent one's draft, not the one now shown.
       drafts.set('comment', cardId, null);
       setKept((k) => (k.card === cardId ? { card: cardId, text: '' } : k));

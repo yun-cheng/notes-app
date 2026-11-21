@@ -1,7 +1,11 @@
 import { describe, expect, it } from 'vitest';
 import type { SharedResponse } from '../src/sync/protocol';
 import type { Comment } from './comments';
+import type { Vault } from '../src/domain/types';
 import { people, rec } from './testHarness';
+
+const pin = { salt: 'c2FsdA==', hash: 'aGFzaA==', iterations: 300_000 };
+const encryption = { version: 1, kdf: { name: 'argon2id', salt: 'c2FsdA==', memory: 19456, iterations: 2, parallelism: 1 }, wrapped: 'd3JhcHBlZA==', recovery: 'cmVjb3Zlcnk=' };
 
 describe('comments', () => {
   it('lets commenters write, everyone read, and authors or editors delete', async () => {
@@ -36,5 +40,30 @@ describe('comments', () => {
     ]);
     // Ben sees only the card shared with him.
     expect((await json<SharedResponse>(send(ben.cookie, 'GET', '/api/shared'))).comments).toEqual([{ card_id: 'a1', open: 1 }]);
+  });
+
+  it('takes only sealed comments in an encrypted vault, and lets its owner store them again either way', async () => {
+    const { ann, ben, push, send, json } = await people();
+    const family = await json<Vault>(send(ann.cookie, 'POST', '/api/vaults', { name: 'Family' }));
+    await push(ann.cookie, [rec(family.id, 'f1')]);
+    await send(ann.cookie, 'POST', `/api/vaults/${family.id}/members`, { email: 'ben@example.com', role: 'editor' });
+    const { comments } = await json<{ comments: Comment[] }>(send(ben.cookie, 'POST', '/api/cards/f1/comments', { body: 'Readable' }));
+
+    await send(ann.cookie, 'PATCH', `/api/vaults/${family.id}`, { pin, encryption });
+    expect((await send(ann.cookie, 'POST', '/api/cards/f1/comments', { body: 'Plain' })).status).toBe(400);
+    expect((await send(ann.cookie, 'POST', '/api/cards/f1/comments', { body: 'e1:c2VhbGVk' })).status).toBe(201);
+    // Its owner's device seals the ones from before; only the owner, and only sealed.
+    const listed = await json<{ comments: { id: string; card_id: string; body: string }[] }>(send(ann.cookie, 'GET', `/api/vaults/${family.id}/comments`));
+    expect(listed.comments.map((k) => k.body).sort()).toEqual(['Readable', 'e1:c2VhbGVk']);
+    expect((await send(ben.cookie, 'GET', `/api/vaults/${family.id}/comments`)).status).toBe(404);
+    expect((await send(ann.cookie, 'PUT', `/api/vaults/${family.id}/comments`, { comments: [{ id: comments[0].id, body: 'Still plain' }] })).status).toBe(400);
+    expect((await send(ann.cookie, 'PUT', `/api/vaults/${family.id}/comments`, { comments: [{ id: comments[0].id, body: 'e1:bm93' }] })).status).toBe(200);
+    const sealed = await json<{ comments: { body: string }[] }>(send(ann.cookie, 'GET', `/api/vaults/${family.id}/comments`));
+    expect(sealed.comments.every((k) => k.body.startsWith('e1:'))).toBe(true);
+
+    // Readable again, it takes them written out.
+    await send(ann.cookie, 'PATCH', `/api/vaults/${family.id}`, { encryption: null });
+    expect((await send(ann.cookie, 'PUT', `/api/vaults/${family.id}/comments`, { comments: [{ id: comments[0].id, body: 'Readable' }] })).status).toBe(200);
+    expect((await json<{ comments: Comment[] }>(send(ben.cookie, 'GET', '/api/cards/f1/comments'))).comments.map((k) => k.body)).toContain('Readable');
   });
 });

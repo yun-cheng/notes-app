@@ -1,3 +1,4 @@
+import { sealComments } from './sealedComments';
 import type { Keyring } from '../crypto/keyring';
 import type { CardRepository } from '../storage/repository';
 import type { SyncEngine } from '../sync/engine';
@@ -30,6 +31,10 @@ async function finish(repo: CardRepository, engine: SyncEngine, keyring: Keyring
   await engine.sync();
   const unsent = (await repo.pushable()).some((record) => record.vault_id === vaultId);
   if (unsent || engine.getStatus().state !== 'idle') return false;
+  // Its comments too: those written before are sealed now.
+  const key = keyring.key(vaultId);
+  if (!key) return false;
+  await sealComments(vaultId, key);
   await purgePlaintextHistory(vaultId);
   await repo.setMeta(encryptingName(vaultId), null);
   return true;

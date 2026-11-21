@@ -261,3 +261,16 @@ export async function keyCode(publicKey: string): Promise<string> {
   const groups = [0, 2, 4, 6].map((i) => String(((digest[i] << 8) | digest[i + 1]) % 10_000).padStart(4, '0'));
   return groups.join(' ');
 }
+
+const commentAad = (cardId: string, vaultId: string): Bytes => new TextEncoder().encode(`comment|${cardId}|${vaultId}`);
+
+/** A comment in an encrypted vault, sealed with its key and bound to its card, as the card itself is. */
+export async function encryptComment(key: CryptoKey, body: string, cardId: string, vaultId: string): Promise<string> {
+  return PREFIX + (await seal(key, new TextEncoder().encode(body), commentAad(cardId, vaultId)));
+}
+
+export async function decryptComment(key: CryptoKey, body: string, cardId: string, vaultId: string): Promise<string | null> {
+  if (!isEncryptedPayload(body)) return null;
+  const plain = await open(key, body.slice(PREFIX.length), commentAad(cardId, vaultId));
+  return plain && new TextDecoder().decode(plain);
+}

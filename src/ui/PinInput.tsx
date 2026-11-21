@@ -1,4 +1,5 @@
 import type { ComponentProps } from 'react';
+import { pinFoundWithin } from '../domain/pin';
 
 /**
  * A box a vault PIN is typed into, its letters shown as dots. It's a plain text box whose own letters are drawn
@@ -31,5 +32,19 @@ export function PinInput({ value, className, ...props }: Omit<ComponentProps<'in
         {'•'.repeat([...value].length)}
       </span>
     </span>
+  );
+}
+
+/**
+ * Under a PIN that will encrypt a vault: how soon it could be found by trying every PIN like it on a copy of the
+ * server's data, where no limit on tries holds anyone back, when that's soon. It warns; any PIN may still be used.
+ */
+export function PinStrength({ pin }: { pin: string }) {
+  const within = pinFoundWithin(pin);
+  if (!within) return null;
+  return (
+    <p className="prose-note pin-strength" role="status">
+      Anyone with a copy of the server’s data could find a PIN like this in {within}, by trying them all. A longer one, or a few words, keeps the vault safe for years.
+    </p>
   );
 }

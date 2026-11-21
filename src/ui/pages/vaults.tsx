@@ -13,7 +13,7 @@ import { NotHere } from '../NotHere';
 import { Icon } from '../Icon';
 import { LockPanel } from '../LockPanel';
 import { useToast } from '../Toast';
-import { PinInput } from '../PinInput';
+import { PinInput, PinStrength } from '../PinInput';
 import { RecoveryKeyDialog } from '../RecoveryKeyDialog';
 import { NeedsPin, SealedOutOfReach, useVaultEncryption } from '../useVaultEncryption';
 import { VaultPeopleSection } from './people';
@@ -79,6 +79,7 @@ function CreateVaultForm() {
     <form className="vault-form" onSubmit={(e) => void submit(e)}>
       <input className="text-input" value={name} placeholder="Vault name" aria-label="Vault name" maxLength={80} onChange={(e) => setName(e.target.value)} />
       <PinInput value={pin} placeholder="PIN (optional, makes it private)" aria-label="PIN" onChange={(e) => setPin(e.target.value)} />
+      {pin && encrypt && <PinStrength pin={pin} />}
       {pin && <EncryptChoice on={encrypt} onChange={setEncrypt} />}
       <button type="submit" className="btn btn--primary" disabled={!name.trim()}>
         Create vault
@@ -287,6 +288,7 @@ function VaultSettings({ vault }: { vault: Vault }) {
               {isPrivate ? 'Change PIN' : owner ? 'Make private' : 'Lock with PIN'}
             </button>
           </form>
+          {(encrypted || (!isPrivate && owner && alone && encryptNew)) && <PinStrength pin={pin} />}
           {error && <p className="lock-panel__error">{error}</p>}
           {!isPrivate && owner && alone && (
             <div className="vault-gap">
@@ -332,6 +334,7 @@ function VaultSettings({ vault }: { vault: Vault }) {
               Encrypt this vault
             </button>
           </div>
+          <PinStrength pin={currentPin} />
         </form>
       )}
       {isPrivate && !encrypted && owner && (

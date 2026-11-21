@@ -1,6 +1,7 @@
 import { createContext, useContext, type MouseEvent } from 'react';
 import type { FileInfo } from '../domain/content';
-import { fileSize } from '../photos/service';
+import { fileSize, SealedUnreadable } from '../photos/service';
+import { UNREADABLE } from './editor/photo';
 import { useCards } from '../state/CardsContext';
 import { canChangeInTheOpen } from '../domain/access';
 import { useShareLink } from './driveLink';
@@ -50,9 +51,9 @@ export function useFileActions() {
       a.href = url;
       a.download = file.name;
       a.click();
-    } catch {
+    } catch (err) {
       tab?.close();
-      toast('This file isn’t available offline.');
+      toast(err instanceof SealedUnreadable ? UNREADABLE.file : 'This file isn’t available offline.');
     }
   };
 }

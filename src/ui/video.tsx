@@ -1,19 +1,20 @@
 import { useEffect, useState, useSyncExternalStore, type MouseEvent } from 'react';
 import { clipLength, type FileInfo } from '../domain/content';
 import { useCards } from '../state/CardsContext';
-import { usePhotoUrl } from './editor/photo';
+import { UNREADABLE, usePhotoUrl } from './editor/photo';
+import { SealedUnreadable } from '../photos/service';
 import { Icon } from './Icon';
 
 /** Where a video plays from: this device's copy, or the server a range at a time (`PhotoService.playAddress`). */
-export function useVideoAddress(id: string): { address: string | null; failed: boolean } {
+export function useVideoAddress(id: string): { address: string | null; failed: boolean; unreadable?: boolean } {
   const { photos } = useCards();
-  const [found, setFound] = useState<{ id: string; address: string | null; failed: boolean } | null>(null);
+  const [found, setFound] = useState<{ id: string; address: string | null; failed: boolean; unreadable?: boolean } | null>(null);
   useEffect(() => {
     if (!id) return;
     let live = true;
     photos.playAddress(id).then(
       (address) => live && setFound({ id, address, failed: false }),
-      () => live && setFound({ id, address: null, failed: true }),
+      (err: unknown) => live && setFound({ id, address: null, failed: true, unreadable: err instanceof SealedUnreadable }),
     );
     return () => void (live = false);
   }, [photos, id]);
@@ -123,7 +124,7 @@ export function HoverPlay({ file, on }: { file: FileInfo; on: boolean }) {
  * (`videoAt`, by the ID and name it carries).
  */
 export function VideoPlayer({ file, autoPlay = false, className = '' }: { file: FileInfo; autoPlay?: boolean; className?: string }) {
-  const { address, failed } = useVideoAddress(file.id);
+  const { address, failed, unreadable } = useVideoAddress(file.id);
   const { url: poster } = usePhotoUrl(file.poster ?? '');
   const share = useUploadShare(file.id);
   const [broken, setBroken] = useState(false);
@@ -146,7 +147,7 @@ export function VideoPlayer({ file, autoPlay = false, className = '' }: { file: 
         />
       ) : (
         <span className="video-player__note" style={{ aspectRatio: ratio }}>
-          {broken ? "This browser can't play this video. Download it to watch it." : failed ? 'This video isn’t available offline.' : 'Loading video…'}
+          {broken ? "This browser can't play this video. Download it to watch it." : unreadable ? UNREADABLE.video : failed ? 'This video isn’t available offline.' : 'Loading video…'}
         </span>
       )}
       {share !== null && <span className="video-player__sending">Uploading {Math.round(share * 100)}%</span>}

@@ -51,6 +51,9 @@ export interface VaultKeys {
 /** Thrown adding to an encrypted vault that isn't open here, as what's added to it is sealed with its key. */
 export class VaultClosed extends Error {}
 
+/** Thrown showing a sealed one its vault's key doesn't open: damaged, or sealed with another key. Asking again won't help. */
+export class SealedUnreadable extends Error {}
+
 /** A file's size for people: "820 KB", "3.4 MB". */
 export function fileSize(bytes: number): string {
   if (bytes < 1024) return `${bytes} B`;
@@ -121,15 +124,17 @@ export class PhotoService {
 
   /**
    * A sealed one opened with its vault's key, with what it says of itself; one not sealed as it is. Null while that
-   * vault is locked here, or if its key doesn't open it.
+   * vault is locked here; `SealedUnreadable` if its key doesn't open it.
    */
   private async open(blob: Blob, id: string): Promise<{ blob: Blob; facts: SealedFacts | null } | null> {
     const vaultId = await sealedVault(blob);
     if (!vaultId) return { blob, facts: null };
     const key = this.keys?.key(vaultId);
-    const opened = key && (await openAttachment(key, blob, id));
+    if (!key) return null;
+    const opened = await openAttachment(key, blob, id);
     // Locked while it was being opened: it isn't shown, or kept in memory.
-    if (!opened || !this.keys?.key(vaultId)) return null;
+    if (!this.keys?.key(vaultId)) return null;
+    if (!opened) throw new SealedUnreadable(`Attachment ${id} doesn't open with its vault's key.`);
     this.opened.set(id, vaultId);
     return opened;
   }
@@ -147,7 +152,7 @@ export class PhotoService {
   async copyAs(id: string, by: string, vaultId: string, seal: boolean, facts: { file: boolean } & Partial<Omit<SealedFacts, 'size'>>): Promise<boolean> {
     const local = await this.store.getPhoto(id);
     const raw = local?.blob ?? (await this.transport.download(id).catch(() => null));
-    const opened = raw && (await this.open(raw, id));
+    const opened = raw && (await this.open(raw, id).catch(() => null));
     if (!opened) return false;
     const { blob } = opened;
     const told: Partial<SealedFacts> = opened.facts ?? (local ? { mime: local.mime, name: local.file?.name, width: local.width, height: local.height, duration: local.duration } : {});
@@ -287,7 +292,7 @@ export class PhotoService {
 
   /**
    * The photo or file itself, from this device or else the server, opened if it's sealed. Null if the server doesn't
-   * have it yet, or it's sealed in a vault locked here. One fetched is kept here as it came, sealed if it was, unless
+   * have it yet, or it's sealed in a vault locked here; `SealedUnreadable` if it's sealed and its key doesn't open it. One fetched is kept here as it came, sealed if it was, unless
    * it's bigger than `KEEP_BYTES`.
    */
   async blob(id: string): Promise<Blob | null> {

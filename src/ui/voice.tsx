@@ -177,7 +177,7 @@ async function transcribe(id: string, vaultId: string, photos: PhotoService, dec
 export function VoiceMessage({ file, vaultId, onTranscript }: { file: FileInfo; vaultId?: string; onTranscript?: (words: Transcript) => void }) {
   const { photos, vaults } = useCards();
   const toast = useToast();
-  const { address, failed } = useVideoAddress(file.id);
+  const { address, failed, unreadable } = useVideoAddress(file.id);
   const audio = useRef<HTMLAudioElement>(null);
   const [playing, setPlaying] = useState(false);
   const [time, setTime] = useState(0);
@@ -304,7 +304,7 @@ export function VoiceMessage({ file, vaultId, onTranscript }: { file: FileInfo; 
             <span key={i} className={(i + 0.5) / bars.length <= done ? 'is-played' : undefined} style={{ height: `${Math.max(12, p)}%` }} />
           ))}
         </span>
-        <span className="voice__time">{broken ? 'Can’t play here' : failed ? 'Not available offline' : playing || time ? clipLength(time) : total ? clipLength(total) : '—'}</span>
+        <span className="voice__time">{broken ? 'Can’t play here' : unreadable ? 'Can’t be opened' : failed ? 'Not available offline' : playing || time ? clipLength(time) : total ? clipLength(total) : '—'}</span>
         <button type="button" className="voice__speed" title="Playback speed" aria-label={`Playback speed ${speed}×`} onClick={faster}>
           {speed}×
         </button>

@@ -3,13 +3,19 @@ import { NodeViewWrapper, ReactNodeViewRenderer, type ReactNodeViewProps } from 
 import { withEditorMenu } from './nodeMenu';
 import { useEffect, useState } from 'react';
 import { useCards } from '../../state/CardsContext';
+import { SealedUnreadable } from '../../photos/service';
+
+type PhotoState = 'loading' | 'ready' | 'waiting' | 'offline' | 'unreadable';
 
 const RETRY_MS = 30_000;
 
-/** An object URL for a photo, retrying while the server doesn't have it yet. An empty ID (no photo) finds none. */
-export function usePhotoUrl(id: string): { url: string | null; state: 'loading' | 'ready' | 'waiting' | 'offline' } {
+/**
+ * An object URL for a photo, retrying while the server doesn't have it yet, or can't be reached. An empty ID (no
+ * photo) finds none. One sealed with a key its vault doesn't have is `unreadable`, and not asked for again.
+ */
+export function usePhotoUrl(id: string): { url: string | null; state: PhotoState } {
   const { photos } = useCards();
-  const [result, setResult] = useState<{ url: string | null; state: 'loading' | 'ready' | 'waiting' | 'offline' }>({ url: null, state: 'loading' });
+  const [result, setResult] = useState<{ url: string | null; state: PhotoState }>({ url: null, state: 'loading' });
 
   useEffect(() => {
     if (!id) return setResult({ url: null, state: 'waiting' });
@@ -22,10 +28,11 @@ export function usePhotoUrl(id: string): { url: string | null; state: 'loading' 
           setResult(url ? { url, state: 'ready' } : { url: null, state: 'waiting' });
           if (!url) timer = setTimeout(attempt, RETRY_MS);
         },
-        () => {
+        (err: unknown) => {
           if (!live) return;
-          setResult({ url: null, state: 'offline' });
-          timer = setTimeout(attempt, RETRY_MS);
+          const unreadable = err instanceof SealedUnreadable;
+          setResult({ url: null, state: unreadable ? 'unreadable' : 'offline' });
+          if (!unreadable) timer = setTimeout(attempt, RETRY_MS);
         },
       );
     };
@@ -38,6 +45,13 @@ export function usePhotoUrl(id: string): { url: string | null; state: 'loading' 
   return result;
 }
 
+/** What's said of a sealed one its vault's key doesn't open. */
+export const UNREADABLE = {
+  photo: 'This photo can’t be opened: it’s damaged, or was encrypted with another key.',
+  file: 'This file can’t be opened: it’s damaged, or was encrypted with another key.',
+  video: 'This video can’t be opened: it’s damaged, or was encrypted with another key.',
+};
+
 function PhotoView({ node, selected }: ReactNodeViewProps) {
   const id = String(node.attrs.id ?? '');
   const alt = typeof node.attrs.alt === 'string' ? node.attrs.alt : '';
@@ -48,7 +62,7 @@ function PhotoView({ node, selected }: ReactNodeViewProps) {
         <img src={url} alt={alt || 'Photo'} draggable={false} />
       ) : (
         <div className="photo__placeholder" role="img" aria-label="Photo">
-          {state === 'loading' ? 'Loading photo…' : state === 'waiting' ? "This photo hasn't been uploaded from its device yet." : 'Photo unavailable offline.'}
+          {state === 'loading' ? 'Loading photo…' : state === 'waiting' ? "This photo hasn't been uploaded from its device yet." : state === 'unreadable' ? UNREADABLE.photo : 'Photo unavailable offline.'}
         </div>
       )}
     </NodeViewWrapper>

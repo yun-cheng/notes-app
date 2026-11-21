@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import { SyncAuthExpired, SyncOffline } from '../sync/engine';
-import { fileSize, KEEP_BYTES, MAX_FILE_BYTES, MAX_VIDEO_BYTES, PhotoService, VaultClosed, type VaultKeys } from './service';
+import { fileSize, KEEP_BYTES, MAX_FILE_BYTES, MAX_VIDEO_BYTES, PhotoService, SealedUnreadable, VaultClosed, type VaultKeys } from './service';
+import { sealAttachment } from '../crypto/attachmentSeal';
 import { MemoryPhotoStore, type PhotoRecord, type PhotoTransport, type UploadResult, type VideoFacts } from './types';
 
 function fixture(answers: (UploadResult | 'offline' | 'expired')[] = [], facts: VideoFacts | null = null, keys: VaultKeys | null = null) {
@@ -136,6 +137,18 @@ describe('copying one for a vault that starts or stops being encrypted', () => {
     expect(copy).toMatchObject({ vaultId: 'home', mime: 'application/pdf', file: { name: 'Lease.pdf' }, uploaded: 0 });
     expect(copy.sealed).toBeUndefined();
     expect(await copy.blob.text()).toBe('the lease');
+  });
+});
+
+describe('a sealed one its vault’s key doesn’t open', () => {
+  it('says so, rather than that it isn’t uploaded yet, and isn’t copied', async () => {
+    const { keys } = await diaryKeys();
+    const { photos, server } = fixture([], null, keys);
+    const other = await crypto.subtle.generateKey({ name: 'AES-GCM', length: 256 }, true, ['encrypt', 'decrypt']);
+    server.set('p1', await sealAttachment(other, image(), 'p1', 'diary', { mime: 'image/jpeg' }));
+    await expect(photos.blob('p1')).rejects.toBeInstanceOf(SealedUnreadable);
+    await expect(photos.url('p1')).rejects.toBeInstanceOf(SealedUnreadable);
+    expect(await photos.copyAs('p1', 'copy', 'diary', false, { file: false })).toBe(false);
   });
 });
 

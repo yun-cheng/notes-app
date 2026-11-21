@@ -14,6 +14,40 @@ final class CardStore {
         try db.execute("CREATE TABLE IF NOT EXISTS dirty (id TEXT PRIMARY KEY)")
         try db.execute("CREATE TABLE IF NOT EXISTS vaults (id TEXT PRIMARY KEY, json TEXT NOT NULL)")
         try db.execute("CREATE TABLE IF NOT EXISTS meta (key TEXT PRIMARY KEY, value TEXT NOT NULL)")
+        try db.execute("CREATE TABLE IF NOT EXISTS changes (n INTEGER PRIMARY KEY AUTOINCREMENT, json TEXT NOT NULL)")
+    }
+
+    // MARK: The change log
+
+    private func change(_ row: [Any?]) -> ChangeEntry? {
+        guard var entry = try? JSON.decode(ChangeEntry.self, from: row[1] as! String) else { return nil }
+        entry.n = row[0] as? Int64
+        return entry
+    }
+
+    /// Adds a change, or with its `n`, replaces it.
+    func putChange(_ entry: ChangeEntry) throws {
+        var stored = entry
+        stored.n = nil
+        if let n = entry.n {
+            try db.execute("UPDATE changes SET json = ? WHERE n = ?", [.text(try JSON.string(stored)), .int(n)])
+        } else {
+            try db.execute("INSERT INTO changes (json) VALUES (?)", [.text(try JSON.string(stored))])
+        }
+    }
+
+    func listChanges() throws -> [ChangeEntry] { try db.query("SELECT n, json FROM changes ORDER BY n").compactMap(change) }
+    func getChange(_ n: Int64) throws -> ChangeEntry? { try db.query("SELECT n, json FROM changes WHERE n = ?", [.int(n)]).first.flatMap(change) }
+    func lastChange() throws -> ChangeEntry? { try db.query("SELECT n, json FROM changes ORDER BY n DESC LIMIT 1").first.flatMap(change) }
+
+    func deleteChanges(_ ns: [Int64]) throws {
+        guard !ns.isEmpty else { return }
+        try db.transaction { for n in ns { try db.execute("DELETE FROM changes WHERE n = ?", [.int(n)]) } }
+    }
+
+    /// Keeps the newest `limit` changes.
+    func trimChanges(_ limit: Int) throws {
+        try db.execute("DELETE FROM changes WHERE n NOT IN (SELECT n FROM changes ORDER BY n DESC LIMIT ?)", [.int(Int64(limit))])
     }
 
     private static func record(_ row: [Any?]) -> CardRecord {
@@ -124,7 +158,7 @@ final class CardStore {
     /// Everything, for signing out.
     func clear() throws {
         try db.transaction {
-            for table in ["cards", "dirty", "vaults", "meta"] { try db.execute("DELETE FROM \(table)") }
+            for table in ["cards", "dirty", "vaults", "meta", "changes"] { try db.execute("DELETE FROM \(table)") }
         }
     }
 }

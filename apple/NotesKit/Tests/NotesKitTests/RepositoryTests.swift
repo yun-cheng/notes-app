@@ -172,3 +172,72 @@ func makeRepo(_ clock: Clock = Clock()) async throws -> Repository {
         #expect(try await repo.card("card-1")?.title == "Still secret")
     }
 }
+
+@Suite struct ChangeLogTests {
+    static let me = "u1"
+    static let vaults = [
+        Vault(id: "vault-u1", name: "Personal", owner_id: "u1", lock: .none, ai_access: .off, created_at: 1, pin: nil, hidden: false),
+        Vault(id: "diary-u1", name: "Diary", owner_id: "u1", lock: .pin, ai_access: .off, created_at: 2, pin: nil, hidden: false),
+    ]
+
+    func repo(_ clock: Clock = Clock()) async throws -> Repository {
+        let repo = try Repository(path: ":memory:", now: { clock.tick() }, newId: { clock.id() })
+        _ = try await repo.applyAccess(vaults: Self.vaults, shared: [])
+        await repo.setMainVault("vault-u1")
+        return repo
+    }
+
+    @Test func undoAndRedoAnEdit() async throws {
+        let repo = try await repo()
+        let note = try await repo.createNote(title: "First")
+        try await repo.update(note.id) { $0.title = "Second" }
+        #expect(try await repo.undo() == 1)
+        #expect(try await repo.card(note.id)?.title == "First")
+        #expect(try await repo.redo() == 1)
+        #expect(try await repo.card(note.id)?.title == "Second")
+        // Undoing the making of a card puts it in the Trash.
+        _ = try await repo.undo()
+        _ = try await repo.undo()
+        #expect(try await repo.card(note.id)?.deleted == true)
+    }
+
+    @Test func typingJoinsOneChangeAndALaterEditBlocksUndo() async throws {
+        let clock = Clock()
+        let repo = try await repo(clock)
+        let note = try await repo.createNote(content: Doc.fromText("a"))
+        for word in ["ab", "abc", "abcd"] { try await repo.update(note.id, typed: true) { $0.content = Doc.fromText(word) } }
+        #expect(try await repo.changes().count == 2)
+        #expect(Changes.describe(try await repo.changes().last!.change) == "Edited")
+        // Changed on another device since: undo leaves it alone.
+        try await repo.applyRemote([])
+        try await repo.update(note.id, group: "other") { $0.payload["color"] = "blue" }
+        _ = try await repo.undo()
+        #expect(try await repo.card(note.id)?.color == nil)
+        _ = try await repo.undo()
+        #expect(try await repo.card(note.id)?.content == Doc.fromText("a"))
+    }
+
+    @Test func savingTheBoxMakesTagsOnceAndIsOneUndo() async throws {
+        let repo = try await repo()
+        let context = SaveContext(accountId: Self.me, vaults: Self.vaults, locked: [], index: CardIndex(try await repo.allCards()), sharedInto: [:])
+        let entries = EntryParser.parseEntries("Idea #diary\n[] milk #shop\n[] eggs #Shop @tomorrow", today: "2026-11-12")
+        guard case .saved(let ids, _) = try await repo.save(entries, in: context), ids.count == 3 else { Issue.record("not saved"); return }
+        let cards = try await repo.allCards()
+        let tags = cards.filter { $0.type == .tag }
+        #expect(tags.map(\.title) == ["shop"] && tags.first?.keptToVault == true && tags.first?.vaultId == "vault-u1")
+        #expect(try await repo.card(ids[0])?.vaultId == "diary-u1")
+        #expect(try await repo.card(ids[2])?.due == "2026-11-13")
+        // A locked Diary keeps everything in the box.
+        let locked = SaveContext(accountId: Self.me, vaults: Self.vaults, locked: ["diary-u1"], index: CardIndex(cards), sharedInto: [:])
+        #expect(try await repo.save(EntryParser.parseEntries("x\n[] y #diary", today: "2026-11-12"), in: locked) == .unlock(vaultId: "diary-u1"))
+        #expect(try await repo.undo() == 4)
+        #expect(try await repo.allCards().allSatisfy(\.deleted))
+    }
+
+    @Test func aRepeatingTodoMovesOnWhenTicked() async throws {
+        let repo = try await repo()
+        let todo = try await repo.createTodo(title: "Gym", due: "2026-11-12", repeat: Repeat(unit: .week, every: 1))
+        #expect(try await repo.setDone(todo.id, true, today: "2026-11-12") == "2026-11-19")
+        #expect(try await repo.card(todo.id)?.isDone == false)
+    }
+}

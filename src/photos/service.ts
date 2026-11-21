@@ -81,6 +81,8 @@ export class PhotoService {
   private opened = new Map<string, string>();
   /** Whether each the server has is sealed, from the server's list or else its start. */
   private sealedThere = new Map<string, boolean>();
+  /** The start of each fetched from the server, which never changes, so the Trash refreshing fetches none again. */
+  private starts = new Map<string, Uint8Array>();
 
   constructor(
     private store: PhotoStore,
@@ -181,11 +183,20 @@ export class PhotoService {
     if (!this.keys?.anyEncrypted() || !this.transport.start) return false;
     const known = this.sealedThere.get(id);
     if (known !== undefined) return known;
-    const start = await this.transport.start(id, HEADER_BYTES).catch(() => null);
+    const start = await this.startThere(id);
     if (!start) return false;
     const sealed = !!readHeader(start);
     this.sealedThere.set(id, sealed);
     return sealed;
+  }
+
+  /** One's first bytes on the server, enough for its header, fetched once; null when the server didn't answer, to ask again. */
+  private async startThere(id: string): Promise<Uint8Array | null> {
+    const known = this.starts.get(id);
+    if (known) return known;
+    const start = (await this.transport.start?.(id, HEADER_BYTES).catch(() => null)) ?? null;
+    if (start) this.starts.set(id, start);
+    return start;
   }
 
   /**
@@ -194,7 +205,7 @@ export class PhotoService {
    */
   async sealedFacts(id: string): Promise<SealedFacts | null> {
     const local = await this.store.getPhoto(id);
-    const start = local ? (local.sealed ? new Uint8Array(await local.blob.slice(0, HEADER_BYTES).arrayBuffer()) : null) : await this.transport.start?.(id, HEADER_BYTES);
+    const start = local ? (local.sealed ? new Uint8Array(await local.blob.slice(0, HEADER_BYTES).arrayBuffer()) : null) : await this.startThere(id);
     const header = start && readHeader(start);
     const key = header && this.keys?.key(header.vaultId);
     return key ? sealedFacts(key, start, id) : null;
@@ -321,6 +332,7 @@ export class PhotoService {
     this.urls.delete(id);
     this.opened.delete(id);
     this.sealedThere.delete(id);
+    this.starts.delete(id);
     void url?.then((u) => u && URL.revokeObjectURL(u), () => undefined);
     await this.store.deletePhoto(id);
   }

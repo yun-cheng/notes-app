@@ -123,6 +123,24 @@ describe('telling a sealed video on the server', () => {
   });
 });
 
+describe('a sealed one in the Trash', () => {
+  it('fetches its start once, however often it is asked what it is, and whether it is sealed', async () => {
+    const { keys, lock } = await diaryKeys();
+    const { photos, server } = fixture([], null, keys);
+    const { id } = await photos.addFile(new File(['a voice message'], 'Voice.webm', { type: 'audio/webm' }), 'diary');
+    await photos.upload();
+    const other = new PhotoService(new MemoryPhotoStore(), { upload: async () => 'ok', download: async () => null, start: async (i, n) => (fetched.push(i), new Uint8Array(await server.get(i)!.slice(0, n).arrayBuffer())), address: (i) => `/api/attachments/${i}` }, async () => ({ blob: image(), mime: 'image/jpeg', width: 1, height: 1 }), undefined, undefined, undefined, keys);
+    const fetched: string[] = [];
+    lock(true);
+    expect(await other.sealedFacts(id)).toBeNull();
+    expect(await other.sealedFacts(id)).toBeNull();
+    lock(false);
+    expect(await other.sealedFacts(id)).toMatchObject({ mime: 'audio/webm', name: 'Voice.webm' });
+    expect(await other.playAddress(id)).toBeNull();
+    expect(fetched).toEqual([id]);
+  });
+});
+
 describe('PhotoService', () => {
   it('keeps a file as it is, under its name, and uploads it with the photos', async () => {
     const { photos, store, uploads } = fixture();

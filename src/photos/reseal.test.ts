@@ -14,6 +14,7 @@ function setup(cards: Card[], server: StoredAttachment[], local: PhotoRecord[] =
   const copies: [string, string, boolean, unknown][] = [];
   const updates: [string, CardPatch][] = [];
   const replaced: { id: string; by: string }[] = [];
+  const forgotten: string[] = [];
   let n = 0;
   const deps: ResealDeps = {
     cards: async () => cards,
@@ -26,9 +27,10 @@ function setup(cards: Card[], server: StoredAttachment[], local: PhotoRecord[] =
     },
     update: async (id, patch) => void updates.push([id, patch]),
     replaced: async (pairs) => void replaced.push(...pairs),
+    forget: async (id) => void forgotten.push(id),
     newId: () => `new-${++n}`,
   };
-  return { deps, copies, updates, replaced };
+  return { deps, copies, updates, replaced, forgotten };
 }
 
 describe('resealing a vault’s photos and files', () => {
@@ -52,11 +54,14 @@ describe('resealing a vault’s photos and files', () => {
 
   it('opens sealed ones when a vault stops being encrypted, and says which it couldn’t do', async () => {
     const card = note('n1', 'Day', { vaultId: 'diary', content: doc(photo('p1'), photo('p2'), photo('p3'), photo('p4')) });
-    const local: PhotoRecord[] = [{ id: 'p3', vaultId: 'diary', blob: new Blob([]), mime: 'application/octet-stream', width: null, height: null, sealed: 1, uploaded: 0, addedAt: 0 }];
-    const t = setup([card], [stored('p1', { sealed: 1 }), stored('p2')], local, ['p3']);
+    const kept = (id: string): PhotoRecord => ({ id, vaultId: 'diary', blob: new Blob([]), mime: 'application/octet-stream', width: null, height: null, sealed: 1, uploaded: 0, addedAt: 0 });
+    const t = setup([card], [stored('p1', { sealed: 1 }), stored('p2')], [kept('p3'), kept('p5')], ['p3']);
+    card.content = doc(photo('p1'), photo('p2'), photo('p3'), photo('p4'), photo('p5'));
     expect(await resealVaults(t.deps, [{ vaultId: 'diary', seal: false }])).toEqual({ failed: 1, unknown: 1 });
-    expect(t.copies.map((c) => c.slice(0, 3))).toEqual([['p1', 'new-1', false]]);
-    expect(t.updates).toEqual([['n1', { content: doc(photo('new-1'), photo('p2'), photo('p3'), photo('p4')) }]]);
+    expect(t.copies.map((c) => c.slice(0, 3))).toEqual([['p1', 'new-1', false], ['p5', 'new-3', false]]);
+    // One kept only here, never uploaded, is forgotten for its copy, so it never goes up sealed.
+    expect(t.forgotten).toEqual(['p5']);
+    expect(t.updates).toEqual([['n1', { content: doc(photo('new-1'), photo('p2'), photo('p3'), photo('p4'), photo('new-3')) }]]);
   });
 
   it('counts one sealed for another vault as not sealed for this one', async () => {

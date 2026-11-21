@@ -23,6 +23,8 @@ export interface ResealDeps {
   update: (id: string, patch: CardPatch) => Promise<unknown>;
   /** Notes the old ones, each with the copy that replaced it, to delete once the copy is up. */
   replaced: (pairs: { id: string; by: string }[]) => Promise<void>;
+  /** Forgets one kept only here, never uploaded: the copy replaces it, and it mustn't go up as it was. */
+  forget: (id: string) => Promise<void>;
   newId?: () => string;
 }
 
@@ -119,5 +121,6 @@ async function resealOne(deps: ResealDeps, cards: Card[], stored: ReadonlyMap<st
     await deps.update(card.id, { content, ...(Array.isArray(card.pages) ? { pages } : pages.length ? { back: pages[0] } : {}) });
   }
   await deps.replaced([...renamed].map(([id, by]) => ({ id, by: by ?? '' })));
+  for (const id of renamed.keys()) if ((await deps.local(id))?.uploaded === 0) await deps.forget(id);
   return left;
 }

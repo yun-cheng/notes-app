@@ -85,6 +85,7 @@ function openAccount(accountId: string) {
         copyAs: (...args) => photos.copyAs(...args),
         update: (id, patch) => repo.update(id, patch),
         replaced: (pairs) => attachments.replaced(pairs),
+        forget: (id) => photos.forget(id),
       },
       vaults,
     );

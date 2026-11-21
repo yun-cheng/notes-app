@@ -715,7 +715,7 @@ export async function seed() {
   note('demo-health-physio', at(2, 8, 0), doc(p('Physio: three sets of ten squats, then the stretches on the sheet.')), [], 'Physio exercises', health.id);
   todo('demo-health-refill', 'Refill the prescription', addDays(today, 1), { dueTime: '09:00', when: at(1, 8, 30), vaultId: health.id });
 
-  // A shared vault with Sam: notes from both of you. Chores is a tag kept to it: Sam has it too, and only its entries offer it.
+  // A shared vault with Sam: notes from both of you. Chores is a tag kept to it and Personal (below): Sam has it too.
   add('demo-tag-chores', family.id, at(9, 9), { type: 'tag', title: 'Chores', pinned: false, tags: [], content: doc(p()), scope: 'vault' });
   note('demo-family-groceries', at(2, 17, 0), doc(p('Shared shopping list'), checklist(['Rice', true], ['Eggs', false], ['Dish soap', false])), ['demo-tag-chores'], '', family.id);
   // Reactions: Sam's and yours together on one, Sam's alone on the other; a press puts yours on or takes it off.
@@ -745,6 +745,8 @@ export async function seed() {
   await call(DEMO, `/cards/${kyoto}/shares`, { vault_id: family.id, role: 'edit' });
   await call(DEMO, `/cards/${launch}/shares`, { vault_id: family.id, role: 'edit' });
   await call(DEMO, '/cards/demo-note-curry/links', {});
+  // Chores is kept to two vaults: it lives in Family and is in Personal besides, so entries in both offer it.
+  await call(DEMO, '/cards/demo-tag-chores/shares', { vault_id: personal, role: 'edit' });
   // Claude and other AI apps may read the Personal vault.
   await call(DEMO, `/vaults/${personal}`, { ai_access: 'read' }, 'PATCH');
 

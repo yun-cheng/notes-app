@@ -27,6 +27,28 @@ describe('DexieStore', () => {
     expect((await dx.pendingPhotos()).map((p) => p.id)).toEqual(['b']);
     expect((await dx.getPhoto('a'))?.uploaded).toBe(1);
   });
+  it('saves a photo again from memory when saving the file as it is fails, as Chrome can for a pasted one', async () => {
+    const dx = new DexieStore(`t-${Math.random()}`);
+    const table = (dx as unknown as { db: { photos: { put: (p: unknown) => Promise<unknown> } } }).db.photos;
+    const put = table.put.bind(table);
+    const saved: Blob[] = [];
+    let fails = 1;
+    table.put = (p) => {
+      saved.push((p as { blob: Blob }).blob);
+      if (fails-- > 0) return Promise.reject(Object.assign(new Error('Failed to write blobs (IOError)'), { name: 'DataError' }));
+      return put(p);
+    };
+    const blob = new Blob(['pixels'], { type: 'image/png' });
+    await dx.putPhoto({ id: 'p', vaultId: 'v', blob, mime: 'image/png', width: 1, height: 1, uploaded: 0, addedAt: 1 });
+    expect(saved).toHaveLength(2);
+    expect(saved[1]).not.toBe(blob);
+    expect(saved[1].type).toBe('image/png');
+    expect(await (await dx.getPhoto('p'))!.blob.text()).toBe('pixels');
+    // Any other failure is left as it is.
+    fails = 1;
+    table.put = (p) => (fails-- > 0 ? Promise.reject(Object.assign(new Error('Quota'), { name: 'QuotaExceededError' })) : put(p));
+    await expect(dx.putPhoto({ id: 'q', vaultId: 'v', blob, mime: 'image/png', width: 1, height: 1, uploaded: 0, addedAt: 1 })).rejects.toThrow('Quota');
+  });
   it('notifies subscribers of later writes', async () => {
     const dx = new DexieStore(`t-${Math.random()}`);
     const counts: number[] = [];

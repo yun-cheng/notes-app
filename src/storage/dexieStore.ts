@@ -23,6 +23,9 @@ class NotesDb extends Dexie {
   }
 }
 
+/** The largest photo or file read into memory to save it again when saving it as it is fails. */
+const MAX_IN_MEMORY = 256 * 1024 * 1024;
+
 export class DexieStore implements CardStore, PhotoStore, TranslationStore {
   private db: NotesDb;
 
@@ -119,7 +122,17 @@ export class DexieStore implements CardStore, PhotoStore, TranslationStore {
     return () => subscription.unsubscribe();
   }
   async putPhoto(photo: PhotoRecord) {
-    await this.db.photos.put(photo);
+    try {
+      await this.db.photos.put(photo);
+    } catch (err) {
+      // Chrome copies a picked or pasted file into the database from where it is on disk, and that can fail ("Failed
+      // to write blobs (IOError)"), as when what was copied was a file the app it came from has since moved. Read
+      // into memory while it still can be, it's saved as any other. Not a huge video, which can't be held in memory.
+      if ((err as Error)?.name !== 'DataError' || photo.blob.size > MAX_IN_MEMORY) throw err;
+      const copy = await photo.blob.arrayBuffer().catch(() => null);
+      if (!copy) throw new Error('This browser can’t read that file any more. Copy it again, or save it and add it from there.');
+      await this.db.photos.put({ ...photo, blob: new Blob([copy], { type: photo.blob.type }) });
+    }
   }
   getPhoto(id: string) {
     return this.db.photos.get(id);

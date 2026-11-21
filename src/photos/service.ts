@@ -119,18 +119,19 @@ export class PhotoService {
     await this.store.putPhoto({ id: record.id, vaultId: record.vaultId, blob, mime: SEALED_TYPE, width: null, height: null, sealed: 1, uploaded: 0, addedAt: record.addedAt });
   }
 
-  /** A sealed one opened with its vault's key; null while that vault is locked here. One that only looked sealed is itself. */
-  private async open(blob: Blob, id: string): Promise<Blob | null> {
+  /**
+   * A sealed one opened with its vault's key, with what it says of itself; one not sealed as it is. Null while that
+   * vault is locked here, or if its key doesn't open it.
+   */
+  private async open(blob: Blob, id: string): Promise<{ blob: Blob; facts: SealedFacts | null } | null> {
     const vaultId = await sealedVault(blob);
-    if (!vaultId) return blob;
+    if (!vaultId) return { blob, facts: null };
     const key = this.keys?.key(vaultId);
-    if (!key) return null;
-    const opened = await openAttachment(key, blob, id);
-    if (!opened) return blob;
+    const opened = key && (await openAttachment(key, blob, id));
     // Locked while it was being opened: it isn't shown, or kept in memory.
-    if (!this.keys?.key(vaultId)) return null;
+    if (!opened || !this.keys?.key(vaultId)) return null;
     this.opened.set(id, vaultId);
-    return opened.blob;
+    return opened;
   }
 
   /** This device's copy, as kept: sealed, for one in an encrypted vault. */
@@ -146,17 +147,10 @@ export class PhotoService {
   async copyAs(id: string, by: string, vaultId: string, seal: boolean, facts: { file: boolean } & Partial<Omit<SealedFacts, 'size'>>): Promise<boolean> {
     const local = await this.store.getPhoto(id);
     const raw = local?.blob ?? (await this.transport.download(id).catch(() => null));
-    if (!raw) return false;
-    let blob = raw;
-    let told: Partial<SealedFacts> = local && !local.sealed ? { mime: local.mime, name: local.file?.name, width: local.width, height: local.height, duration: local.duration } : {};
-    const sealedFor = await sealedVault(raw);
-    if (sealedFor) {
-      const key = this.keys?.key(sealedFor);
-      const opened = key && (await openAttachment(key, raw, id));
-      if (!opened) return false;
-      blob = opened.blob;
-      told = opened.facts;
-    }
+    const opened = raw && (await this.open(raw, id));
+    if (!opened) return false;
+    const { blob } = opened;
+    const told: Partial<SealedFacts> = opened.facts ?? (local ? { mime: local.mime, name: local.file?.name, width: local.width, height: local.height, duration: local.duration } : {});
     const mime = facts.mime || told.mime || blob.type || SEALED_TYPE;
     const name = facts.name ?? told.name ?? 'Untitled';
     const shape = { width: facts.width ?? told.width ?? null, height: facts.height ?? told.height ?? null, duration: facts.duration ?? told.duration ?? null };
@@ -298,13 +292,13 @@ export class PhotoService {
    */
   async blob(id: string): Promise<Blob | null> {
     const local = await this.store.getPhoto(id);
-    if (local) return local.sealed ? this.open(local.blob, id) : local.blob;
+    if (local) return local.sealed ? ((await this.open(local.blob, id))?.blob ?? null) : local.blob;
     const blob = await this.transport.download(id);
     if (!blob) return null;
     const vaultId = await sealedVault(blob);
     if (blob.size <= KEEP_BYTES)
       await this.store.putPhoto({ id, vaultId: vaultId ?? '', blob, mime: vaultId ? SEALED_TYPE : blob.type, width: null, height: null, ...(vaultId ? { sealed: 1 as const } : {}), uploaded: 1, addedAt: this.now() });
-    return vaultId ? this.open(blob, id) : blob;
+    return vaultId ? ((await this.open(blob, id))?.blob ?? null) : blob;
   }
 
   /** An object URL for showing the photo, or opening the file, shared by every view of it. */

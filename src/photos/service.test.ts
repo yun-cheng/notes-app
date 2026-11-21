@@ -123,6 +123,22 @@ describe('telling a sealed video on the server', () => {
   });
 });
 
+describe('copying one for a vault that starts or stops being encrypted', () => {
+  it('opens a sealed one into a copy not sealed, with what it said of itself, and copies none while its vault is locked', async () => {
+    const { keys, lock } = await diaryKeys();
+    const { photos, store } = fixture([], null, keys);
+    const { id } = await photos.addFile(new File(['the lease'], 'Lease.pdf', { type: 'application/pdf' }), 'diary');
+    lock(true);
+    expect(await photos.copyAs(id, 'copy', 'home', false, { file: true })).toBe(false);
+    lock(false);
+    expect(await photos.copyAs(id, 'copy', 'home', false, { file: true })).toBe(true);
+    const copy = (await store.getPhoto('copy'))!;
+    expect(copy).toMatchObject({ vaultId: 'home', mime: 'application/pdf', file: { name: 'Lease.pdf' }, uploaded: 0 });
+    expect(copy.sealed).toBeUndefined();
+    expect(await copy.blob.text()).toBe('the lease');
+  });
+});
+
 describe('a sealed one in the Trash', () => {
   it('fetches its start once, however often it is asked what it is, and whether it is sealed', async () => {
     const { keys, lock } = await diaryKeys();

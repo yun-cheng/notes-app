@@ -101,6 +101,16 @@ export type VaultUpdate = Partial<VaultInput> & { ai_access?: Vault['ai_access']
 
 export type UpdateResult = { vault: Vault } | { error: 'not_found' | 'default_vault' | 'private_ai' | 'needs_key' | 'encrypted_open' | 'not_owner' };
 
+/** The vault key sealed for a member's key pair, after a change to their own lock. */
+function grantKept(had: MemberKey | null, kept: Omit<MemberKey, 'grant'> | null, offered: MemberKey | null): string | null {
+  // Not let in yet (whatever they send), or no PIN left to hold it.
+  if (!had?.grant || !kept) return null;
+  // Let in, and sealed the key to a new key pair themselves.
+  if (offered?.grant) return offered.grant;
+  // The same key pair keeps what the owner gave it; a new one without the key (a forgotten PIN) asks again.
+  return kept.public === had.public ? had.grant : null;
+}
+
 /**
  * A member's own lock: their PIN, and whether it hides the vault. That's all they may change in someone else's vault.
  * In an encrypted one, a PIN comes with their own copy of its key, wrapped under it: a new key pair to be let in with,
@@ -115,13 +125,10 @@ async function updateOwnLock(db: Database, userId: string, current: Vault, updat
   if (sealedVault && newPin && !offered) return { error: 'needs_key' };
   const pin = newPin === undefined ? current.pin : newPin;
   const hidden = !!pin && (newHidden ?? current.hidden);
-  const had = current.encryption && 'member' in current.encryption ? current.encryption.member : null;
-  // What they had stays while the PIN does; a new key pair keeps the owner's grant only if they sealed one to it
-  // themselves, which only someone already let in may do.
+  const had = (current.encryption && 'member' in current.encryption && current.encryption.member) || null;
+  // What they had stays while the PIN does.
   const kept = offered ?? (pin ? had : null);
-  let grant: string | null = null;
-  if (offered) grant = had?.grant ? (offered.grant ?? (offered.public === had.public ? had.grant : null)) : null;
-  else if (kept) grant = had?.grant ?? null;
+  const grant = grantKept(had, kept, offered);
   const copy = kept ? JSON.stringify({ kdf: kept.kdf, wrapped: kept.wrapped, public: kept.public }) : null;
   await db
     .prepare(`UPDATE vault_members SET pin_salt = ?, pin_hash = ?, pin_iterations = ?, hidden = ?, encryption = ?, key_grant = ? WHERE vault_id = ? AND user_id = ?`)

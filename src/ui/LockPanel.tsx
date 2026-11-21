@@ -60,46 +60,24 @@ export function LockPanel({ vaultId }: { vaultId: string }) {
     }
   };
 
-  if (recovering && member) {
-    return (
-      <form className="lock-panel" onSubmit={(e) => void recover(e)}>
-        <div className="lock-panel__title">
-          <Icon name="lock" size={18} />
-          <span>Ask for its key again</span>
-        </div>
-        <p className="prose-note">Your PIN held your copy of its key. With a new one, you ask its owner again, and see nothing in it until they let you in once more.</p>
-        <PinInput value={newPin} placeholder="New PIN" aria-label="New PIN" onChange={(e) => setNewPin(e.target.value)} />
-        <PinStrength pin={newPin} />
-        <div className="button-row vault-gap">
-          <button type="submit" className="btn btn--primary" disabled={!newPin || busy}>
-            Set PIN and ask
-          </button>
-          <button type="button" className="btn btn--quiet" onClick={() => setRecovering(false)}>
-            Back
-          </button>
-        </div>
-        {error && (
-          <p className="lock-panel__error" role="alert">
-            {error}
-          </p>
-        )}
-      </form>
-    );
-  }
-
+  // An owner sets a new PIN with the recovery key; a member, whose copy has none, asks its owner for the key again.
   if (recovering) {
     return (
       <form className="lock-panel" onSubmit={(e) => void recover(e)}>
         <div className="lock-panel__title">
           <Icon name="lock" size={18} />
-          <span>Use your recovery key</span>
+          <span>{member ? 'Ask for its key again' : 'Use your recovery key'}</span>
         </div>
-        <input className="text-input" value={recoveryKey} autoComplete="off" placeholder="XXXX-XXXX-…" aria-label="Recovery key" onChange={(e) => setRecoveryKey(e.target.value)} />
-        <PinInput className="vault-gap" value={newPin} placeholder="New PIN" aria-label="New PIN" onChange={(e) => setNewPin(e.target.value)} />
+        {member ? (
+          <p className="prose-note">Your PIN held your copy of its key. With a new one, you ask its owner again, and see nothing in it until they let you in once more.</p>
+        ) : (
+          <input className="text-input" value={recoveryKey} autoComplete="off" placeholder="XXXX-XXXX-…" aria-label="Recovery key" onChange={(e) => setRecoveryKey(e.target.value)} />
+        )}
+        <PinInput className={member ? undefined : 'vault-gap'} value={newPin} placeholder="New PIN" aria-label="New PIN" onChange={(e) => setNewPin(e.target.value)} />
         <PinStrength pin={newPin} />
         <div className="button-row vault-gap">
-          <button type="submit" className="btn btn--primary" disabled={!recoveryKey || !newPin || busy}>
-            Unlock and set PIN
+          <button type="submit" className="btn btn--primary" disabled={(!member && !recoveryKey) || !newPin || busy}>
+            {member ? 'Set PIN and ask' : 'Unlock and set PIN'}
           </button>
           <button type="button" className="btn btn--quiet" onClick={() => setRecovering(false)}>
             Back

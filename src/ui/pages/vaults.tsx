@@ -415,6 +415,7 @@ export function SetOwnPin({ vault }: { vault: Vault }) {
   const { locks, engine } = useCards();
   const save = useVaultSaver();
   const crypt = useVaultEncryption();
+  const toast = useToast();
   const [pin, setPin] = useState('');
   const [error, setError] = useState<string | null>(null);
   const [again, setAgain] = useState(false);
@@ -428,7 +429,14 @@ export function SetOwnPin({ vault }: { vault: Vault }) {
     const next = pin;
     setPin('');
     if (sealed) {
-      if (await save(() => crypt.askForKey(vault, next), 'Asked for its key')) setAgain(false);
+      // It saves the vault itself, keyring and all.
+      try {
+        await crypt.askForKey(vault, next);
+        toast('Asked for its key');
+        setAgain(false);
+      } catch (err) {
+        toast(err instanceof SyncOffline ? 'Connect to the internet to change a vault.' : "That change couldn't be saved.");
+      }
       return;
     }
     const hashed = await hashPin(next);

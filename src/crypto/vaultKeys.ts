@@ -124,9 +124,10 @@ async function seal(key: CryptoKey, plain: Bytes, aad: Bytes): Promise<string> {
   return toBase64(out);
 }
 
-async function open(key: CryptoKey, sealed: string, aad: Bytes): Promise<Bytes | null> {
+/** Opens what `seal` sealed: its base64, or its bytes. Null if it doesn't open. */
+async function open(key: CryptoKey, sealed: string | Bytes, aad: Bytes): Promise<Bytes | null> {
   try {
-    const bytes = fromBase64(sealed);
+    const bytes = typeof sealed === 'string' ? fromBase64(sealed) : sealed;
     return new Uint8Array(await crypto.subtle.decrypt({ name: 'AES-GCM', iv: bytes.slice(0, 12), additionalData: aad }, key, bytes.slice(12)));
   } catch {
     return null;
@@ -234,16 +235,11 @@ async function openMemberKey(member: MemberKey, pin: string, vaultId: string): P
     const ephemeral = grant.slice(0, 65);
     const theirs = await crypto.subtle.importKey('raw', ephemeral, ECDH, false, []);
     const key = await grantKey(privateKey, theirs, ephemeral, fromBase64(member.public));
-    const raw = await open(key, toBase64(grant.slice(65)), grantAad(vaultId));
+    const raw = await open(key, grant.slice(65), grantAad(vaultId));
     return raw && importVaultKey(raw);
   } catch {
     return null;
   }
-}
-
-/** Whether a PIN opens a member's wrapped private key, let in or not: their own PIN, checked without the vault key. */
-export async function memberPinMatches(member: MemberKey, pin: string): Promise<boolean> {
-  return !!(await open(await pinKey(pin, member.kdf), member.wrapped, MEMBER_AAD));
 }
 
 /** A member's new PIN: a new key pair, with the vault key they have open sealed to it themselves. */

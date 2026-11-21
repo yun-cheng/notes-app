@@ -18,11 +18,10 @@ const MAX_BODY = 5000;
  * characters of up to 3 bytes each, and a tag.
  */
 const MAX_SEALED = 20_100;
-const isSealed = (body: string) => body.startsWith('e1:');
 
 /** Whether a comment's body is what its card's vault takes: sealed in an encrypted vault, written out in any other. */
 function fits(body: string, encrypted: boolean): boolean {
-  if (encrypted) return isSealed(body) && body.length <= MAX_SEALED && /^e1:[A-Za-z0-9+/]+=*$/.test(body);
+  if (encrypted) return body.length <= MAX_SEALED && /^e1:[A-Za-z0-9+/]+=*$/.test(body);
   return !!body && body.length <= MAX_BODY;
 }
 

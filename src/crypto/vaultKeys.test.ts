@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { vaultKeyCode, changeMemberPin, changePin, createVaultKey, grantVaultKey, keyCode, memberPinMatches, requestVaultKey, decryptPayload, encryptPayload, isEncryptedPayload, normalizeRecoveryKey, unlockWithPin, unlockWithRecoveryKey } from './vaultKeys';
+import { vaultKeyCode, changeMemberPin, changePin, createVaultKey, grantVaultKey, keyCode, requestVaultKey, decryptPayload, encryptPayload, isEncryptedPayload, normalizeRecoveryKey, unlockWithPin, unlockWithRecoveryKey } from './vaultKeys';
 
 // Light Argon2id settings keep tests quick; the app uses the defaults.
 const FAST = { memory: 256, iterations: 1 };
@@ -44,8 +44,6 @@ describe('vault keys', () => {
     const sealed = await encryptPayload(key, 'shared', 'c1', 'v1');
     const asked = await requestVaultKey('their-pin', FAST);
     expect(await unlockWithPin({ version: 1, member: asked }, 'their-pin', 'v1')).toBeNull();
-    expect(await memberPinMatches(asked, 'their-pin')).toBe(true);
-    expect(await memberPinMatches(asked, '2468')).toBe(false);
 
     const member = { ...asked, grant: await grantVaultKey(key, asked.public, 'v1') };
     const opened = await unlockWithPin({ version: 1, member }, 'their-pin', 'v1');

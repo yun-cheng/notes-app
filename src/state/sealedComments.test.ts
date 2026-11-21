@@ -1,7 +1,7 @@
 import { describe, expect, it, vi } from 'vitest';
 import { createVaultKey, decryptComment, encryptComment } from '../crypto/vaultKeys';
 import { fetchVaultComments, putVaultComments } from '../sync/http';
-import { openComments, sealComments } from './sealedComments';
+import { sealComments, writeOutComments } from './sealedComments';
 
 vi.mock('../sync/http', () => ({ fetchVaultComments: vi.fn(), putVaultComments: vi.fn(async () => ({ ok: true })) }));
 
@@ -20,6 +20,8 @@ describe('comments in an encrypted vault', () => {
     // Bound to its card and vault.
     expect(await decryptComment(key, put[0].body, 'c2', 'v')).toBeNull();
 
-    expect(await openComments('v', key)).toEqual([{ id: 'k2', body: 'Already sealed' }]);
+    vi.mocked(putVaultComments).mockClear();
+    await writeOutComments('v', key);
+    expect(vi.mocked(putVaultComments).mock.calls[0][1]).toEqual([{ id: 'k2', body: 'Already sealed' }]);
   });
 });

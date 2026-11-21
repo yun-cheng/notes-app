@@ -3,7 +3,7 @@ import { hashPin } from '../domain/pin';
 import type { Vault } from '../domain/types';
 import { deviceKeyName, useCards } from '../state/CardsContext';
 import { encryptingName, finishEncrypting } from '../state/encrypting';
-import { openComments, storeOpened } from '../state/sealedComments';
+import { writeOutComments } from '../state/sealedComments';
 import { giveVaultKey, updateVault, type VaultChanges, type VaultPeople } from '../sync/http';
 
 export class NeedsPin extends Error {}
@@ -60,16 +60,16 @@ export function useVaultEncryption() {
     // Its photos and files are opened first, while the key is here: once it's gone, a sealed one can't be.
     const { failed } = await reseal([{ vaultId: vault.id, seal: false }]);
     if (failed) throw new SealedOutOfReach(`${failed === 1 ? 'A photo or file' : `${failed} photos or files`} in it can’t be fetched now. Try again when you’re online.`);
-    // Its comments are opened while the key is here, and stored written out once the vault takes them so.
     const key = keyring.key(vault.id);
-    const comments = key ? await openComments(vault.id, key) : [];
     await save(vault, keepPin ? { encryption: null } : { pin: null, encryption: null });
-    await storeOpened(vault.id, comments).catch(() => storeOpened(vault.id, comments));
     await repo.recodeVault(vault.id);
     await repo.setMeta(deviceKeyName(vault.id), null);
     await repo.setMeta(encryptingName(vault.id), null);
     await engine.sync();
     void attachments.sweep(true);
+    // Its comments last, once its cards are done, with the key kept from before: read after the vault takes them
+    // written out, so one sealed in the meantime is opened too. One that can't be stays sealed, and stops nothing.
+    if (key) await writeOutComments(vault.id, key).catch(() => writeOutComments(vault.id, key)).catch(() => undefined);
   };
 
   /**

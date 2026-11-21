@@ -15,13 +15,11 @@ export async function sealComments(vaultId: string, key: CryptoKey): Promise<voi
 }
 
 /**
- * A vault's sealed comments, opened with its key while it's still here, to be stored written out once the vault is
- * readable again (`storeOpened`). One its key doesn't open is left as it is.
+ * Writes out a vault's sealed comments with its key, kept from before, once the vault is readable again and takes
+ * them so. One its key doesn't open is left as it is.
  */
-export async function openComments(vaultId: string, key: CryptoKey): Promise<{ id: string; body: string }[]> {
+export async function writeOutComments(vaultId: string, key: CryptoKey): Promise<void> {
   const sealed = (await fetchVaultComments(vaultId)).filter((k) => isEncryptedPayload(k.body));
   const opened = await Promise.all(sealed.map(async (k) => ({ id: k.id, body: await decryptComment(key, k.body, k.card_id, vaultId) })));
-  return opened.filter((k): k is { id: string; body: string } => k.body !== null);
+  await put(vaultId, opened.filter((k): k is { id: string; body: string } => k.body !== null));
 }
-
-export const storeOpened = (vaultId: string, comments: { id: string; body: string }[]) => put(vaultId, comments);

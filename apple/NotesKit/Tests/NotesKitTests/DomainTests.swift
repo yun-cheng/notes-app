@@ -274,3 +274,23 @@ import Testing
         #expect(Board.place(m, at: 1, among: [x, tight]) == ["m": 2024, "t": 3048])
     }
 }
+
+@Suite struct VoiceTests {
+    @Test func peaksCutsAndJoins() {
+        let samples: [Float] = (0..<1600).map { i in i < 800 ? 0.1 : 0.5 }
+        let peaks = Voice.peaks(samples, bars: 4)
+        #expect(peaks == [20, 20, 100, 100])
+        // 250 seconds of sound with a quiet stretch just before two minutes: cut there.
+        var long = [Float](repeating: 0.3, count: 250 * 1600)
+        for i in (115 * 1600)..<(116 * 1600) { long[i] = 0 }
+        let cuts = Voice.cutPoints(long, rate: 1600, most: 120)
+        #expect(cuts.count == 2 && abs(cuts[0] - 115 * 1600) < 1600)
+        #expect(Voice.wav([0, 1, -1][...], rate: 16000).count == 44 + 6)
+        let joined = Voice.join([(0, "你好", "zh", [Doc.Cue(start: 0, text: "你好")]), (120, "世界", "zh", [Doc.Cue(start: 1.5, text: "世界")])])
+        #expect(joined.transcript == "你好世界" && joined.cues.last?.start == 121.5)
+        let doc: JSONValue = ["type": "doc", "content": [["type": "file", "attrs": ["id": "f1", "mime": "audio/mp4"]]]]
+        let next = Voice.withTranscript(doc, fileId: "f1", joined)
+        #expect(Doc.files(next!).first?.transcript == "你好世界")
+        #expect(Voice.withTranscript(doc, fileId: "f2", joined) == Optional<JSONValue>.none)
+    }
+}

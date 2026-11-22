@@ -1,4 +1,5 @@
 import NotesKit
+import QuickLook
 import SwiftUI
 
 /// The app's frame, as the web app's: a sidebar of pages, tag groups, tags and vaults beside the page on a wide
@@ -23,6 +24,9 @@ struct MainView: View {
         }
         .sheet(isPresented: $model.showPalette) { CommandPalette() }
         .sheet(item: $model.panel) { panel in EntryPanelView(panel: panel) }
+        #if os(iOS)
+        .quickLookPreview($model.preview)
+        #endif
         .overlay(alignment: .bottom) { ToastView() }
         .tint(Theme.accent)
     }

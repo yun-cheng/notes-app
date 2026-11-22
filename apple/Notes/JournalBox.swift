@@ -1,5 +1,7 @@
 import NotesKit
+import PhotosUI
 import SwiftUI
+import UniformTypeIdentifiers
 
 /// The box at the foot of the journal, as the web app's `JournalBox`: `[]` makes a todo, `#tag` files it, `#diary`
 /// sends it to the Diary vault, and `@fri @3pm @weekly` give a todo its date, time and repeat. Return saves on a
@@ -11,6 +13,10 @@ struct JournalBox: View {
     @State private var text = ""
     @State private var todos = false
     @State private var unlock: Vault?
+    /// Photos and files added to the box, saved with what's typed.
+    @State private var attached: [JSONValue] = []
+    @State private var picking: [PhotosPickerItem] = []
+    @State private var importing = false
     @FocusState private var focused: Bool
 
     private var draftKey: String { "draft:" + String(describing: filter.with { $0.sort = .written }) }
@@ -19,6 +25,15 @@ struct JournalBox: View {
         VStack(spacing: 6) {
             if let unlock {
                 UnlockView(vault: unlock).frame(maxHeight: 260)
+            }
+            if !attached.isEmpty {
+                ScrollView(.horizontal, showsIndicators: false) {
+                    HStack(spacing: 6) {
+                        ForEach(Array(attached.enumerated()), id: \.offset) { i, node in
+                            AttachedThumb(node: node, vaultId: targetVault) { attached.remove(at: i) }
+                        }
+                    }
+                }
             }
             HStack(alignment: .bottom, spacing: 8) {
                 Button { todos.toggle() } label: {
@@ -44,6 +59,17 @@ struct JournalBox: View {
                     }
                     #endif
                     .padding(.vertical, 6)
+                PhotosPicker(selection: $picking, matching: .any(of: [.images, .videos])) {
+                    Image(systemName: "photo").foregroundStyle(Theme.muted)
+                }
+                .buttonStyle(.plain)
+                .padding(.bottom, 8)
+                .accessibilityLabel("Add photos")
+                Button { importing = true } label: { Image(systemName: "paperclip").foregroundStyle(Theme.muted) }
+                    .buttonStyle(.plain)
+                    .accessibilityLabel("Attach a file")
+                    .padding(.bottom, 8)
+                VoiceRecordButton(vaultId: targetVault) { node in attached.append(node) }
                 Button(action: send) {
                     Image(systemName: "arrow.up")
                         .font(.body.weight(.semibold))
@@ -74,6 +100,15 @@ struct JournalBox: View {
             if t.isEmpty { UserDefaults.standard.removeObject(forKey: draftKey) } else { UserDefaults.standard.set(t, forKey: draftKey) }
         }
         .onChange(of: model.focusBox) { focused = true }
+        .onChange(of: picking) { _, items in
+            guard !items.isEmpty else { return }
+            picking = []
+            Task { for item in items { await addPicked(item) } }
+        }
+        .fileImporter(isPresented: $importing, allowedContentTypes: [.item], allowsMultipleSelection: true) { result in
+            guard case .success(let urls) = result else { return }
+            for url in urls { addFile(url) }
+        }
         .onChange(of: model.lockedVaults) { _, locked in
             if let v = unlock, !locked.contains(v.id) {
                 unlock = nil
@@ -86,15 +121,64 @@ struct JournalBox: View {
         todos ? "Write a todo · @fri · #tag" : "Write a note · [] todo · #tag"
     }
 
+    /// The vault what's added goes into: the journal's, or the account's own.
+    private var targetVault: String { filter.vaultId ?? model.mainVault?.id ?? "" }
+
+    private func addPicked(_ item: PhotosPickerItem) async {
+        guard let data = try? await item.loadTransferable(type: Data.self) else { return }
+        let video = item.supportedContentTypes.contains { $0.conforms(to: .movie) }
+        do {
+            if video {
+                let type = item.supportedContentTypes.first { $0.conforms(to: .movie) }
+                let mime = type?.preferredMIMEType ?? "video/quicktime"
+                attached.append(try Attachments.shared.addFile(data, name: "Video.\(type?.preferredFilenameExtension ?? "mov")", mime: mime, vaultId: targetVault, model: model))
+            } else {
+                attached.append(try Attachments.shared.addPhoto(data, vaultId: targetVault, model: model))
+            }
+        } catch {
+            model.say(error.localizedDescription)
+        }
+    }
+
+    private func addFile(_ url: URL) {
+        let scoped = url.startAccessingSecurityScopedResource()
+        defer { if scoped { url.stopAccessingSecurityScopedResource() } }
+        guard let data = try? Data(contentsOf: url) else {
+            model.say("That file can't be read. Save it to a folder first, then add it from there.")
+            return
+        }
+        let type = UTType(filenameExtension: url.pathExtension)
+        do {
+            if let type, type.conforms(to: .image), !type.conforms(to: .svg) {
+                attached.append(try Attachments.shared.addPhoto(data, vaultId: targetVault, model: model))
+            } else {
+                attached.append(try Attachments.shared.addFile(data, name: url.lastPathComponent, mime: type?.preferredMIMEType ?? "application/octet-stream", vaultId: targetVault, model: model))
+            }
+        } catch {
+            model.say(error.localizedDescription)
+        }
+    }
+
     private func send() {
         let typed = text
-        guard !typed.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty else { return }
-        let entries = EntryParser.parseEntries(typed, today: model.today, allTodos: todos)
+        let added = Transcriber.shared.fill(attached)
+        guard !typed.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty || !added.isEmpty else { return }
+        var entries: [Entry]
+        if added.isEmpty {
+            entries = EntryParser.parseEntries(typed, today: model.today, allTodos: todos)
+        } else {
+            // Photos and files go in with the words, read as the web's box reads its rich text.
+            let words = typed.trimmingCharacters(in: .whitespacesAndNewlines)
+            let blocks = (words.isEmpty ? [] : Doc.fromText(todos && !words.hasPrefix("[") ? "[] " + words : words)["content"]?.arrayValue ?? []) + added
+            entries = EntryParser.entries(from: ["type": "doc", "content": .array(blocks)], today: model.today)
+        }
         let opts = SaveOptions(journal: filter, today: model.today)
         Task {
             switch await model.save(entries, opts) {
             case .saved(let ids, _):
                 if text == typed { text = "" }
+                let sent = Set(added.compactMap { $0["attrs"]?["id"]?.stringValue })
+                attached.removeAll { sent.contains($0["attrs"]?["id"]?.stringValue ?? "") }
                 // Once the stream has it, so there's somewhere to scroll to.
                 await model.refresh()
                 model.lastSaved = ids.last
@@ -181,5 +265,30 @@ struct BatchBar: View {
         }
         picked = []
         model.say("Stacked \(ids.count)", undoable: true)
+    }
+}
+
+/// A photo or file added to the box, before it's saved, with an × to take it out.
+struct AttachedThumb: View {
+    let node: JSONValue
+    let vaultId: String
+    let remove: () -> Void
+
+    var body: some View {
+        ZStack(alignment: .topTrailing) {
+            if node["type"] == "photo", let id = node["attrs"]?["id"]?.stringValue {
+                PhotoThumb(media: .photo(id), vaultId: vaultId, size: 56)
+            } else {
+                VStack(spacing: 2) {
+                    Image(systemName: (node["attrs"]?["mime"]?.stringValue ?? "").hasPrefix("audio/") ? "waveform" : "doc")
+                    Text(node["attrs"]?["name"]?.stringValue ?? "File").font(.caption2).lineLimit(1)
+                }
+                .frame(width: 76, height: 56)
+                .background(RoundedRectangle(cornerRadius: 6).fill(Theme.sunken))
+            }
+            Button(action: remove) { Image(systemName: "xmark.circle.fill").foregroundStyle(.white, .black.opacity(0.6)) }
+                .buttonStyle(.plain).padding(2)
+                .accessibilityLabel("Take it out")
+        }
     }
 }

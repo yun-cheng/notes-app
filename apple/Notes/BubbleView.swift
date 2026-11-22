@@ -38,6 +38,7 @@ struct BubbleView: View {
                 }
                 BubbleText(doc: doc, folded: !unfolded, revealed: revealed)
             }
+            if page == 0 { BubbleAttachments(card: card) }
             if Doc.previewLines(doc).count > 6 {
                 Button(unfolded ? "Less" : "More") { unfolded.toggle() }
                     .buttonStyle(.plain).font(.caption.weight(.semibold)).foregroundStyle(Theme.accent)

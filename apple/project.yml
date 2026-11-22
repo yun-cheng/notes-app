@@ -40,6 +40,10 @@ targets:
         GENERATE_INFOPLIST_FILE: YES
         ENABLE_APP_SANDBOX: YES
         ENABLE_OUTGOING_NETWORK_CONNECTIONS: YES
+        ENABLE_RESOURCE_ACCESS_AUDIO_INPUT: YES
+        ENABLE_USER_SELECTED_FILES: readonly
+        INFOPLIST_KEY_NSMicrophoneUsageDescription: Records voice messages for your notes.
+        INFOPLIST_KEY_NSPhotoLibraryUsageDescription: Adds photos and videos to your notes.
         ENABLE_HARDENED_RUNTIME: YES
     info:
       path: Notes/Info.plist

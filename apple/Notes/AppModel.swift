@@ -33,6 +33,8 @@ final class AppModel {
     var openEntry: String?
     /// A panel an entry's menu opened: its tags, due date, vaults or sharing.
     var panel: EntryPanel?
+    /// A file opened to look at, on a phone.
+    var preview: URL?
     /// The entry the journal box saved last, to scroll to.
     var lastSaved: String?
     /// Set by the Mac's New Note command and the sidebar's button: the journal box takes focus.
@@ -147,6 +149,7 @@ final class AppModel {
         commentCounts = (try? await repo.commentCounts()) ?? [:]
         cards = all
         index = CardIndex(all, locked: lockedVaults)
+        Transcriber.shared.apply(model: self)
     }
 
     /// Opens a private vault on this device: its cards show until the app locks again.
@@ -296,9 +299,10 @@ enum Page: Hashable {
 }
 
 extension AppModel {
-    /// Once a minute while the app is open.
+    /// Once a minute while the app is open, with photos and files still waiting to go up.
     func syncPeriodically() async {
         while !Task.isCancelled {
+            await Attachments.shared.upload(model: self)
             try? await Task.sleep(for: .seconds(60))
             await sync?.sync()
         }

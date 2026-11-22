@@ -204,3 +204,21 @@ extension ServerAPI {
         _ = try await send(Self.card(cardId) + "/versions/seal", method: "POST", body: [String: String]())
     }
 }
+
+/// What a link's page says about itself, for a preview card. Only `url` is certain.
+public struct LinkPreview: Codable, Sendable, Hashable {
+    public var url: String
+    public var title: String?
+    public var description: String?
+    /// An https image address from the page.
+    public var image: String?
+    public var site: String?
+}
+
+extension ServerAPI {
+    /// The server reads the page's Open Graph tags, as the web app's `fetchLinkPreview`.
+    public func unfurl(_ url: String) async throws -> LinkPreview {
+        struct Body: Encodable { let url: String }
+        return try await json(LinkPreview.self, "/unfurl", method: "POST", body: Body(url: url))
+    }
+}

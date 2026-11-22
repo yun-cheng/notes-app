@@ -37,7 +37,7 @@ const time = (at: number) => new Date(at).toLocaleTimeString(undefined, { hour: 
  * or a card changes, one read at a time. Null until the first read.
  */
 function useChanges(): ChangeRow[] | null {
-  const { repo, index } = useCards();
+  const { repo } = useCards();
   const [rows, setRows] = useState<ChangeRow[] | null>(null);
   useEffect(() => {
     let live = true;
@@ -59,8 +59,8 @@ function useChanges(): ChangeRow[] | null {
       live = false;
       stop();
     };
-    // A card can change without the log changing, when another device's edit arrives.
-  }, [repo, index]);
+    // Read again only as the log changes; each card as it is now comes from the index (ChangesPage).
+  }, [repo]);
   return rows;
 }
 
@@ -105,10 +105,10 @@ export function ChangesPage() {
     // `here` stands for the filter, which is a new object each time.
   }, [rows, synced.changes, vaults, locked, here, today]);
 
-  const current = new Map(shown.map((row) => [row.change.n, row.current]));
   const changes = shown.map((row) => row.change);
   // A change from elsewhere is checked against the card as it is here now.
-  const currentOf = (change: Change) => (change.by ? index.byId.get(change.cardId) : current.get(change.n));
+  // A card as it is now, from the index: it can change without the log changing, when another device's edit arrives.
+  const currentOf = (change: Change) => index.byId.get(change.cardId);
   const can = (direction: Direction) => (change: Change) => canRevert(change, currentOf(change), direction);
   /** Undoes a change made elsewhere. That is a change made here, so the way back is to undo it. */
   const takeBack = async (change: Change) => {

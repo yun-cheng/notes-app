@@ -59,6 +59,8 @@ export interface PayloadCodec {
   decode(data: string, context: CodecContext): Promise<CardPayload | null>;
   /** True for a vault whose cards must be stored encrypted. */
   isEncrypted?(vaultId: string): boolean;
+  /** Goes up whenever a key is opened or forgotten: what was decoded before may read differently now. */
+  getGeneration?(): number;
 }
 
 export const jsonCodec: PayloadCodec = {

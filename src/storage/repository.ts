@@ -284,15 +284,29 @@ export class CardRepository {
   // The change log: what this device changed, newest last, for the history and for undo.
 
   /** A logged change with its cards readable, if their vault's key is open. */
+  /** Log records already read, by what's stored and the keys open then: the log is read again at each change to it. */
+  private opened = new Map<string, Card>();
+
   async decodeChange(entry: ChangeEntry): Promise<Change> {
     const { before: beforeRecord, beforeVault, after: afterRecord, joins: _joins, n, ...rest } = entry;
+    // Kept only with a codec that says when its keys change; without one, what was read can't be trusted later.
+    const generation = this.codec.getGeneration?.();
     const open = async (record: CardRecord) => {
+      const key = generation === undefined ? null : `${generation}|${record.id}|${record.updated_at}|${record.deleted}|${record.vault_id}|${record.payload}`;
+      const known = key && this.opened.get(key);
+      if (known) return known;
+      let card: Card;
       try {
-        return await this.unpack(record);
+        card = await this.unpack(record);
       } catch {
         // Stored under a key that has since changed. It can't be read again.
-        return sealedCard(record);
+        card = sealedCard(record);
       }
+      if (key) {
+        if (this.opened.size > 4000) this.opened.clear();
+        this.opened.set(key, card);
+      }
+      return card;
     };
     const after = await open(afterRecord);
     const before = beforeRecord && { ...(await open(beforeRecord)), vaultId: beforeVault ?? beforeRecord.vault_id };

@@ -19,6 +19,9 @@ struct MainView: View {
             WideFrame()
             #endif
         }
+        // Each account starts its pages afresh: a journal kept from another account would keep its scroll offset, past
+        // the end of a shorter list or short of the newest entries in a longer one.
+        .id(model.accountId)
         .sheet(id: $model.openEntry) { id in EntrySheet(id: id) }
         .sheet(isPresented: $model.showPalette) { CommandPalette() }
         .sheet(isPresented: $model.addingAccount) { SignInView() }

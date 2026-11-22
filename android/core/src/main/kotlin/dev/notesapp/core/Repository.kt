@@ -34,7 +34,6 @@ class Repository(
 
     fun setMainVault(id: String?) { mainVaultId = id }
     fun action() = UUID.randomUUID().toString()
-    fun newCardId() = newId()
 
     fun decode(r: CardRecord): Card {
         keyring.decode(r.payload, r.id, r.vault_id)?.let { return Card(r.id, r.vault_id, r.updated_at, r.deleted, r.seq, modernPayload(it)) }

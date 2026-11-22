@@ -94,8 +94,6 @@ object Backup {
         return out.toByteArray()
     }
 
-    fun crc32(bytes: ByteArray) = CRC32().apply { update(bytes) }.value
-
     /** The Markdown and text files in a zip, hidden files and macOS's extras left out. */
     fun filesFromZip(bytes: ByteArray): List<Pair<String, String>> {
         val out = mutableListOf<Pair<String, String>>()

@@ -169,18 +169,6 @@ class VaultEncryption(private val model: AppModel) {
         return api.giveVaultKey(vault.id, userId, publicKey, grant)
     }
 
-    /** Opens an encrypted vault with its recovery key and sets a new PIN. False if the recovery key is wrong. */
-    suspend fun recover(vault: Vault, recoveryKey: String, newPin: String): Boolean {
-        val encryption = vault.encryption ?: return false
-        if (vault.isMemberCopy) return false
-        val key = VaultCrypto.unlock(encryption, recoveryKey) ?: return false
-        val next = withContext(Dispatchers.Default) { VaultKeys.changePin(encryption, key, newPin) }
-        save(vault, VaultChanges(pin = hashPin(newPin), encryption = next))
-        repo.keyring.set(vault.id, key)
-        model.openVault(vault.id)
-        return true
-    }
-
     /**
      * Copies each photo and file the vault's cards hold that isn't kept as the vault keeps them (sealed or open) under a
      * new ID, has its entries hold the copy, and sends the old one to the Trash and deletes it once the copy is up, as

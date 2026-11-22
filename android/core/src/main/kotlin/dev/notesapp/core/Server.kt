@@ -376,9 +376,6 @@ class ServerApi(
         return when (errorOf(r)) { "in_use" -> DeleteResult.InUse; "drive_not_connected" -> DeleteResult.NeedsDrive; else -> DeleteResult.Error }
     }
 
-    /** Whether a photo, video or file is shared by its Google Drive link, and the link. */
-    suspend fun driveLink(id: String): Pair<String?, Boolean> { val o = obj("/attachments/" + part(id) + "/link"); return o["url"].str to (o["can"].bool ?: false) }
-
     /** Lets anyone with its Drive link open it, and answers with the link, or a sentence saying why not. */
     suspend fun shareDriveLink(id: String): Result<String> {
         val r = runCatching { send("/attachments/" + part(id) + "/link", "POST", jobj()) }.getOrElse { return Result.failure(Exception("Sharing needs a connection.")) }

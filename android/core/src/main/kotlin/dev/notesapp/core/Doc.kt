@@ -308,5 +308,4 @@ object Doc {
         return if (h > 0) "%d:%02d:%02d".format(h, m, s % 60) else "%d:%02d".format(m, s % 60)
     }
 
-    fun isObject(e: JsonElement) = e is JsonObject
 }

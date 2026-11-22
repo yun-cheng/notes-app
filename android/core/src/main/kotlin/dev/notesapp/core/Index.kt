@@ -63,12 +63,6 @@ class TagGroups(cards: List<Card> = emptyList()) {
         return tags.withIndex().sortedWith(compareBy({ rank(it.value) }, { it.index })).map { it.value }
     }
 
-    fun clashing(tags: List<String>): Set<String> {
-        val seen = mutableMapOf<String, MutableList<String>>()
-        for (id in tags) groupOf[id]?.takeIf { it.choosesOne }?.let { seen.getOrPut(it.id) { mutableListOf() }.add(id) }
-        return seen.values.filter { it.size > 1 }.flatten().toSet()
-    }
-
     fun isGroupName(name: String): Boolean {
         val key = name.trim().lowercase()
         return groups.any { it.title.trim().lowercase() == key }
@@ -168,14 +162,6 @@ class CardIndex(all: List<Card> = emptyList(), locked: Set<String> = emptySet())
     }
 }
 
-fun moveInStack(list: List<String>, shown: List<String>, id: String, index: Int): List<String> {
-    val others = shown.filter { it != id }.toMutableList()
-    others.add(index.coerceIn(0, others.size), id)
-    var next = 0
-    val visible = shown.toSet()
-    return list.map { if (it in visible) others[next++] else it }
-}
-
 fun stackPlan(ids: List<String>, into: Card, stacks: List<Card>): Map<String, List<String>> {
     val moving = ids.filter { it != into.id }
     val lists = mutableMapOf<String, List<String>>()
@@ -244,9 +230,3 @@ private fun liftFirstLine(doc: JsonElement): Pair<String, JsonElement>? {
 }
 
 val commonReactions = listOf("👍", "❤️", "😂", "🎉", "🔥", "👀")
-
-fun reactedBy(count: Int, mine: Boolean): String {
-    if (!mine) return if (count == 1) "1 person" else "$count people"
-    val others = count - 1
-    return if (others == 0) "You" else "You and $others ${if (others == 1) "other" else "others"}"
-}

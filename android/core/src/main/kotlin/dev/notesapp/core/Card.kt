@@ -59,7 +59,6 @@ data class Card(
     val archived get() = flag("archived")
     fun withArchived(on: Boolean) = withFlag("archived", on)
     val template get() = flag("template")
-    fun withTemplate(on: Boolean) = withFlag("template", on)
     val viewOnly get() = flag("viewOnly")
     fun withViewOnly(on: Boolean) = withFlag("viewOnly", on)
     val color: CardColor? get() = payload["color"].str?.let { c -> CardColor.entries.firstOrNull { it.name == c } }

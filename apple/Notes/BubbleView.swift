@@ -227,7 +227,9 @@ struct BubbleText: View {
                 case .text(let lines):
                     Text(Self.attributed(lines.joined(separator: "\n"), revealed: revealed))
                         .fixedSize(horizontal: false, vertical: true)
+                        #if os(iOS)
                         .textSelection(.enabled)
+                        #endif
                 case .code(let text, let language, _):
                     CodeSnippet(text: text, language: language)
                 }
@@ -538,31 +540,59 @@ struct DueLabel: View {
     }
 }
 
-/// An entry's reactions, each with its count, pressed to put yours on or take it off; a smiley adds one.
+/// An entry's reactions as the web's chips, each emoji with how many put it on, filled where this account did, a press
+/// toggling it; then the faint smiley that opens the picker.
 struct Reactions: View {
     @Environment(AppModel.self) private var model
     let card: Card
+    var large = false
     @State private var picking = false
 
     var body: some View {
-        let reactions = card.reactions.sorted { $0.key < $1.key }
-        ForEach(reactions, id: \.key) { emoji, by in
+        // The payload's object keeps no order, so they go by emoji, the same on every redraw.
+        let reactions = card.reactions.filter { !$0.value.isEmpty }.keys.sorted()
+        ForEach(reactions, id: \.self) { emoji in
+            let by = card.reactions[emoji] ?? []
             let mine = by.contains(model.accountId)
             Button { toggle(emoji) } label: {
-                Text("\(emoji) \(by.count)")
-                    .padding(.horizontal, 6)
-                    .background(Capsule().fill(mine ? Theme.accentSoft : Theme.sunken))
+                HStack(spacing: 3) {
+                    Text(emoji).font(.system(size: large ? 16 : 13))
+                    Text("\(by.count)").font(.system(size: large ? 13 : 11, weight: .medium)).monospacedDigit()
+                }
+                .padding(.leading, large ? 8 : 5).padding(.trailing, large ? 10 : 7)
+                .frame(height: large ? 28 : 20)
+                .background(Capsule().fill(mine ? Theme.accentSoft : Theme.surface))
+                .overlay(Capsule().stroke(mine ? Theme.accent.opacity(0.55) : Theme.line))
+                .foregroundStyle(mine ? Theme.text : Theme.muted)
             }
             .buttonStyle(.plain)
-            .help(reactedBy(count: by.count, mine: mine))
+            .disabled(!canReact)
+            .help("\(reactedBy(count: by.count, mine: mine))\(canReact ? (mine ? ". Press to take yours off" : ". Press to add yours") : "")")
+            .accessibilityLabel("\(emoji) \(by.count): \(reactedBy(count: by.count, mine: mine))")
         }
-        if model.canEdit(card) || model.commentCounts[card.id] != nil {
-            Button { picking = true } label: { Image(systemName: "face.smiling") }
-                .buttonStyle(.plain)
-                .popover(isPresented: $picking) { EmojiPicker { emoji in toggle(emoji); picking = false } }
-                .accessibilityLabel("Add a reaction")
+        if canReact {
+            Button { picking = true } label: {
+                Image(systemName: "face.smiling")
+                    .font(.system(size: large ? 15 : 12))
+                    .frame(width: large ? 28 : 20, height: large ? 28 : 20)
+                    .contentShape(Circle())
+                    .opacity(picking ? 1 : 0.55)
+            }
+            .buttonStyle(.plain)
+            .help("Add a reaction")
+            .accessibilityLabel("Add a reaction")
+            .popover(isPresented: $picking) {
+                ReactionPicker(mine: { card.reactions[$0]?.contains(model.accountId) == true }) { emoji in
+                    toggle(emoji)
+                    picking = false
+                }
+                .presentationCompactAdaptation(.popover)
+            }
         }
     }
+
+    /// Anyone who could change the entry can react, even while it's set to view only; not in the Trash.
+    private var canReact: Bool { !card.deleted && model.canWrite(card) }
 
     private func toggle(_ emoji: String) {
         let me = model.accountId
@@ -570,23 +600,109 @@ struct Reactions: View {
     }
 }
 
-/// The common reactions first, then any emoji typed in.
-struct EmojiPicker: View {
+/// The emoji picker, as the web's: the common reactions in a row, then + for any emoji, by group with the ones used
+/// lately first, or found by name, or typed or pasted in from the system's emoji keyboard.
+struct ReactionPicker: View {
+    let mine: (String) -> Bool
     let pick: (String) -> Void
-    @State private var typed = ""
+    @State private var more = false
+    @State private var query = ""
+    @FocusState private var searching: Bool
+    @AppStorage("recentReactions") private var recentRaw = ""
+
+    static let recentLimit = 16
 
     var body: some View {
-        VStack(spacing: 10) {
-            HStack {
-                ForEach(commonReactions, id: \.self) { e in Button(e) { pick(e) }.buttonStyle(.plain).font(.title2) }
-            }
-            TextField("Any emoji", text: $typed)
-                .textFieldStyle(.roundedBorder)
-                .onSubmit {
-                    if let e = typed.first(where: { $0.unicodeScalars.first?.properties.isEmojiPresentation ?? false || $0.unicodeScalars.count > 1 }) { pick(String(e)) }
+        VStack(alignment: .leading, spacing: 6) {
+            HStack(spacing: 0) {
+                ForEach(commonReactions, id: \.self) { cell($0, size: 22, height: 36) }
+                Spacer(minLength: 0)
+                Button { more.toggle(); if more { searching = true } } label: {
+                    Image(systemName: more ? "chevron.up" : "plus").font(.system(size: 14, weight: .medium))
+                        .frame(width: 36, height: 36).contentShape(Rectangle())
                 }
+                .buttonStyle(.plain).foregroundStyle(Theme.muted)
+                .help("Any emoji")
+                .accessibilityLabel("More emoji")
+            }
+            if more {
+                TextField("Search, or type any emoji", text: $query)
+                    .textFieldStyle(.roundedBorder)
+                    .focused($searching)
+                    .onSubmit { if let first = found.first { choose(first) } }
+                ScrollView {
+                    LazyVStack(alignment: .leading, spacing: 2) {
+                        if !query.trimmingCharacters(in: .whitespaces).isEmpty {
+                            if found.isEmpty {
+                                Text("No emoji called that. Type or paste one, from the emoji keyboard.")
+                                    .font(.footnote).foregroundStyle(Theme.muted).padding(4)
+                            } else {
+                                grid(found)
+                            }
+                        } else {
+                            if !recent.isEmpty { section("Recent", recent) }
+                            ForEach(EmojiData.groups, id: \.name) { g in section(g.name, g.emoji.map(\.char)) }
+                        }
+                    }
+                }
+                .frame(height: 232)
+            }
         }
-        .padding(12)
+        .padding(6)
+        .frame(width: 296)
+    }
+
+    private var found: [String] {
+        var seen = Set<String>()
+        return (Self.emojisIn(query) + EmojiData.search(query)).filter { seen.insert($0).inserted }
+    }
+
+    private var recent: [String] { recentRaw.split(separator: " ").map(String.init) }
+
+    private func section(_ name: String, _ emoji: [String]) -> some View {
+        VStack(alignment: .leading, spacing: 2) {
+            Text(name).font(.caption.weight(.semibold)).foregroundStyle(Theme.muted).padding(.horizontal, 4).padding(.top, 6)
+            grid(emoji)
+        }
+    }
+
+    private func grid(_ emoji: [String]) -> some View {
+        LazyVGrid(columns: Array(repeating: GridItem(.flexible(), spacing: 0), count: 8), spacing: 0) {
+            ForEach(Self.once(emoji), id: \.self) { cell($0, size: 20, height: 34) }
+        }
+    }
+
+    private func cell(_ emoji: String, size: CGFloat, height: CGFloat) -> some View {
+        Button { choose(emoji) } label: {
+            Text(emoji).font(.system(size: size))
+                .frame(maxWidth: .infinity).frame(minWidth: 34, minHeight: height)
+                .background(RoundedRectangle(cornerRadius: 8).fill(mine(emoji) ? Theme.accentSoft : .clear))
+                .contentShape(Rectangle())
+        }
+        .buttonStyle(.plain)
+        .accessibilityLabel(emoji)
+    }
+
+    private func choose(_ emoji: String) {
+        recentRaw = ([emoji] + recent.filter { $0 != emoji }).prefix(Self.recentLimit).joined(separator: " ")
+        pick(emoji)
+    }
+
+    /// Each once, in order.
+    static func once(_ list: [String]) -> [String] {
+        var seen = Set<String>()
+        return list.filter { seen.insert($0).inserted }
+    }
+
+    /// The emoji in what was typed or pasted, one per character as seen, in order and without repeats.
+    static func emojisIn(_ text: String) -> [String] {
+        var seen = Set<String>()
+        return text.filter { ch in
+            guard let first = ch.unicodeScalars.first else { return false }
+            return first.properties.isEmojiPresentation || (first.properties.isEmoji && ch.unicodeScalars.count > 1)
+        }
+        .map(String.init)
+        .filter { seen.insert($0).inserted }
     }
 }
 

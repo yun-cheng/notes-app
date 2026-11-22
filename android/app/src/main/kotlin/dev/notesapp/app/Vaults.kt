@@ -148,7 +148,7 @@ fun VaultsPage(openDrawer: (() -> Unit)?) {
         working = true
         model.scope.launch {
             try {
-                var vault = model.api.createVault(VaultChanges(name = n, pin = if (p.isEmpty()) null else VaultPin.hash(p)))
+                var vault = model.api.createVault(VaultChanges(name = n, pin = if (p.isEmpty()) null else hashPin(p)))
                 model.repo.putVaults(listOf(vault))
                 model.refresh()
                 if (p.isNotEmpty()) {
@@ -236,7 +236,10 @@ fun VaultDetail(id: String, back: () -> Unit) {
             when {
                 vault.isEncrypted -> step("Changing the PIN…") { crypt.rewrap(vault, next); model.say("PIN changed") }
                 !vault.isPrivate && owner && encryptNew -> step("Encrypting…") { recoveryKey = crypt.encrypt(vault, next) }
-                else -> change(VaultChanges(pin = VaultPin.hash(next)), if (vault.isPrivate) "PIN changed" else if (owner) "Vault is private" else "Locked with your PIN")
+                else -> step("Saving…") {
+                    crypt.save(vault, VaultChanges(pin = hashPin(next)))
+                    model.say(if (vault.isPrivate) "PIN changed" else if (owner) "Vault is private" else "Locked with your PIN")
+                }
             }
         }
         Column(Modifier.weight(1f).verticalScroll(rememberScrollState()).padding(bottom = 24.dp)) {
@@ -268,8 +271,10 @@ fun VaultDetail(id: String, back: () -> Unit) {
                     PinField(currentPin, { currentPin = it }, "Current PIN, to encrypt with")
                     FormButton("Encrypt end to end", enabled = currentPin.isNotEmpty() && busy == null) {
                         val entered = currentPin; currentPin = ""
-                        if (!VaultPin.verify(entered, vault.pin)) model.say("That PIN isn't right.")
-                        else step("Encrypting…") { recoveryKey = VaultEncryption(model).encrypt(vault, entered) }
+                        step("Encrypting…") {
+                            if (!pinMatches(entered, vault.pin)) model.say("That PIN isn't right.")
+                            else recoveryKey = VaultEncryption(model).encrypt(vault, entered)
+                        }
                     }
                 }
                 if (owner && vault.isEncrypted) FormButton("Stop encrypting…", enabled = busy == null) { confirmStop = true }

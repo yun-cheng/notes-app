@@ -27,6 +27,12 @@ import kotlinx.serialization.json.JsonElement
 import kotlinx.serialization.json.JsonNull
 import kotlinx.serialization.json.JsonObject
 
+/** A PIN's verifier, worked out off the main thread: PBKDF2 at 300,000 rounds takes a moment on a phone. */
+suspend fun hashPin(pin: String) = withContext(Dispatchers.Default) { VaultPin.hash(pin) }
+
+/** Whether a PIN matches its verifier, worked out off the main thread too. */
+suspend fun pinMatches(pin: String, verifier: kotlinx.serialization.json.JsonElement?) = withContext(Dispatchers.Default) { VaultPin.verify(pin, verifier) }
+
 /** Opens a private vault. An encrypted one gets its key, so its cards can be read and written. */
 suspend fun AppModel.unlock(vault: Vault, pin: String, recoveryKey: Boolean): Boolean {
     val keyring = repo.keyring
@@ -74,7 +80,7 @@ class VaultEncryption(private val model: AppModel) {
         // Noted first, so the cards are still stored again if this stops partway.
         repo.setMetaString(encryptingName(vault.id), "true")
         try {
-            save(vault, VaultChanges(pin = VaultPin.hash(pin), encryption = made.encryption))
+            save(vault, VaultChanges(pin = hashPin(pin), encryption = made.encryption))
         } catch (e: Exception) {
             repo.setMetaString(encryptingName(vault.id), null)
             throw e
@@ -140,13 +146,13 @@ class VaultEncryption(private val model: AppModel) {
             if (VaultKeys.isMemberCopy(encryption)) jobj("version" to j(1), "member" to VaultKeys.changeMemberPin(key, newPin, vault.id))
             else VaultKeys.changePin(encryption, key, newPin)
         }
-        save(vault, VaultChanges(pin = VaultPin.hash(newPin), encryption = next))
+        save(vault, VaultChanges(pin = hashPin(newPin), encryption = next))
     }
 
     /** A member of an encrypted vault sets their own PIN, which asks its owner for its key. */
     suspend fun askForKey(vault: Vault, pin: String) {
         val member = withContext(Dispatchers.Default) { VaultKeys.request(pin) }
-        save(vault, VaultChanges(pin = VaultPin.hash(pin), encryption = jobj("version" to j(1), "member" to member)))
+        save(vault, VaultChanges(pin = hashPin(pin), encryption = jobj("version" to j(1), "member" to member)))
     }
 
     /**
@@ -169,7 +175,7 @@ class VaultEncryption(private val model: AppModel) {
         if (vault.isMemberCopy) return false
         val key = VaultCrypto.unlock(encryption, recoveryKey) ?: return false
         val next = withContext(Dispatchers.Default) { VaultKeys.changePin(encryption, key, newPin) }
-        save(vault, VaultChanges(pin = VaultPin.hash(newPin), encryption = next))
+        save(vault, VaultChanges(pin = hashPin(newPin), encryption = next))
         repo.keyring.set(vault.id, key)
         model.openVault(vault.id)
         return true

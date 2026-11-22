@@ -32,7 +32,8 @@ enum Reminders {
         return date
     }
 
-    private static var scheduled = ""
+    /// What's scheduled now; nil until this launch first schedules, so what an earlier launch left is cleared too.
+    private static var scheduled: String?
 
     /// Schedules the soonest reminders again from the todos as they are now, when they changed.
     static func reschedule(_ index: CardIndex) {

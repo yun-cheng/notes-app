@@ -175,6 +175,8 @@ final class AppModel {
         vaults = []
         openVaults = []
         page = .journal(StreamFilter())
+        // Its todos remind no more; the next account's are scheduled once it opens.
+        Reminders.reschedule(index)
         Task {
             if let token { await ServerAPI(site: site, token: token).signOut() }
             try? await old.clear()

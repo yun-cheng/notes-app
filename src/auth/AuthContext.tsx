@@ -1,6 +1,7 @@
 import { createContext, useCallback, useContext, useEffect, useMemo, useState, type ReactNode } from 'react';
 import { claimLegacyNotes } from '../storage/legacy';
 import { CardsProvider, forgetAccountStorage, openAccountStorage } from '../state/CardsContext';
+import { leavePushHere } from '../reminders/push';
 import { deleteAccountOnServer, fetchSignedInAccounts, setRequestAccount, signInWithGoogle, signOutOfServer } from '../sync/http';
 import type { Account, SessionInfo } from '../sync/protocol';
 import { SignInScreen } from './SignInScreen';
@@ -105,6 +106,8 @@ export function AuthGate({ children }: { children: ReactNode }) {
 
   // Unsynced changes stay in this account's local database and sync at its next sign-in.
   const signOut = useCallback(async () => {
+    // Its reminders stop reaching this browser, while its session can still say so.
+    await leavePushHere().catch(() => undefined);
     const rest = await signOutOfServer().catch(() => signedIn.filter((a) => a.id !== account?.id));
     save(ACCOUNTS_KEY, rest);
     setSignedIn(rest);

@@ -117,7 +117,9 @@ fun EntrySheet(id: String, dismiss: () -> Unit) {
     var title by remember(id) { mutableStateOf(card.title) }
     var menu by remember { mutableStateOf(false) }
     var tools by remember { mutableStateOf<(@Composable () -> Unit)?>(null) }
-    val pages = listOf(card.content) + card.morePages
+    // Its pages, and a blank one being added: kept only once something is written on it.
+    val stored = listOf(card.content) + card.morePages
+    val pages = stored + List(maxOf(0, page + 1 - stored.size)) { Doc.empty }
     fun saveTitle() {
         val c = model.card(id) ?: return
         if (!model.canEdit(c) || title == c.title) return
@@ -129,11 +131,7 @@ fun EntrySheet(id: String, dismiss: () -> Unit) {
     FullScreen(if (card.type == CardType.todo) "Todo" else if (card.isStack) "Stack" else "Note", { saveTitle(); dismiss() }, actions = {
         if (edit) {
             IconButton(onClick = { model.panel = EntryPanel.Tags(id) }) { Icon(Icons.Outlined.Label, "Tags", tint = Theme.text) }
-            IconButton(onClick = {
-                val count = pages.size
-                model.perform { it.update(id) { c -> c.withMorePages(c.morePages + Doc.empty) } }
-                page = count
-            }) { Icon(Icons.Outlined.NoteAdd, "Add a page", tint = Theme.text) }
+            IconButton(onClick = { page = pages.size }) { Icon(Icons.Outlined.NoteAdd, "Add a page", tint = Theme.text) }
         }
         IconButton(onClick = { model.panel = EntryPanel.History(id) }) { Icon(Icons.Outlined.History, "History", tint = Theme.text) }
         Box {
@@ -166,7 +164,7 @@ fun EntrySheet(id: String, dismiss: () -> Unit) {
                 }
             }
             androidx.compose.runtime.key("$id:$page") {
-                DocEditor(pages[minOf(page, pages.size - 1)], edit, { doc -> savePage(model, id, page, doc) }, onTools = { tools = it })
+                DocEditor(pages[page], edit, { doc -> savePage(model, id, page, doc) }, onTools = { tools = it })
             }
             if (card.isStack) StackPreview(card)
             BubbleAttachments(card)

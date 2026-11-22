@@ -114,11 +114,15 @@ class AppModel(private val context: Context, val site: String) {
     private fun saveAccounts(list: List<Account>) { accounts = list; tokens.accounts = list }
 
     private suspend fun start() {
+        val t0 = System.currentTimeMillis()
         accounts = tokens.accounts
+        android.util.Log.i("Notes", "accounts in ${System.currentTimeMillis() - t0} ms")
         val current = tokens.current
         val account = accounts.firstOrNull { it.id == current } ?: accounts.firstOrNull()
         val token = account?.let { tokens.token(it.id) }
+        android.util.Log.i("Notes", "token in ${System.currentTimeMillis() - t0} ms")
         if (account != null && token != null) open(account, token) else phase = Phase.signedOut
+        android.util.Log.i("Notes", "started in ${System.currentTimeMillis() - t0} ms")
     }
 
     private fun openRepo(id: String): Repository {
@@ -231,9 +235,11 @@ class AppModel(private val context: Context, val site: String) {
         for (s in repo.vaultShares()) into.getOrPut(s.card_id) { mutableListOf() }.add(s.vault_id)
         sharedInto = into
         commentCounts = repo.commentCounts()
+        val locked = lockedVaults
+        val next = kotlinx.coroutines.withContext(Dispatchers.Default) { CardIndex(all, locked) }
         cards = all
-        index = CardIndex(all, lockedVaults)
-        Reminders.reschedule(context, index)
+        index = next
+        Reminders.reschedule(context, next)
     }
 
     /** Opens a private vault on this device: its cards show until the app locks again. */

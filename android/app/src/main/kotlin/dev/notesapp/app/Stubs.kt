@@ -16,9 +16,6 @@ import kotlinx.serialization.json.JsonElement
 @Composable fun BubbleAttachments(card: Card) {}
 @Composable fun BubbleLinks(card: Card) {}
 @Composable fun BubbleTranslation(card: Card) {}
-@Composable fun EntryMenu(card: Card, open: Boolean, onDismiss: () -> Unit, revealHidden: () -> Unit, onPick: () -> Unit) {}
-@Composable fun EntrySheet(id: String, dismiss: () -> Unit) {}
-@Composable fun EntryPanelView(panel: EntryPanel, dismiss: () -> Unit) {}
 @Composable fun AttachedThumb(node: JsonElement, vaultId: String, remove: () -> Unit) {}
 class Pickers(val photos: () -> Unit, val files: () -> Unit)
 @Composable fun rememberAttachmentPickers(vaultId: String, add: (JsonElement) -> Unit) = Pickers({}, {})
@@ -35,3 +32,14 @@ class Pickers(val photos: () -> Unit, val files: () -> Unit)
 @Composable fun VaultsPage(openDrawer: () -> Unit) = Stub("Vaults", openDrawer)
 @Composable fun SettingsPage(openDrawer: () -> Unit) = Stub("Settings", openDrawer)
 @Composable fun SearchPage(openDrawer: () -> Unit) = Stub("Search", openDrawer)
+
+@Composable fun CommentsSection(card: Card) {}
+@Composable fun SharePanel(id: String) {}
+@Composable fun EntryHistory(id: String, dismiss: () -> Unit) {}
+object Translations {
+    sealed class State { data class Done(val to: String, val shown: Boolean) : State() }
+    val states = androidx.compose.runtime.mutableStateMapOf<String, State>()
+    fun show(id: String, on: Boolean) {}
+    fun translate(card: Card, model: AppModel) {}
+}
+object Settings { var copyStyle: String = "markdown" }

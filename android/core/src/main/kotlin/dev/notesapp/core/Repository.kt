@@ -1,6 +1,9 @@
 package dev.notesapp.core
 
+import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.sync.Mutex
+import kotlinx.coroutines.withContext
+import kotlin.coroutines.CoroutineContext
 import kotlinx.coroutines.sync.withLock
 import kotlinx.serialization.builtins.ListSerializer
 import kotlinx.serialization.builtins.MapSerializer
@@ -16,8 +19,12 @@ class Repository(
     val keyring: Keyring = Keyring(),
     private val now: () -> Long = { System.currentTimeMillis() },
     private val newId: () -> String = { UUID.randomUUID().toString() },
+    private val context: CoroutineContext = Dispatchers.IO,
 ) {
     private val lock = Mutex()
+
+    /** Every read and write runs one at a time, off the caller's thread, as the Swift app's repository actor. */
+    private suspend fun <T> locked(block: suspend () -> T): T = withContext(context) { lock.withLock { block() } }
     private var mainVaultId: String? = null
     var onChange: (() -> Unit)? = null
     private var logged = 0
@@ -34,10 +41,10 @@ class Repository(
         return Card(r.id, r.vault_id, r.updated_at, r.deleted, r.seq, jobj("type" to j("note"), "title" to j(""), "tags" to jarr(emptyList()), "content" to Doc.empty), sealed = true)
     }
 
-    suspend fun allCards() = lock.withLock { store.listCards().map(::decode) }
-    suspend fun card(id: String) = lock.withLock { store.getCard(id)?.let(::decode) }
+    suspend fun allCards() = locked { store.listCards().map(::decode) }
+    suspend fun card(id: String) = locked { store.getCard(id)?.let(::decode) }
     private fun read(id: String) = store.getCard(id)?.let(::decode)
-    suspend fun vaults() = lock.withLock { store.listVaults() }
+    suspend fun vaults() = locked { store.listVaults() }
 
     private fun encode(c: Card): CardRecord {
         check(!c.sealed) { "A locked card can't be saved" }
@@ -99,7 +106,7 @@ class Repository(
     suspend fun createNote(
         id: String? = null, title: String = "", content: JsonElement = Doc.empty, pages: List<JsonElement> = emptyList(), stack: List<String>? = null,
         tags: List<String> = emptyList(), vaultId: String? = null, createdAt: Long? = null, extra: JsonObject = JsonObject(emptyMap()), group: String? = null,
-    ): Card = lock.withLock {
+    ): Card = locked {
         var f = jobj("type" to j("note"), "title" to j(title), "content" to content, "tags" to jstrings(tags))
         if (pages.isNotEmpty()) f = f.with("pages", jarr(pages))
         stack?.let { f = f.with("stack", jstrings(it)) }
@@ -110,7 +117,7 @@ class Repository(
         id: String? = null, title: String, due: String? = null, dueTime: String? = null, start: String? = null, repeat: Repeat? = null,
         content: JsonElement = Doc.empty, pages: List<JsonElement> = emptyList(), tags: List<String> = emptyList(), vaultId: String? = null,
         done: Boolean = false, waiting: Boolean = false, createdAt: Long? = null, extra: JsonObject = JsonObject(emptyMap()), group: String? = null,
-    ): Card = lock.withLock {
+    ): Card = locked {
         var f = jobj("type" to j("todo"), "title" to j(title), "content" to content, "tags" to jstrings(tags), "status" to j(if (done) "done" else "open"), "due" to j(due), "completedAt" to JsonNull)
         if (pages.isNotEmpty()) f = f.with("pages", jarr(pages))
         if (due != null && dueTime != null) f = f.with("dueTime", j(dueTime))
@@ -122,7 +129,7 @@ class Repository(
         write(c, group ?: action())
     }
 
-    suspend fun createTag(id: String? = null, title: String, vaultId: String? = null, members: List<String>? = null, choosesOne: Boolean = false, ordered: Boolean = false, group: String? = null): Card = lock.withLock {
+    suspend fun createTag(id: String? = null, title: String, vaultId: String? = null, members: List<String>? = null, choosesOne: Boolean = false, ordered: Boolean = false, group: String? = null): Card = locked {
         var f = jobj("type" to j("tag"), "title" to j(title), "pinned" to j(false))
         if (members != null) f = f.with("members", jstrings(members)).with("choice", j(if (choosesOne) "one" else "many")).with("ordered", j(ordered))
         else if (vaultId != null) f = f.with("scope", j("vault"))
@@ -130,10 +137,10 @@ class Repository(
     }
 
     /** Applies `change` to the card and saves it, unless nothing changed. `typed` joins typing into one change. */
-    suspend fun update(id: String, group: String? = null, typed: Boolean = false, change: (Card) -> Card): Card? = lock.withLock {
-        val card = read(id)?.takeIf { !it.sealed } ?: return@withLock null
+    suspend fun update(id: String, group: String? = null, typed: Boolean = false, change: (Card) -> Card): Card? = locked {
+        val card = read(id)?.takeIf { !it.sealed } ?: return@locked null
         val next = change(card)
-        if (next == card) return@withLock card
+        if (next == card) return@locked card
         write(next.copy(updatedAt = now()), group ?: action(), typed && group == null, card)
     }
 
@@ -148,20 +155,20 @@ class Repository(
     suspend fun move(id: String, vaultId: String, group: String? = null) = update(id, group) { it.copy(vaultId = vaultId) }
 
     suspend fun setTagScope(id: String, vaultId: String?, group: String? = null) {
-        val home = lock.withLock { defaultVaultId() }
+        val home = locked { defaultVaultId() }
         update(id, group) { c -> if (c.type != CardType.tag) c else if (vaultId != null) c.copy(vaultId = vaultId).with("scope", j("vault")) else c.copy(vaultId = home).with("scope", null) }
     }
 
     /** Stores every readable card in a vault again, after its key was unlocked or its encryption changed. */
-    suspend fun recodeVault(vaultId: String) = lock.withLock {
+    suspend fun recodeVault(vaultId: String) = locked {
         val records = store.listCards().filter { it.vault_id == vaultId }.map(::decode).filter { !it.sealed }.map(::encode)
         if (records.isNotEmpty()) { store.putCards(records); onChange?.invoke() }
         store.deleteChanges(store.listChanges().filter { it.after.vault_id == vaultId || it.beforeVault == vaultId }.mapNotNull { it.n })
     }
 
     /** Rewrites a card from what it holds now, not logged. */
-    suspend fun rewrite(id: String, change: (Card) -> Card) = lock.withLock {
-        val c = read(id)?.takeIf { !it.sealed } ?: return@withLock
+    suspend fun rewrite(id: String, change: (Card) -> Card) = locked {
+        val c = read(id)?.takeIf { !it.sealed } ?: return@locked
         val next = change(c)
         if (next != c) write(next.copy(updatedAt = now()))
     }
@@ -173,12 +180,12 @@ class Repository(
         return Change(e.n ?: 0, e.at, e.until, e.group, e.cardId, before, after, e.fields, e.undoneAt, e.redoneAt, after.sealed || before?.sealed == true)
     }
 
-    suspend fun changes(): List<Pair<Change, Card?>> = lock.withLock {
+    suspend fun changes(): List<Pair<Change, Card?>> = locked {
         val current = mutableMapOf<String, Card?>()
         store.listChanges().map { e -> decodeChange(e) to current.getOrPut(e.cardId) { read(e.cardId) } }
     }
 
-    suspend fun revert(ns: List<Long>, undo: Boolean): List<Long> = lock.withLock {
+    suspend fun revert(ns: List<Long>, undo: Boolean): List<Long> = locked {
         val done = mutableListOf<Long>()
         var stamp: Long? = null
         for (n in ns.distinct().let { if (undo) it.sortedDescending() else it.sorted() }) {
@@ -207,9 +214,9 @@ class Repository(
         return revert(Changes.nextRedo(rows.map { it.first }) { Changes.canRedo(it, current[it.cardId]) }.map { it.n }, false).size
     }
 
-    suspend fun takeBack(change: Change): Boolean = lock.withLock {
-        val current = read(change.cardId)?.takeIf { !it.sealed } ?: return@withLock false
-        if (!Changes.canUndo(change, current)) return@withLock false
+    suspend fun takeBack(change: Change): Boolean = locked {
+        val current = read(change.cardId)?.takeIf { !it.sealed } ?: return@locked false
+        if (!Changes.canUndo(change, current)) return@locked false
         write(Changes.revert(current, change, true).copy(updatedAt = now()), action(), before = current)
         true
     }
@@ -228,7 +235,7 @@ class Repository(
 
     // Sync
 
-    suspend fun pushable(limit: Int = Int.MAX_VALUE, excluding: Set<String> = emptySet()): List<CardRecord> = lock.withLock {
+    suspend fun pushable(limit: Int = Int.MAX_VALUE, excluding: Set<String> = emptySet()): List<CardRecord> = locked {
         val out = mutableListOf<CardRecord>()
         for (r0 in store.listDirty()) {
             if (out.size >= limit) break
@@ -250,7 +257,7 @@ class Repository(
     private fun <T> meta(key: String, ser: kotlinx.serialization.KSerializer<T>): T? = store.getMeta(key)?.let { runCatching { json.decodeFromString(ser, it) }.getOrNull() }
     private fun <T> setMeta(key: String, ser: kotlinx.serialization.KSerializer<T>, value: T?) = store.setMeta(key, value?.let { json.encodeToString(ser, it) })
 
-    suspend fun applyAccess(vaults: List<Vault>, shared: List<SharedCard>, vaultShares: List<VaultShare> = emptyList()): Boolean = lock.withLock {
+    suspend fun applyAccess(vaults: List<Vault>, shared: List<SharedCard>, vaultShares: List<VaultShare> = emptyList()): Boolean = locked {
         if ((meta("vaultShares", ListSerializer(VaultShare.serializer())) ?: emptyList()) != vaultShares) setMeta("vaultShares", ListSerializer(VaultShare.serializer()), vaultShares)
         val known = store.listVaults()
         val knownShared = meta("shared", ListSerializer(SharedCard.serializer())) ?: emptyList()
@@ -261,7 +268,7 @@ class Repository(
             val stray = store.listDirty().filter(outOfReach).map { it.id }
             if (stray.isNotEmpty()) { store.deleteCards(stray); onChange?.invoke() }
             keyring.setVaults(vaults)
-            return@withLock false
+            return@locked false
         }
         val reached = { list: List<Vault> -> list.filterNot { it.isWithheld }.map { "v:${it.id}" } }
         val before = (reached(known) + knownShared.map { "c:${it.card_id}" }).toSet()
@@ -278,7 +285,7 @@ class Repository(
         after.any { it !in before }
     }
 
-    suspend fun putVaults(vaults: List<Vault>) = lock.withLock {
+    suspend fun putVaults(vaults: List<Vault>) = locked {
         val known = store.listVaults().associateBy { it.id }
         store.putVaults(vaults)
         keyring.setVaults(store.listVaults())
@@ -286,47 +293,47 @@ class Repository(
         onChange?.invoke()
     }
 
-    suspend fun sharedCards() = lock.withLock { meta("shared", ListSerializer(SharedCard.serializer())) ?: emptyList() }
-    suspend fun vaultShares() = lock.withLock { meta("vaultShares", ListSerializer(VaultShare.serializer())) ?: emptyList() }
-    suspend fun putCommentCounts(counts: List<CommentCount>) = lock.withLock {
+    suspend fun sharedCards() = locked { meta("shared", ListSerializer(SharedCard.serializer())) ?: emptyList() }
+    suspend fun vaultShares() = locked { meta("vaultShares", ListSerializer(VaultShare.serializer())) ?: emptyList() }
+    suspend fun putCommentCounts(counts: List<CommentCount>) = locked {
         if ((meta("commentCounts", ListSerializer(CommentCount.serializer())) ?: emptyList()) != counts) {
             setMeta("commentCounts", ListSerializer(CommentCount.serializer()), counts)
             onChange?.invoke()
         }
     }
-    suspend fun commentCounts(): Map<String, Int> = lock.withLock { (meta("commentCounts", ListSerializer(CommentCount.serializer())) ?: emptyList()).associate { it.card_id to it.open } }
+    suspend fun commentCounts(): Map<String, Int> = locked { (meta("commentCounts", ListSerializer(CommentCount.serializer())) ?: emptyList()).associate { it.card_id to it.open } }
 
-    suspend fun dropCards(ids: List<String>) = lock.withLock {
+    suspend fun dropCards(ids: List<String>) = locked {
         store.deleteCards(ids)
         val lost = ids.toSet()
         store.deleteChanges(store.listChanges().filter { it.cardId in lost }.mapNotNull { it.n })
         onChange?.invoke()
     }
 
-    suspend fun applyRemote(records: List<CardRecord>) = lock.withLock { store.applyRemote(records); if (records.isNotEmpty()) onChange?.invoke() }
-    suspend fun forceRemote(record: CardRecord, ifUpdatedAt: Long? = null): Boolean = lock.withLock { store.forceRemote(record, ifUpdatedAt).also { if (it) onChange?.invoke() } }
-    suspend fun markSynced(id: String, updatedAt: Long, seq: Long) = lock.withLock { store.markSynced(id, updatedAt, seq) }
-    suspend fun cursor() = lock.withLock { store.getMeta("cursor")?.toLongOrNull() ?: 0L }
-    suspend fun setCursor(seq: Long) = lock.withLock { store.setMeta("cursor", seq.toString()) }
+    suspend fun applyRemote(records: List<CardRecord>) = locked { store.applyRemote(records); if (records.isNotEmpty()) onChange?.invoke() }
+    suspend fun forceRemote(record: CardRecord, ifUpdatedAt: Long? = null): Boolean = locked { store.forceRemote(record, ifUpdatedAt).also { if (it) onChange?.invoke() } }
+    suspend fun markSynced(id: String, updatedAt: Long, seq: Long) = locked { store.markSynced(id, updatedAt, seq) }
+    suspend fun cursor() = locked { store.getMeta("cursor")?.toLongOrNull() ?: 0L }
+    suspend fun setCursor(seq: Long) = locked { store.setMeta("cursor", seq.toString()) }
 
-    suspend fun saveConflictCopy(loserRecord: CardRecord, winnerRecord: CardRecord) = lock.withLock {
+    suspend fun saveConflictCopy(loserRecord: CardRecord, winnerRecord: CardRecord) = locked {
         val loser = decode(loserRecord)
         val winner = decode(winnerRecord)
-        if (loser.sealed || loser.deleted || loser.type == CardType.tag || loser.isBlank) return@withLock
-        if (loser.title == winner.title && loser.content == winner.content) return@withLock
+        if (loser.sealed || loser.deleted || loser.type == CardType.tag || loser.isBlank) return@locked
+        if (loser.title == winner.title && loser.content == winner.content) return@locked
         var f = jobj("type" to j("note"), "title" to j("${loser.displayTitle} (conflict copy)"), "content" to loser.content, "tags" to jstrings(loser.tags), "createdAt" to j(loser.createdAt))
         if (loser.type == CardType.todo) f = f.with("type", j("todo")).with("status", loser.payload["status"] ?: j("open")).with("due", loser.payload["due"] ?: JsonNull).with("completedAt", loser.payload["completedAt"] ?: JsonNull)
         write(newCard(null, loser.vaultId, loser.createdAt, f))
     }
 
-    suspend fun metaString(key: String) = lock.withLock { store.getMeta(key) }
-    suspend fun setMetaString(key: String, value: String?) = lock.withLock { store.setMeta(key, value) }
+    suspend fun metaString(key: String) = locked { store.getMeta(key) }
+    suspend fun setMetaString(key: String, value: String?) = locked { store.setMeta(key, value) }
 
-    suspend fun deviceId(): String = lock.withLock { store.getMeta("deviceId") ?: newId().also { store.setMeta("deviceId", it) } }
+    suspend fun deviceId(): String = locked { store.getMeta("deviceId") ?: newId().also { store.setMeta("deviceId", it) } }
 
-    suspend fun clear() = lock.withLock { store.clear(); keyring.forgetAll(); keyring.setVaults(emptyList()); onChange?.invoke() }
+    suspend fun clear() = locked { store.clear(); keyring.forgetAll(); keyring.setVaults(emptyList()); onChange?.invoke() }
 
-    suspend fun importBackup(cards: List<Card>): Triple<Int, Int, Int> = lock.withLock {
+    suspend fun importBackup(cards: List<Card>): Triple<Int, Int, Int> = locked {
         val known = store.listVaults().map { it.id }.toSet()
         val target = store.listVaults().minByOrNull { it.created_at }?.id
         var added = 0; var updated = 0; var skipped = 0

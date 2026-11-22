@@ -32,7 +32,13 @@ android {
     }
 
     buildTypes {
-        release { isMinifyEnabled = false }
+        release {
+            isMinifyEnabled = true
+            isShrinkResources = true
+            proguardFiles(getDefaultProguardFile("proguard-android-optimize.txt"), "proguard-rules.pro")
+            // Signed with the debug key until there's a release key, so it installs for testing.
+            signingConfig = signingConfigs.getByName("debug")
+        }
     }
 }
 

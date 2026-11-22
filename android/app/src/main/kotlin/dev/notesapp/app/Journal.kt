@@ -5,6 +5,7 @@ import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.gestures.detectVerticalDragGestures
+import androidx.compose.foundation.gestures.scrollBy
 import androidx.compose.foundation.horizontalScroll
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
@@ -154,7 +155,7 @@ fun JournalView(initial: StreamFilter, openDrawer: () -> Unit, fixed: Boolean = 
                 }
                 val rows = (if (chat && all.size > visible.size) 1 else 0) + groups.sumOf { 1 + it.second.size }
                 // A chat opens at its newest entry, at the foot.
-                LaunchedEffect(filter, rows > 0) { if (chat && rows > 0) list.scrollToItem(rows - 1, Int.MAX_VALUE / 2) }
+                LaunchedEffect(filter, rows > 0) { if (chat && rows > 0) { list.scrollToItem(rows - 1); list.scrollBy(100_000f) } }
                 LaunchedEffect(model.lastSaved) { model.lastSaved?.let { id -> rowOf[id]?.let { list.animateScrollToItem(it) } } }
                 BoxWithConstraints(Modifier.weight(1f).fillMaxWidth()) {
                     val bubbleWidth = minOf(560.dp, (minOf(maxWidth, 720.dp) - 32.dp) * 0.85f)

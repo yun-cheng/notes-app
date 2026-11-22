@@ -110,12 +110,25 @@ class DocText(val text: RichText, val stash: Map<String, JsonElement> = emptyMap
             return null
         }
 
+        /**
+         * What typing at the start of a line turns into, as the web's editor does: `[] ` a checkbox, `- ` a bullet. The
+         * line's start, as typed, and what it becomes.
+         */
+        fun typedMarker(line: String): Pair<String, String>? {
+            val spaces = line.takeWhile { it == ' ' }
+            val rest = line.substring(spaces.length)
+            for ((typed, marker) in listOf("[] " to "☐ ", "[ ] " to "☐ ", "[x] " to "☑ ", "[X] " to "☑ ", "- " to "• ", "* " to "• ")) {
+                if (rest.startsWith(typed)) return spaces + typed to spaces + marker
+            }
+            return null
+        }
+
         /** A checklist item's box at the start of a line: "☐ ", "☑ ", or as typed, "[ ] " and "[x] ". */
         fun taskMarker(s: String): TaskMarker? {
             val spaces = s.takeWhile { it == ' ' }.length
             val rest = s.substring(spaces)
             if (rest.startsWith("☐ ") || rest.startsWith("☑ ")) return TaskMarker(spaces / 2, rest.startsWith("☑"), spaces + 2)
-            for ((box, checked) in listOf("[ ] " to false, "[x] " to true, "[X] " to true)) if (rest.startsWith(box)) return TaskMarker(spaces / 2, checked, spaces + box.length)
+            for ((box, checked) in listOf("[ ] " to false, "[] " to false, "[x] " to true, "[X] " to true)) if (rest.startsWith(box)) return TaskMarker(spaces / 2, checked, spaces + box.length)
             return null
         }
 

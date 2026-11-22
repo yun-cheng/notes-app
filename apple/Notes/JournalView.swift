@@ -111,6 +111,13 @@ struct JournalView: View {
                     .overlay(alignment: .trailing) {
                         JournalRail(items: visible) { id in withAnimation(nil) { proxy.scrollTo(id, anchor: .top) } }
                     }
+                    // The anchor places the end by estimated heights; once the entries are drawn, go to the newest for
+                    // real, or a list opened at the bottom can sit past its end, blank.
+                    .task(id: "\(all.isEmpty)|\(filter.sort)") {
+                        guard chat, let last = visible.last?.card.id else { return }
+                        try? await Task.sleep(for: .milliseconds(60))
+                        withAnimation(nil) { proxy.scrollTo(last, anchor: .bottom) }
+                    }
                     .onChange(of: model.lastSaved) { _, id in
                         if let id { withAnimation(nil) { proxy.scrollTo(id, anchor: .bottom) } }
                     }

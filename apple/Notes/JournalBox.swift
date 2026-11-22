@@ -225,7 +225,7 @@ struct JournalBox: View {
                 let sent = Set(added.compactMap { $0["attrs"]?["id"]?.stringValue })
                 attached.removeAll { sent.contains($0["attrs"]?["id"]?.stringValue ?? "") }
                 // Once the stream has it, so there's somewhere to scroll to.
-                await model.refresh()
+                await model.caughtUp()
                 model.lastSaved = ids.last
             case .unlock(let vaultId):
                 unlock = model.vault(vaultId)

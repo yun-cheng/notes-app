@@ -65,6 +65,7 @@ final class AppModel {
     /// A refresh is running for local changes, and whether another change came after it started.
     @ObservationIgnored private var refreshing = false
     @ObservationIgnored private var refreshAgain = false
+    @ObservationIgnored private var refreshTask: Task<Void, Never>?
 
     init(site: URL = ServerAPI.production) {
         self.site = site
@@ -182,6 +183,7 @@ final class AppModel {
         sync = nil
         cards = []
         index = CardIndex()
+        indexed = ([], [])
         vaults = []
         openVaults = []
         page = .journal(StreamFilter())
@@ -220,7 +222,7 @@ final class AppModel {
             return
         }
         refreshing = true
-        Task {
+        refreshTask = Task {
             repeat {
                 refreshAgain = false
                 await refresh()
@@ -229,19 +231,53 @@ final class AppModel {
         }
     }
 
+    /// Waits until the screens show the changes made so far, without reading everything again itself.
+    func caughtUp() async {
+        // The repository's change note reaches the main actor as a task of its own: let it start first.
+        await Task.yield()
+        await refreshTask?.value
+    }
+
+    /// Reads the cards and vaults again. Only what changed is set, so screens redraw only for it, and the index is
+    /// built off the main thread, only when a card or what's locked changed.
     func refresh() async {
+        refreshes += 1
+        let run = refreshes
         guard let all = try? await repo.allCards(), let vaults = try? await repo.vaults() else { return }
-        today = DateKey.today()
-        self.vaults = vaults.sorted { ($0.created_at, $0.id) < ($1.created_at, $1.id) }
-        shared = (try? await repo.sharedCards()) ?? []
+        let shared = (try? await repo.sharedCards()) ?? []
         var into: SharedInto = [:]
         for share in (try? await repo.vaultShares()) ?? [] { into[share.card_id, default: []].append(share.vault_id) }
-        sharedInto = into
-        commentCounts = (try? await repo.commentCounts()) ?? [:]
+        let counts = (try? await repo.commentCounts()) ?? [:]
+        let sorted = vaults.sorted { ($0.created_at, $0.id) < ($1.created_at, $1.id) }
+        // A newer refresh has begun: it sets everything.
+        guard run == refreshes else { return }
+        setIfChanged(\.today, DateKey.today())
+        setIfChanged(\.vaults, sorted)
+        setIfChanged(\.shared, shared)
+        setIfChanged(\.sharedInto, into)
+        setIfChanged(\.commentCounts, counts)
+        let marks = all.map(CardMark.init)
+        let locked = lockedVaults
+        guard marks != indexed.marks || locked != indexed.locked else { return }
+        let index = await Task.detached(priority: .userInitiated) { CardIndex(all, locked: locked) }.value
+        guard run == refreshes else { return }
+        indexed = (marks, locked)
         cards = all
-        index = CardIndex(all, locked: lockedVaults)
+        self.index = index
         Transcriber.shared.apply(model: self)
         Reminders.reschedule(index)
+    }
+
+    /// What tells one version of a card from another without comparing its whole body.
+    private struct CardMark: Equatable {
+        let id: String, vaultId: String, updatedAt: Int64, seq: Int64, deleted: Bool, sealed: Bool
+        init(_ c: Card) { (id, vaultId, updatedAt, seq, deleted, sealed) = (c.id, c.vaultId, c.updatedAt, c.seq, c.deleted, c.sealed) }
+    }
+    @ObservationIgnored private var indexed: (marks: [CardMark], locked: Set<String>) = ([], [])
+    @ObservationIgnored private var refreshes = 0
+
+    private func setIfChanged<T: Equatable>(_ key: ReferenceWritableKeyPath<AppModel, T>, _ value: T) {
+        if self[keyPath: key] != value { self[keyPath: key] = value }
     }
 
     /// Opens a private vault on this device: its cards show until the app locks again.

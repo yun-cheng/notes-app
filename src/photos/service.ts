@@ -97,6 +97,8 @@ export class PhotoService {
   private running: Promise<void> | null = null;
   private again = false;
   private urls = new Map<string, Promise<string | null>>();
+  /** Shrunk copies for thumbnails, by ID and size, the least recently asked for let go past `MAX_THUMBS`. */
+  private thumbs = new Map<string, Promise<string | null>>();
   /** The vault each sealed one shown here is in, so it stops showing once that vault locks. */
   private opened = new Map<string, string>();
   /** Whether each the server has is sealed, from the server's list or else its start. */
@@ -124,6 +126,15 @@ export class PhotoService {
       const url = this.urls.get(id);
       this.urls.delete(id);
       void url?.then((u) => u && URL.revokeObjectURL(u), () => undefined);
+      this.dropThumbs(id);
+    }
+  }
+
+  private dropThumbs(id?: string) {
+    for (const [key, url] of this.thumbs) {
+      if (id !== undefined && !key.startsWith(`${id}@`)) continue;
+      this.thumbs.delete(key);
+      void url.then((u) => u && URL.revokeObjectURL(u), () => undefined);
     }
   }
 
@@ -324,6 +335,38 @@ export class PhotoService {
     return vaultId ? ((await this.open(blob, id))?.blob ?? null) : blob;
   }
 
+  /**
+   * An object URL for a thumbnail: the photo shrunk to `edge` pixels on its longer side, so a grid of them doesn't
+   * decode every one at full size. Kept for the most recently shown, and let go after.
+   */
+  thumbUrl(id: string, edge: number): Promise<string | null> {
+    const key = `${id}@${edge}`;
+    const had = this.thumbs.get(key);
+    if (had) {
+      // The most recently asked for go last, the first to be let go.
+      this.thumbs.delete(key);
+      this.thumbs.set(key, had);
+      return had;
+    }
+    const made = this.blob(id).then(
+      async (blob) => {
+        if (!blob) this.thumbs.delete(key);
+        return blob ? URL.createObjectURL(await shrink(blob, edge)) : null;
+      },
+      (err: unknown) => {
+        this.thumbs.delete(key);
+        throw err;
+      },
+    );
+    this.thumbs.set(key, made);
+    while (this.thumbs.size > MAX_THUMBS) {
+      const [oldest, url] = this.thumbs.entries().next().value!;
+      this.thumbs.delete(oldest);
+      void url.then((u) => u && URL.revokeObjectURL(u), () => undefined);
+    }
+    return made;
+  }
+
   /** An object URL for showing the photo, or opening the file, shared by every view of it. */
   url(id: string): Promise<string | null> {
     let url = this.urls.get(id);
@@ -351,6 +394,7 @@ export class PhotoService {
     this.sealedThere.delete(id);
     this.starts.delete(id);
     void url?.then((u) => u && URL.revokeObjectURL(u), () => undefined);
+    this.dropThumbs(id);
     await this.store.deletePhoto(id);
   }
 
@@ -413,5 +457,27 @@ export class PhotoService {
       document.removeEventListener('visibilitychange', onVisible);
       clearInterval(timer);
     };
+  }
+}
+
+/** How many shrunk thumbnails are kept at once. */
+const MAX_THUMBS = 300;
+
+/** A picture no bigger than `edge` pixels on its longer side, as a JPEG; as it was when it's small already, a GIF (which would stop moving), or where the browser can't draw it. */
+async function shrink(blob: Blob, edge: number): Promise<Blob> {
+  if (blob.type === 'image/gif' || typeof createImageBitmap !== 'function' || typeof OffscreenCanvas !== 'function') return blob;
+  try {
+    const image = await createImageBitmap(blob);
+    const scale = edge / Math.max(image.width, image.height);
+    if (scale >= 1) {
+      image.close();
+      return blob;
+    }
+    const canvas = new OffscreenCanvas(Math.max(1, Math.round(image.width * scale)), Math.max(1, Math.round(image.height * scale)));
+    canvas.getContext('2d')!.drawImage(image, 0, 0, canvas.width, canvas.height);
+    image.close();
+    return await canvas.convertToBlob({ type: 'image/jpeg', quality: 0.85 });
+  } catch {
+    return blob;
   }
 }

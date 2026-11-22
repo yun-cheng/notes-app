@@ -110,7 +110,8 @@ export function Attachments({ card }: { card: Card }) {
 }
 
 function Thumb({ id }: { id: string }) {
-  const { url } = usePhotoUrl(id);
+  // Whole under its entry, at most about 560 points wide on a sharp screen.
+  const { url } = usePhotoUrl(id, 1200);
   return url ? <img src={url} alt="" loading="lazy" draggable={false} /> : <span className="thumb__empty"><Icon name="image" size={18} /></span>;
 }
 
@@ -320,6 +321,6 @@ function StripThumb({ id, video, label, current, onPick }: { id: string; video?:
 }
 
 function StripImage({ id }: { id: string }) {
-  const { url } = usePhotoUrl(id);
+  const { url } = usePhotoUrl(id, 240);
   return url ? <img src={url} alt="" draggable={false} /> : <Icon name="image" size={16} />;
 }

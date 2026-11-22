@@ -437,7 +437,8 @@ function useLongPress(run: () => void) {
 }
 
 function TileImage({ id, onShape }: { id: string; onShape: (ratio: number) => void }) {
-  const { url } = usePhotoUrl(id);
+  // Rows up to about 200 points high, twice that on a sharp screen, a wide photo wider.
+  const { url } = usePhotoUrl(id, 800);
   if (!url) return <Icon name="image" size={18} />;
   return (
     <img

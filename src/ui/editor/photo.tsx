@@ -13,7 +13,8 @@ const RETRY_MS = 30_000;
  * An object URL for a photo, retrying while the server doesn't have it yet, or can't be reached. An empty ID (no
  * photo) finds none. One sealed with a key its vault doesn't have is `unreadable`, and not asked for again.
  */
-export function usePhotoUrl(id: string): { url: string | null; state: PhotoState } {
+/** `edge`, for a thumbnail: the photo shrunk to that many pixels on its longer side. */
+export function usePhotoUrl(id: string, edge?: number): { url: string | null; state: PhotoState } {
   const { photos } = useCards();
   const [result, setResult] = useState<{ url: string | null; state: PhotoState }>({ url: null, state: 'loading' });
 
@@ -22,7 +23,7 @@ export function usePhotoUrl(id: string): { url: string | null; state: PhotoState
     let live = true;
     let timer: ReturnType<typeof setTimeout> | null = null;
     const attempt = () => {
-      photos.url(id).then(
+      (edge ? photos.thumbUrl(id, edge) : photos.url(id)).then(
         (url) => {
           if (!live) return;
           setResult(url ? { url, state: 'ready' } : { url: null, state: 'waiting' });
@@ -41,7 +42,7 @@ export function usePhotoUrl(id: string): { url: string | null; state: PhotoState
       live = false;
       if (timer) clearTimeout(timer);
     };
-  }, [photos, id]);
+  }, [photos, id, edge]);
   return result;
 }
 

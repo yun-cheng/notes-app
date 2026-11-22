@@ -123,7 +123,7 @@ function TrashedVideo({ item, still }: { item: StoredAttachment; still: string }
 }
 
 function TrashedPhoto({ id }: { id: string }) {
-  const { url } = usePhotoUrl(id);
+  const { url } = usePhotoUrl(id, 400);
   return url ? <img src={url} alt="" draggable={false} /> : <Icon name="image" size={20} />;
 }
 

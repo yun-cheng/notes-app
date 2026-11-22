@@ -11,13 +11,10 @@ import dev.notesapp.core.StreamFilter
 import dev.notesapp.core.Vault
 import kotlinx.serialization.json.JsonElement
 
-@Composable fun BoardView(filter: StreamFilter, board: String) {}
 @Composable fun BubbleLinks(card: Card) {}
 @Composable fun BubbleTranslation(card: Card) {}
 @Composable fun VoiceRecordButton(vaultId: String, add: (JsonElement) -> Unit) {}
 @Composable private fun Stub(title: String, openDrawer: () -> Unit) { Column(Modifier.fillMaxSize()) { TopBar(title, openDrawer) } }
-@Composable fun HistoryPage(openDrawer: () -> Unit) = Stub("History", openDrawer)
-@Composable fun TagsPage(openDrawer: () -> Unit) = Stub("Tags", openDrawer)
 @Composable fun SettingsPage(openDrawer: () -> Unit) = Stub("Settings", openDrawer)
 
 object Translations {

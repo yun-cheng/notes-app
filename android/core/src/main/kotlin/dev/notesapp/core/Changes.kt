@@ -140,6 +140,12 @@ object Changes {
         return order.map { g -> Group(g, groups.getValue(g), groups.getValue(g).first().until) }
     }
 
+    /** Whether this device's log already shows a change that came by sync, because this device made it. */
+    fun inLog(change: Change, v: RecentVersion, log: List<Change>): Boolean {
+        if (!v.mine || v.via != null || v.device?.here == false) return false
+        return log.any { it.cardId == change.cardId && it.at <= change.until && maxOf(it.until, it.undoneAt ?: 0, it.redoneAt ?: 0) >= change.at }
+    }
+
     fun nextUndo(changes: List<Change>, usable: (Change) -> Boolean): List<Change> {
         for (g in grouped(changes)) {
             val ready = g.changes.filter { it.undoneAt == null && usable(it) }

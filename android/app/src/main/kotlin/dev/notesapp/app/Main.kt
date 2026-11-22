@@ -119,6 +119,9 @@ fun PhoneFrame() {
     val scope = rememberCoroutineScope()
     var tab by remember { mutableStateOf(0) }
     val openDrawer: () -> Unit = { scope.launch { drawer.open() } }
+    // A page picked from another tab (a day on the calendar, a tag in a result) shows in the Journal tab.
+    var shownPage by remember { mutableStateOf(model.page) }
+    if (model.page != shownPage) { shownPage = model.page; tab = 0 }
     BackHandler(drawer.isOpen) { scope.launch { drawer.close() } }
     BackHandler(!drawer.isOpen && tab == 0 && model.page != Page.Journal()) { model.page = Page.Journal() }
 

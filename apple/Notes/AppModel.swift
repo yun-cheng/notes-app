@@ -52,7 +52,9 @@ final class AppModel {
     /// Shows the sign-in to add another account.
     var addingAccount = false
     private let site: URL
-    private var refreshQueued = false
+    /// A refresh is running for local changes, and whether another change came after it started.
+    @ObservationIgnored private var refreshing = false
+    @ObservationIgnored private var refreshAgain = false
 
     init(site: URL = ServerAPI.production) {
         self.site = site
@@ -200,11 +202,18 @@ final class AppModel {
     /// Local changes refresh the screens at once and sync shortly after.
     private func changed() {
         sync?.schedule()
-        guard !refreshQueued else { return }
-        refreshQueued = true
+        // A change made while a refresh is running may come after it read the cards, so one more runs after it.
+        guard !refreshing else {
+            refreshAgain = true
+            return
+        }
+        refreshing = true
         Task {
-            await refresh()
-            refreshQueued = false
+            repeat {
+                refreshAgain = false
+                await refresh()
+            } while refreshAgain
+            refreshing = false
         }
     }
 

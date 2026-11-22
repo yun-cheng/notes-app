@@ -31,13 +31,32 @@ final class Drafts {
 
     private var storeKey: String { "drafts:\(accountId)" }
 
+    /// The drafts as last read or written, so a keystroke doesn't decode and encode them all; stored a moment after
+    /// the last change.
+    @ObservationIgnored private var cached: (key: String, kept: Kept)?
+    @ObservationIgnored private var storing: Task<Void, Never>?
+
     private func read() -> Kept {
-        guard let data = UserDefaults.standard.data(forKey: storeKey), var kept = try? JSONDecoder().decode(Kept.self, from: data) else { return Kept() }
-        kept.entries = kept.entries.filter { $0.value.dirty == true || ($0.value.value != nil && Date().timeIntervalSince($0.value.at) < 30 * 86400) }
+        if let cached, cached.key == storeKey { return cached.kept }
+        var kept = Kept()
+        if let data = UserDefaults.standard.data(forKey: storeKey), let stored = try? JSONDecoder().decode(Kept.self, from: data) {
+            let now = Date()
+            kept = stored
+            kept.entries = kept.entries.filter { $0.value.dirty == true || ($0.value.value != nil && now.timeIntervalSince($0.value.at) < 30 * 86400) }
+        }
+        cached = (storeKey, kept)
         return kept
     }
 
-    private func write(_ kept: Kept) { UserDefaults.standard.set(try? JSONEncoder().encode(kept), forKey: storeKey) }
+    private func write(_ kept: Kept) {
+        let key = storeKey
+        cached = (key, kept)
+        storing?.cancel()
+        storing = Task {
+            try? await Task.sleep(for: .milliseconds(500))
+            if !Task.isCancelled { UserDefaults.standard.set(try? JSONEncoder().encode(kept), forKey: key) }
+        }
+    }
 
     func get(_ kind: String, _ key: String) -> JSONValue? {
         let k = "\(kind):\(key)"
@@ -115,7 +134,11 @@ final class Drafts {
         write(kept)
     }
 
-    func forget() { UserDefaults.standard.removeObject(forKey: storeKey) }
+    func forget() {
+        storing?.cancel()
+        cached = nil
+        UserDefaults.standard.removeObject(forKey: storeKey)
+    }
 
     /// A journal draft as the web keeps it, a document, from what's typed in the box.
     static func doc(_ text: String) -> JSONValue? { text.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty ? nil : Doc.fromText(text) }

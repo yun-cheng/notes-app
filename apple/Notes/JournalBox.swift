@@ -115,6 +115,11 @@ struct JournalBox: View {
             picking = []
             Task { for item in items { await addPicked(item) } }
         }
+        // Files and pictures dropped on the box are added to it; a picture dragged from a web page comes by its address.
+        .dropDestination(for: URL.self) { urls, _ in
+            urls.forEach(addFile)
+            return !urls.isEmpty
+        }
         .fileImporter(isPresented: $importing, allowedContentTypes: [.item], allowsMultipleSelection: true) { result in
             guard case .success(let urls) = result else { return }
             for url in urls { addFile(url) }

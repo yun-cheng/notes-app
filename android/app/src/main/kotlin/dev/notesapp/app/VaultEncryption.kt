@@ -193,10 +193,10 @@ class VaultEncryption(private val model: AppModel) {
             val there = stored[id] ?: continue
             val wrong = if (seal) !there.isSealed || there.vault_id != vaultId else there.isSealed
             if (!wrong) continue
-            val by = copy(id, vaultId, file)
+            val by = copy(id, vaultId, file, seal)
             if (by == null) { failed++; continue }
             renamed[id] = by
-            file?.poster?.let { renamed[it] = copy(it, vaultId, null, Doc.posterId(by)) }
+            file?.poster?.let { renamed[it] = copy(it, vaultId, null, seal, Doc.posterId(by)) }
         }
         if (renamed.isEmpty()) return failed
         for (card in cards) repo.rewrite(card.id) { c ->
@@ -204,19 +204,26 @@ class VaultEncryption(private val model: AppModel) {
             val next = c.withContent(withCopies(c.content, renamed))
             if (pages != c.morePages) next.withMorePages(pages) else next
         }
-        // The old ones go once the copies are up.
+        // The old ones go once their copies are up. One whose copy still waits stays on the server; no entry holds it
+        // any more, so the attachment sweep sends it to the Trash later.
         Attachments.upload(model)
-        runCatching { api.markAttachments(renamed.keys.map { TrashMark(it) }, emptyList()) }
-        for (id in renamed.keys) runCatching { api.deleteAttachment(id) }
+        val waiting = Attachments.pending.map { it.id }.toSet()
+        val done = renamed.filter { (_, by) -> by == null || by !in waiting }.keys
+        if (done.isEmpty()) return failed
+        runCatching { api.markAttachments(done.map { TrashMark(it) }, emptyList()) }
+        for (id in done) runCatching { api.deleteAttachment(id) }
         return failed
     }
 
-    /** One photo or file copied under a new ID, sealed or opened for the vault, and queued to upload. */
-    private suspend fun copy(id: String, vaultId: String, file: Doc.FileInfo?, newId: String? = null): String? {
+    /**
+     * One photo or file copied under a new ID, sealed or opened as `seal` says (not as the vault is now: while encryption
+     * goes off, the vault is still encrypted), and queued to upload.
+     */
+    private suspend fun copy(id: String, vaultId: String, file: Doc.FileInfo?, seal: Boolean, newId: String? = null): String? {
         val data = Attachments.data(id, model) ?: return null
         return runCatching {
-            val node = if (file != null) Attachments.addFile(data, file.name, file.mime ?: "application/octet-stream", vaultId, model, file.duration, given = newId)
-            else Attachments.addPhoto(data, vaultId, model, newId)
+            val node = if (file != null) Attachments.addFile(data, file.name, file.mime ?: "application/octet-stream", vaultId, model, file.duration, given = newId, seal = seal)
+            else Attachments.addPhoto(data, vaultId, model, newId, seal)
             node["attrs"]["id"].str
         }.getOrNull()
     }

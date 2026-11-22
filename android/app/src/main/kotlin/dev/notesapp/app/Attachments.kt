@@ -150,11 +150,14 @@ object Attachments {
 
     private fun newId() = UUID.randomUUID().toString().lowercase()
 
-    /** Keeps a photo for an entry in `vaultId` and queues its upload. Returns the photo node to put in the entry. */
-    fun addPhoto(raw: ByteArray, vaultId: String, model: AppModel, given: String? = null): JsonElement {
+    /**
+     * Keeps a photo for an entry in `vaultId` and queues its upload. Returns the photo node to put in the entry. `seal`
+     * says whether it's sealed, which otherwise follows the vault.
+     */
+    fun addPhoto(raw: ByteArray, vaultId: String, model: AppModel, given: String? = null, seal: Boolean? = null): JsonElement {
         val photo = prepare(raw) ?: throw AddError("That isn't a picture this app can read.")
         val id = given ?: newId()
-        keep(id, photo.data, vaultId, model, Pending(id, vaultId, photo.mime, width = photo.width, height = photo.height))
+        keep(id, photo.data, vaultId, model, seal, Pending(id, vaultId, photo.mime, width = photo.width, height = photo.height))
         return jobj("type" to j("photo"), "attrs" to jobj("id" to j(id)))
     }
 
@@ -199,12 +202,12 @@ object Attachments {
     }
 
     /** Keeps a file (a video, a sound, a PDF, anything) and queues its upload. Returns the file node. */
-    fun addFile(data: ByteArray, name: String, mime: String, vaultId: String, model: AppModel, duration: Double? = null, extra: JsonObject = jobj(), given: String? = null): JsonElement {
+    fun addFile(data: ByteArray, name: String, mime: String, vaultId: String, model: AppModel, duration: Double? = null, extra: JsonObject = jobj(), given: String? = null, seal: Boolean? = null): JsonElement {
         val video = mime.startsWith("video/")
         val limit = if (video) MAX_VIDEO_BYTES else MAX_FILE_BYTES
         if (data.size > limit) throw AddError("$name is ${size(data.size.toLong())}. ${if (video) "Videos" else "Files"} can be up to ${size(limit.toLong())}.")
         val id = given ?: newId()
-        keep(id, data, vaultId, model, Pending(id, vaultId, mime, fileName = name, duration = duration))
+        keep(id, data, vaultId, model, seal, Pending(id, vaultId, mime, fileName = name, duration = duration))
         var attrs = jobj("id" to j(id), "name" to j(name), "mime" to j(mime), "size" to j(data.size.toLong()))
         duration?.let { attrs = attrs.with("duration", j(it)) }
         attrs = JsonObject(attrs + extra)
@@ -213,10 +216,10 @@ object Attachments {
 
     fun size(bytes: Long): String = Formatter.formatShortFileSize(null, bytes).ifEmpty { "$bytes B" }
 
-    private fun keep(id: String, data: ByteArray, vaultId: String, model: AppModel, item0: Pending) {
+    private fun keep(id: String, data: ByteArray, vaultId: String, model: AppModel, seal: Boolean?, item0: Pending) {
         var item = item0.copy(account = model.accountId)
         var stored = data
-        if (model.vault(vaultId)?.isEncrypted == true) {
+        if (seal ?: (model.vault(vaultId)?.isEncrypted == true)) {
             val key = model.repo.keyring.key(vaultId) ?: throw AddError("Open the vault first.")
             stored = AttachmentSeal.seal(data, id, vaultId, key, AttachmentSeal.Facts(item.mime, data.size, item.fileName, item.width, item.height, item.duration))
             item = item.copy(sealed = true)

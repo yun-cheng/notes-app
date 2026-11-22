@@ -142,6 +142,24 @@ export function lockedVaultIds(vaults: Vault[], open: ReadonlySet<string>): Set<
 }
 
 
+/**
+ * Vaults this device can't read all of: locked here, holding a card it couldn't open, or encrypted with no key here,
+ * as when another device has just encrypted one this device had open. Which of their photos are held can't be told
+ * here, so the attachment sweep leaves them alone.
+ */
+export function unreadVaultIds(
+  locked: ReadonlySet<string>,
+  vaults: Vault[],
+  cards: Iterable<{ vaultId: string }>,
+  sealed: (card: { vaultId: string }) => boolean,
+  hasKey: (vaultId: string) => boolean,
+): Set<string> {
+  const unread = new Set(locked);
+  for (const card of cards) if (sealed(card)) unread.add(card.vaultId);
+  for (const v of vaults) if (v.encryption && !hasKey(v.id)) unread.add(v.id);
+  return unread;
+}
+
 /** Each account's first vault. It holds new cards, so it always stays open. */
 export const isDefaultVault = (vault: Vault) => vault.id === `vault-${vault.owner_id}`;
 

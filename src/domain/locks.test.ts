@@ -1,5 +1,5 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
-import { isDefaultVault, lockedVaultIds, sortVaults, VaultLocks } from './locks';
+import { isDefaultVault, lockedVaultIds, sortVaults, unreadVaultIds, VaultLocks } from './locks';
 import { hashPin } from './pin';
 import type { Vault } from './types';
 
@@ -68,6 +68,12 @@ describe('vault helpers', () => {
     const locked = await privateVault('l', '1234');
     const unlocked = await privateVault('u', '1234');
     expect([...lockedVaultIds([open, locked, unlocked], new Set(['u']))]).toEqual(['l']);
+  });
+  it('counts a vault as unread while it is locked, holds a card that can\'t be opened, or is encrypted with no key here', () => {
+    const vaults = [make('plain'), make('sealedCards'), make('noKey', { encryption: { version: 1 } as Vault['encryption'] }), make('keyed', { encryption: { version: 1 } as Vault['encryption'] })];
+    const cards = [{ vaultId: 'plain' }, { vaultId: 'sealedCards', sealed: true }];
+    const unread = unreadVaultIds(new Set(['locked']), vaults, cards, (c) => (c as { sealed?: boolean }).sealed === true, (id) => id === 'keyed');
+    expect([...unread].sort()).toEqual(['locked', 'noKey', 'sealedCards']);
   });
   it('lists the oldest vault first', () => {
     const list = [make('b', { created_at: 5 }), make('a', { created_at: 1 })];

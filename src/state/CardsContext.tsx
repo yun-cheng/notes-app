@@ -2,11 +2,11 @@ import Dexie from 'dexie';
 import { createContext, useContext, useEffect, useMemo, useRef, useState, useSyncExternalStore, type ReactNode } from 'react';
 import { buildIndex, type CardIndex } from '../domain/cardIndex';
 import { toDateKey } from '../domain/dates';
-import { lockedVaultIds, sortVaults, VaultLocks, type VaultKeyHooks } from '../domain/locks';
+import { lockedVaultIds, sortVaults, unreadVaultIds, VaultLocks, type VaultKeyHooks } from '../domain/locks';
 import type { Card, CardRecord, Vault } from '../domain/types';
 import { DexieStore } from '../storage/dexieStore';
 import { localStorageJournal } from '../storage/journal';
-import { CardRepository } from '../storage/repository';
+import { CardRepository, isSealed } from '../storage/repository';
 import { SyncEngine, type SyncStatus } from '../sync/engine';
 import type { CommentCount, SharedCard, VaultShare } from '../sync/protocol';
 import { deleteAttachment, fetchDrafts, httpTransport, listAttachments, markAttachments, photoTransport, sendDrafts } from '../sync/http';
@@ -170,30 +170,32 @@ export function CardsProvider({ accountId, children }: { accountId: string; chil
   );
 
   // After a sync that left nothing to send, photos and files no entry holds go to the Trash, and those 30 days
-  // there are deleted. Judged against every card readable here; a vault locked here, or one this account can only
-  // view, isn't judged, and nothing is deleted for good while any vault is locked.
+  // there are deleted. Judged against every card readable here; a vault this device can't read all of (locked here,
+  // or with cards it can't open, as just after another device encrypted it), or one this account can only view,
+  // isn't judged, and nothing is deleted for good while there is one.
   const sweepView = useRef({ index, vaults, locked });
   sweepView.current = { index, vaults, locked };
   useEffect(() => {
     attachments.watch(() => {
       const { index: now, vaults: all, locked: shut } = sweepView.current;
       const { state, pending, lastSyncedAt } = engine.getStatus();
+      const unread = unreadVaultIds(shut, all ?? [], now?.byId.values() ?? [], (c) => isSealed(c as Card), (id) => !!keyring.key(id));
       return {
         ready: state === 'idle' && !pending && !!lastSyncedAt && !!now,
         cards: () => now?.byId.values() ?? [],
         fresh: async () => (await repo.exportAll(shut)).cards,
         judges: (id) => {
           const vault = all?.find((v) => v.id === id);
-          return !!vault && (vault.role ?? 'owner') !== 'viewer' && !shut.has(id);
+          return !!vault && (vault.role ?? 'owner') !== 'viewer' && !unread.has(id);
         },
-        mayDelete: shut.size === 0,
+        mayDelete: unread.size === 0,
       };
     });
     return engine.subscribe(() => {
       const { state, pending, lastSyncedAt } = engine.getStatus();
       if (state === 'idle' && !pending && lastSyncedAt) void attachments.sweep();
     });
-  }, [attachments, engine, repo]);
+  }, [attachments, engine, repo, keyring]);
 
   // Drafts are sent and fetched after each sync, as the journal comes from other devices then too; and sent as the
   // app is left, rather than a moment later.

@@ -18,7 +18,7 @@ function sealedCard(record: CardRecord): Card {
   return Object.assign(card, { [SEALED]: true });
 }
 
-const isSealed = (card: Card) => (card as { [SEALED]?: boolean })[SEALED] === true;
+export const isSealed = (card: Card) => (card as { [SEALED]?: boolean })[SEALED] === true;
 
 /** One thing the user did: every write asked for in the same breath. Its changes are logged, and undone, together. */
 interface Action {

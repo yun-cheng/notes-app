@@ -160,6 +160,7 @@ final class AppModel {
         cards = all
         index = CardIndex(all, locked: lockedVaults)
         Transcriber.shared.apply(model: self)
+        Reminders.reschedule(index)
     }
 
     /// Opens a private vault on this device: its cards show until the app locks again.

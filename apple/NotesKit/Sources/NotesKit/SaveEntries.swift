@@ -100,15 +100,17 @@ extension Repository {
         for (i, entry) in entries.enumerated() {
             let vault = vaultOf(entry)
             let tags = try tagIds(entry.tags, vault ?? main)
-            let createdAt = at.map { $0 + Int64(i) }
-            let extra: [String: JSONValue] = opts.template ? ["template": true] : [:]
+            let createdAt = entry.createdAt ?? at.map { $0 + Int64(i) }
+            let extra: [String: JSONValue] = opts.template || entry.template ? ["template": true] : [:]
             let card: Card
             if entry.kind == .note {
-                card = try createNote(content: entry.content, tags: tags, vaultId: vault, createdAt: createdAt, extra: extra, group: group)
+                card = try createNote(
+                    id: entry.id, title: entry.title, content: entry.content, pages: entry.pages, tags: tags, vaultId: vault, createdAt: createdAt, extra: extra, group: group)
             } else {
                 card = try createTodo(
-                    title: entry.title, due: entry.due ?? opts.due, dueTime: entry.dueTime, repeat: entry.repeat, content: entry.content, tags: tags,
-                    vaultId: vault, done: entry.done, waiting: opts.waiting, createdAt: createdAt, extra: extra, group: group)
+                    id: entry.id, title: entry.title, due: entry.due ?? opts.due, dueTime: entry.dueTime, start: entry.start, repeat: entry.repeat,
+                    content: entry.content, pages: entry.pages, tags: tags, vaultId: vault, done: entry.done, waiting: opts.waiting, createdAt: createdAt,
+                    extra: extra, group: group)
             }
             ids.append(card.id)
         }

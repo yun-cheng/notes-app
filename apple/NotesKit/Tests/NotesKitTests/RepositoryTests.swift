@@ -241,3 +241,25 @@ func makeRepo(_ clock: Clock = Clock()) async throws -> Repository {
         #expect(try await repo.card(todo.id)?.isDone == false)
     }
 }
+
+@Suite struct BackupTests {
+    @Test func aBackupRestoresAndMarkdownZips() async throws {
+        let repo = try await makeRepo()
+        let note = try await repo.createNote(title: "Kept", content: Doc.fromText("Hello"))
+        let data = try Backup.make(vaults: [personal], cards: [note])
+        let other = try await makeRepo()
+        let cards = try Backup.parse(data)
+        let result = try await other.importBackup(cards)
+        let restored = try await other.card(note.id)
+        #expect(result.added == 1 && restored?.title == "Kept")
+        #expect(try await other.importBackup(cards).skipped == 1)
+        #expect(throws: Error.self) { try Backup.parse(Data("{\"format\":\"x\"}".utf8)) }
+        // A diary card from an old web backup comes back as a note.
+        let old = #"{"format":"notes-app-backup","version":1,"vaults":[],"cards":[{"id":"d1","vaultId":"v1","updatedAt":5,"createdAt":5,"type":"diary","date":"2026-11-01","title":"","content":{"type":"doc"},"tags":[]}]}"#
+        #expect(try Backup.parse(Data(old.utf8)).first?.type == .note)
+        let files = Backup.markdownFiles(CardIndex([note]))
+        #expect(files.first?.path == "notes/Kept.md" && files.first?.text.contains("title: \"Kept\"") == true)
+        let zip = Backup.zip(files)
+        #expect(zip.prefix(4) == Data([0x50, 0x4B, 0x03, 0x04]) && Backup.crc32(Data("abc".utf8)) == 0x3524_41C2)
+    }
+}

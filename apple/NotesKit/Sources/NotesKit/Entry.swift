@@ -18,6 +18,16 @@ public struct Entry: Sendable, Hashable {
     public var `repeat`: Repeat?
     /// A todo already ticked, typed as `[x] ` or a ticked checkbox.
     public var done = false
+    /// An imported file's: the ID it's saved under, so other files' links can reach it before it's made.
+    public var id: String? = nil
+    /// A copied or imported card's pages after the first.
+    public var pages: [JSONValue] = []
+    /// A copied or imported todo's start date.
+    public var start: String? = nil
+    /// When an imported file says it was written.
+    public var createdAt: Int64? = nil
+    /// An imported template.
+    public var template = false
 }
 
 public enum EntryParser {

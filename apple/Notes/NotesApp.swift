@@ -1,5 +1,6 @@
 import NotesKit
 import SwiftUI
+import UserNotifications
 #if os(macOS)
 import AppKit
 #endif
@@ -14,6 +15,10 @@ struct NotesApp: App {
         WindowGroup {
             RootView()
                 .environment(model)
+                .task {
+                    UNUserNotificationCenter.current().delegate = ReminderDelegate.shared
+                    ReminderDelegate.shared.open = { id in model.openEntry = id }
+                }
                 .onOpenURL { _ in Task { await model.sync?.sync() } }
         }
         .onChange(of: scenePhase) { _, phase in

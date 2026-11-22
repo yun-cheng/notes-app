@@ -294,3 +294,27 @@ import Testing
         #expect(Voice.withTranscript(doc, fileId: "f2", joined) == Optional<JSONValue>.none)
     }
 }
+
+@Suite struct MarkdownImportTests {
+    @Test func readsMarkdownAndFrontMatter() {
+        let doc = MarkdownImport.doc("# Trip\n\n- [ ] passport\n- [x] **charger**\n\nSee [[Packing]] and [site](https://a.example) ||secret||\n\n```js\nx()\n```")
+        let types = doc["content"]?.arrayValue?.compactMap { $0["type"]?.stringValue }
+        #expect(types == ["heading", "taskList", "paragraph", "codeBlock"])
+        #expect(doc["content"]?.arrayValue?[1]["content"]?.arrayValue?[1]["attrs"]?["checked"] == true)
+        let files = [
+            (name: "Packing.md", text: "---\ntitle: \"Packing\"\ntags: [travel, \"to do\"]\ntype: todo\ndue: 2026-12-01\ntime: \"09:30\"\nrepeat: weekly\nstatus: open\n---\n\n# Packing\n\nSee [[trip notes]]\n\n## Page 2\n\nBack"),
+            (name: "trip notes.md", text: "Just text, linked to [[Packing]]"),
+        ]
+        let entries = MarkdownImport.entries(files, today: "2026-11-22")
+        #expect(entries.count == 2)
+        #expect(entries[0].kind == .todo && entries[0].title == "Packing" && entries[0].tags == ["travel", "to do"] && entries[0].due == "2026-12-01" && entries[0].dueTime == "09:30" && entries[0].repeat == Repeat(unit: .week, every: 1))
+        #expect(entries[0].pages.count == 1)
+        // Links between the files reach each other by name.
+        let link = entries[1].content["content"]?.arrayValue?.first?["content"]?.arrayValue?.last
+        #expect(link?["type"] == "cardLink" && link?["attrs"]?["id"]?.stringValue == entries[0].id)
+        // A zip of them, as this app's export makes.
+        let zipped = Backup.zip([.init(path: "notes/a.md", text: "# A\nhello"), .init(path: ".hidden/b.md", text: "x")])
+        let unzipped = MarkdownImport.filesFromZip(zipped)
+        #expect(unzipped.map(\.name) == ["notes/a.md"] && unzipped.first?.text == "# A\nhello")
+    }
+}

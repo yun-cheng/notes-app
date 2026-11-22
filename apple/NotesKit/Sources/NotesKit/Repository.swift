@@ -59,6 +59,12 @@ public actor Repository {
         changeHandler?()
     }
 
+    /// Stores a card from a backup as it is, to be pushed.
+    func putImported(_ card: Card) throws {
+        try store.putCards([encode(card)])
+        changeHandler?()
+    }
+
     /// Rewrites a card from what it holds now, if `change` changes it; not logged, as a reseal isn't the user's edit.
     public func rewrite(_ id: String, _ change: @Sendable (inout Card) -> Void) throws {
         guard var card = try card(id), !card.sealed else { return }

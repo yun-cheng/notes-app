@@ -146,6 +146,16 @@ class BackupRestoreTest {
         assertEquals("Kept", other.card(note.id)?.title)
         assertEquals(1, other.importBackup(cards).third)
     }
+
+    @Test fun cardsFromAnotherAccountGoIntoThisAccountsOwnVault() = runBlocking {
+        val shared = Vault(id = "vault-team", name = "Team", owner_id = "u2", created_at = 1)
+        val own = Vault(id = "vault-u1", name = "Personal", owner_id = "u1", created_at = 5)
+        val repo = makeRepo(vaults = listOf(shared, own))
+        repo.setMainVault("vault-u1")
+        val card = Card("c-from-u3", "vault-u3", 9, false, 0, jobj("type" to j("note"), "title" to j("Mine")))
+        repo.importBackup(listOf(card))
+        assertEquals("vault-u1", repo.card("c-from-u3")?.vaultId)
+    }
 }
 
 /** A server in memory: last write wins by `updated_at`, like the real one. */

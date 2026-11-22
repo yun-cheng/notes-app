@@ -335,7 +335,8 @@ class Repository(
 
     suspend fun importBackup(cards: List<Card>): Triple<Int, Int, Int> = locked {
         val known = store.listVaults().map { it.id }.toSet()
-        val target = store.listVaults().minByOrNull { it.created_at }?.id
+        // This account's own vault, not merely the oldest here, which may be someone else's shared one.
+        val target = runCatching { defaultVaultId() }.getOrNull()
         var added = 0; var updated = 0; var skipped = 0
         for (c0 in cards) {
             var c = if (c0.vaultId !in known && target != null) c0.copy(vaultId = target) else c0

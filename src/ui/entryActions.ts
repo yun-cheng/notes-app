@@ -115,6 +115,22 @@ export function useEntryActions() {
     });
   };
 
+  /**
+   * Moves entries (or a tag) into another vault, where this account may, as one action with an undo. One alone is
+   * said as "Moved to Family"; several with their count, and how many couldn't be moved.
+   */
+  const move = async (ids: string[], vaultId: string) => {
+    const cards = ids.map((id) => index.byId.get(id)).filter((c): c is Card => !!c && !c.deleted);
+    const allowed = cards.filter((c) => may(c).manage);
+    const moving = allowed.filter((c) => c.vaultId !== vaultId);
+    if (!moving.length) return;
+    const skipped = cards.length - allowed.length;
+    const action = repo.action();
+    await Promise.all(moving.map((c) => repo.moveToVault(c.id, vaultId)));
+    const name = vaults.find((v) => v.id === vaultId)?.name ?? 'another vault';
+    said(`Moved ${ids.length === 1 ? '' : `${entries(moving.length)} `}to ${name}${skipped ? `; ${entries(skipped)} couldn't be moved` : ''}`, action);
+  };
+
   /** Brings entries, or tags, back from the Trash, where this account may, as one action with an undo. */
   const restore = async (ids: string[]) => {
     const cards = ids.map((id) => index.byId.get(id)).filter((c): c is Card => !!c && canRestore(c));
@@ -172,5 +188,5 @@ export function useEntryActions() {
     if (await repo.retype(id, type)) said(type === 'todo' ? 'Made it a todo' : 'Made it a note', action);
   };
 
-  return { copy, cut, trash, restore, archive, paste, retype };
+  return { copy, cut, trash, restore, archive, move, paste, retype };
 }

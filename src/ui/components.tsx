@@ -10,6 +10,7 @@ import { Icon, type IconName } from './Icon';
 import { cardPath, entryPath, journalPath, sheetState } from './paths';
 import { useToast } from './Toast';
 import { useUndo } from './useUndo';
+import { useEntryActions } from './entryActions';
 import { usePopover } from './usePopover';
 import { colorClass } from './EntryStyle';
 import { SyncBadge } from './SyncStatus';
@@ -392,18 +393,12 @@ function GroupChoices({ group, tagIds, onChange }: { group: TagGroup; tagIds: st
  * when there's nowhere to move it, or it isn't this account's to move.
  */
 export function useVaultMove(card: Card) {
-  const { repo, vaults, locked } = useCards();
+  const { vaults, locked } = useCards();
   const may = usePermissions();
-  const { said } = useUndo();
+  const actions = useEntryActions();
   const options = vaults.filter((v) => !locked.has(v.id) && !v.withheld && (v.role ?? 'owner') !== 'viewer');
   if (options.length < 2 || !may(card).manage) return null;
-  const move = (vaultId: string) => {
-    if (vaultId === card.vaultId) return;
-    const action = repo.action();
-    void repo.moveToVault(card.id, vaultId);
-    const name = vaults.find((v) => v.id === vaultId)?.name ?? 'another vault';
-    said(`Moved to ${name}`, action);
-  };
+  const move = (vaultId: string) => void actions.move([card.id], vaultId);
   return { options, move };
 }
 

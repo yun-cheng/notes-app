@@ -73,16 +73,7 @@ export function BatchBar({ selection }: { selection: Selection }) {
   };
 
   const targets = vaults.filter((v) => !locked.has(v.id) && !v.withheld && (v.role ?? 'owner') !== 'viewer');
-  const move = async (vaultId: string) => {
-    const moving = manageable.filter((c) => c.vaultId !== vaultId);
-    if (!moving.length) return;
-    const action = repo.action();
-    await Promise.all(moving.map((c) => repo.moveToVault(c.id, vaultId)));
-    const name = vaults.find((v) => v.id === vaultId)?.name ?? 'another vault';
-    toast(`Moved ${entries(moving.length)} to ${name}${skipped(cards.length - manageable.length)}`, {
-      action: undoButton(action),
-    });
-  };
+  const move = (vaultId: string) => void actions.move(cards.map((c) => c.id), vaultId);
 
   const toggle = (p: 'tags' | 'due') => setPanel(panel === p ? null : p);
   const none = cards.length === 0;

@@ -289,12 +289,16 @@ export const reachOf = (pages: RecentVersionsResponse | null): number => (pages?
  * looking for new changes doesn't lose the place. Otherwise too much is new, and the history starts over.
  */
 export function refreshRecent(had: RecentVersionsResponse | null, page: RecentVersionsResponse): RecentVersionsResponse {
-  if (!had || !page.next) return page;
+  if (!had) return page;
+  // Nothing new: the same object, so nothing reads them all again.
+  const keep = (next: RecentVersionsResponse) =>
+    next.next === had.next && next.versions.length === had.versions.length && next.versions.every((v, i) => v.id === had.versions[i].id) ? had : next;
+  if (!page.next) return keep(page);
   const fresh = new Set(page.versions.map((v) => v.id));
-  if (!had.versions.some((v) => fresh.has(v.id))) return page;
+  if (!had.versions.some((v) => fresh.has(v.id))) return keep(page);
   const [at, id] = pageEnd(page.next);
   const older = had.versions.filter((v) => !fresh.has(v.id) && (v.saved_at < at || (v.saved_at === at && v.id < id)));
-  return { versions: [...page.versions, ...older], next: older.length ? had.next : page.next };
+  return keep({ versions: [...page.versions, ...older], next: older.length ? had.next : page.next });
 }
 
 /** The next, older page added to what was loaded. */

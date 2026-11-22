@@ -291,6 +291,8 @@ describe('changes that came by sync', () => {
     expect(reachOf({ versions: at(1), next: null })).toBe(-Infinity);
     expect(reachOf(null)).toBe(-Infinity);
 
+    // The same page again changes nothing, and gives back what was had.
+    expect(refreshRecent(had, { versions: [...had.versions], next: had.next })).toBe(had);
     const met = refreshRecent(had, { versions: at(11, 10, 9), next: '90-9' });
     expect([ids(met), met.next]).toEqual([[11, 10, 9, 8, 7, 6, 5], '50-5']);
     // A version saved again moves up, and isn't listed twice.

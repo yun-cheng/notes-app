@@ -67,6 +67,8 @@ public final class Keyring: Sendable {
 
     public func isEncrypted(_ vaultId: String) -> Bool { state.withLock { $0.encrypted.contains(vaultId) } }
     public func hasKey(_ vaultId: String) -> Bool { state.withLock { $0.keys[vaultId] != nil } }
+    /// The open key of a vault, to seal or open what isn't a card: its comments, photos and files.
+    public func key(_ vaultId: String) -> SymmetricKey? { state.withLock { $0.keys[vaultId] } }
     public func set(_ vaultId: String, key: SymmetricKey) { state.withLock { $0.keys[vaultId] = key } }
     public func forget(_ vaultId: String) { state.withLock { _ = $0.keys.removeValue(forKey: vaultId) } }
     public func forgetAll() { state.withLock { $0.keys.removeAll() } }

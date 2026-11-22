@@ -22,11 +22,14 @@ public struct ServerAPI: SyncAPI {
 
     public let site: URL
     public let token: String?
+    /// Which device this is, sent with each push, so history can tell this device's changes from the others'.
+    public var device: (id: String, name: String)?
     private let session: URLSession
 
-    public init(site: URL = ServerAPI.production, token: String?, session: URLSession = .shared) {
+    public init(site: URL = ServerAPI.production, token: String?, device: (id: String, name: String)? = nil, session: URLSession = .shared) {
         self.site = site
         self.token = token
+        self.device = device
         self.session = session
     }
 
@@ -36,6 +39,10 @@ public struct ServerAPI: SyncAPI {
         request.httpMethod = method
         request.setValue("application/json", forHTTPHeaderField: "Content-Type")
         if let token { request.setValue("Bearer \(token)", forHTTPHeaderField: "Authorization") }
+        if let device {
+            request.setValue(device.id, forHTTPHeaderField: "X-Device-Id")
+            request.setValue(device.name, forHTTPHeaderField: "X-Device-Name")
+        }
         if let body { request.httpBody = try JSON.encoder.encode(body) }
         let data: Data
         let response: URLResponse
@@ -49,7 +56,7 @@ public struct ServerAPI: SyncAPI {
         return (data, status)
     }
 
-    func json<T: Decodable>(_ type: T.Type, _ path: String, method: String = "GET", body: (any Encodable)? = nil) async throws -> T {
+    public func json<T: Decodable>(_ type: T.Type, _ path: String, method: String = "GET", body: (any Encodable)? = nil) async throws -> T {
         let (data, status) = try await send(path, method: method, body: body)
         guard (200..<300).contains(status) else { throw APIError.status(status) }
         return try JSONDecoder().decode(type, from: data)

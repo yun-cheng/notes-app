@@ -39,6 +39,11 @@ public actor Repository {
         return Card(id: r.id, vaultId: r.vault_id, updatedAt: r.updated_at, deleted: r.deleted, seq: r.seq, payload: payload, sealed: true)
     }
 
+    /// A payload from the server's history, opened with the vault's key when it's encrypted. Nil when it can't be.
+    public nonisolated func openPayload(_ payload: String, id: String, vaultId: String) -> [String: JSONValue]? {
+        keyring.decode(payload, id: id, vaultId: vaultId).map { modernPayload($0) }
+    }
+
     public func allCards() throws -> [Card] { try store.listCards().map(decode) }
 
     public func card(_ id: String) throws -> Card? { try store.getCard(id).map(decode) }

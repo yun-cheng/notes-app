@@ -185,3 +185,25 @@ public enum Changes {
         return changes.filter { $0.undoneAt == last && usable($0) }
     }
 }
+
+extension Card {
+    /// The fields restoring a version puts back, a note or todo's type among them; the ID and vault stay as they are.
+    /// As the web app's `restorePatch`.
+    public func restoreFields() -> [String: JSONValue] {
+        var out: [String: JSONValue] = ["title": .string(title), "content": content]
+        switch type {
+        case .tag:
+            out["pinned"] = .bool(pinned)
+        case .note, .todo:
+            out["type"] = .string(type.rawValue)
+            out["back"] = payload["back"] ?? .null
+            out["pages"] = payload["pages"] ?? .null
+            out["tags"] = .array(tags.map(JSONValue.string))
+            if type == .note, let stack = payload["stack"] { out["stack"] = stack }
+            if type == .todo {
+                for key in ["status", "due", "dueTime", "start", "repeat"] { out[key] = payload[key] ?? .null }
+            }
+        }
+        return out
+    }
+}

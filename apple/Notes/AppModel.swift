@@ -1,6 +1,9 @@
 import Foundation
 import NotesKit
 import Observation
+#if os(iOS)
+import UIKit
+#endif
 
 /// Everything the app's screens read: the account, its vaults and cards, and sync. As the web app's `CardsContext`.
 @MainActor
@@ -70,7 +73,8 @@ final class AppModel {
     private func begin(account: Account, token: String) async {
         self.account = account
         await repo.setMainVault("vault-\(account.id)")
-        let engine = SyncEngine(repo: repo, api: ServerAPI(site: site, token: token))
+        if let id = try? await repo.deviceId() { device = (id, Self.deviceName) }
+        let engine = SyncEngine(repo: repo, api: ServerAPI(site: site, token: token, device: device))
         sync = engine
         phase = .signedIn
         await refresh()
@@ -105,7 +109,17 @@ final class AppModel {
         }
     }
 
-    var api: ServerAPI { ServerAPI(site: site, token: Keychain.token()) }
+    var api: ServerAPI { ServerAPI(site: site, token: Keychain.token(), device: device) }
+    @ObservationIgnored private var device: (id: String, name: String)?
+
+    /// What this device calls itself in the history its account sees, as the web's "Safari on Mac".
+    static var deviceName: String {
+        #if os(macOS)
+        return "Notes app on Mac"
+        #else
+        return UIDevice.current.userInterfaceIdiom == .pad ? "Notes app on iPad" : "Notes app on iPhone"
+        #endif
+    }
     var siteURL: URL { site }
     var accountId: String { account?.id ?? "" }
 

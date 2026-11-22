@@ -65,6 +65,7 @@ struct EntrySheet: View {
                 if card.isStack { StackPreview(stack: card) }
                 BubbleTags(card: card)
                 Backlinks(card: card)
+                CommentsSection(card: card)
             }
             .padding(20)
         }
@@ -89,6 +90,7 @@ struct EntrySheet: View {
                         page = count
                     } label: { Label("Add a page", systemImage: "doc.badge.plus") }
                 }
+                Button { model.panel = .history(card.id) } label: { Label("History", systemImage: "clock.arrow.circlepath") }
                 Menu { EntryMenu(card: card) } label: { Label("More", systemImage: "ellipsis.circle") }
             }
         }

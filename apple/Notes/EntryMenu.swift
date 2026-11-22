@@ -43,6 +43,21 @@ struct EntryMenu: View {
                 }
             }
         }
+        #if os(iOS)
+        // A phone's menu is short: the rarer items go one level down, so Archive and Move to Trash stay in reach.
+        Menu("More") { more }
+        #else
+        more
+        #endif
+        if model.canManage(card) {
+            Divider()
+            Button(card.archived ? "Unarchive" : "Archive") { model.archive([card.id], !card.archived) }
+            Button("Move to Trash", role: .destructive) { model.trash([card.id]) }
+        }
+    }
+
+    @ViewBuilder
+    private var more: some View {
         Divider()
         if Doc.previewLines(card.content, hidden: .mark).joined().contains(Doc.hideOpen) {
             Button("Show hidden words", action: revealHidden)
@@ -64,11 +79,6 @@ struct EntryMenu: View {
                 let id = card.id
                 model.perform { try await $0.update(stack) { $0.stack = ($0.stack ?? []).filter { $0 != id } } }
             }
-        }
-        if model.canManage(card) {
-            Divider()
-            Button(card.archived ? "Unarchive" : "Archive") { model.archive([card.id], !card.archived) }
-            Button("Move to Trash", role: .destructive) { model.trash([card.id]) }
         }
     }
 

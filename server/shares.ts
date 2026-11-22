@@ -4,7 +4,7 @@ import { cardPages, fileAttachments, photoIds, walk } from '../src/domain/conten
 import { DAY, isTimeKey } from '../src/domain/dates';
 import { parsePayload } from '../src/domain/payload';
 import type { CardPayload } from '../src/domain/types';
-import { allows, cardAccess, sharedIntoVaults, sharedWith } from './access';
+import { allows, cardAccess, inEncryptedVault, sharedIntoVaults, sharedWith } from './access';
 import type { SharedResponse } from '../src/sync/protocol';
 import { randomToken } from './auth';
 import type { AppEnv, Database, Statement } from './db';
@@ -51,10 +51,7 @@ export async function cardShares(db: Database, cardId: string, now: number): Pro
 async function mayShare(c: Context<AppEnv>, cardId: string): Promise<boolean> {
   const access = await cardAccess(c.env.DB, c.get('user').id, cardId);
   if (!access?.member || !allows(access, 'write')) return false;
-  const sealed = await c.env.DB.prepare(`SELECT 1 AS yes FROM cards c JOIN vaults v ON v.id = c.vault_id WHERE c.id = ? AND v.encryption IS NOT NULL`)
-    .bind(cardId)
-    .first();
-  return !sealed;
+  return !(await inEncryptedVault(c.env.DB, cardId));
 }
 
 /** The statements that end all sharing of the cards picked by `where` (a condition on card ids, with its values): people, vaults, waiting invites and public links. */

@@ -1,7 +1,7 @@
 import { DAY } from '../src/domain/dates';
 import type { CardRecord } from '../src/domain/types';
 import { MAX_PAYLOAD_BYTES, PULL_LIMIT, type PullResponse, type PushResult } from '../src/sync/protocol';
-import { EDITABLE_SHARE, SHARED_WITH } from './access';
+import { EDITABLE_SHARE, EDITABLE_VAULTS, SHARED_WITH } from './access';
 import type { Database, Statement } from './db';
 import { unshare } from './shares';
 import { recordVersions, type Device, type Written } from './versions';
@@ -33,7 +33,7 @@ function mayWrite(record: CardRecord, current: CardRecord | undefined, writable:
 
 async function writableVaults(db: Database, userId: string): Promise<Set<string>> {
   const { results } = await db
-    .prepare(`SELECT vault_id FROM vault_access WHERE user_id = ? AND role IN ('owner', 'editor')`)
+    .prepare(EDITABLE_VAULTS)
     .bind(userId)
     .all<{ vault_id: string }>();
   return new Set(results.map((r) => r.vault_id));

@@ -1,6 +1,6 @@
 import type { Hono } from 'hono';
 import type { ServerTranslation } from '../src/sync/protocol';
-import { allows, cardAccess } from './access';
+import { allows, cardAccess, inEncryptedVault } from './access';
 import type { AppEnv, Database } from './db';
 
 /** Cloudflare's Workers AI, as a Worker reaches it through its `AI` binding: no key, the account's own. */
@@ -129,10 +129,7 @@ export function translateRoutes(app: Hono<AppEnv>, now: () => number) {
     }
     if ((pieces as string[]).join('').length > MAX_CHARS) return c.json({ error: 'Too long to translate here' }, 413);
     if (!allows(await cardAccess(c.env.DB, c.get('user').id, cardId), 'read')) return c.json({ error: 'Card not found' }, 404);
-    const sealed = await c.env.DB.prepare(`SELECT 1 AS yes FROM cards c JOIN vaults v ON v.id = c.vault_id WHERE c.id = ? AND v.encryption IS NOT NULL`)
-      .bind(cardId)
-      .first();
-    if (sealed) return c.json({ error: 'Entries in an encrypted vault aren’t sent to the server' }, 403);
+    if (await inEncryptedVault(c.env.DB, cardId)) return c.json({ error: 'Entries in an encrypted vault aren’t sent to the server' }, 403);
     if (!(await countTranslation(c.env.DB, c.get('user').id, utcDay(now())))) {
       return c.json({ error: `That’s ${DAILY_TRANSLATIONS} translations today, as many as a day has` }, 429);
     }

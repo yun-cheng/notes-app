@@ -3,6 +3,7 @@ import { isTimeKey } from '../src/domain/dates';
 import { parsePayload } from '../src/domain/payload';
 import { dueKey, fireAt, LATE, notification, reminderOf, type Reminder, type ReminderSettings } from '../src/domain/reminders';
 import type { CardRecord } from '../src/domain/types';
+import { writableVault } from './access';
 import type { AppEnv, Bindings, Database } from './db';
 import { b64url, validVapidKeys, webPushSender, type PushTarget, type SendPush, type VapidKeys } from './webpush';
 
@@ -145,12 +146,9 @@ interface SealedBody {
  * out from the vault's todos, open on it. Only for cards in that vault, and browsers of this account.
  */
 async function replaceSealed(db: Database, userId: string, vaultId: string, input: unknown): Promise<{ kept: number } | { error: string; status: 400 | 404 }> {
-  const vault = await db
-    .prepare(`SELECT v.encryption FROM vaults v JOIN vault_access m ON m.vault_id = v.id WHERE v.id = ? AND m.user_id = ? AND m.role IN ('owner', 'editor')`)
-    .bind(vaultId, userId)
-    .first<{ encryption: string | null }>();
+  const vault = await writableVault(db, vaultId, userId);
   if (!vault) return { error: 'Vault not found', status: 404 };
-  if (!vault.encryption) return { error: 'The server reminds of an open vault’s todos itself', status: 400 };
+  if (!vault.encrypted) return { error: 'The server reminds of an open vault’s todos itself', status: 400 };
   const list = (input as { reminders?: unknown } | null)?.reminders;
   if (!Array.isArray(list) || list.length > MAX_SEALED) return { error: 'Give the reminders as a list', status: 400 };
   const [{ results: subs }, { results: cards }] = await Promise.all([

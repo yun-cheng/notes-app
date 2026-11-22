@@ -1,6 +1,6 @@
 import type { Hono } from 'hono';
 import type { CommentCount } from '../src/sync/protocol';
-import { allows, cardAccess, SHARED_WITH } from './access';
+import { allows, cardAccess, inEncryptedVault, SHARED_WITH, writableVault } from './access';
 import type { AppEnv, Database } from './db';
 
 export interface Comment {
@@ -24,9 +24,6 @@ function fits(body: string, encrypted: boolean): boolean {
   if (encrypted) return body.length <= MAX_SEALED && /^e1:[A-Za-z0-9+/]+=*$/.test(body);
   return !!body && body.length <= MAX_BODY;
 }
-
-const homeEncrypted = async (db: Database, cardId: string) =>
-  !!(await db.prepare(`SELECT 1 AS yes FROM cards c JOIN vaults v ON v.id = c.vault_id WHERE c.id = ? AND v.encryption IS NOT NULL`).bind(cardId).first());
 
 async function listComments(db: Database, cardId: string): Promise<Comment[]> {
   const { results } = await db
@@ -72,7 +69,7 @@ export function commentRoutes(app: Hono<AppEnv>, now: () => number) {
     if (!allows(await cardAccess(c.env.DB, me, cardId), 'comment')) return c.json({ error: 'Card not found' }, 404);
     const body = await c.req.json<{ body?: unknown }>().catch(() => null);
     const text = typeof body?.body === 'string' ? body.body.trim() : '';
-    const encrypted = await homeEncrypted(c.env.DB, cardId);
+    const encrypted = await inEncryptedVault(c.env.DB, cardId);
     if (!fits(text, encrypted)) return c.json({ error: encrypted ? 'A comment in an encrypted vault comes sealed' : `Write 1 to ${MAX_BODY} characters` }, 400);
     await c.env.DB.prepare(`INSERT INTO comments (id, card_id, author_id, body, created_at) VALUES (?, ?, ?, ?, ?)`)
       .bind(crypto.randomUUID(), cardId, me, text, now())
@@ -135,11 +132,3 @@ export function commentRoutes(app: Hono<AppEnv>, now: () => number) {
   });
 }
 
-/** A vault this account can change (as its owner or an editor let in), and whether it's encrypted. */
-async function writableVault(db: Database, vaultId: string, userId: string): Promise<{ encrypted: boolean } | null> {
-  const row = await db
-    .prepare(`SELECT v.encryption FROM vaults v JOIN vault_access m ON m.vault_id = v.id WHERE v.id = ? AND m.user_id = ? AND m.role IN ('owner', 'editor')`)
-    .bind(vaultId, userId)
-    .first<{ encryption: string | null }>();
-  return row ? { encrypted: !!row.encryption } : null;
-}

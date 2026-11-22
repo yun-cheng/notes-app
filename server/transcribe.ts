@@ -1,6 +1,7 @@
 import type { Hono } from 'hono';
 import type { ServerTranscript } from '../src/sync/protocol';
 import { utcDay } from './translate';
+import { writableVault } from './access';
 import type { AppEnv, Database } from './db';
 
 /**
@@ -76,13 +77,9 @@ export function transcribeRoutes(app: Hono<AppEnv>, now: () => number) {
     const ai = c.env.AI;
     if (!ai) return c.json({ error: 'Transcribing isn’t set up on this server' }, 501);
     const user = c.get('user').id;
-    const vault = await c.env.DB.prepare(
-      `SELECT v.encryption FROM vaults v JOIN vault_access m ON m.vault_id = v.id WHERE v.id = ? AND m.user_id = ? AND m.role IN ('owner', 'editor')`,
-    )
-      .bind(c.req.query('vault') ?? '', user)
-      .first<{ encryption: string | null }>();
+    const vault = await writableVault(c.env.DB, c.req.query('vault') ?? '', user);
     if (!vault) return c.json({ error: 'Vault not found' }, 404);
-    if (vault.encryption) return c.json({ error: 'Voice in an encrypted vault isn’t sent to the server' }, 403);
+    if (vault.encrypted) return c.json({ error: 'Voice in an encrypted vault isn’t sent to the server' }, 403);
     const bytes = new Uint8Array(await c.req.arrayBuffer());
     if (bytes.length > MAX_BYTES) return c.json({ error: 'Too long to transcribe at once' }, 413);
     if (!isPieceWav(bytes)) return c.json({ error: 'Invalid sound' }, 400);

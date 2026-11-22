@@ -1,5 +1,5 @@
 import type { Context, Hono } from 'hono';
-import { SHARED_WITH } from './access';
+import { EDITABLE_VAULTS, SHARED_WITH } from './access';
 import type { StoredAttachment } from '../src/domain/attachments';
 import type { AppEnv } from './db';
 import {
@@ -105,7 +105,6 @@ export function drivePublicRoutes(app: Hono<AppEnv>, fetcher: GoogleFetch, now: 
 /** At most this many photos and files trashed or kept in one request. */
 const MAX_STATE_CHANGES = 500;
 /** The vaults the user (the next binding) can change. */
-const EDITABLE = `SELECT vault_id FROM vault_access WHERE user_id = ? AND role IN ('owner', 'editor')`;
 /**
  * Whether a card the server can read holds the attachment, in the journal or the Trash. One in an encrypted vault
  * can't be read here, so devices, which can, decide for those. Only cards that could: those in a vault of anyone in
@@ -205,7 +204,7 @@ export function photoRoutes(app: Hono<AppEnv>, fetcher: GoogleFetch, now: () => 
 
   /** An upload under way, its vault one the user can change. */
   const uploadRow = (c: Context<AppEnv>, id: string) =>
-    c.env.DB.prepare(`SELECT * FROM attachment_uploads WHERE id = ? AND vault_id IN (${EDITABLE})`)
+    c.env.DB.prepare(`SELECT * FROM attachment_uploads WHERE id = ? AND vault_id IN (${EDITABLE_VAULTS})`)
       .bind(id, c.get('user').id)
       .first<{ id: string; owner_id: string; vault_id: string; session_url: string; mime: string; size: number; name: string | null; width: number | null; height: number | null; duration: number | null; sealed: number }>();
 
@@ -316,11 +315,11 @@ export function photoRoutes(app: Hono<AppEnv>, fetcher: GoogleFetch, now: () => 
       ...trash.map((t) =>
         c.env.DB.prepare(
           `UPDATE attachments SET trashed_at = ?, trashed_from = ?, name = CASE WHEN sealed = 1 THEN NULL ELSE coalesce(name, ?) END
-           WHERE id = ? AND trashed_at IS NULL AND vault_id IN (${EDITABLE}) AND NOT ${IN_A_CARD}`,
+           WHERE id = ? AND trashed_at IS NULL AND vault_id IN (${EDITABLE_VAULTS}) AND NOT ${IN_A_CARD}`,
         ).bind(at, text(t.from, 64), text(t.name, 200), t.id, userId),
       ),
       ...keep.map((id) =>
-        c.env.DB.prepare(`UPDATE attachments SET trashed_at = NULL, trashed_from = NULL WHERE id = ? AND trashed_at IS NOT NULL AND vault_id IN (${EDITABLE})`).bind(id, userId),
+        c.env.DB.prepare(`UPDATE attachments SET trashed_at = NULL, trashed_from = NULL WHERE id = ? AND trashed_at IS NOT NULL AND vault_id IN (${EDITABLE_VAULTS})`).bind(id, userId),
       ),
     ];
     if (statements.length) await c.env.DB.batch(statements);
@@ -335,7 +334,7 @@ export function photoRoutes(app: Hono<AppEnv>, fetcher: GoogleFetch, now: () => 
   app.get('/attachments/:id/link', async (c) => {
     const userId = c.get('user').id;
     const row = await c.env.DB.prepare(
-      `SELECT a.drive_link, (a.vault_id IN (${EDITABLE}) AND v.encryption IS NULL AND a.sealed = 0) AS can FROM attachments a JOIN vaults v ON v.id = a.vault_id
+      `SELECT a.drive_link, (a.vault_id IN (${EDITABLE_VAULTS}) AND v.encryption IS NULL AND a.sealed = 0) AS can FROM attachments a JOIN vaults v ON v.id = a.vault_id
        WHERE a.id = ? AND a.vault_id IN (SELECT vault_id FROM vault_access WHERE user_id = ?)`,
     )
       .bind(userId, c.req.param('id'), userId)
@@ -348,7 +347,7 @@ export function photoRoutes(app: Hono<AppEnv>, fetcher: GoogleFetch, now: () => 
   const linkable = (c: Context<AppEnv>) =>
     c.env.DB.prepare(
       `SELECT a.id, a.owner_id, a.drive_file_id FROM attachments a JOIN vaults v ON v.id = a.vault_id
-       WHERE a.id = ? AND a.vault_id IN (${EDITABLE}) AND v.encryption IS NULL AND a.sealed = 0`,
+       WHERE a.id = ? AND a.vault_id IN (${EDITABLE_VAULTS}) AND v.encryption IS NULL AND a.sealed = 0`,
     )
       .bind(c.req.param('id'), c.get('user').id)
       .first<{ id: string; owner_id: string; drive_file_id: string }>();
@@ -397,7 +396,7 @@ export function photoRoutes(app: Hono<AppEnv>, fetcher: GoogleFetch, now: () => 
   app.delete('/attachments/:id', async (c) => {
     const id = c.req.param('id');
     const row = await c.env.DB.prepare(
-      `SELECT owner_id, drive_file_id, trashed_at, ${IN_A_CARD} AS held FROM attachments WHERE id = ? AND vault_id IN (${EDITABLE})`,
+      `SELECT owner_id, drive_file_id, trashed_at, ${IN_A_CARD} AS held FROM attachments WHERE id = ? AND vault_id IN (${EDITABLE_VAULTS})`,
     )
       .bind(id, c.get('user').id)
       .first<{ owner_id: string; drive_file_id: string; trashed_at: number | null; held: number }>();

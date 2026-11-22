@@ -85,3 +85,20 @@ export async function sharedWith(db: Database, userId: string): Promise<SharedCa
   }
   return [...best.values()];
 }
+
+/** Whether a card's own vault is encrypted: its words then never reach the server readable. */
+export async function inEncryptedVault(db: Database, cardId: string): Promise<boolean> {
+  return !!(await db.prepare(`SELECT 1 AS yes FROM cards c JOIN vaults v ON v.id = c.vault_id WHERE c.id = ? AND v.encryption IS NOT NULL`).bind(cardId).first());
+}
+
+/** SQL listing the vaults `?` (the user) can change: as their owner, or an editor let in. */
+export const EDITABLE_VAULTS = `SELECT vault_id FROM vault_access WHERE user_id = ? AND role IN ('owner', 'editor')`;
+
+/** A vault this account can change (as its owner or an editor let in), and whether it's encrypted; null otherwise. */
+export async function writableVault(db: Database, vaultId: string, userId: string): Promise<{ encrypted: boolean } | null> {
+  const row = await db
+    .prepare(`SELECT v.encryption FROM vaults v JOIN vault_access m ON m.vault_id = v.id WHERE v.id = ? AND m.user_id = ? AND m.role IN ('owner', 'editor')`)
+    .bind(vaultId, userId)
+    .first<{ encryption: string | null }>();
+  return row ? { encrypted: !!row.encryption } : null;
+}

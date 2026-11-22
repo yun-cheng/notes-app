@@ -27,6 +27,27 @@ class DocTextTest {
         assertEquals("Plain, bold and both\n\ncode gone under", DocText.from(d).text.text)
     }
 
+    @Test fun wordsThatLookLikeSyntaxStayWords() {
+        val d = doc(
+            para(text("- milk")), para(text("1. first")), para(text("# not a heading")), para(text("> not a quote")),
+            para(text("---")), para(text("[ ] not a box")), para(text("  indented")),
+            para(text("if a || b || c")), para(text("x || y", "code")),
+        )
+        assertEquals(d, roundTrip(d))
+        // Typed in, they still make lists and hide words.
+        val t = typed("- milk\nsay ||this||")
+        assertEquals(j("bulletList"), t["content"][0]["type"])
+        assertEquals(j("hidden"), t["content"][1]["content"][1]["marks"][0]["type"])
+    }
+
+    @Test fun linksShownAsLockedKeepTheirLabel() {
+        val card = jobj("type" to j("cardLink"), "attrs" to jobj("id" to j("c-9"), "label" to j("Plans")))
+        val d = doc(para(text("See "), card))
+        val shown = DocText.from(d, Doc.TitleOf { _, _ -> CardIndex.LOCKED_TITLE })
+        assertEquals("See Locked", shown.text.text)
+        assertEquals(d, shown.doc())
+    }
+
     @Test fun linksCardLinksAndBreaks() {
         val link = jobj("type" to j("text"), "text" to j("site"), "marks" to jarr(listOf(jobj("type" to j("link"), "attrs" to jobj("href" to j("https://example.com/a"))))))
         val card = jobj("type" to j("cardLink"), "attrs" to jobj("id" to j("c-1"), "label" to j("Groceries")))

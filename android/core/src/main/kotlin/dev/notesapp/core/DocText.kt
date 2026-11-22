@@ -137,6 +137,33 @@ class DocText(val text: RichText, val stash: Map<String, JsonElement> = emptyMap
             return if (hashes in 1..3 && s.substring(hashes).startsWith(" ")) hashes else null
         }
 
+        /**
+         * An invisible character that keeps words that look like editor syntax as words: put before a paragraph that
+         * starts like a list, and between bars that would hide words. Never saved.
+         */
+        const val LITERAL = "\u2060"
+
+        /** Whether a line starting with these words would be read as something other than a paragraph. */
+        fun readsAsBlock(s: String): Boolean =
+            s.startsWith(" ") || s.startsWith(">") || s.startsWith("```") || s.trim() == "---" ||
+                listMarker(s) != null || taskMarker(s) != null || headingLevel(s) != null
+
+        /** Words with `LITERAL` between any two bars, so they aren't read as `||hidden||` again. */
+        fun keepingBars(s: String): String {
+            if (!s.contains("||")) return s
+            val out = StringBuilder()
+            var last: Char? = null
+            for (c in s) {
+                if (c == '|' && last == '|') out.append(LITERAL)
+                out.append(c)
+                last = c
+            }
+            return out.toString()
+        }
+
+        /** Where a card link's own label is kept while it's shown as Locked or Not shared. */
+        fun labelKey(id: String, shown: String) = "label:$id:$shown"
+
         /** Text cut where `||words||` marks words to hide; the bars go. */
         fun hiddenRuns(s: String): List<Pair<String, Boolean>> {
             val out = mutableListOf<Pair<String, Boolean>>()
@@ -179,7 +206,7 @@ class DocText(val text: RichText, val stash: Map<String, JsonElement> = emptyMap
 
         fun block(node: JsonElement, prefix: String) {
             when (node["type"].str) {
-                "paragraph" -> { newLine(); add(prefix); inline(node["content"].arr ?: emptyList()) }
+                "paragraph" -> { newLine(); add(prefix); paragraph(node["content"].arr ?: emptyList()) }
                 "heading" -> {
                     val level = (node["attrs"]["level"].long ?: 1).toInt().coerceIn(1, 3)
                     newLine(); add(prefix + "#".repeat(level) + " "); inline(node["content"].arr ?: emptyList())
@@ -210,7 +237,7 @@ class DocText(val text: RichText, val stash: Map<String, JsonElement> = emptyMap
                             if (first) { newLine(); add(prefix + indent + box); first = false }
                             tasks(child, prefix, depth + 1)
                         }
-                        "paragraph" -> { newLine(); add(prefix + indent + if (first) box else "  "); inline(child["content"].arr ?: emptyList()); first = false }
+                        "paragraph" -> { newLine(); add(prefix + indent + if (first) box else "  "); paragraph(child["content"].arr ?: emptyList()); first = false }
                         else -> { newLine(); add(prefix + indent + if (first) box else "  "); placeholder(child, true); first = false }
                     }
                 }
@@ -233,7 +260,7 @@ class DocText(val text: RichText, val stash: Map<String, JsonElement> = emptyMap
                         if (first) { newLine(); add(prefix + indent + bullet); first = false }
                         list(child, prefix, depth + 1)
                     } else if (type == "paragraph") {
-                        newLine(); add(prefix + indent + if (first) bullet else "  "); inline(child["content"].arr ?: emptyList()); first = false
+                        newLine(); add(prefix + indent + if (first) bullet else "  "); paragraph(child["content"].arr ?: emptyList()); first = false
                     } else {
                         newLine(); add(prefix + indent + if (first) bullet else "  "); placeholder(child, true); first = false
                     }
@@ -241,14 +268,24 @@ class DocText(val text: RichText, val stash: Map<String, JsonElement> = emptyMap
             }
         }
 
+        /** A paragraph's words; words that would be read back as a list, heading, quote or rule start with `LITERAL`. */
+        fun paragraph(nodes: List<JsonElement>) {
+            val first = nodes.firstOrNull()
+            if (first != null && first["type"].str == "text" && readsAsBlock(first["text"].str ?: "")) add(LITERAL)
+            inline(nodes)
+        }
+
         fun inline(nodes: List<JsonElement>) {
             for (n in nodes) when (n["type"].str) {
-                "text" -> add(n["text"].str ?: "", styled(n["marks"].arr ?: emptyList()))
+                "text" -> add(keepingBars(n["text"].str ?: ""), styled(n["marks"].arr ?: emptyList()))
                 "hardBreak" -> add(" ")
                 "cardLink" -> {
                     val id = n["attrs"]["id"].str ?: ""
                     val label = n["attrs"]["label"].str ?: ""
-                    add(titleOf?.title(id, label) ?: label, TextStyle(card = id))
+                    val shown = titleOf?.title(id, label) ?: label
+                    // Shown as Locked or Not shared here, but saved back with its own label.
+                    if (shown != label && (shown == CardIndex.LOCKED_TITLE || shown == CardIndex.UNSHARED_TITLE)) stash[labelKey(id, shown)] = j(label)
+                    add(shown, TextStyle(card = id))
                 }
                 else -> placeholder(n, false)
             }
@@ -441,7 +478,7 @@ class DocText(val text: RichText, val stash: Map<String, JsonElement> = emptyMap
         for ((a, b, style) in line.runs()) {
             val s = line.text.substring(a, b)
             if (s.isEmpty()) continue
-            style?.card?.let { out.add(jobj("type" to j("cardLink"), "attrs" to jobj("id" to j(it), "label" to j(s)))); continue }
+            style?.card?.let { out.add(jobj("type" to j("cardLink"), "attrs" to jobj("id" to j(it), "label" to (stash[labelKey(it, s)] ?: j(s))))); continue }
             style?.node?.let { key -> stash[key]?.let { out.add(it); continue } }
             val marks = mutableListOf<JsonElement>()
             if (style != null) {
@@ -457,8 +494,11 @@ class DocText(val text: RichText, val stash: Map<String, JsonElement> = emptyMap
             s.split(' ').forEachIndexed { k, part ->
                 if (k > 0) out.add(jobj("type" to j("hardBreak")))
                 if (part.isEmpty()) return@forEachIndexed
-                // `||words||` typed in hides them, as in the web app's editor.
-                for ((piece, typedHidden) in hiddenRuns(part)) {
+                // `||words||` typed in hides them, as in the web app's editor; not in code. Bars kept apart by `LITERAL`
+                // were in the words already, and stay.
+                for ((typed, typedHidden) in if (style?.code == true) listOf(part to false) else hiddenRuns(part)) {
+                    val piece = typed.replace(LITERAL, "")
+                    if (piece.isEmpty()) continue
                     val pieceMarks = if (hidden || typedHidden) marks + jobj("type" to j("hidden")) else marks
                     var node = jobj("type" to j("text"), "text" to j(piece))
                     if (pieceMarks.isNotEmpty()) node = node.with("marks", JsonArray(pieceMarks))

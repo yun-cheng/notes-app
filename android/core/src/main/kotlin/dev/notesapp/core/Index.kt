@@ -141,8 +141,8 @@ class CardIndex(all: List<Card> = emptyList(), locked: Set<String> = emptySet())
     fun resolveTags(ids: List<String>) = ids.mapNotNull { byId[it] }.filter { it.type == CardType.tag && !it.deleted }
 
     fun linkTitle(id: String, fallback: String): String {
-        if (lockedCards.containsKey(id)) return "Locked"
-        val target = byId[id] ?: return "Not shared"
+        if (lockedCards.containsKey(id)) return LOCKED_TITLE
+        val target = byId[id] ?: return UNSHARED_TITLE
         return if (target.deleted) fallback else target.displayTitle
     }
 
@@ -155,6 +155,10 @@ class CardIndex(all: List<Card> = emptyList(), locked: Set<String> = emptySet())
     }
 
     companion object {
+        /** What a link shows in place of a card this device can't read; never saved as the link's label. */
+        const val LOCKED_TITLE = "Locked"
+        const val UNSHARED_TITLE = "Not shared"
+
         fun stackIndex(cards: List<Card>): Map<String, String> {
             val stacks = cards.filter { it.isStack && !it.deleted }.sortedWith(compareBy({ it.createdAt }, { it.id }))
             val of = mutableMapOf<String, String>()

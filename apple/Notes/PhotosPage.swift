@@ -115,15 +115,9 @@ struct PhotosPage: View {
 
 /// A photo's or video's menu on the Photos page: open its entry, show it in the journal, copy it, share it by link.
 struct PhotoItemMenu: View {
-    @Environment(AppModel.self) private var model
     let item: PhotosPage.Item
 
     var body: some View {
-        Button("Open entry") { model.openEntry = item.card.id }
-        Button("Show in journal") {
-            model.page = .journal(StreamFilter())
-            model.lastSaved = item.card.id
-        }
         PhotoMenu(id: item.id, card: item.card)
         PublicLinkMenu(id: item.id, vaultId: item.card.vaultId)
     }

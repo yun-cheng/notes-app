@@ -6,6 +6,7 @@ import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.gestures.detectVerticalDragGestures
 import androidx.compose.foundation.gestures.scrollBy
+import androidx.compose.foundation.layout.isImeVisible
 import androidx.compose.foundation.horizontalScroll
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
@@ -94,7 +95,7 @@ private const val PAGE_SIZE = 150
  * The journal: every note and todo as compact bubbles like a chat, under day badges, with a box to write the next one,
  * as the web app's `journal.tsx`. A filter row narrows it; the sidebar narrows it to a tag or a vault.
  */
-@OptIn(ExperimentalFoundationApi::class)
+@OptIn(ExperimentalFoundationApi::class, androidx.compose.foundation.layout.ExperimentalLayoutApi::class)
 @Composable
 fun JournalView(initial: StreamFilter, openDrawer: () -> Unit, fixed: Boolean = false) {
     val model = LocalModel.current
@@ -156,6 +157,9 @@ fun JournalView(initial: StreamFilter, openDrawer: () -> Unit, fixed: Boolean = 
                 val rows = (if (chat && all.size > visible.size) 1 else 0) + groups.sumOf { 1 + it.second.size }
                 // A chat opens at its newest entry, at the foot.
                 LaunchedEffect(filter, rows > 0) { if (chat && rows > 0) { list.scrollToItem(rows - 1); list.scrollBy(100_000f) } }
+                // Opening the keyboard to write keeps the newest entries in view, as a chat does.
+                val typing = androidx.compose.foundation.layout.WindowInsets.isImeVisible
+                LaunchedEffect(typing) { if (typing && chat && rows > 0 && true) { list.scrollToItem(rows - 1); list.scrollBy(100_000f) } }
                 LaunchedEffect(model.lastSaved) { model.lastSaved?.let { id -> rowOf[id]?.let { list.animateScrollToItem(it) } } }
                 BoxWithConstraints(Modifier.weight(1f).fillMaxWidth()) {
                     val bubbleWidth = minOf(560.dp, (minOf(maxWidth, 720.dp) - 32.dp) * 0.85f)

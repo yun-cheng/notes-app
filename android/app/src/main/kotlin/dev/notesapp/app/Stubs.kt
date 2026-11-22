@@ -13,12 +13,8 @@ import kotlinx.serialization.json.JsonElement
 
 @Composable fun UnlockView(vault: Vault, modifier: Modifier = Modifier) { Text("Locked: ${vault.name}", modifier) }
 @Composable fun BoardView(filter: StreamFilter, board: String) {}
-@Composable fun BubbleAttachments(card: Card) {}
 @Composable fun BubbleLinks(card: Card) {}
 @Composable fun BubbleTranslation(card: Card) {}
-@Composable fun AttachedThumb(node: JsonElement, vaultId: String, remove: () -> Unit) {}
-class Pickers(val photos: () -> Unit, val files: () -> Unit)
-@Composable fun rememberAttachmentPickers(vaultId: String, add: (JsonElement) -> Unit) = Pickers({}, {})
 @Composable fun VoiceRecordButton(vaultId: String, add: (JsonElement) -> Unit) {}
 @Composable private fun Stub(title: String, openDrawer: () -> Unit) { Column(Modifier.fillMaxSize()) { TopBar(title, openDrawer) } }
 @Composable fun TrashPage(openDrawer: () -> Unit) = Stub("Trash", openDrawer)
@@ -42,4 +38,5 @@ object Translations {
     fun show(id: String, on: Boolean) {}
     fun translate(card: Card, model: AppModel) {}
 }
-object Settings { var copyStyle: String = "markdown" }
+@Composable fun VoicePlayer(file: dev.notesapp.core.Doc.FileInfo, vaultId: String) {}
+@Composable fun PublicLinkMenu(id: String, vaultId: String, close: () -> Unit) {}

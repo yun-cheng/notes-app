@@ -358,7 +358,9 @@ class AppModel(private val context: Context, val site: String) {
     /** Once a minute while the app is open, with photos and files still waiting to go up. */
     fun syncPeriodically() = scope.launch {
         while (isActive) {
+            Attachments.upload(this@AppModel)
             Drafts.sync()
+            AttachmentKeeper.sweep(this@AppModel)
             delay(60_000)
             sync?.sync()
         }

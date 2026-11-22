@@ -18,6 +18,8 @@ class NotesApplication : Application() {
     override fun onCreate() {
         super.onCreate()
         Drafts.init(this)
+        Settings.init(this)
+        Attachments.init(this)
         Reminders.channel(this)
         model = AppModel(this, BuildConfig.SERVER)
         model.syncPeriodically()

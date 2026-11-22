@@ -95,6 +95,7 @@ import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 import java.net.URI
 import androidx.compose.foundation.layout.statusBars
+import androidx.compose.foundation.layout.isImeVisible
 import androidx.compose.material.icons.outlined.Menu
 
 @Composable
@@ -110,6 +111,7 @@ fun Root() {
 }
 
 /** The phone's frame, as the web app's: tabs (Journal, Today, Calendar, Search), with the sidebar in a drawer. */
+@OptIn(androidx.compose.foundation.layout.ExperimentalLayoutApi::class)
 @Composable
 fun PhoneFrame() {
     val model = LocalModel.current
@@ -138,7 +140,8 @@ fun PhoneFrame() {
                 }
                 ToastView(Modifier.align(Alignment.BottomCenter))
             }
-            NavigationBar(containerColor = Theme.surface, tonalElevation = 0.dp) {
+            // The keyboard takes the tabs' place while it's up.
+            if (!androidx.compose.foundation.layout.WindowInsets.isImeVisible) NavigationBar(containerColor = Theme.surface, tonalElevation = 0.dp) {
                 val items = listOf(
                     "Journal" to Icons.AutoMirrored.Outlined.Article, "Today" to Icons.Outlined.WbSunny,
                     "Calendar" to Icons.Outlined.CalendarMonth, "Search" to Icons.Outlined.Search,

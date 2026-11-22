@@ -41,14 +41,31 @@ object Drafts {
 
     private val storeKey get() = "drafts:$accountId"
 
+    /**
+     * The drafts as last read or written, so a keystroke doesn't decode and encode them all; stored half a second after
+     * the last change.
+     */
+    private var cached: Pair<String, Kept>? = null
+    private var storing: Job? = null
+
     private fun read(): Kept {
-        val text = prefs?.getString(storeKey, null) ?: return Kept()
-        val kept = runCatching { json.decodeFromString(Kept.serializer(), text) }.getOrNull() ?: return Kept()
+        cached?.let { (key, kept) -> if (key == storeKey) return kept }
+        val text = prefs?.getString(storeKey, null)
+        val stored = text?.let { runCatching { json.decodeFromString(Kept.serializer(), it) }.getOrNull() }
         val now = System.currentTimeMillis()
-        return kept.copy(entries = kept.entries.filter { it.value.dirty == true || (!it.value.value.isNull && now - it.value.at < 30 * 86_400_000L) })
+        val kept = stored?.let { k -> k.copy(entries = k.entries.filter { it.value.dirty == true || (!it.value.value.isNull && now - it.value.at < 30 * 86_400_000L) }) } ?: Kept()
+        cached = storeKey to kept
+        return kept
     }
 
-    private fun write(kept: Kept) { prefs?.edit()?.putString(storeKey, json.encodeToString(Kept.serializer(), kept))?.apply() }
+    private fun write(kept: Kept) {
+        val key = storeKey
+        cached = key to kept
+        storing?.cancel()
+        val store = { prefs?.edit()?.putString(key, json.encodeToString(Kept.serializer(), kept))?.apply() }
+        val m = model ?: return run { store() }
+        storing = m.scope.launch { delay(500); store() }
+    }
 
     fun get(kind: String, key: String): JsonElement? {
         val k = "$kind:$key"
@@ -121,7 +138,11 @@ object Drafts {
         write(kept.copy(entries = entries, fetched = maxOf(kept.fetched, at)))
     }
 
-    fun forget() { prefs?.edit()?.remove(storeKey)?.apply() }
+    fun forget() {
+        storing?.cancel()
+        cached = null
+        prefs?.edit()?.remove(storeKey)?.apply()
+    }
 
     /** A journal draft as the web keeps it, a document, from what's typed in the box. */
     fun doc(text: String): JsonElement? = if (text.isBlank()) null else Doc.fromText(text)

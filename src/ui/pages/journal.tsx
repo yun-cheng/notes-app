@@ -78,13 +78,17 @@ function JournalStream() {
   // The title bar's search narrows what the filter shows, as words are typed. The newest found are at the foot in written order.
   const search = usePageSearch({ placeholder: 'Search entries', fromFoot: (filter.sort ?? 'written') === 'written' && !filter.board, off: vaultLocked });
   const { words, found } = search;
-  const listed = streamItems(index, filter, today, sharedInto);
-  const all = found ? listed.filter((i) => found.has(i.card.id)) : listed;
+  // Worked out again only when the cards, the filter, the day or what's found change: not on every redraw, a
+  // keystroke in the search field that finds the same entries or a pick included.
+  const filterKey = JSON.stringify(filter);
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  const listed = useMemo(() => streamItems(index, filter, today, sharedInto), [index, filterKey, today, sharedInto]);
+  const all = useMemo(() => (found ? listed.filter((i) => found.has(i.card.id)) : listed), [listed, found]);
   // Shown as a board, by todo state or by a group that still has tags; otherwise the board asks which.
   const board = useBoardKind(filter, all);
   // In the list, a stack's entries are in it; the board shows each on its own.
-  const items = filter.board ? all : foldStacks(all, stacksOf(index));
-  const order = board ? board.columns.flatMap((c) => c.items.map((i) => i.card.id)) : items.map((i) => i.card.id);
+  const items = useMemo(() => (filter.board ? all : foldStacks(all, stacksOf(index))), [all, filter.board, index]);
+  const order = useMemo(() => (board ? board.columns.flatMap((c) => c.items.map((i) => i.card.id)) : items.map((i) => i.card.id)), [board, items]);
   const selection = useSelectionState(order);
   useEntryShortcuts(selection, filter, !vaultLocked);
 

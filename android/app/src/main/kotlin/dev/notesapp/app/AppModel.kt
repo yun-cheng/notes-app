@@ -236,6 +236,7 @@ class AppModel(private val context: Context, val site: String) {
         cards = all
         index = next
         Reminders.reschedule(context, next)
+        Transcriber.apply(this)
     }
 
     /** Opens a private vault on this device: its cards show until the app locks again. */

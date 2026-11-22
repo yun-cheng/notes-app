@@ -102,7 +102,7 @@ fun JournalBox(filter: StreamFilter) {
 
     fun send() {
         val typed = text
-        val added = attached.toList()
+        val added = Transcriber.fill(attached.toList())
         if (typed.isBlank() && added.isEmpty()) return
         val entries = if (added.isEmpty()) EntryParser.parseEntries(typed, model.today, allTodos = todos) else {
             // Photos and files go in with the words, read as the web's box reads its rich text.

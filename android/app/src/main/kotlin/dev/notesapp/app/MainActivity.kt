@@ -20,6 +20,7 @@ class NotesApplication : Application() {
         Drafts.init(this)
         Settings.init(this)
         Attachments.init(this)
+        LinkPreviews.init(this)
         Reminders.channel(this)
         model = AppModel(this, BuildConfig.SERVER)
         model.syncPeriodically()

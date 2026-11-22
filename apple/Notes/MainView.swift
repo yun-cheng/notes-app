@@ -6,6 +6,12 @@ import SwiftUI
 /// screen, and on a phone a tab bar (Journal, Today, Calendar, Search) with the tags and vaults in a sheet.
 struct MainView: View {
     @Environment(AppModel.self) private var model
+    #if DEBUG
+    /// `-wide` at launch shows a phone the wide layout, to check the computer's pages in the simulator.
+    static let forcedWide = ProcessInfo.processInfo.arguments.contains("-wide")
+    #else
+    static let forcedWide = false
+    #endif
     #if os(iOS)
     @Environment(\.horizontalSizeClass) private var sizeClass
     #endif
@@ -14,7 +20,7 @@ struct MainView: View {
         @Bindable var model = model
         Group {
             #if os(iOS)
-            if sizeClass == .compact { PhoneFrame() } else { WideFrame() }
+            if sizeClass == .compact && !Self.forcedWide { PhoneFrame() } else { WideFrame().environment(\.horizontalSizeClass, .regular) }
             #else
             WideFrame()
             #endif

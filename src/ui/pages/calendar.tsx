@@ -10,7 +10,7 @@ import { useCards, useToday } from '../../state/CardsContext';
 import { Page } from '../components';
 import { firstDayOfWeek } from '../DatesDialog';
 import { colorClass } from '../EntryStyle';
-import { FilterBar, FilterSheet, useJournalFilter } from '../FilterPanel';
+import { FilterBar, FilterSheetButton, useJournalFilter } from '../FilterPanel';
 import { Icon } from '../Icon';
 import { cardPath, datedParams, datedPath, journalPath, sheetState, type DatedPage } from '../paths';
 import { useTickTodo } from '../TodoDue';
@@ -112,7 +112,6 @@ export function dateNav({ label, earlier, later, onEarlier, onLater, onToday }: 
  * along, and on a phone, where there's no sidebar, the sheet of tags and vaults (which lists both pages too).
  */
 export function DatedActions({ filter, to }: { filter: StreamFilter; to: DatedPage }) {
-  const [filtering, setFiltering] = useState(false);
   const toCalendar = to === '/calendar';
   return (
     <>
@@ -125,16 +124,7 @@ export function DatedActions({ filter, to }: { filter: StreamFilter; to: DatedPa
       >
         <Icon name={toCalendar ? 'calendar' : 'timeline'} />
       </Link>
-      <button
-        type="button"
-        className={`icon-btn only-mobile${filter.tagId || filter.vaultId ? ' is-active' : ''}`}
-        aria-label="Tags and vaults"
-        title="Tags and vaults"
-        onClick={() => setFiltering(true)}
-      >
-        <Icon name="filter" />
-      </button>
-      {filtering && <FilterSheet onClose={() => setFiltering(false)} />}
+      <FilterSheetButton filter={filter} />
     </>
   );
 }

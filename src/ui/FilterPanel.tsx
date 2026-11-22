@@ -493,6 +493,25 @@ function FilterSection({ id, title, children }: { id: string; title: string; chi
 }
 
 /** The sidebar's tags and vaults in a sheet, for a phone, where there's no sidebar. Picking one closes it. */
+/** The phone's Tags and vaults button in a page's title bar, lit while a tag or vault narrows it, and the sheet it opens. */
+export function FilterSheetButton({ filter }: { filter: Pick<StreamFilter, 'tagId' | 'vaultId'> }) {
+  const [open, setOpen] = useState(false);
+  return (
+    <>
+      <button
+        type="button"
+        className={`icon-btn only-mobile${filter.tagId || filter.vaultId ? ' is-active' : ''}`}
+        aria-label="Tags and vaults"
+        title="Tags and vaults"
+        onClick={() => setOpen(true)}
+      >
+        <Icon name="filter" />
+      </button>
+      {open && <FilterSheet onClose={() => setOpen(false)} />}
+    </>
+  );
+}
+
 export function FilterSheet({ onClose }: { onClose: () => void }) {
   const backdrop = useBackdropClose(onClose);
   return (

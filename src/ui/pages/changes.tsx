@@ -12,7 +12,7 @@ import { useCards, useToday } from '../../state/CardsContext';
 import type { ChangeRow } from '../../storage/repository';
 import { Empty, Page } from '../components';
 import { Diff } from '../Diff';
-import { FilterBar, FilterSheet, useJournalFilter } from '../FilterPanel';
+import { FilterBar, FilterSheetButton, useJournalFilter } from '../FilterPanel';
 import { Icon, type IconName } from '../Icon';
 import { cardPath, historyPath, sheetState, versionsPath } from '../paths';
 import { MOD, REDO_KEYS } from '../Shortcuts';
@@ -79,7 +79,6 @@ export function ChangesPage() {
   const synced = useSyncedChanges();
   const canRevert = useCanRevert();
   const { undo, redo, revert, undoAction } = useUndo();
-  const [filtering, setFiltering] = useState(false);
   const here = historyPath(filter);
 
   const [waited, setWaited] = useState(false);
@@ -155,9 +154,7 @@ export function ChangesPage() {
       <button type="button" className="icon-btn" disabled={!redoable} onClick={() => void redo()} aria-label="Redo" title={`Redo what was undone last${among} (${REDO_KEYS})`}>
         <Icon name="redo" />
       </button>
-      <button type="button" className={`icon-btn only-mobile${filter.tagId || filter.vaultId ? ' is-active' : ''}`} aria-label="Tags and vaults" title="Tags and vaults" onClick={() => setFiltering(true)}>
-        <Icon name="filter" />
-      </button>
+      <FilterSheetButton filter={filter} />
     </>
   );
 
@@ -206,7 +203,6 @@ export function ChangesPage() {
           )}
         </div>
       )}
-      {filtering && <FilterSheet onClose={() => setFiltering(false)} />}
     </Page>
   );
 }

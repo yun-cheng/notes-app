@@ -10,7 +10,7 @@ import { mediaCount, PhotoViewer, videosIn } from '../Attachments';
 import { Empty, Page } from '../components';
 import type { Point } from '../EntryMenu';
 import { usePhotoUrl } from '../editor/photo';
-import { FilterBar, FilterSheet } from '../FilterPanel';
+import { FilterBar, FilterSheetButton } from '../FilterPanel';
 import { Icon } from '../Icon';
 import { useCopyPhoto } from '../copyPhoto';
 import { canSharePhotos, usePhotoActions } from '../photoActions';
@@ -76,7 +76,6 @@ export function PhotosPage() {
   const all = useMemo(() => days.flatMap((d) => d.items), [days]);
   const railKeys = useMemo(() => all.map((i) => i.day), [all]);
   const [viewing, setViewing] = useState<number | null>(null);
-  const [filtering, setFiltering] = useState(false);
   const entry = useEntryActions();
   const copyPhoto = useCopyPhoto();
   const act = usePhotoActions();
@@ -222,9 +221,7 @@ export function PhotosPage() {
             </button>
           </>
         ) : (
-          <button type="button" className={`icon-btn only-mobile${filter.tagId || filter.vaultId ? ' is-active' : ''}`} aria-label="Tags and vaults" title="Tags and vaults" onClick={() => setFiltering(true)}>
-            <Icon name="filter" />
-          </button>
+          <FilterSheetButton filter={filter} />
         )
       }
       below={
@@ -242,7 +239,6 @@ export function PhotosPage() {
         />
       }
     >
-      {filtering && <FilterSheet onClose={() => setFiltering(false)} />}
       {!all.length ? (
         <Empty>{emptyText(show, isFiltered(filter))}</Empty>
       ) : (

@@ -12,7 +12,7 @@ import { Empty, Page } from '../components';
 import { DriveLinkItems } from '../driveLink';
 import { ContextMenu, Item, LinkItems, Shield, type Point } from '../EntryMenu';
 import { FileChip, showsInTab, useFileActions } from '../files';
-import { FilterBar, FilterSheet, useJournalFilter } from '../FilterPanel';
+import { FilterBar, FilterSheetButton, useJournalFilter } from '../FilterPanel';
 import { Icon } from '../Icon';
 import { cardPath, FILES_PATH, libraryPath, sheetState } from '../paths';
 import { useShowInJournal } from '../showInJournal';
@@ -124,7 +124,6 @@ interface ListProps<T extends { id: string }> {
 function HeldList<T extends { id: string }>({ title, days: held, filtered, noun, text, empty, emptyFiltered, lead, render, menu, menuLabel }: ListProps<T>) {
   const today = useToday();
   const filter = useJournalFilter();
-  const [filtering, setFiltering] = useState(false);
   const entry = useEntryActions();
   const [menuFor, setMenuFor] = useState<{ item: DayItem<T>; at: Point } | null>(null);
   // The title bar's search keeps those whose entry has its words, or that have them themselves (a link's address, a file's name).
@@ -146,9 +145,7 @@ function HeldList<T extends { id: string }>({ title, days: held, filtered, noun,
       actions={
         <>
           {search.button}
-          <button type="button" className={`icon-btn only-mobile${filter.tagId || filter.vaultId ? ' is-active' : ''}`} aria-label="Tags and vaults" title="Tags and vaults" onClick={() => setFiltering(true)}>
-          <Icon name="filter" />
-          </button>
+          <FilterSheetButton filter={filter} />
         </>
       }
       below={
@@ -158,7 +155,6 @@ function HeldList<T extends { id: string }>({ title, days: held, filtered, noun,
         </>
       }
     >
-      {filtering && <FilterSheet onClose={() => setFiltering(false)} />}
       {!all.length ? (
         <Empty>{words ? `No ${noun[1]} here have “${words}” in them or their entries.` : filtered ? emptyFiltered : empty}</Empty>
       ) : (

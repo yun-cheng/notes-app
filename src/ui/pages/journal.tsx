@@ -17,7 +17,7 @@ import { ReactionsRow } from '../Reactions';
 import { Backlinks, Empty, Page, TagChips, TagPicker, TitleField, useDeleteCard, VaultField } from '../components';
 import { NotHere } from '../NotHere';
 import { Editor } from '../editor/Editor';
-import { FilterBar, FilterSheet, SortMenu, useJournalFilter } from '../FilterPanel';
+import { FilterBar, FilterSheetButton, SortMenu, useJournalFilter } from '../FilterPanel';
 import { Icon } from '../Icon';
 import { MOD } from '../Shortcuts';
 import { usePageSearch } from '../PageSearch';
@@ -70,7 +70,6 @@ function JournalStream() {
   const today = useToday();
   const filter = useJournalFilter();
   const diary = diaryVault(vaults, accountId);
-  const [filtering, setFiltering] = useState(false);
   const tag = index.tags.find((t) => t.id === filter.tagId);
   const vault = vaults.find((v) => v.id === filter.vaultId);
   const filtered = isFiltered(filter);
@@ -127,15 +126,7 @@ function JournalStream() {
           Diary for this day
         </Link>
       )}
-      <button
-        type="button"
-        className={`icon-btn only-mobile${filter.tagId || filter.vaultId ? ' is-active' : ''}`}
-        aria-label="Tags and vaults"
-        title="Tags and vaults"
-        onClick={() => setFiltering(true)}
-      >
-        <Icon name="filter" />
-      </button>
+      <FilterSheetButton filter={filter} />
     </>
   );
 
@@ -210,7 +201,6 @@ function JournalStream() {
             )}
           </>
         )}
-        {filtering && <FilterSheet onClose={() => setFiltering(false)} />}
         <Outlet />
       </Page>
     </SelectionProvider>

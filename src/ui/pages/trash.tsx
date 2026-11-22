@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState, useSyncExternalStore } from 'react';
+import { useEffect, useRef, useSyncExternalStore } from 'react';
 import { displayTitle } from '../../domain/content';
 import { toDateKey } from '../../domain/dates';
 import { entryMatcher, isFiltered, type StreamItem } from '../../domain/stream';
@@ -6,7 +6,7 @@ import type { Card, NoteCard, TodoCard } from '../../domain/types';
 import { useCards, useToday } from '../../state/CardsContext';
 import { Page } from '../components';
 import { entries, useEntryActions } from '../entryActions';
-import { FilterBar, FilterSheet, useJournalFilter } from '../FilterPanel';
+import { FilterBar, FilterSheetButton, useJournalFilter } from '../FilterPanel';
 import { Icon } from '../Icon';
 import { SelectionProvider, useSelectionState, type Selection } from '../selection';
 import { MOD } from '../Shortcuts';
@@ -30,7 +30,6 @@ export function TrashPage() {
   const filter = useJournalFilter();
   const canRestore = useCanRestore();
   const { restore, copy } = useEntryActions();
-  const [filtering, setFiltering] = useState(false);
 
   const keep = entryMatcher(filter, today, sharedInto);
   // Each under the day it was trashed, at the time it was: the last change to a card in the Trash is trashing it.
@@ -86,15 +85,7 @@ export function TrashPage() {
                     <span className="restore-all__label">Restore all</span>
                   </button>
                 )}
-                <button
-                  type="button"
-                  className={`icon-btn only-mobile${filter.tagId || filter.vaultId ? ' is-active' : ''}`}
-                  aria-label="Tags and vaults"
-                  title="Tags and vaults"
-                  onClick={() => setFiltering(true)}
-                >
-                  <Icon name="filter" />
-                </button>
+                <FilterSheetButton filter={filter} />
               </>
             )
           }
@@ -134,7 +125,6 @@ export function TrashPage() {
               </div>
               </div>
           </FloatDock>
-          {filtering && <FilterSheet onClose={() => setFiltering(false)} />}
         </Page>
       </SelectionProvider>
     </InTrash.Provider>

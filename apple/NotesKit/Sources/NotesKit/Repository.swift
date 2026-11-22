@@ -196,6 +196,21 @@ public actor Repository {
         return try write(card, group: group ?? action())
     }
 
+    /// A new note or todo: a todo takes its dates, its repeat and whether it's done; a note leaves them.
+    @discardableResult
+    public func createEntry(
+        todo: Bool, id: String? = nil, title: String, content: JSONValue = Doc.empty, pages: [JSONValue] = [], tags: [String] = [],
+        vaultId: String? = nil, due: String? = nil, dueTime: String? = nil, start: String? = nil, repeat rule: Repeat? = nil, done: Bool = false,
+        waiting: Bool = false, createdAt: Int64? = nil, extra: [String: JSONValue] = [:], group: String? = nil
+    ) throws -> Card {
+        guard todo else {
+            return try createNote(id: id, title: title, content: content, pages: pages, tags: tags, vaultId: vaultId, createdAt: createdAt, extra: extra, group: group)
+        }
+        return try createTodo(
+            id: id, title: title, due: due, dueTime: dueTime, start: start, repeat: rule, content: content, pages: pages, tags: tags, vaultId: vaultId,
+            done: done, waiting: waiting, createdAt: createdAt, extra: extra, group: group)
+    }
+
     /// A tag, or with `members`, a tag group. With `vaultId`, a tag kept to that vault; without, one for every vault,
     /// in the account's own vault.
     @discardableResult

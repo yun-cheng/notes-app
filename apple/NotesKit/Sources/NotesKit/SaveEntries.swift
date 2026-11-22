@@ -102,16 +102,10 @@ extension Repository {
             let tags = try tagIds(entry.tags, vault ?? main)
             let createdAt = entry.createdAt ?? at.map { $0 + Int64(i) }
             let extra: [String: JSONValue] = opts.template || entry.template ? ["template": true] : [:]
-            let card: Card
-            if entry.kind == .note {
-                card = try createNote(
-                    id: entry.id, title: entry.title, content: entry.content, pages: entry.pages, tags: tags, vaultId: vault, createdAt: createdAt, extra: extra, group: group)
-            } else {
-                card = try createTodo(
-                    id: entry.id, title: entry.title, due: entry.due ?? opts.due, dueTime: entry.dueTime, start: entry.start, repeat: entry.repeat,
-                    content: entry.content, pages: entry.pages, tags: tags, vaultId: vault, done: entry.done, waiting: opts.waiting, createdAt: createdAt,
-                    extra: extra, group: group)
-            }
+            let card = try createEntry(
+                todo: entry.kind == .todo, id: entry.id, title: entry.title, content: entry.content, pages: entry.pages, tags: tags, vaultId: vault,
+                due: entry.due ?? opts.due, dueTime: entry.dueTime, start: entry.start, repeat: entry.repeat, done: entry.done, waiting: opts.waiting,
+                createdAt: createdAt, extra: extra, group: group)
             ids.append(card.id)
         }
         return .saved(ids: ids, group: group)

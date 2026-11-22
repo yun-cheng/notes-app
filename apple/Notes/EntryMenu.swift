@@ -158,11 +158,9 @@ extension AppModel {
         perform { repo in
             var extra: [String: JSONValue] = ["template": true]
             if let c = source.color { extra["color"] = .string(c.rawValue) }
-            if source.type == .todo {
-                try await repo.createTodo(title: source.title, content: source.content, pages: source.turnPages, tags: source.tags, vaultId: source.vaultId, extra: extra)
-            } else {
-                try await repo.createNote(title: source.title, content: source.content, pages: source.turnPages, tags: source.tags, vaultId: source.vaultId, extra: extra)
-            }
+            try await repo.createEntry(
+                todo: source.type == .todo, title: source.title, content: source.content, pages: source.turnPages, tags: source.tags, vaultId: source.vaultId,
+                extra: extra)
         }
         say("Saved as a template", undoable: true)
     }
@@ -177,12 +175,9 @@ extension AppModel {
             var extra: [String: JSONValue] = [:]
             if let c = fields["color"] { extra["color"] = c }
             if let p = fields["preview"] { extra["preview"] = p }
-            let card: Card
-            if fields["type"] == "todo" {
-                card = try await repo.createTodo(title: fields["title"]?.stringValue ?? "", content: fields["content"] ?? Doc.empty, pages: pages, tags: tags, vaultId: vault, extra: extra)
-            } else {
-                card = try await repo.createNote(title: fields["title"]?.stringValue ?? "", content: fields["content"] ?? Doc.empty, pages: pages, tags: tags, vaultId: vault, extra: extra)
-            }
+            let card = try await repo.createEntry(
+                todo: fields["type"] == "todo", title: fields["title"]?.stringValue ?? "", content: fields["content"] ?? Doc.empty, pages: pages, tags: tags,
+                vaultId: vault, extra: extra)
             await MainActor.run { self.openEntry = card.id }
         }
     }

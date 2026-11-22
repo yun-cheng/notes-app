@@ -1,7 +1,8 @@
 import type { VaultPin } from '../src/domain/pin';
 import type { AnyEncryption, MemberKey, VaultEncryption } from '../src/crypto/vaultKeys';
 import type { Vault } from '../src/domain/types';
-import type { Database } from './db';
+import type { Hono } from 'hono';
+import type { AppEnv, Database } from './db';
 import { unshare } from './shares';
 
 interface VaultRow extends Omit<Vault, 'pin' | 'hidden' | 'encryption' | 'members_need_pin' | 'withheld' | 'waiting'> {
@@ -179,4 +180,106 @@ export async function updateVault(db: Database, userId: string, id: string, upda
   const copies = !encryption && current.encryption ? [db.prepare(`UPDATE vault_members SET encryption = NULL, key_grant = NULL WHERE vault_id = ?`).bind(id)] : [];
   await db.batch([save, ...ending, ...copies]);
   return { vault: (await listVaults(db, userId)).find((v) => v.id === id)! };
+}
+
+function isPin(value: unknown): value is VaultPin {
+  const p = value as Partial<VaultPin> | null;
+  return (
+    !!p &&
+    typeof p.salt === 'string' &&
+    p.salt.length <= 200 &&
+    typeof p.hash === 'string' &&
+    p.hash.length <= 200 &&
+    Number.isSafeInteger(p.iterations) &&
+    p.iterations! >= 100_000 &&
+    p.iterations! <= 10_000_000
+  );
+}
+
+/**
+ * The server can't check a wrapped key, only its shape and size: the owner's, or a member's own copy, which comes
+ * with a public key and, from a member already let in who changes their PIN, the vault key sealed to it.
+ */
+function isEncryption(value: unknown): boolean {
+  const e = value as { version?: unknown; kdf?: unknown; wrapped?: unknown; recovery?: unknown; member?: Record<string, unknown> } | null;
+  if (!e || e.version !== 1 || JSON.stringify(e).length > 4000) return false;
+  if (e.member !== undefined) {
+    const m = e.member;
+    return !!m && typeof m.kdf === 'object' && !!m.kdf && typeof m.wrapped === 'string' && typeof m.public === 'string' && (m.grant === null || m.grant === undefined || typeof m.grant === 'string');
+  }
+  return typeof e.kdf === 'object' && typeof e.wrapped === 'string' && typeof e.recovery === 'string';
+}
+
+/** Reads the fields of a vault create or update, or returns null if any is invalid. */
+function parseVaultBody(body: Record<string, unknown> | null): VaultUpdate | null {
+  if (!body) return null;
+  const out: VaultUpdate = {};
+  if (body.name !== undefined) {
+    if (typeof body.name !== 'string' || !body.name.trim() || body.name.length > 80) return null;
+    out.name = body.name.trim();
+  }
+  if (body.pin !== undefined) {
+    if (body.pin !== null && !isPin(body.pin)) return null;
+    out.pin = body.pin;
+  }
+  if (body.ai_access !== undefined) {
+    if (body.ai_access !== 'off' && body.ai_access !== 'read' && body.ai_access !== 'write') return null;
+    out.ai_access = body.ai_access;
+  }
+  if (body.encryption !== undefined) {
+    if (body.encryption !== null && !isEncryption(body.encryption)) return null;
+    out.encryption = body.encryption as VaultUpdate['encryption'];
+  }
+  if (body.hidden !== undefined) {
+    if (typeof body.hidden !== 'boolean') return null;
+    out.hidden = body.hidden;
+  }
+  if (body.members_need_pin !== undefined) {
+    if (typeof body.members_need_pin !== 'boolean') return null;
+    out.members_need_pin = body.members_need_pin;
+  }
+  return out;
+}
+
+/** Making a vault, changing it, and dropping its readable history once it is encrypted. */
+export function vaultRoutes(app: Hono<AppEnv>, now: () => number) {
+  app.post('/vaults', async (c) => {
+    const input = parseVaultBody(await c.req.json<Record<string, unknown>>().catch(() => null));
+    if (!input?.name) return c.json({ error: 'Invalid vault' }, 400);
+    const vault = await createVault(
+      c.env.DB,
+      c.get('user').id,
+      { name: input.name, pin: input.pin ?? null, hidden: input.hidden ?? false, encryption: input.encryption ?? null },
+      now(),
+    );
+    return c.json(vault, 201);
+  });
+
+  app.patch('/vaults/:id', async (c) => {
+    const update = parseVaultBody(await c.req.json<Record<string, unknown>>().catch(() => null));
+    if (!update) return c.json({ error: 'Invalid vault' }, 400);
+    const result = await updateVault(c.env.DB, c.get('user').id, c.req.param('id'), update);
+    if ('vault' in result) return c.json(result.vault);
+    if (result.error === 'not_found') return c.json({ error: 'Vault not found' }, 404);
+    const messages = {
+      default_vault: 'The default vault cannot be locked',
+      private_ai: 'A private vault cannot give AI access',
+      needs_key: 'A PIN on an encrypted vault comes with a key of your own',
+      not_owner: 'Only the owner can change that',
+      encrypted_open: 'Remove the encryption along with the PIN',
+    };
+    return c.json({ error: messages[result.error] }, 400);
+  });
+
+  /** After a vault is encrypted, its history's plaintext versions are removed. */
+  app.post('/vaults/:id/purge-plaintext', async (c) => {
+    const vault = (await listVaults(c.env.DB, c.get('user').id)).find((v) => v.id === c.req.param('id'));
+    if (!vault || vault.owner_id !== c.get('user').id || !vault.encryption) return c.json({ error: 'Vault not found' }, 404);
+    await c.env.DB.prepare(
+      `DELETE FROM card_versions WHERE payload NOT LIKE 'e1:%' AND card_id IN (SELECT id FROM cards WHERE vault_id = ?)`,
+    )
+      .bind(vault.id)
+      .run();
+    return c.json({ ok: true });
+  });
 }

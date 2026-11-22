@@ -1,8 +1,6 @@
 import { Hono, type Context } from 'hono';
 import { deleteCookie, getCookie, setCookie } from 'hono/cookie';
-import type { VaultPin } from '../src/domain/pin';
-import type { CardRecord } from '../src/domain/types';
-import { PUSH_LIMIT, type AccountSummary, type ConfigResponse, type RecentVersionsResponse, type SessionInfo, type SignedInAccounts, type VersionResponse, type VersionsResponse } from '../src/sync/protocol';
+import type { AccountSummary, ConfigResponse, SessionInfo, SignedInAccounts } from '../src/sync/protocol';
 import {
   createSession,
   deleteSession,
@@ -25,10 +23,10 @@ import { commentRoutes } from './comments';
 import { memberRoutes } from './members';
 import { pairingPublicRoutes, pairingSessionRoutes } from './pairing';
 import { publicRoutes, shareRoutes } from './shares';
-import { pullRecords, pushRecords } from './sync';
+import { syncRoutes } from './sync';
 import { reminderRoutes } from './reminders';
-import { createVault, listVaults, updateVault, type VaultUpdate } from './vaults';
-import { getVersion, listRecentVersions, listVersions, sealVersions, type Device } from './versions';
+import { listVaults, vaultRoutes } from './vaults';
+import { versionRoutes } from './versions';
 import { transcribeRoutes } from './transcribe';
 import { translateRoutes } from './translate';
 import { draftRoutes } from './drafts';
@@ -60,92 +58,6 @@ const cookieTokens = (c: Context<Env>) => (getCookie(c, COOKIE) ?? '').split('.'
 function bearerToken(c: Context<Env>): string | undefined {
   const header = c.req.header('Authorization');
   return header?.startsWith('Bearer ') ? header.slice(7).trim() || undefined : undefined;
-}
-
-/**
- * The device a request says it comes from. A device makes up its own ID and name, and nothing rests on them but
- * how the history tells devices apart, so they're only checked for shape.
- */
-function deviceOf(c: Context<Env>): Device | null {
-  const id = c.req.header('X-Device-Id');
-  if (!id || !/^[\w-]{8,64}$/.test(id)) return null;
-  const name = (c.req.header('X-Device-Name') ?? '').replace(/[^\x20-\x7e]/g, '').trim().slice(0, 60);
-  return { id, name: name || null };
-}
-
-function isRecord(value: unknown): value is CardRecord {
-  const r = value as Partial<CardRecord> | null;
-  return (
-    !!r &&
-    typeof r.id === 'string' &&
-    r.id.length > 0 &&
-    r.id.length <= 200 &&
-    typeof r.vault_id === 'string' &&
-    Number.isSafeInteger(r.updated_at) &&
-    typeof r.deleted === 'boolean' &&
-    Number.isSafeInteger(r.seq) &&
-    r.seq! >= 0 &&
-    typeof r.payload === 'string'
-  );
-}
-
-function isPin(value: unknown): value is VaultPin {
-  const p = value as Partial<VaultPin> | null;
-  return (
-    !!p &&
-    typeof p.salt === 'string' &&
-    p.salt.length <= 200 &&
-    typeof p.hash === 'string' &&
-    p.hash.length <= 200 &&
-    Number.isSafeInteger(p.iterations) &&
-    p.iterations! >= 100_000 &&
-    p.iterations! <= 10_000_000
-  );
-}
-
-/**
- * The server can't check a wrapped key, only its shape and size: the owner's, or a member's own copy, which comes
- * with a public key and, from a member already let in who changes their PIN, the vault key sealed to it.
- */
-function isEncryption(value: unknown): boolean {
-  const e = value as { version?: unknown; kdf?: unknown; wrapped?: unknown; recovery?: unknown; member?: Record<string, unknown> } | null;
-  if (!e || e.version !== 1 || JSON.stringify(e).length > 4000) return false;
-  if (e.member !== undefined) {
-    const m = e.member;
-    return !!m && typeof m.kdf === 'object' && !!m.kdf && typeof m.wrapped === 'string' && typeof m.public === 'string' && (m.grant === null || m.grant === undefined || typeof m.grant === 'string');
-  }
-  return typeof e.kdf === 'object' && typeof e.wrapped === 'string' && typeof e.recovery === 'string';
-}
-
-/** Reads the fields of a vault create or update, or returns null if any is invalid. */
-function parseVaultBody(body: Record<string, unknown> | null): VaultUpdate | null {
-  if (!body) return null;
-  const out: VaultUpdate = {};
-  if (body.name !== undefined) {
-    if (typeof body.name !== 'string' || !body.name.trim() || body.name.length > 80) return null;
-    out.name = body.name.trim();
-  }
-  if (body.pin !== undefined) {
-    if (body.pin !== null && !isPin(body.pin)) return null;
-    out.pin = body.pin;
-  }
-  if (body.ai_access !== undefined) {
-    if (body.ai_access !== 'off' && body.ai_access !== 'read' && body.ai_access !== 'write') return null;
-    out.ai_access = body.ai_access;
-  }
-  if (body.encryption !== undefined) {
-    if (body.encryption !== null && !isEncryption(body.encryption)) return null;
-    out.encryption = body.encryption as VaultUpdate['encryption'];
-  }
-  if (body.hidden !== undefined) {
-    if (typeof body.hidden !== 'boolean') return null;
-    out.hidden = body.hidden;
-  }
-  if (body.members_need_pin !== undefined) {
-    if (typeof body.members_need_pin !== 'boolean') return null;
-    out.members_need_pin = body.members_need_pin;
-  }
-  return out;
 }
 
 export function createApp({
@@ -278,84 +190,9 @@ export function createApp({
     return c.json<SignedInAccounts>({ accounts: rest.map((s) => s.user) });
   });
 
-  app.post('/vaults', async (c) => {
-    const input = parseVaultBody(await c.req.json<Record<string, unknown>>().catch(() => null));
-    if (!input?.name) return c.json({ error: 'Invalid vault' }, 400);
-    const vault = await createVault(
-      c.env.DB,
-      c.get('user').id,
-      { name: input.name, pin: input.pin ?? null, hidden: input.hidden ?? false, encryption: input.encryption ?? null },
-      now(),
-    );
-    return c.json(vault, 201);
-  });
-
-  app.patch('/vaults/:id', async (c) => {
-    const update = parseVaultBody(await c.req.json<Record<string, unknown>>().catch(() => null));
-    if (!update) return c.json({ error: 'Invalid vault' }, 400);
-    const result = await updateVault(c.env.DB, c.get('user').id, c.req.param('id'), update);
-    if ('vault' in result) return c.json(result.vault);
-    if (result.error === 'not_found') return c.json({ error: 'Vault not found' }, 404);
-    const messages = {
-      default_vault: 'The default vault cannot be locked',
-      private_ai: 'A private vault cannot give AI access',
-      needs_key: 'A PIN on an encrypted vault comes with a key of your own',
-      not_owner: 'Only the owner can change that',
-      encrypted_open: 'Remove the encryption along with the PIN',
-    };
-    return c.json({ error: messages[result.error] }, 400);
-  });
-
-  /** After a vault is encrypted, its history's plaintext versions are removed. */
-  app.post('/vaults/:id/purge-plaintext', async (c) => {
-    const vault = (await listVaults(c.env.DB, c.get('user').id)).find((v) => v.id === c.req.param('id'));
-    if (!vault || vault.owner_id !== c.get('user').id || !vault.encryption) return c.json({ error: 'Vault not found' }, 404);
-    await c.env.DB.prepare(
-      `DELETE FROM card_versions WHERE payload NOT LIKE 'e1:%' AND card_id IN (SELECT id FROM cards WHERE vault_id = ?)`,
-    )
-      .bind(vault.id)
-      .run();
-    return c.json({ ok: true });
-  });
-
-  app.post('/sync/push', async (c) => {
-    const body = await c.req.json<{ records?: unknown }>().catch(() => null);
-    const records = body?.records;
-    if (!Array.isArray(records) || !records.every(isRecord) || records.length === 0 || records.length > PUSH_LIMIT) {
-      return c.json({ error: 'Invalid records' }, 400);
-    }
-    if (new Set(records.map((r) => r.id)).size !== records.length) return c.json({ error: 'Duplicate records' }, 400);
-    return c.json({ results: await pushRecords(c.env.DB, c.get('user').id, records, now(), null, deviceOf(c)) });
-  });
-
-  app.get('/sync/pull', async (c) => {
-    const since = Number(c.req.query('since') ?? 0);
-    if (!Number.isSafeInteger(since) || since < 0) return c.json({ error: 'Invalid cursor' }, 400);
-    return c.json(await pullRecords(c.env.DB, c.get('user').id, since));
-  });
-
-  /** What changed lately across every card this account can read, newest first, a page at a time. */
-  app.get('/versions', async (c) => {
-    const page = await listRecentVersions(c.env.DB, c.get('user').id, deviceOf(c)?.id ?? null, c.req.query('before') ?? null);
-    return page ? c.json<RecentVersionsResponse>(page) : c.json({ error: 'Invalid cursor' }, 400);
-  });
-
-  app.get('/cards/:id/versions', async (c) => {
-    const versions = await listVersions(c.env.DB, c.get('user').id, c.req.param('id'));
-    return versions ? c.json<VersionsResponse>({ versions }) : c.json({ error: 'Card not found' }, 404);
-  });
-
-  app.post('/cards/:id/versions/seal', async (c) =>
-    (await sealVersions(c.env.DB, c.get('user').id, c.req.param('id'))) ? c.json({ ok: true }) : c.json({ error: 'Card not found' }, 404),
-  );
-
-  app.get('/cards/:id/versions/:version', async (c) => {
-    const versionId = Number(c.req.param('version'));
-    if (!Number.isSafeInteger(versionId)) return c.json({ error: 'Version not found' }, 404);
-    const version = await getVersion(c.env.DB, c.get('user').id, c.req.param('id'), versionId);
-    return version ? c.json<VersionResponse>(version) : c.json({ error: 'Version not found' }, 404);
-  });
-
+  vaultRoutes(app, now);
+  syncRoutes(app, now);
+  versionRoutes(app);
   aiSessionRoutes(app, now);
   photoRoutes(app, googleFetch, now);
   unfurlRoutes(app, webFetch);

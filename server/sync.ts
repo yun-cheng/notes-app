@@ -1,10 +1,11 @@
 import { DAY } from '../src/domain/dates';
 import type { CardRecord } from '../src/domain/types';
-import { MAX_PAYLOAD_BYTES, PULL_LIMIT, type PullResponse, type PushResult } from '../src/sync/protocol';
+import { MAX_PAYLOAD_BYTES, PULL_LIMIT, PUSH_LIMIT, type PullResponse, type PushResult } from '../src/sync/protocol';
 import { EDITABLE_SHARE, EDITABLE_VAULTS, SHARED_WITH } from './access';
-import type { Database, Statement } from './db';
+import type { Hono } from 'hono';
+import type { AppEnv, Database, Statement } from './db';
 import { unshare } from './shares';
-import { recordVersions, type Device, type Written } from './versions';
+import { deviceOf, recordVersions, type Device, type Written } from './versions';
 import { syncReminders } from './reminders';
 
 interface CardRow extends Omit<CardRecord, 'deleted'> {
@@ -190,4 +191,39 @@ export async function pullRecords(db: Database, userId: string, since: number): 
     .bind(since, more ? last : Number.MAX_SAFE_INTEGER, userId, userId, userId, userId)
     .all<{ card_id: string; seq: number }>();
   return { records: page, gone: moved.map((m) => m.card_id), next: more ? last : Math.max(last, ...moved.map((m) => m.seq)), more };
+}
+
+function isRecord(value: unknown): value is CardRecord {
+  const r = value as Partial<CardRecord> | null;
+  return (
+    !!r &&
+    typeof r.id === 'string' &&
+    r.id.length > 0 &&
+    r.id.length <= 200 &&
+    typeof r.vault_id === 'string' &&
+    Number.isSafeInteger(r.updated_at) &&
+    typeof r.deleted === 'boolean' &&
+    Number.isSafeInteger(r.seq) &&
+    r.seq! >= 0 &&
+    typeof r.payload === 'string'
+  );
+}
+
+/** Sending a device's changes and taking in everyone else's. */
+export function syncRoutes(app: Hono<AppEnv>, now: () => number) {
+  app.post('/sync/push', async (c) => {
+    const body = await c.req.json<{ records?: unknown }>().catch(() => null);
+    const records = body?.records;
+    if (!Array.isArray(records) || !records.every(isRecord) || records.length === 0 || records.length > PUSH_LIMIT) {
+      return c.json({ error: 'Invalid records' }, 400);
+    }
+    if (new Set(records.map((r) => r.id)).size !== records.length) return c.json({ error: 'Duplicate records' }, 400);
+    return c.json({ results: await pushRecords(c.env.DB, c.get('user').id, records, now(), null, deviceOf(c)) });
+  });
+
+  app.get('/sync/pull', async (c) => {
+    const since = Number(c.req.query('since') ?? 0);
+    if (!Number.isSafeInteger(since) || since < 0) return c.json({ error: 'Invalid cursor' }, 400);
+    return c.json(await pullRecords(c.env.DB, c.get('user').id, since));
+  });
 }

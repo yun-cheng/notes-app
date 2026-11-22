@@ -1,7 +1,8 @@
 import type { CardRecord } from '../src/domain/types';
-import type { RecentVersion, RecentVersionsResponse, VersionInfo, VersionResponse } from '../src/sync/protocol';
+import type { RecentVersion, RecentVersionsResponse, VersionInfo, VersionResponse, VersionsResponse } from '../src/sync/protocol';
 import { allows, cardAccess, SHARED_WITH } from './access';
-import type { Database, Statement } from './db';
+import type { Context, Hono } from 'hono';
+import type { AppEnv, Database, Statement } from './db';
 
 /** Saves this close together, by one person on one device or through one app, extend the same version. */
 export const VERSION_GAP = 10 * 60_000;
@@ -227,4 +228,40 @@ export async function listRecentVersions(db: Database, userId: string, device: s
   }
   const last = results[read - 1];
   return { versions, next: last && read < results.length ? `${last.saved_at}-${last.id}` : null };
+}
+
+/**
+ * The device a request says it comes from. A device makes up its own ID and name, and nothing rests on them but
+ * how the history tells devices apart, so they're only checked for shape.
+ */
+export function deviceOf(c: Context<AppEnv>): Device | null {
+  const id = c.req.header('X-Device-Id');
+  if (!id || !/^[\w-]{8,64}$/.test(id)) return null;
+  const name = (c.req.header('X-Device-Name') ?? '').replace(/[^\x20-\x7e]/g, '').trim().slice(0, 60);
+  return { id, name: name || null };
+}
+
+/** A card's history, and what changed lately across every card this account can read. */
+export function versionRoutes(app: Hono<AppEnv>) {
+  /** What changed lately across every card this account can read, newest first, a page at a time. */
+  app.get('/versions', async (c) => {
+    const page = await listRecentVersions(c.env.DB, c.get('user').id, deviceOf(c)?.id ?? null, c.req.query('before') ?? null);
+    return page ? c.json<RecentVersionsResponse>(page) : c.json({ error: 'Invalid cursor' }, 400);
+  });
+
+  app.get('/cards/:id/versions', async (c) => {
+    const versions = await listVersions(c.env.DB, c.get('user').id, c.req.param('id'));
+    return versions ? c.json<VersionsResponse>({ versions }) : c.json({ error: 'Card not found' }, 404);
+  });
+
+  app.post('/cards/:id/versions/seal', async (c) =>
+    (await sealVersions(c.env.DB, c.get('user').id, c.req.param('id'))) ? c.json({ ok: true }) : c.json({ error: 'Card not found' }, 404),
+  );
+
+  app.get('/cards/:id/versions/:version', async (c) => {
+    const versionId = Number(c.req.param('version'));
+    if (!Number.isSafeInteger(versionId)) return c.json({ error: 'Version not found' }, 404);
+    const version = await getVersion(c.env.DB, c.get('user').id, c.req.param('id'), versionId);
+    return version ? c.json<VersionResponse>(version) : c.json({ error: 'Version not found' }, 404);
+  });
 }

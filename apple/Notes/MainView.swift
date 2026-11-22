@@ -138,10 +138,15 @@ struct Sidebar: View {
     }
 
     /// One row: a name with its icon and a count, tinted while it's the page shown.
-    private func row(_ title: String, _ icon: String, selected: Bool, count: Int = 0, go action: @escaping () -> Void) -> some View {
+    private func row(_ title: String, _ icon: String, tint: Color? = nil, quiet: Bool = false, selected: Bool, count: Int = 0, go action: @escaping () -> Void) -> some View {
         Button(action: action) {
             HStack {
-                Label(title, systemImage: icon)
+                if icon.isEmpty {
+                    // No icon, lined up with the names above it; a quiet link, All tags or Manage vaults, fainter.
+                    Label { Text(title).foregroundStyle(quiet ? Theme.muted : Theme.text) } icon: { Color.clear.frame(width: 16) }
+                } else {
+                    Label { Text(title) } icon: { Image(systemName: icon).foregroundStyle(tint ?? Theme.muted) }
+                }
                 Spacer()
                 if count > 0 { Text("\(count)").foregroundStyle(Theme.muted).monospacedDigit() }
             }
@@ -151,8 +156,8 @@ struct Sidebar: View {
         .listRowBackground(selected ? Theme.accentSoft.clipShape(RoundedRectangle(cornerRadius: 8)) : nil)
     }
 
-    private func row(_ d: Page.Destination, count: Int = 0) -> some View {
-        row(d.title, d.icon, selected: model.page == d.page, count: count) { go(d.page) }
+    private func row(_ d: Page.Destination, count: Int = 0, quiet: Bool = false) -> some View {
+        row(d.title, quiet ? "" : d.icon, quiet: quiet, selected: model.page == d.page, count: count) { go(d.page) }
     }
 
     var body: some View {
@@ -175,7 +180,9 @@ struct Sidebar: View {
                     HStack {
                         Label("Search", systemImage: "magnifyingglass")
                         Spacer()
+                        #if os(macOS)
                         Text("⌘K").font(.caption).foregroundStyle(Theme.muted)
+                        #endif
                     }
                 }
                 .buttonStyle(.plain)
@@ -188,26 +195,38 @@ struct Sidebar: View {
                     ForEach(group.members) { tag in tagRow(tag) }
                 }
             }
+            // As the web's: pinned tags outside a group, and the one the journal is narrowed to.
             Section("Tags") {
-                ForEach(index.tagGroups.loose) { tag in tagRow(tag) }
-                row(Page.destination("tags"))
+                let filtered = model.page.filter?.tagId
+                let pinned = index.pinnedTags.filter { index.tagGroups.groupOf[$0.id] == nil }
+                let shown = pinned.contains { $0.id == filtered } || filtered.map { index.tagGroups.groupOf[$0] != nil } == true ? pinned : pinned + index.tags.filter { $0.id == filtered }
+                ForEach(shown) { tag in tagRow(tag) }
+                row(Page.destination("tags"), quiet: true)
             }
             Section("Vaults") {
-                ForEach(model.shownVaults) { vault in
-                    let icon = vault.isPrivate ? (model.lockedVaults.contains(vault.id) ? "lock" : "lock.open") : (vault.members ?? 1) > 1 ? "person.2" : "tray"
-                    row(vault.name, icon, selected: model.page.filter?.vaultId == vault.id) { go(.journal(StreamFilter(vaultId: vault.id))) }
+                if model.shownVaults.count > 1 {
+                    ForEach(model.shownVaults) { vault in
+                        row(vault.name, model.lockedVaults.contains(vault.id) ? "lock" : "", selected: model.page.filter?.vaultId == vault.id) { go(.journal(StreamFilter(vaultId: vault.id))) }
+                    }
                 }
-                row(Page.destination("vaults"))
+                row(Page.destination("vaults"), quiet: true)
             }
         }
         .listStyle(.sidebar)
         .navigationTitle("Notes")
-        .safeAreaInset(edge: .bottom) { AccountBadge(onPick: onPick) }
+        .safeAreaInset(edge: .bottom) {
+            VStack(spacing: 0) {
+                row(Page.destination("settings")).padding(.horizontal, 10).padding(.vertical, 6)
+                AccountBadge(onPick: onPick)
+            }
+            .background(.bar)
+        }
     }
 
     private func tagRow(_ tag: Card) -> some View {
-        let count = model.index.backlinks[tag.id]?.filter { $0.kind == .tag && $0.from.isEntry && !$0.from.archived && !$0.from.template }.count ?? 0
-        return row(tag.displayTitle, "tag", selected: model.page.filter?.tagId == tag.id, count: count) { go(.journal(StreamFilter(tagId: tag.id))) }
+        // Every entry it's on, archived and templates too, as the web counts.
+        let count = model.index.backlinks[tag.id]?.filter { $0.kind == .tag }.count ?? 0
+        return row(tag.displayTitle, "tag", tint: tag.color.map(Theme.tint), selected: model.page.filter?.tagId == tag.id, count: count) { go(.journal(StreamFilter(tagId: tag.id))) }
     }
 }
 
@@ -227,7 +246,7 @@ struct AccountBadge: View {
                 }
                 Button("Add another account") { model.addingAccount = true }
                 Divider()
-                Button("Settings") {
+                Button("Backup & settings") {
                     model.page = .settings
                     onPick()
                 }

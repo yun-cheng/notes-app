@@ -483,7 +483,7 @@ enum Page: Hashable {
         .init(key: "upcoming", title: "Upcoming", icon: "calendar.badge.clock", page: .journal(StreamFilter(status: .upcoming)), listed: false),
         .init(key: "history", title: "History", icon: "clock.arrow.circlepath", page: .history),
         .init(key: "calendar", title: "Calendar", icon: "calendar", page: .calendar),
-        .init(key: "timeline", title: "Timeline", icon: "chart.bar.xaxis", page: .timeline),
+        .init(key: "timeline", title: "Timeline", icon: "align.horizontal.left", page: .timeline),
         .init(key: "photos", title: "Photos", icon: "photo", page: .photos),
         .init(key: "links", title: "Links", icon: "link", page: .links),
         .init(key: "files", title: "Files", icon: "doc", page: .files),
@@ -491,8 +491,8 @@ enum Page: Hashable {
         .init(key: "templates", title: "Templates", icon: "doc.on.doc", page: .journal(StreamFilter(template: true)), listed: false),
         .init(key: "trash", title: "Trash", icon: "trash", page: .trash),
         .init(key: "tags", title: "All tags", icon: "tag", page: .tags, listed: false),
-        .init(key: "vaults", title: "All vaults", icon: "square.stack.3d.up", page: .vaults, listed: false),
-        .init(key: "settings", title: "Settings", icon: "gear", page: .settings, listed: false),
+        .init(key: "vaults", title: "Manage vaults", icon: "square.stack.3d.up", page: .vaults, listed: false),
+        .init(key: "settings", title: "Backup & settings", icon: "slider.horizontal.3", page: .settings, listed: false),
     ]
 
     static func destination(_ key: String) -> Destination { destinations.first { $0.key == key }! }

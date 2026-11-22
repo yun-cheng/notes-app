@@ -40,7 +40,7 @@ struct JournalView: View {
     private var items: [StreamItem] {
         var items = Stream.items(model.index, filter, today: model.today, sharedInto: model.sharedInto)
         if searching && !query.trimmingCharacters(in: .whitespaces).isEmpty {
-            let hits = Set(CardSearch(model.index).search(query).map(\.card.id))
+            let hits = Set(model.search.search(query).map(\.card.id))
             items = items.filter { hits.contains($0.card.id) }
         } else {
             items = Stream.foldStacks(items, stackOf: model.index.stackOf)

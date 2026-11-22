@@ -124,7 +124,8 @@ struct SearchPage: View {
     @State private var query = ""
 
     var body: some View {
-        let hits = CardSearch(model.index).search(query).filter { $0.card.isEntry }
+        let q = query.trimmingCharacters(in: .whitespaces)
+        let hits = q.isEmpty ? [] : model.search.search(q).filter { $0.card.isEntry }
         List(hits, id: \.card.id) { hit in
             Button { model.openEntry = hit.card.id } label: {
                 VStack(alignment: .leading, spacing: 2) {
@@ -196,7 +197,7 @@ struct CommandPalette: View {
     var body: some View {
         let q = query.trimmingCharacters(in: .whitespaces)
         let matching = marked ? [] : commands.filter { q.isEmpty || $0.id.localizedCaseInsensitiveContains(q) }
-        let hits = q.isEmpty ? [] : CardSearch(model.index).search(q).prefix(20)
+        let hits = q.isEmpty ? [] : model.search.search(q).prefix(20)
         VStack(spacing: 0) {
             TextField("Search or run a command", text: $query)
                 .textFieldStyle(.plain)

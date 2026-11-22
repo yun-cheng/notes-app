@@ -18,7 +18,17 @@ final class AppModel {
     /// Every card on the device, sealed ones too: `index` keeps locked ones out of every list.
     private(set) var cards: [Card] = []
     /// Derived from the cards, with locked vaults' cards left out.
-    private(set) var index = CardIndex()
+    private(set) var index = CardIndex() {
+        didSet { cachedSearch = nil }
+    }
+    /// Search over `index`, built when first asked for after it changes rather than on every keystroke.
+    var search: CardSearch {
+        if let cachedSearch { return cachedSearch }
+        let made = CardSearch(index)
+        cachedSearch = made
+        return made
+    }
+    @ObservationIgnored private var cachedSearch: CardSearch?
     /// The vaults each card is shared into besides its own.
     private(set) var sharedInto: SharedInto = [:]
     /// Open comments on each card.

@@ -29,7 +29,7 @@ import { useToast } from '../Toast';
 import { useUndo } from '../useUndo';
 import { journalDefaults, useSaveEntries } from '../useSaveEntry';
 import { usePermissions, useViewOnly } from '../viewOnly';
-import { EntryBubble } from './journal';
+import { EntryBubble } from '../bubbles';
 import { composing } from '../composing';
 
 type Entry = NoteCard | TodoCard;

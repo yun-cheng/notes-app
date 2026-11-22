@@ -261,12 +261,11 @@ body:has(.composer:focus-within) .tabbar { display: none; }
 .list { display: flex; flex-direction: column; }
 .row { display: flex; align-items: flex-start; gap: 10px; padding: 10px 0; border-bottom: 1px solid var(--line); }
 .list .row:last-child { border-bottom: 0; }
-.row--link:hover .row__title, .row--todo .row__body:hover .row__title { color: var(--accent); }
+.row--link:hover .row__title { color: var(--accent); }
 .row__icon { color: var(--muted); padding-top: 2px; flex: none; }
 .row__body { display: flex; flex-direction: column; gap: 2px; flex: 1; min-width: 0; }
 .row__title { font-weight: 500; overflow-wrap: anywhere; }
 .row__preview { color: var(--muted); font-size: 14px; display: -webkit-box; -webkit-box-orient: vertical; -webkit-line-clamp: 2; overflow: hidden; }
-.row__due { color: var(--muted); font-size: 13px; }
 .is-alert { color: var(--alert); }
 .row.is-done .row__title { color: var(--muted); }
 

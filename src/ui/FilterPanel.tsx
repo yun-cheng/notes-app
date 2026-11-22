@@ -62,16 +62,6 @@ export function useFilterPath(): (filter: StreamFilter) => string {
   return pathname === '/history' ? historyPath : journalPath;
 }
 
-/**
- * Where a tag or vault named on an entry leads: its entries alone on the page showing it, the Trash or the Archive,
- * and otherwise the journal.
- */
-export function useShowOnly(): (part: Pick<StreamFilter, 'tagId' | 'vaultId'>) => string {
-  const { pathname } = useLocation();
-  if (pathname === TRASH_PATH) return trashPath;
-  return (part) => journalPath({ ...part, archived: pathname === ARCHIVE_PATH || undefined });
-}
-
 const STATUSES: TodoStatus[] = ['open', 'today', 'upcoming', 'undated', 'waiting', 'done'];
 
 /** One choice in a filter chip's menu: picking the one in use takes it off. */

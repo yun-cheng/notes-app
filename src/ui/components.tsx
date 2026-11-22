@@ -1,9 +1,9 @@
-import { useEffect, useRef, useState, type FormEvent, type ReactNode } from 'react';
+import { useEffect, useRef, useState, type ReactNode } from 'react';
 import { Link, useLocation, useNavigate } from 'react-router';
 import { cardText, resolveTags, type Backlink } from '../domain/cardIndex';
 import { displayTitle } from '../domain/content';
 import { clashingTags, orderTags, pickInGroup, withTag, type TagGroup } from '../domain/tagGroups';
-import type { Card, TagCard, TodoCard } from '../domain/types';
+import type { Card, TagCard } from '../domain/types';
 import { useCards } from '../state/CardsContext';
 import { usePermissions, useViewOnly, VIEW_ONLY_NOTE, ViewOnlyToggle } from './viewOnly';
 import { Icon, type IconName } from './Icon';
@@ -12,7 +12,6 @@ import { useToast } from './Toast';
 import { useUndo } from './useUndo';
 import { usePopover } from './usePopover';
 import { colorClass } from './EntryStyle';
-import { DueLabel, useTickTodo } from './TodoDue';
 import { SyncBadge } from './SyncStatus';
 import { AccountButton, DemoTag } from './AccountBadge';
 import { VoiceBar } from './voice';
@@ -182,62 +181,6 @@ export function CardRow({ card, detail }: { card: Card; detail?: string }) {
         <TagChips tagIds={card.tags} />
       </span>
     </CardLink>
-  );
-}
-
-export function TodoRow({ todo, showDue = true }: { todo: TodoCard; showDue?: boolean }) {
-  const may = usePermissions();
-  const { edit } = may(todo);
-  const tick = useTickTodo();
-  const done = todo.status === 'done';
-  return (
-    <div className={`row row--todo${done ? ' is-done' : ''}`}>
-      <label className={`check${!done && todo.waiting ? ' check--waiting' : ''}`}>
-        <input
-          type="checkbox"
-          checked={done}
-          disabled={!edit}
-          aria-label={`Mark "${displayTitle(todo)}" ${done ? 'not done' : 'done'}`}
-          // A done todo may drop out of the list, so a mistaken tap needs a way back.
-          onChange={() => tick(todo, { announce: true })}
-        />
-      </label>
-      <CardLink className="row__body" card={todo}>
-        <span className="row__title">{displayTitle(todo)}</span>
-        {showDue && <DueLabel todo={todo} short className="row__due" />}
-        <TagChips tagIds={todo.tags} />
-      </CardLink>
-    </div>
-  );
-}
-
-export function TodoList({ todos, showDue }: { todos: TodoCard[]; showDue?: boolean }) {
-  return (
-    <div className="list">
-      {todos.map((t) => (
-        <TodoRow key={t.id} todo={t} showDue={showDue} />
-      ))}
-    </div>
-  );
-}
-
-export function QuickAddTodo({ due, placeholder }: { due: string | null; placeholder: string }) {
-  const { repo } = useCards();
-  const [title, setTitle] = useState('');
-  const submit = (e: FormEvent) => {
-    e.preventDefault();
-    const text = title.trim();
-    if (!text) return;
-    setTitle('');
-    void repo.createTodo({ title: text, due });
-  };
-  return (
-    <form className="quick-add" onSubmit={submit}>
-      <input value={title} onChange={(e) => setTitle(e.target.value)} placeholder={placeholder} aria-label={placeholder} enterKeyHint="done" />
-      <button type="submit" aria-label="Add todo" disabled={!title.trim()}>
-        <Icon name="plus" size={18} />
-      </button>
-    </form>
   );
 }
 

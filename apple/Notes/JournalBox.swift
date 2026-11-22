@@ -53,6 +53,8 @@ struct JournalBox: View {
                     .lineLimit(1...8)
                     .focused($focused)
                     #if os(macOS)
+                    // A picture or file pasted in is added to the box, as on the web; text pastes where the cursor is.
+                    .onPasteCommand(of: [.image, .fileURL]) { providers in paste(providers) }
                     .onKeyPress(.return, phases: .down) { press in
                         if press.modifiers.contains(.shift) || press.modifiers.contains(.option) {
                             text += "\n"
@@ -132,6 +134,20 @@ struct JournalBox: View {
     /// The vault what's added goes into: the journal's, or the account's own.
     private var targetVault: String { filter.vaultId ?? model.mainVault?.id ?? "" }
 
+    #if os(macOS)
+    private func paste(_ providers: [NSItemProvider]) {
+        let board = NSPasteboard.general
+        if let urls = board.readObjects(forClasses: [NSURL.self], options: [.urlReadingFileURLsOnly: true]) as? [URL], !urls.isEmpty {
+            urls.forEach(addFile)
+            return
+        }
+        if let data = board.data(forType: .png) ?? board.data(forType: .tiff) {
+            do { attached.append(try Attachments.shared.addPhoto(data, vaultId: targetVault, model: model)) } catch { model.say(error.localizedDescription) }
+            return
+        }
+    }
+    #endif
+
     private func addPicked(_ item: PhotosPickerItem) async {
         guard let data = try? await item.loadTransferable(type: Data.self) else { return }
         let video = item.supportedContentTypes.contains { $0.conforms(to: .movie) }
@@ -149,6 +165,13 @@ struct JournalBox: View {
     }
 
     private func addFile(_ url: URL) {
+        // A picture's address from a web page: fetched by the server, since most sites don't let others fetch it.
+        if url.scheme?.hasPrefix("http") == true {
+            Task {
+                do { attached.append(try Attachments.shared.addPhoto(try await model.api.fetchPicture(url.absoluteString), vaultId: targetVault, model: model)) } catch { model.say(error.localizedDescription) }
+            }
+            return
+        }
         let scoped = url.startAccessingSecurityScopedResource()
         defer { if scoped { url.stopAccessingSecurityScopedResource() } }
         guard let data = try? Data(contentsOf: url) else {

@@ -444,3 +444,16 @@ extension StreamFilter {
         return (archived ? "/archive" : "/journal") + (query.isEmpty ? "" : "?" + query)
     }
 }
+
+extension ServerAPI {
+    /// A picture on the web, fetched by the server, since most sites don't let others fetch their pictures.
+    public func fetchPicture(_ url: String) async throws -> Data {
+        struct Body: Encodable { let url: String }
+        let (data, status) = try await send("/fetch-image", method: "POST", body: Body(url: url))
+        guard (200..<300).contains(status) else {
+            let error = (try? JSONDecoder().decode([String: String].self, from: data))?["error"]
+            throw NSError(domain: "notes", code: status, userInfo: [NSLocalizedDescriptionKey: error ?? "That picture couldn't be brought in."])
+        }
+        return data
+    }
+}

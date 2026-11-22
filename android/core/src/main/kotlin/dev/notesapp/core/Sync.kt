@@ -33,6 +33,7 @@ class SyncEngine(private val repo: Repository, private val api: SyncApi) {
     val status: StateFlow<Status> = _status
     private val running = Mutex()
     @Volatile private var again = false
+    @Volatile private var stopped = false
     private var debounce: Job? = null
 
     /** Syncs shortly after the latest local change. */
@@ -43,7 +44,7 @@ class SyncEngine(private val repo: Repository, private val api: SyncApi) {
 
     /** Runs a sync. If one is already running, another follows it. */
     suspend fun sync() {
-        if (_status.value.state == State.signedOut) return
+        if (stopped || _status.value.state == State.signedOut) return
         if (!running.tryLock()) {
             again = true
             running.withLock { }
@@ -53,14 +54,18 @@ class SyncEngine(private val repo: Repository, private val api: SyncApi) {
             do {
                 again = false
                 runOnce()
-            } while (again && _status.value.state != State.signedOut)
+            } while (again && !stopped && _status.value.state != State.signedOut)
         } finally {
             running.unlock()
         }
     }
 
-    /** After signing in again. */
-    fun reset() { _status.value = Status() }
+    /** For signing out: no more syncs start, and this returns once the one running, if any, has finished. */
+    suspend fun stop() {
+        stopped = true
+        debounce?.cancel()
+        running.withLock { }
+    }
 
     private suspend fun runOnce() {
         _status.value = _status.value.copy(state = State.syncing)

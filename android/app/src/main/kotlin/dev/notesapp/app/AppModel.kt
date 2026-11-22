@@ -10,6 +10,7 @@ import dev.notesapp.core.Account
 import dev.notesapp.core.Board
 import dev.notesapp.core.Card
 import dev.notesapp.core.CardIndex
+import dev.notesapp.core.Doc
 import dev.notesapp.core.DateKey
 import dev.notesapp.core.Entry
 import dev.notesapp.core.Repository
@@ -184,6 +185,9 @@ class AppModel(private val context: Context, val site: String) {
         tokens.clear(leaving.id)
         saveAccounts(accounts.filter { it.id != leaving.id })
         val old = repo
+        val engine = sync
+        // Its photos and files on this device: what its cards hold, read before they go.
+        val held = cards.flatMap { c -> (listOf(c.content) + c.morePages).flatMap { p -> Doc.photoIds(p) + Doc.files(p).flatMap { f -> listOfNotNull(f.id, f.poster) } } }.toSet()
         account = null
         sync = null
         cards = emptyList()
@@ -191,9 +195,14 @@ class AppModel(private val context: Context, val site: String) {
         vaults = emptyList()
         openVaults = emptySet()
         page = Page.Journal()
+        Reminders.cancelAll(context)
         scope.launch {
+            // A sync still running, or one about to start, would open the database again after it's deleted.
+            engine?.stop()
+            old.onChange = null
             if (token != null) ServerApi(site, token).signOut()
             runCatching { old.clear() }
+            Attachments.forget(leaving.id, held)
             store?.close()
             store = null
             context.deleteDatabase("notes-${leaving.id}.sqlite")

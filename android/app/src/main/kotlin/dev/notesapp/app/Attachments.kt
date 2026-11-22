@@ -82,6 +82,14 @@ object Attachments {
         get() = runCatching { json.decodeFromString(ListSerializer(Pending.serializer()), queueFile.readText()) }.getOrDefault(emptyList())
         set(v) { queueFile.writeText(json.encodeToString(ListSerializer(Pending.serializer()), v)) }
 
+    /** Deletes an account's photos and files from this device as it signs out, with any still waiting to go up. */
+    fun forget(accountId: String, ids: Set<String>) {
+        val leaving = pending.filter { it.account == accountId }
+        for (id in ids + leaving.map { it.id }) file(id).delete()
+        pending = pending.filter { it.account != accountId }
+        bitmaps.evictAll()
+    }
+
     /** The bytes as stored: from this device, or fetched once from the server. */
     suspend fun stored(id: String, api: ServerApi): ByteArray? {
         val f = file(id)

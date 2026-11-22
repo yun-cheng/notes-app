@@ -179,6 +179,8 @@ final class AppModel {
         accounts.removeAll { $0.id == leaving.id }
         saveAccounts()
         let old = repo
+        // Its photos and files on this device: what its cards hold, read before they go.
+        let held = Set(cards.flatMap { c in ([c.content] + c.morePages).flatMap { p in Doc.photoIds(p) + Doc.files(p).flatMap { [$0.id] + ($0.poster.map { [$0] } ?? []) } } })
         account = nil
         sync = nil
         cards = []
@@ -193,6 +195,7 @@ final class AppModel {
         Task {
             if let token { await ServerAPI(site: site, token: token).signOut() }
             try? await old.clear()
+            Attachments.shared.forget(account: leaving.id, ids: held)
             // SQLite's write-ahead log and its index go with it.
             for suffix in ["", "-wal", "-shm"] { try? FileManager.default.removeItem(atPath: Self.database(for: leaving.id) + suffix) }
             if let next = accounts.first, let t = Keychain.token(for: next.id) { await open(account: next, token: t) } else { phase = .signedOut }

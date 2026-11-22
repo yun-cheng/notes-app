@@ -55,6 +55,14 @@ final class Attachments {
         set { try? JSONEncoder().encode(newValue).write(to: queueFile) }
     }
 
+    /// Deletes an account's photos and files from this device as it signs out, with any still waiting to go up.
+    func forget(account: String, ids: Set<String>) {
+        let leaving = pending.filter { $0.account == account }
+        for id in ids.union(leaving.map(\.id)) { try? FileManager.default.removeItem(at: file(id)) }
+        pending = pending.filter { $0.account != account }
+        forgetThumbnails()
+    }
+
     /// The bytes as stored: from this device, or fetched once from the server.
     func stored(_ id: String, api: ServerAPI) async -> Data? {
         let url = file(id)

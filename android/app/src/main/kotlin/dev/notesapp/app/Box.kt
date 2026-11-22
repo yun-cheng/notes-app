@@ -122,7 +122,7 @@ fun JournalBox(filter: StreamFilter) {
                     if (text == typed) { text = ""; Drafts.set("journal", draftKey, null) }
                     val sent = added.mapNotNull { it["attrs"]["id"].str }.toSet()
                     attached.removeAll { it["attrs"]["id"].str in sent }
-                    model.refresh()
+                    model.caughtUp()
                     model.lastSaved = r.ids.lastOrNull()
                 }
                 is SaveResult.Unlock -> unlock = model.vault(r.vaultId)

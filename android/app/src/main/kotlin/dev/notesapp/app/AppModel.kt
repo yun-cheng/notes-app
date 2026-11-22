@@ -5,6 +5,7 @@ import android.os.Build
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.referentialEqualityPolicy
 import androidx.compose.runtime.setValue
 import dev.notesapp.core.Account
 import dev.notesapp.core.Board
@@ -36,6 +37,7 @@ import kotlinx.coroutines.SupervisorJob
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.collectLatest
 import kotlinx.coroutines.isActive
+import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.launch
 import java.util.UUID
 
@@ -79,7 +81,10 @@ class AppModel(private val context: Context, val site: String) {
     var vaults by mutableStateOf<List<Vault>>(emptyList()); private set
     var shared by mutableStateOf<List<SharedCard>>(emptyList()); private set
     /** Every card on the device, sealed ones too: `index` keeps locked ones out of every list. */
-    var cards by mutableStateOf<List<Card>>(emptyList()); private set
+    // Set only when a card changed (see refresh), so a plain reference check is enough, not comparing every card.
+    var cards by mutableStateOf<List<Card>>(emptyList(), referentialEqualityPolicy()); private set
+    /** Goes up each time `cards` changes: a cheap key for an effect to watch instead of every card. */
+    var cardsVersion by mutableIntStateOf(0); private set
     var index by mutableStateOf(CardIndex()); private set
     /** The vaults each card is shared into besides its own. */
     var sharedInto by mutableStateOf<SharedInto>(emptyMap()); private set
@@ -108,7 +113,7 @@ class AppModel(private val context: Context, val site: String) {
     private var store: SqliteStore? = null
     private var device: Pair<String, String>? = null
     /** A refresh is running for local changes, and whether another change came after it started. */
-    private var refreshing = false
+    private val refreshing = kotlinx.coroutines.flow.MutableStateFlow(false)
     private var refreshAgain = false
     private var watching: Job? = null
 
@@ -191,6 +196,7 @@ class AppModel(private val context: Context, val site: String) {
         account = null
         sync = null
         cards = emptyList()
+        indexed = null
         index = CardIndex()
         vaults = emptyList()
         openVaults = emptySet()
@@ -227,35 +233,61 @@ class AppModel(private val context: Context, val site: String) {
     private suspend fun changed() {
         sync?.schedule(scope)
         // A change made while a refresh runs may come after it read the cards, so one more runs after it.
-        if (refreshing) { refreshAgain = true; return }
-        refreshing = true
+        if (refreshing.value) { refreshAgain = true; return }
+        refreshing.value = true
         try {
             do {
                 refreshAgain = false
                 refresh()
             } while (refreshAgain)
         } finally {
-            refreshing = false
+            refreshing.value = false
         }
     }
 
+    /** Waits until the screens show the changes made so far, without reading everything again itself. */
+    suspend fun caughtUp() {
+        // The repository's change note reaches the main thread as a coroutine of its own: let it start first.
+        kotlinx.coroutines.yield()
+        refreshing.first { !it }
+    }
+
+    /**
+     * Reads the cards and vaults again. Each state is set to an equal value when nothing changed, which redraws
+     * nothing, and the index is built off the main thread only when a card or what's locked changed. An older refresh
+     * never overwrites a newer one.
+     */
     suspend fun refresh() {
+        val run = ++refreshes
         val all = runCatching { repo.allCards() }.getOrNull() ?: return
         val vs = repo.vaults()
-        today = DateKey.today()
-        vaults = vs.sortedWith(compareBy({ it.created_at }, { it.id }))
-        shared = repo.sharedCards()
+        val sharedNow = repo.sharedCards()
         val into = mutableMapOf<String, MutableList<String>>()
         for (s in repo.vaultShares()) into.getOrPut(s.card_id) { mutableListOf() }.add(s.vault_id)
+        val counts = repo.commentCounts()
+        if (run != refreshes) return
+        today = DateKey.today()
+        vaults = vs.sortedWith(compareBy({ it.created_at }, { it.id }))
+        shared = sharedNow
         sharedInto = into
-        commentCounts = repo.commentCounts()
+        commentCounts = counts
+        val marks = all.map { CardMark(it.id, it.vaultId, it.updatedAt, it.seq, it.deleted, it.sealed) }
         val locked = lockedVaults
+        if (marks == indexed?.first && locked == indexed?.second) return
         val next = kotlinx.coroutines.withContext(Dispatchers.Default) { CardIndex(all, locked) }
+        if (run != refreshes) return
+        indexed = marks to locked
         cards = all
+        cardsVersion++
         index = next
         Reminders.reschedule(context, next)
         Transcriber.apply(this)
     }
+
+    /** What tells one version of a card from another without comparing its whole body. */
+    private data class CardMark(val id: String, val vaultId: String, val updatedAt: Long, val seq: Long, val deleted: Boolean, val sealed: Boolean)
+    private var indexed: Pair<List<CardMark>, Set<String>>? = null
+    private var refreshes = 0
 
     /** Opens a private vault on this device: its cards show until the app locks again. */
     suspend fun openVault(vaultId: String) {

@@ -246,39 +246,3 @@ struct CommandPalette: View {
     }
 }
 
-/// Every tag, grouped, with how many entries have each, as the web app's Tags page.
-struct TagsPage: View {
-    @Environment(AppModel.self) private var model
-
-    var body: some View {
-        let groups = model.index.tagGroups
-        List {
-            ForEach(groups.groups) { group in
-                Section(group.title) { ForEach(group.members) { TagRow(tag: $0) } }
-            }
-            Section("Tags") { ForEach(groups.loose) { TagRow(tag: $0) } }
-        }
-        .navigationTitle("Tags")
-    }
-}
-
-struct TagRow: View {
-    @Environment(AppModel.self) private var model
-    let tag: Card
-
-    var body: some View {
-        let count = model.index.backlinks[tag.id]?.filter { $0.kind == .tag }.count ?? 0
-        Button { model.page = .journal(StreamFilter(tagId: tag.id)) } label: {
-            HStack {
-                Label(tag.displayTitle, systemImage: "tag")
-                Spacer()
-                Text(tag.tagVaults(model.sharedInto)?.compactMap { model.vault($0)?.name }.joined(separator: ", ") ?? "All vaults")
-                    .font(.caption).foregroundStyle(Theme.muted)
-                Text("\(count)").monospacedDigit().foregroundStyle(Theme.muted)
-            }
-            .contentShape(Rectangle())
-        }
-        .buttonStyle(.plain)
-    }
-}
-

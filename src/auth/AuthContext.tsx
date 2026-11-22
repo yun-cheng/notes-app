@@ -1,6 +1,6 @@
 import { createContext, useCallback, useContext, useEffect, useMemo, useState, type ReactNode } from 'react';
 import { claimLegacyNotes } from '../storage/legacy';
-import { CardsProvider, forgetAccountStorage, openAccountStorage } from '../state/CardsContext';
+import { CardsProvider, forgetAccountStorage, hasUnsent, openAccountStorage } from '../state/CardsContext';
 import { leavePushHere } from '../reminders/push';
 import { deleteAccountOnServer, fetchSignedInAccounts, setRequestAccount, signInWithGoogle, signOutOfServer } from '../sync/http';
 import type { Account, SessionInfo } from '../sync/protocol';
@@ -104,14 +104,19 @@ export function AuthGate({ children }: { children: ReactNode }) {
 
   const signIn = useCallback(async (credential: string) => finish(await signInWithGoogle(credential)), [finish]);
 
-  // Unsynced changes stay in this account's local database and sync at its next sign-in.
+  // The account's copy on this device goes with it (its cards, photos, keys and drafts), unless it holds changes not
+  // yet on the server: those stay, to sync at its next sign-in here.
   const signOut = useCallback(async () => {
+    const leaving = account?.id;
+    const keep = leaving ? await hasUnsent(leaving).catch(() => true) : true;
     // Its reminders stop reaching this browser, while its session can still say so.
     await leavePushHere().catch(() => undefined);
     const rest = await signOutOfServer().catch(() => signedIn.filter((a) => a.id !== account?.id));
     save(ACCOUNTS_KEY, rest);
     setSignedIn(rest);
     open(rest[0] ?? null);
+    // Once its notes are closed, which opening another account does.
+    if (leaving && !keep) await forgetAccountStorage(leaving).catch(() => undefined);
   }, [account, signedIn, open]);
 
   const deleteAccount = useCallback(

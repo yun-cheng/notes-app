@@ -33,6 +33,16 @@ export class DexieStore implements CardStore, PhotoStore, TranslationStore {
   listCards() {
     return this.db.cards.toArray();
   }
+
+  /** How many changes and photos here aren't on the server yet. */
+  async unsent(): Promise<number> {
+    const [changes, photos] = await Promise.all([this.db.dirty.count(), this.db.photos.where('uploaded').equals(0).count()]);
+    return changes + photos;
+  }
+
+  close() {
+    this.db.close();
+  }
   getCard(id: string) {
     return this.db.cards.get(id);
   }

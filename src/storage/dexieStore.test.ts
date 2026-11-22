@@ -27,6 +27,16 @@ describe('DexieStore', () => {
     expect((await dx.pendingPhotos()).map((p) => p.id)).toEqual(['b']);
     expect((await dx.getPhoto('a'))?.uploaded).toBe(1);
   });
+  it('counts what isn\'t on the server yet: changes and photos waiting to go up', async () => {
+    const dx = new DexieStore(`t-${Math.random()}`);
+    expect(await dx.unsent()).toBe(0);
+    await dx.putCards([rec('a')]);
+    await dx.putPhoto({ id: 'p', vaultId: 'v', blob: new Blob(['x']), mime: 'image/jpeg', width: 1, height: 1, uploaded: 0, addedAt: 1 });
+    expect(await dx.unsent()).toBe(2);
+    await dx.markSynced('a', 1, 5);
+    await dx.markPhotoUploaded('p');
+    expect(await dx.unsent()).toBe(0);
+  });
   it('notifies subscribers of later writes', async () => {
     const dx = new DexieStore(`t-${Math.random()}`);
     const counts: number[] = [];

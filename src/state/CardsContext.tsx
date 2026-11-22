@@ -33,6 +33,16 @@ export function openAccountStorage(accountId: string) {
   return { store, repo, keyring };
 }
 
+/** Whether an account's copy on this device holds changes or photos not yet on the server. */
+export async function hasUnsent(accountId: string): Promise<boolean> {
+  const store = new DexieStore(`notes-app:user:${accountId}`);
+  try {
+    return (await store.unsent()) > 0;
+  } finally {
+    store.close();
+  }
+}
+
 /** Removes an account's copy on this device: its notes, photos, keys, unsaved-edit journal and drafts. */
 export async function forgetAccountStorage(accountId: string) {
   try {

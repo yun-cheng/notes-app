@@ -33,7 +33,7 @@ struct HistoryPage: View {
                 Section {
                     ForEach(row.changes) { change in changeRow(change) }
                 } header: {
-                    Text(Date(timeIntervalSince1970: Double(row.at) / 1000).formatted(date: .abbreviated, time: .shortened) + (row.by.map { " · \($0)" } ?? ""))
+                    Text(Date(ms: row.at).formatted(date: .abbreviated, time: .shortened) + (row.by.map { " · \($0)" } ?? ""))
                 }
             }
             if next != nil { Button("Show older changes") { Task { await load(more: true) } } }

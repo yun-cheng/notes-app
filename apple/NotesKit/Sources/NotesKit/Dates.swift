@@ -214,3 +214,8 @@ extension Card {
         payload["completedAt"] = .null
     }
 }
+
+extension Date {
+    /// A time as the cards and the server keep it: milliseconds since 1970.
+    public init<T: BinaryInteger>(ms: T) { self.init(timeIntervalSince1970: Double(ms) / 1000) }
+}

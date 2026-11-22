@@ -147,7 +147,7 @@ public enum Stream {
         }
     }
 
-    public static func entryDay(_ card: Card) -> String { DateKey.of(Date(timeIntervalSince1970: Double(card.createdAt) / 1000)) }
+    public static func entryDay(_ card: Card) -> String { DateKey.of(Date(ms: card.createdAt)) }
 
     static func matchesStatus(_ card: Card, _ status: StreamFilter.TodoStatus, today: String) -> Bool {
         if status == .done { return card.isDone }
@@ -209,7 +209,7 @@ public enum Stream {
             return items.map { i in
                 var e = i
                 e.at = i.card.updatedAt
-                e.day = DateKey.of(Date(timeIntervalSince1970: Double(i.card.updatedAt) / 1000))
+                e.day = DateKey.of(Date(ms: i.card.updatedAt))
                 return e
             }.sorted { $0.at < $1.at }
         case .due:

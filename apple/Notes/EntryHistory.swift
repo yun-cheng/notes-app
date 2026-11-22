@@ -16,7 +16,7 @@ struct EntryHistory: View {
         HStack(spacing: 0) {
             List(versions, selection: $picked) { v in
                 VStack(alignment: .leading, spacing: 2) {
-                    Text(Date(timeIntervalSince1970: Double(v.saved_at) / 1000).formatted(date: .abbreviated, time: .shortened))
+                    Text(Date(ms: v.saved_at).formatted(date: .abbreviated, time: .shortened))
                     Text([v.author, v.via.map { "with \($0)" }].compactMap { $0 }.joined(separator: " ")).font(.caption).foregroundStyle(Theme.muted)
                 }
                 .tag(v.id)

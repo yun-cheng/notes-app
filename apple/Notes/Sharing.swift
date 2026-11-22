@@ -56,7 +56,7 @@ struct SharePanel: View {
                         VStack(alignment: .leading, spacing: 4) {
                             Text(url.absoluteString).font(.callout.monospaced()).textSelection(.enabled).lineLimit(1)
                             HStack {
-                                Text(link.expires_at.map { "Until " + Date(timeIntervalSince1970: Double($0) / 1000).formatted(date: .abbreviated, time: .omitted) } ?? "Doesn't expire")
+                                Text(link.expires_at.map { "Until " + Date(ms: $0).formatted(date: .abbreviated, time: .omitted) } ?? "Doesn't expire")
                                     .font(.caption).foregroundStyle(Theme.muted)
                                 Spacer()
                                 Button("Copy") { Clipboard.copy(url.absoluteString); model.say("Link copied") }
@@ -157,7 +157,7 @@ struct CommentsSection: View {
                 VStack(alignment: .leading, spacing: 2) {
                     HStack {
                         Text(comment.author).font(.caption.weight(.semibold))
-                        Text(Date(timeIntervalSince1970: Double(comment.created_at) / 1000), format: .relative(presentation: .named)).font(.caption).foregroundStyle(Theme.muted)
+                        Text(Date(ms: comment.created_at), format: .relative(presentation: .named)).font(.caption).foregroundStyle(Theme.muted)
                         Spacer()
                         Button(comment.resolved_at == nil ? "Resolve" : "Reopen") { run { try await $0.resolveComment(card.id, id: comment.id, resolved: comment.resolved_at == nil) } }
                         if comment.author_id == model.accountId {

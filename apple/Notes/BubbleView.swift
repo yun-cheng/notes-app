@@ -334,7 +334,7 @@ struct BubbleMeta: View {
             if card.type == .todo { DueLabel(card: card) }
             if card.viewOnly { Image(systemName: "lock.doc").foregroundStyle(Theme.accent).help("View only") }
             Text(model.vaultNames(card).joined(separator: ", "))
-            Text(Date(timeIntervalSince1970: Double(card.createdAt) / 1000), format: .dateTime.hour().minute())
+            Text(Date(ms: card.createdAt), format: .dateTime.hour().minute())
         }
         .font(.caption)
         .foregroundStyle(Theme.muted)

@@ -100,7 +100,7 @@ struct SettingsPage: View {
                     HStack {
                         VStack(alignment: .leading) {
                             Text(app.name)
-                            Text(app.last_used_at.map { "Last used " + Date(timeIntervalSince1970: Double($0) / 1000).formatted(date: .abbreviated, time: .shortened) } ?? "Not used yet")
+                            Text(app.last_used_at.map { "Last used " + Date(ms: $0).formatted(date: .abbreviated, time: .shortened) } ?? "Not used yet")
                                 .font(.caption).foregroundStyle(Theme.muted)
                         }
                         Spacer()

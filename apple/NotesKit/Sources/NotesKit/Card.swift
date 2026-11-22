@@ -244,7 +244,7 @@ public func modernPayload(_ payload: [String: JSONValue], calendar: Calendar = .
     let date = out.removeValue(forKey: "date")?.stringValue
     guard let date else { return out }
     if let created = out["createdAt"]?.intValue,
-        DateKey.of(Date(timeIntervalSince1970: Double(created) / 1000), calendar: calendar) == date
+        DateKey.of(Date(ms: created), calendar: calendar) == date
     {
         return out
     }

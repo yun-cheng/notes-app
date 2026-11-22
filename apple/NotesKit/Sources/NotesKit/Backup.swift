@@ -25,7 +25,7 @@ public enum Backup {
     static func iso(_ ms: Int64) -> String {
         let f = ISO8601DateFormatter()
         f.formatOptions = [.withInternetDateTime, .withFractionalSeconds]
-        return f.string(from: Date(timeIntervalSince1970: Double(ms) / 1000))
+        return f.string(from: Date(ms: ms))
     }
 
     /// A backup of these vaults and cards, as JSON text.

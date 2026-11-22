@@ -44,7 +44,7 @@ struct VaultsPage: View {
         .formStyle(.grouped)
         .navigationTitle("Vaults")
         .navigationDestination(for: String.self) { id in VaultDetail(id: id) }
-        .sheet(item: Binding(get: { recoveryKey.map(OpenEntry.init) }, set: { recoveryKey = $0?.id })) { key in RecoveryKeySheet(key: key.id) }
+        .sheet(id: $recoveryKey) { key in RecoveryKeySheet(key: key) }
     }
 
     static func describe(_ vault: Vault) -> String {
@@ -169,7 +169,7 @@ struct VaultDetail: View {
             .formStyle(.grouped)
             .navigationTitle(vault.name)
             .onAppear { name = vault.name }
-            .sheet(item: Binding(get: { recoveryKey.map(OpenEntry.init) }, set: { recoveryKey = $0?.id })) { key in RecoveryKeySheet(key: key.id) }
+            .sheet(id: $recoveryKey) { key in RecoveryKeySheet(key: key) }
             .confirmationDialog("Stop encrypting \(vault.name)?", isPresented: $confirmStop) {
                 Button("Stop encrypting") { step("Decrypting…") { try await VaultEncryption(model: model).decrypt(vault, keepPin: true); model.say("Vault is no longer encrypted") } }
             } message: {

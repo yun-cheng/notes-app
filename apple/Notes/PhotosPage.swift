@@ -80,9 +80,9 @@ struct PhotosPage: View {
                 }
             }
         }
-        .sheet(item: Binding(get: { viewing.map(OpenEntry.init) }, set: { viewing = $0?.id })) { start in
+        .sheet(id: $viewing) { start in
             // Full screen, paging through every photo on the page.
-            MediaViewer(media: all.map(\.media), start: start.id, vaultId: all.first { $0.id == start.id }?.card.vaultId ?? "")
+            MediaViewer(media: all.map(\.media), start: start, vaultId: all.first { $0.id == start }?.card.vaultId ?? "")
         }
         .sheet(isPresented: Binding(get: { !sharing.isEmpty }, set: { if !$0 { sharing = [] } })) {
             VStack(spacing: 16) {

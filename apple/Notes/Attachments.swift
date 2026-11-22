@@ -316,12 +316,10 @@ struct BubbleAttachments: View {
         let files = BubbleMemo.value(model, card, "files") { Doc.files(card.content).filter { !$0.isVideo } }
         // How photos show: large, small thumbnails, or a count that opens them; each entry can say for itself.
         let style = card.payload["preview"]?["photos"]?.stringValue ?? deviceStyle
+        Group {
         if !media.isEmpty, style == "off" {
             Button { viewing = media[0].id } label: { Label("\(media.count) \(media.count == 1 ? "photo" : "photos")", systemImage: "photo.on.rectangle") }
                 .buttonStyle(.plain).font(.callout).foregroundStyle(Theme.accent).padding(.top, 4)
-                .sheet(item: Binding(get: { viewing.map(OpenEntry.init) }, set: { viewing = $0?.id })) { start in
-                    MediaViewer(media: media, start: start.id, vaultId: card.vaultId)
-                }
         } else if !media.isEmpty {
             FlowLayout(spacing: 4) {
                 ForEach(media) { m in
@@ -334,10 +332,9 @@ struct BubbleAttachments: View {
                 }
             }
             .padding(.top, 4)
-            .sheet(item: Binding(get: { viewing.map(OpenEntry.init) }, set: { viewing = $0?.id })) { start in
-                MediaViewer(media: media, start: start.id, vaultId: card.vaultId)
-            }
         }
+        }
+        .sheet(id: $viewing) { start in MediaViewer(media: media, start: start, vaultId: card.vaultId) }
         ForEach(files) { file in FileChip(file: file, vaultId: card.vaultId) }
     }
 }

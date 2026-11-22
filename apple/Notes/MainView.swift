@@ -19,9 +19,7 @@ struct MainView: View {
             WideFrame()
             #endif
         }
-        .sheet(item: Binding(get: { model.openEntry.map(OpenEntry.init) }, set: { model.openEntry = $0?.id })) { entry in
-            EntrySheet(id: entry.id)
-        }
+        .sheet(id: $model.openEntry) { id in EntrySheet(id: id) }
         .sheet(isPresented: $model.showPalette) { CommandPalette() }
         .sheet(isPresented: $model.addingAccount) { SignInView() }
         .sheet(item: $model.panel) { panel in EntryPanelView(panel: panel) }
@@ -33,7 +31,14 @@ struct MainView: View {
     }
 }
 
-struct OpenEntry: Identifiable {
+extension View {
+    /// A sheet shown while `id` holds something, for what it names; closing the sheet clears it.
+    func sheet<Content: View>(id: Binding<String?>, @ViewBuilder content: @escaping (String) -> Content) -> some View {
+        sheet(item: Binding(get: { id.wrappedValue.map(SheetID.init) }, set: { id.wrappedValue = $0?.id })) { content($0.id) }
+    }
+}
+
+private struct SheetID: Identifiable {
     let id: String
 }
 

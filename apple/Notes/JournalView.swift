@@ -12,7 +12,7 @@ struct JournalView: View {
     @State private var picked: Set<String> = []
     @State private var pickDates = false
     /// The date picker opened from a day's badge, at that day.
-    @State private var datesFrom: PickDates?
+    @State private var datesFrom: String?
     /// The entry the keyboard is on: ↑ ↓ move, Space picks, Enter opens.
     @State private var focusedEntry: String?
     @State private var showShortcuts = false
@@ -83,7 +83,7 @@ struct JournalView: View {
                                 } header: {
                                     DayBadge(day: group.day, sort: filter.sort) { day in
                                         // Opens the date picker at that day, as on the web: Show picks it, another press makes a range.
-                                        datesFrom = PickDates(day: day)
+                                        datesFrom = day
                                     }
                                 }
                             }
@@ -120,7 +120,7 @@ struct JournalView: View {
         .navigationTitle(title)
         .toolbar { toolbar(count: all.count) }
         .sheet(isPresented: $pickDates) { DatesDialog(filter: $filter) }
-        .sheet(item: $datesFrom) { pick in DatesDialog(filter: $filter, startDay: pick.day) }
+        .sheet(id: $datesFrom) { day in DatesDialog(filter: $filter, startDay: day) }
         .sheet(isPresented: $showShortcuts) { ShortcutsSheet() }
         .onChange(of: filter) { _, f in
             shown = Self.pageSize
@@ -347,7 +347,3 @@ struct JournalRail: View {
     }
 }
 
-struct PickDates: Identifiable {
-    let day: String
-    var id: String { day }
-}

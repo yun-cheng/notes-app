@@ -19,15 +19,6 @@ struct EntryHistory: View {
     }
 }
 
-/// The journal as a board.
-struct BoardView: View {
-    let filter: StreamFilter
-    let board: String
-    var body: some View {
-        ContentUnavailableView("Board", systemImage: "rectangle.split.3x1", description: Text("Coming next to this app."))
-    }
-}
-
 struct SettingsPage: View {
     @Environment(AppModel.self) private var model
     var body: some View {

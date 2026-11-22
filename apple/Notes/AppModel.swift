@@ -217,12 +217,23 @@ final class AppModel {
         }
     }
 
-    /// Ticks a todo or opens it again, saying when a repeating one is due next.
+    /// Ticks a todo or opens it again, saying when a repeating one is due next. On a board by a group with a Done
+    /// tag, it moves into Done, or out of it, as dragging it there does.
     func setDone(_ card: Card, _ done: Bool) {
         let id = card.id
         let today = today
+        let groups = index.tagGroups.groups
         perform { repo in
-            if let next = try await repo.setDone(id, done, today: today) {
+            let at = Repository.milliseconds()
+            let updated = try await repo.update(id) { c in
+                if done {
+                    if c.complete(today: today, at: at) == nil { c.tags = Board.tagsForStatus(c.tags, groups: groups, done: true) }
+                } else {
+                    c.reopen()
+                    c.tags = Board.tagsForStatus(c.tags, groups: groups, done: false)
+                }
+            }
+            if done, let updated, updated.repeat != nil, let next = updated.due {
                 await MainActor.run { self.say("Next due \(DateKey.relativeDayInSentence(next, today: today))", undoable: true) }
             }
         }

@@ -234,3 +234,43 @@ import Testing
         #expect(made["color"] == "blue" && made["template"] == nil)
     }
 }
+
+@Suite struct BoardTests {
+    static func card(_ id: String, _ fields: [String: JSONValue]) -> Card { StreamTests.card(id, fields, created: 100) }
+
+    @Test func columnsAndMoves() {
+        let todo = Self.card("todo", ["title": "To do", "type": "tag"])
+        let done = Self.card("done", ["title": "Done", "type": "tag"])
+        let status = Self.card("status", ["type": "tag", "title": "Status", "members": ["todo", "done"], "choice": "one"])
+        let groups = TagGroups([status, todo, done])
+        let group = groups.groups[0]
+        let a = Self.card("a", ["type": "todo", "status": "open", "tags": ["todo"]])
+        let b = Self.card("b", ["tags": []])
+        let columns = Board.columns([StreamItem(card: a, day: "", at: 1), StreamItem(card: b, day: "", at: 2)], group: group)
+        #expect(columns.map(\.key) == ["", "todo", "done"] && columns[0].items.map(\.card.id) == ["b"] && columns[1].items.map(\.card.id) == ["a"])
+        var moved = a
+        let (became, next) = Board.groupMove(&moved, group: group, from: "todo", to: "done", today: "2026-11-12", at: 5)
+        #expect(became == .done && next == nil && moved.isDone && moved.tags == ["done"])
+        var back = moved
+        Board.groupMove(&back, group: group, from: "done", to: "todo", today: "2026-11-12", at: 6)
+        #expect(!back.isDone && back.tags == ["todo"])
+        // Ticking a todo on the board moves it to Done.
+        #expect(Board.tagsForStatus(["todo"], groups: groups.groups, done: true) == ["done"])
+    }
+
+    @Test func placesBetweenNeighbours() {
+        var x = Self.card("x", [:])
+        x.position = 1000
+        var y = Self.card("y", [:])
+        y.position = 2000
+        let m = Self.card("m", [:])
+        #expect(Board.place(m, at: 1, among: [x, y]) == ["m": 1500])
+        // Already before them (written earlier): it stays put.
+        #expect(Board.place(m, at: 0, among: [x, y]) == [:])
+        #expect(Board.place(m, at: 2, among: [x, y]) == ["m": 2000 + 1024])
+        var tight = Self.card("t", [:])
+        tight.position = 1000.0
+        // No room between two at the same place: the column is spaced out again, the first keeping its place.
+        #expect(Board.place(m, at: 1, among: [x, tight]) == ["m": 2024, "t": 3048])
+    }
+}

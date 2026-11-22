@@ -349,7 +349,9 @@ export function CardsProvider({ accountId, children }: { accountId: string; chil
   useEffect(() => {
     let active = true;
     let latest = 0;
-    const decoded = new Map<string, { at: number; deleted: boolean; generation: number; card: Card }>();
+    // Kept by what's stored: a card stored again under the same time (written out or sealed as its vault's encryption
+    // changes) has another payload, so it's read again; one only marked as sent keeps its payload, and stays.
+    const decoded = new Map<string, { at: number; payload: string; deleted: boolean; generation: number; card: Card }>();
     let lastRecords: CardRecord[] = [];
 
     const load = async (records: CardRecord[]) => {
@@ -359,9 +361,9 @@ export function CardsProvider({ accountId, children }: { accountId: string; chil
       const loaded = await Promise.all(
         records.map(async (r) => {
           const hit = decoded.get(r.id);
-          if (hit && hit.at === r.updated_at && hit.deleted === r.deleted && hit.generation === generation) return hit.card;
+          if (hit && hit.at === r.updated_at && hit.payload === r.payload && hit.deleted === r.deleted && hit.generation === generation) return hit.card;
           const card = await repo.decode(r);
-          decoded.set(r.id, { at: r.updated_at, deleted: r.deleted, generation, card });
+          decoded.set(r.id, { at: r.updated_at, payload: r.payload, deleted: r.deleted, generation, card });
           return card;
         }),
       );

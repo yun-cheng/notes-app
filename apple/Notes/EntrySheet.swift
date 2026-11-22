@@ -27,7 +27,9 @@ struct EntrySheet: View {
     @ViewBuilder
     private func content(_ card: Card) -> some View {
         let edit = model.canEdit(card)
-        let pages = [card.content] + card.morePages
+        // Its pages, and a blank one being added: kept only once something is written on it.
+        let stored = [card.content] + card.morePages
+        let pages = stored + Array(repeating: Doc.empty, count: max(0, page + 1 - stored.count))
         ScrollView {
             VStack(alignment: .leading, spacing: 12) {
                 if card.viewOnly || !model.canWrite(card) {
@@ -57,7 +59,7 @@ struct EntrySheet: View {
                     }
                     .pickerStyle(.segmented)
                 }
-                DocEditor(content: pages[min(page, pages.count - 1)], editable: edit, titleOf: model.index.titleOf) { doc in
+                DocEditor(content: pages[page], editable: edit, titleOf: model.index.titleOf) { doc in
                     savePage(card.id, page, doc)
                 }
                 .frame(minHeight: 240)
@@ -83,12 +85,7 @@ struct EntrySheet: View {
             ToolbarItemGroup(placement: .primaryAction) {
                 if edit {
                     Button { model.panel = .tags(card.id) } label: { Label("Tags", systemImage: "tag") }
-                    Button {
-                        let id = card.id
-                        let count = pages.count
-                        model.perform { try await $0.update(id) { c in c.morePages = c.morePages + [Doc.empty] } }
-                        page = count
-                    } label: { Label("Add a page", systemImage: "doc.badge.plus") }
+                    Button { page = pages.count } label: { Label("Add a page", systemImage: "doc.badge.plus") }
                 }
                 Button { model.panel = .history(card.id) } label: { Label("History", systemImage: "clock.arrow.circlepath") }
                 Menu { EntryMenu(card: card) } label: { Label("More", systemImage: "ellipsis.circle") }

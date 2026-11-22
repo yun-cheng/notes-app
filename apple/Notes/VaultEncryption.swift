@@ -151,12 +151,12 @@ struct VaultEncryption {
             guard let there = stored[id] else { continue }
             let wrong = seal ? !there.isSealed || there.vault_id != vaultId : there.isSealed
             guard wrong else { continue }
-            guard let by = await copy(id, vaultId: vaultId, file: file) else {
+            guard let by = await copy(id, vaultId: vaultId, file: file, seal: seal) else {
                 failed += 1
                 continue
             }
             renamed[id] = by
-            if let poster = file?.poster { renamed[poster] = await copy(poster, vaultId: vaultId, file: nil, as: Doc.posterId(by)) }
+            if let poster = file?.poster { renamed[poster] = await copy(poster, vaultId: vaultId, file: nil, seal: seal, as: Doc.posterId(by)) }
         }
         guard !renamed.isEmpty else { return failed }
         let map = renamed
@@ -167,23 +167,27 @@ struct VaultEncryption {
                 if pages != c.morePages { c.morePages = pages }
             }
         }
-        // The old ones go once the copies are up.
+        // The old ones go once their copies are up. One whose copy is still waiting stays on the server until then;
+        // no entry holds it any more, so the attachment sweep sends it to the Trash later.
         await Attachments.shared.upload(model: model)
-        let trash = renamed.keys.map { ServerAPI.TrashMark(id: $0, from: nil, name: nil) }
-        try? await api.markAttachments(trash: trash, keep: [])
-        for id in renamed.keys { _ = try? await api.deleteAttachment(id) }
+        let waiting = Set(Attachments.shared.pending.map(\.id))
+        let done = renamed.filter { _, by in by.map { !waiting.contains($0) } ?? true }.map(\.key)
+        guard !done.isEmpty else { return failed }
+        try? await api.markAttachments(trash: done.map { ServerAPI.TrashMark(id: $0, from: nil, name: nil) }, keep: [])
+        for id in done { _ = try? await api.deleteAttachment(id) }
         return failed
     }
 
-    /// One photo or file copied under a new ID, sealed or opened for the vault, and queued to upload.
-    private func copy(_ id: String, vaultId: String, file: Doc.FileInfo?, as newId: String? = nil) async -> String? {
+    /// One photo or file copied under a new ID, sealed or opened as `seal` says (not as the vault is now: while
+    /// encryption goes off, the vault is still encrypted), and queued to upload.
+    private func copy(_ id: String, vaultId: String, file: Doc.FileInfo?, seal: Bool, as newId: String? = nil) async -> String? {
         guard let data = await Attachments.shared.data(id, model: model) else { return nil }
         do {
             let node: JSONValue
             if let file {
-                node = try Attachments.shared.addFile(data, name: file.name, mime: file.mime ?? "application/octet-stream", vaultId: vaultId, model: model, duration: file.duration, id: newId)
+                node = try Attachments.shared.addFile(data, name: file.name, mime: file.mime ?? "application/octet-stream", vaultId: vaultId, model: model, duration: file.duration, id: newId, seal: seal)
             } else {
-                node = try Attachments.shared.addPhoto(data, vaultId: vaultId, model: model, id: newId)
+                node = try Attachments.shared.addPhoto(data, vaultId: vaultId, model: model, id: newId, seal: seal)
             }
             return node["attrs"]?["id"]?.stringValue
         } catch {

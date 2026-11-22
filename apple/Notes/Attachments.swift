@@ -129,10 +129,11 @@ final class Attachments {
     }
 
     /// Keeps a photo for an entry in `vaultId` and queues its upload. Returns the photo node to put in the entry.
-    func addPhoto(_ raw: Data, vaultId: String, model: AppModel, id given: String? = nil) throws -> JSONValue {
+    /// `seal` overrides whether it's sealed, which otherwise follows the vault.
+    func addPhoto(_ raw: Data, vaultId: String, model: AppModel, id given: String? = nil, seal: Bool? = nil) throws -> JSONValue {
         guard let photo = Self.prepare(raw) else { throw AddError.notAPicture }
         let id = given ?? UUID().uuidString.lowercased()
-        try keep(id, photo.data, vaultId: vaultId, model: model, pending: Pending(id: id, vaultId: vaultId, mime: photo.mime, sealed: false, width: photo.width, height: photo.height))
+        try keep(id, photo.data, vaultId: vaultId, model: model, seal: seal, pending: Pending(id: id, vaultId: vaultId, mime: photo.mime, sealed: false, width: photo.width, height: photo.height))
         return ["type": "photo", "attrs": ["id": .string(id)]]
     }
 
@@ -173,25 +174,25 @@ final class Attachments {
         return try addFile(data, name: name, mime: mime, vaultId: vaultId, model: model, duration: facts.duration, extra: extra, id: id)
     }
 
-    func addFile(_ data: Data, name: String, mime: String, vaultId: String, model: AppModel, duration: Double? = nil, extra: [String: JSONValue] = [:], id given: String? = nil) throws -> JSONValue {
+    func addFile(_ data: Data, name: String, mime: String, vaultId: String, model: AppModel, duration: Double? = nil, extra: [String: JSONValue] = [:], id given: String? = nil, seal: Bool? = nil) throws -> JSONValue {
         let video = mime.hasPrefix("video/")
         let limit = video ? Self.maxVideoBytes : Self.maxFileBytes
         if data.count > limit {
             throw AddError.tooBig("\(name) is \(ByteCountFormatter.string(fromByteCount: Int64(data.count), countStyle: .file)). \(video ? "Videos" : "Files") can be up to \(ByteCountFormatter.string(fromByteCount: Int64(limit), countStyle: .file)).")
         }
         let id = given ?? UUID().uuidString.lowercased()
-        try keep(id, data, vaultId: vaultId, model: model, pending: Pending(id: id, vaultId: vaultId, mime: mime, sealed: false, fileName: name, duration: duration))
+        try keep(id, data, vaultId: vaultId, model: model, seal: seal, pending: Pending(id: id, vaultId: vaultId, mime: mime, sealed: false, fileName: name, duration: duration))
         var attrs: [String: JSONValue] = ["id": .string(id), "name": .string(name), "mime": .string(mime), "size": .int(Int64(data.count))]
         if let duration { attrs["duration"] = .double(duration) }
         attrs.merge(extra) { _, new in new }
         return ["type": "file", "attrs": .object(attrs)]
     }
 
-    private func keep(_ id: String, _ data: Data, vaultId: String, model: AppModel, pending item: Pending) throws {
+    private func keep(_ id: String, _ data: Data, vaultId: String, model: AppModel, seal: Bool?, pending item: Pending) throws {
         var item = item
         item.account = model.accountId
         var stored = data
-        if model.vault(vaultId)?.isEncrypted == true {
+        if seal ?? (model.vault(vaultId)?.isEncrypted == true) {
             guard let key = model.repo.keyring.key(vaultId) else { throw AddError.locked }
             stored = try AttachmentSeal.seal(
                 data, id: id, vaultId: vaultId, key: key,

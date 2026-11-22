@@ -322,7 +322,7 @@ class DocText(val text: RichText, val stash: Map<String, JsonElement> = emptyMap
         for (i in t.indices) if (t[i] == '\n') { lines.add(Line(t.substring(start, i), text.styles.subList(start, i))); start = i + 1 }
         lines.add(Line(t.substring(start), text.styles.subList(start, t.length)))
         val content = blocks(lines)
-        return jobj("type" to j("doc"), "content" to jarr(content.ifEmpty { listOf(jobj("type" to j("paragraph"))) }))
+        return Doc.of(content)
     }
 
     private fun nonEmpty(l: List<JsonElement>) = l.ifEmpty { listOf(jobj("type" to j("paragraph"))) }

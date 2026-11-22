@@ -8,6 +8,28 @@ import java.net.URI
 object Doc {
     val empty: JsonElement = jobj("type" to j("doc"), "content" to jarr(listOf(jobj("type" to j("paragraph")))))
 
+    /** A document of these blocks; with none, one empty paragraph, as ProseMirror keeps an empty document. */
+    fun of(blocks: List<JsonElement>): JsonObject = jobj("type" to j("doc"), "content" to jarr(blocks.ifEmpty { listOf(jobj("type" to j("paragraph"))) }))
+
+    /** A photo as an entry holds it. */
+    fun photoNode(id: String): JsonObject = jobj("type" to j("photo"), "attrs" to jobj("id" to j(id)))
+
+    /**
+     * A file as an entry holds it, with what else is known: a video's still and shape, a sound's length, and any
+     * `extra` attributes.
+     */
+    fun fileNode(
+        id: String, name: String, mime: String, size: Long, poster: String? = null, width: Double? = null, height: Double? = null,
+        duration: Double? = null, extra: JsonObject = jobj(),
+    ): JsonObject {
+        var attrs = jobj("id" to j(id), "name" to j(name), "mime" to j(mime), "size" to j(size))
+        poster?.let { attrs = attrs.with("poster", j(it)) }
+        width?.let { attrs = attrs.with("width", j(it)) }
+        height?.let { attrs = attrs.with("height", j(it)) }
+        duration?.let { attrs = attrs.with("duration", j(it)) }
+        return jobj("type" to j("file"), "attrs" to JsonObject(attrs + extra))
+    }
+
     const val CODE_OPEN = ""
     const val CODE_CLOSE = ""
     const val HIDE_OPEN = ""

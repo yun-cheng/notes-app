@@ -200,7 +200,7 @@ fun Card.retype(to: CardType): Card {
     if (to == CardType.todo && title.isBlank()) {
         liftFirstLine(content)?.let { (t, rest) -> c = c.withTitle(t).withContent(rest) }
     } else if (to == CardType.note && title.isNotBlank() && Doc.isBlank(content)) {
-        c = c.withContent(jobj("type" to j("doc"), "content" to jarr(listOf(jobj("type" to j("paragraph"), "content" to jarr(listOf(jobj("type" to j("text"), "text" to j(title.trim())))))))))
+        c = c.withContent(Doc.of(listOf(jobj("type" to j("paragraph"), "content" to jarr(listOf(jobj("type" to j("text"), "text" to j(title.trim()))))))))
             .withTitle("")
     }
     c = if (to == CardType.note) {
@@ -226,7 +226,7 @@ private fun liftFirstLine(doc: JsonElement): Pair<String, JsonElement>? {
     }
     val trimmed = text.toString().trim().takeIf { it.isNotEmpty() } ?: return null
     val rest = blocks.drop(1)
-    return trimmed to (if (rest.isEmpty()) Doc.empty else jobj("type" to j("doc"), "content" to jarr(rest)))
+    return trimmed to (if (rest.isEmpty()) Doc.empty else Doc.of(rest))
 }
 
 val commonReactions = listOf("👍", "❤️", "😂", "🎉", "🔥", "👀")

@@ -254,7 +254,7 @@ object MarkdownImport {
 
     fun doc(markdown: String, resolve: LinkResolver = LinkResolver { null }): JsonElement {
         val content = blocks(markdown.replace("\r\n", "\n").replace("\r", "\n").split("\n"), resolve)
-        return jobj("type" to j("doc"), "content" to jarr(content.ifEmpty { listOf(jobj("type" to j("paragraph"))) }))
+        return Doc.of(content)
     }
 
     private fun scalar(raw: String): String {

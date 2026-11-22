@@ -207,12 +207,12 @@ object EntryParser {
         fun trim(list: List<JsonElement>) = list.dropWhile(::isEmptyBlock).dropLastWhile(::isEmptyBlock)
         body = trim(body)
         if (!hasSubstance(body)) return null
-        if (!todo) return Entry(Entry.Kind.note, diary, "", jobj("type" to j("doc"), "content" to jarr(body)), tags)
+        if (!todo) return Entry(Entry.Kind.note, diary, "", Doc.of(body), tags)
         val title = Doc.inlineText(body[0]).trim()
         val details = trim(if (title.isEmpty()) body else body.drop(1))
         val due = date ?: rule?.firstDue(today) ?: if (time != null) today else null
         return Entry(
-            Entry.Kind.todo, diary, title.ifEmpty { "Photo" }, if (details.isEmpty()) Doc.fromText("") else jobj("type" to j("doc"), "content" to jarr(details)), tags,
+            Entry.Kind.todo, diary, title.ifEmpty { "Photo" }, if (details.isEmpty()) Doc.fromText("") else Doc.of(details), tags,
             due = due, dueTime = if (due == null) null else time, repeat = if (due == null) null else rule, done = done,
         )
     }

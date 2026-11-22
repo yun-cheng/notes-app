@@ -171,7 +171,7 @@ object Attachments {
         val photo = withContext(Dispatchers.Default) { prepare(raw) } ?: throw AddError("That isn't a picture this app can read.")
         val id = given ?: newId()
         keep(id, photo.data, vaultId, model, seal, Pending(id, vaultId, photo.mime, width = photo.width, height = photo.height))
-        return jobj("type" to j("photo"), "attrs" to jobj("id" to j(id)))
+        return Doc.photoNode(id)
     }
 
     data class VideoFacts(val poster: ByteArray?, val width: Double?, val height: Double?, val duration: Double?)
@@ -221,10 +221,7 @@ object Attachments {
         if (data.size > limit) throw AddError("$name is ${size(data.size.toLong())}. ${if (video) "Videos" else "Files"} can be up to ${size(limit.toLong())}.")
         val id = given ?: newId()
         keep(id, data, vaultId, model, seal, Pending(id, vaultId, mime, fileName = name, duration = duration))
-        var attrs = jobj("id" to j(id), "name" to j(name), "mime" to j(mime), "size" to j(data.size.toLong()))
-        duration?.let { attrs = attrs.with("duration", j(it)) }
-        attrs = JsonObject(attrs + extra)
-        return jobj("type" to j("file"), "attrs" to attrs)
+        return Doc.fileNode(id, name, mime, data.size.toLong(), duration = duration, extra = extra)
     }
 
     fun size(bytes: Long): String = Formatter.formatShortFileSize(null, bytes).ifEmpty { "$bytes B" }
@@ -390,22 +387,14 @@ object AttachmentKeeper {
     fun putBack(a: StoredAttachment, model: AppModel) {
         val stillId = Doc.posterId(a.id)
         val still = if (a.mime.startsWith("video/") && trash.value.any { it.id == stillId }) stillId else null
-        var attrs = jobj("id" to j(a.id))
-        val node = if (a.isFile) {
-            attrs = attrs.with("name", j(a.name ?: "Untitled")).with("mime", j(a.mime)).with("size", j(a.size))
-            still?.let { attrs = attrs.with("poster", j(it)) }
-            a.width?.let { attrs = attrs.with("width", j(it)) }
-            a.height?.let { attrs = attrs.with("height", j(it)) }
-            a.duration?.let { attrs = attrs.with("duration", j(it)) }
-            jobj("type" to j("file"), "attrs" to attrs)
-        } else jobj("type" to j("photo"), "attrs" to attrs)
+        val node = if (a.isFile) Doc.fileNode(a.id, a.name ?: "Untitled", a.mime, a.size, still, a.width, a.height, a.duration) else Doc.photoNode(a.id)
         val from = a.trashed_from?.let { model.card(it) }
         model.perform { repo ->
             if (from != null && from.isEntry && !from.deleted && model.canEdit(from)) {
                 repo.update(from.id) { c -> c.withContent(c.content.let { (it as JsonObject).with("content", jarr((it["content"].arr ?: emptyList()) + node)) }) }
                 model.say("Put back in “${from.displayTitle}”", undoable = true)
             } else {
-                repo.createNote(content = jobj("type" to j("doc"), "content" to jarr(listOf(node))), vaultId = a.vault_id)
+                repo.createNote(content = Doc.of(listOf(node)), vaultId = a.vault_id)
                 model.say("Put back, in a new note", undoable = true)
             }
             runCatching { model.api.markAttachments(emptyList(), listOfNotNull(a.id, still)) }

@@ -108,11 +108,11 @@ fun JournalBox(filter: StreamFilter) {
         // they're a note of their own, or a todo named Photo.
         var entries = EntryParser.parseEntries(if (typed.isBlank() && todos && added.isNotEmpty()) "Photo" else typed, model.today, allTodos = todos)
         if (added.isNotEmpty()) {
-            entries = if (entries.isEmpty()) EntryParser.entries(jobj("type" to j("doc"), "content" to jarr(added)), model.today)
+            entries = if (entries.isEmpty()) EntryParser.entries(Doc.of(added), model.today)
             else {
                 val last = entries.last()
                 val words = (last.content["content"].arr ?: emptyList()).filterNot { it["type"].str == "paragraph" && it["content"] == null }
-                entries.dropLast(1) + last.copy(content = jobj("type" to j("doc"), "content" to jarr(words + added)))
+                entries.dropLast(1) + last.copy(content = Doc.of(words + added))
             }
         }
         val opts = SaveOptions.journal(filter, model.today)

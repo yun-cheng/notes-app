@@ -353,6 +353,6 @@ object Transcriber {
     fun fill(nodes: List<JsonElement>): List<JsonElement> = nodes.map { node ->
         val id = node["attrs"]["id"].str ?: return@map node
         val words = done.remove(id) ?: return@map node
-        Voice.withTranscript(jobj("type" to j("doc"), "content" to jarr(listOf(node))), id, words)?.get("content")?.let { (it as? JsonArray)?.firstOrNull() } ?: node
+        Voice.withTranscript(Doc.of(listOf(node)), id, words)?.get("content")?.let { (it as? JsonArray)?.firstOrNull() } ?: node
     }
 }

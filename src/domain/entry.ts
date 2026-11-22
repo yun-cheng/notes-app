@@ -203,7 +203,8 @@ export function entriesFromDoc(doc: JSONNode, today: string): Entry[] {
       continue;
     }
     const last = chunks[chunks.length - 1];
-    if (last && !last.todo) last.blocks.push(block);
+    // A photo or file right after a todo goes with it, as its details: it was added to that todo.
+    if (last && (!last.todo || block.type === 'photo' || block.type === 'file')) last.blocks.push(block);
     else chunks.push({ todo: false, done: false, blocks: [block] });
   }
 

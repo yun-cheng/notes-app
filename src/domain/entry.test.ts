@@ -117,6 +117,16 @@ describe('entriesFromDoc', () => {
     ]);
   });
 
+  it('keeps a photo or file added after a todo with it, as its details', () => {
+    const photo: JSONNode = { type: 'photo', attrs: { id: 'p1' } };
+    const file: JSONNode = { type: 'file', attrs: { id: 'f1', name: 'list.pdf' } };
+    expect(entriesFromDoc(docOf(para(t('[] buy milk')), photo), TODAY)).toEqual([{ kind: 'todo', title: 'buy milk', content: docOf(photo), tags: [], due: null }]);
+    expect(entriesFromDoc(docOf(tasks(item(false, para(t('pack')))), file, para(t('a note after'))), TODAY).map((e) => [e.kind, e.content])).toEqual([
+      ['todo', docOf(file)],
+      ['note', docOf(para(t('a note after')))],
+    ]);
+  });
+
   it('keeps formatting and links, and takes tags out of the text', () => {
     const link = [{ type: 'link', attrs: { href: 'https://a.example' } }];
     const [entry] = entriesFromDoc(docOf(para(t('Read '), t('this', link), t(' later #reading'))), TODAY);

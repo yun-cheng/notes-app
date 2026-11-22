@@ -11,6 +11,8 @@ struct JournalView: View {
     @State private var shown = JournalView.pageSize
     @State private var picked: Set<String> = []
     @State private var pickDates = false
+    /// The date picker opened from a day's badge, at that day.
+    @State private var datesFrom: PickDates?
     /// The entry the keyboard is on: ↑ ↓ move, Space picks, Enter opens.
     @State private var focusedEntry: String?
     @State private var showShortcuts = false
@@ -76,7 +78,8 @@ struct JournalView: View {
                                     }
                                 } header: {
                                     DayBadge(day: group.day, sort: filter.sort) { day in
-                                        filter.when = filter.when == day ? nil : day
+                                        // Opens the date picker at that day, as on the web: Show picks it, another press makes a range.
+                                        datesFrom = PickDates(day: day)
                                     }
                                 }
                             }
@@ -95,6 +98,9 @@ struct JournalView: View {
                     .focused($streamFocused)
                     .focusEffectDisabled()
                     .onKeyPress { press in keys(press, visible.map(\.card.id), all: all.map(\.card.id), proxy: proxy) }
+                    .overlay(alignment: .trailing) {
+                        JournalRail(items: visible) { id in withAnimation(nil) { proxy.scrollTo(id, anchor: .top) } }
+                    }
                     .onChange(of: model.lastSaved) { _, id in
                         if let id { withAnimation(nil) { proxy.scrollTo(id, anchor: .bottom) } }
                     }
@@ -110,6 +116,7 @@ struct JournalView: View {
         .navigationTitle(title)
         .toolbar { toolbar(count: all.count) }
         .sheet(isPresented: $pickDates) { DatesDialog(filter: $filter) }
+        .sheet(item: $datesFrom) { pick in DatesDialog(filter: $filter, startDay: pick.day) }
         .sheet(isPresented: $showShortcuts) { ShortcutsSheet() }
         .onChange(of: filter) { _, f in
             shown = Self.pageSize
@@ -285,4 +292,58 @@ struct PageSearchField: View {
         .padding(.bottom, 8)
         .onAppear { focused = true }
     }
+}
+
+/// A rail down the right, as a photo library has, with the years or months marked down it: pressed or dragged to go
+/// anywhere in the journal at once, as the web app's `ScrollRail`.
+struct JournalRail: View {
+    let items: [StreamItem]
+    let go: (String) -> Void
+    @State private var pointing: String?
+
+    var body: some View {
+        // The first entry of each month, in the order shown.
+        var months: [(key: String, id: String)] = []
+        for item in items where DateKey.isKey(item.day) {
+            let m = DateKey.monthKey(item.day)
+            if months.last?.key != m { months.append((m, item.id)) }
+        }
+        let years = Set(months.map { $0.key.prefix(4) }).count > 1
+        return GeometryReader { geo in
+            if months.count > 1 {
+                let step = geo.size.height / CGFloat(months.count)
+                ZStack(alignment: .topTrailing) {
+                    ForEach(Array(months.enumerated()), id: \.offset) { i, m in
+                        let mark = years ? (m.key.hasSuffix("-01") || i == 0 ? String(m.key.prefix(4)) : nil) : String(DateKey.formatMonth(m.key).prefix(3))
+                        if let mark, step > 14 || years {
+                            Text(mark).font(.caption2.weight(.semibold)).foregroundStyle(Theme.muted)
+                                .offset(y: CGFloat(i) * step)
+                        }
+                    }
+                    if let pointing {
+                        Text(DateKey.formatMonth(pointing)).font(.caption.weight(.semibold))
+                            .padding(.horizontal, 8).padding(.vertical, 3)
+                            .background(Capsule().fill(Theme.raised).shadow(radius: 3))
+                            .offset(x: -40, y: CGFloat(months.firstIndex { $0.key == pointing } ?? 0) * step)
+                    }
+                }
+                .frame(width: 36, height: geo.size.height, alignment: .topTrailing)
+                .contentShape(Rectangle())
+                .gesture(DragGesture(minimumDistance: 0).onChanged { v in
+                    let i = max(0, min(months.count - 1, Int(v.location.y / step)))
+                    pointing = months[i].key
+                    go(months[i].id)
+                }.onEnded { _ in pointing = nil })
+                .frame(maxWidth: .infinity, alignment: .trailing)
+            }
+        }
+        .frame(width: 44)
+        .padding(.vertical, 8)
+        .accessibilityHidden(true)
+    }
+}
+
+struct PickDates: Identifiable {
+    let day: String
+    var id: String { day }
 }

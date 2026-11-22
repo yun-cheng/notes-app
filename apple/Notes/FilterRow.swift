@@ -155,6 +155,8 @@ struct DatesDialog: View {
     @Environment(AppModel.self) private var model
     @Environment(\.dismiss) private var dismiss
     @Binding var filter: StreamFilter
+    /// A day's badge opened it: that day starts picked.
+    var startDay: String? = nil
     @State private var month = DateKey.monthKey(DateKey.today())
     @State private var from: String?
     @State private var to: String?
@@ -192,8 +194,12 @@ struct DatesDialog: View {
         }
         .padding(20)
         .frame(minWidth: 320)
+        .presentationDetents([.medium, .large])
         .onAppear {
-            if let when = filter.when, DateKey.isKey(when) || Stream.dayRange(when) != nil {
+            if let startDay {
+                from = startDay
+                month = DateKey.monthKey(startDay)
+            } else if let when = filter.when, DateKey.isKey(when) || Stream.dayRange(when) != nil {
                 let (a, b) = Stream.whenRange(when, today: model.today)
                 from = a
                 to = b == a ? nil : b

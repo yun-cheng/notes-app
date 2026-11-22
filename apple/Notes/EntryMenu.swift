@@ -36,6 +36,20 @@ struct EntryMenu: View {
                     model.perform { try await $0.update(id) { $0.waiting = on } }
                 }
             }
+            Menu("Style") {
+                Picker("Link previews", selection: Binding(get: { card.payload["preview"]?["links"]?.stringValue ?? "" }, set: { setPreview("links", $0) })) {
+                    Text("As set on this device").tag("")
+                    Text("Card").tag("card")
+                    Text("One line").tag("compact")
+                    Text("Off").tag("off")
+                }
+                Picker("Photos", selection: Binding(get: { card.payload["preview"]?["photos"]?.stringValue ?? "" }, set: { setPreview("photos", $0) })) {
+                    Text("As set on this device").tag("")
+                    Text("Large").tag("large")
+                    Text("Thumbnails").tag("thumbs")
+                    Text("Count").tag("off")
+                }
+            }
             Menu("Color") {
                 Button("None") { setColor(nil) }
                 ForEach(CardColor.allCases, id: \.self) { c in
@@ -78,6 +92,18 @@ struct EntryMenu: View {
             Button("Take out of the stack") {
                 let id = card.id
                 model.perform { try await $0.update(stack) { $0.stack = ($0.stack ?? []).filter { $0 != id } } }
+            }
+        }
+    }
+
+    /// One entry's own preview style; what it leaves out follows the device's setting.
+    private func setPreview(_ key: String, _ value: String) {
+        let id = card.id
+        model.perform {
+            try await $0.update(id) { c in
+                var preview = c.payload["preview"]?.objectValue ?? [:]
+                if value.isEmpty { preview.removeValue(forKey: key) } else { preview[key] = .string(value) }
+                if preview.isEmpty { c.payload.removeValue(forKey: "preview") } else { c.payload["preview"] = .object(preview) }
             }
         }
     }
@@ -171,7 +197,9 @@ enum Clipboard {
     /// An entry as Markdown, a todo as a checkbox line, so it pastes back whole.
     @MainActor
     static func copyEntry(_ card: Card, model: AppModel) {
-        copy(Markdown.entry(card, index: model.index))
+        // Markdown pastes back whole; plain text is just its words. A setting on each device, as on the web.
+        let plain = UserDefaults.standard.string(forKey: "copyStyle") == "plain"
+        copy(plain ? Markdown.words(card, index: model.index) : Markdown.entry(card, index: model.index))
         model.say("Copied")
     }
 }

@@ -135,6 +135,42 @@ final class Attachments {
     }
 
     /// Keeps a file (a video, a sound, a PDF, anything) and queues its upload. Returns the file node.
+    /// A video's still, its size and its length, as the web app's `video.ts` finds them when one is added.
+    static func videoFacts(_ data: Data, name: String) async -> (poster: Data?, width: Double?, height: Double?, duration: Double?) {
+        let url = URL.temporaryDirectory.appending(path: UUID().uuidString + "-" + name)
+        guard (try? data.write(to: url)) != nil else { return (nil, nil, nil, nil) }
+        defer { try? FileManager.default.removeItem(at: url) }
+        let asset = AVURLAsset(url: url)
+        let duration = try? await asset.load(.duration).seconds
+        let track = try? await asset.loadTracks(withMediaType: .video).first
+        let size = try? await track?.load(.naturalSize)
+        let generator = AVAssetImageGenerator(asset: asset)
+        generator.appliesPreferredTrackTransform = true
+        generator.maximumSize = CGSize(width: 1280, height: 1280)
+        var poster: Data?
+        if let image = try? await generator.image(at: CMTime(seconds: min(0.5, (duration ?? 0) / 2), preferredTimescale: 600)).image {
+            let out = NSMutableData()
+            if let dest = CGImageDestinationCreateWithData(out, UTType.jpeg.identifier as CFString, 1, nil) {
+                CGImageDestinationAddImage(dest, image, [kCGImageDestinationLossyCompressionQuality: 0.82] as CFDictionary)
+                if CGImageDestinationFinalize(dest) { poster = out as Data }
+            }
+        }
+        return (poster, size.map { Double(abs($0.width)) }, size.map { Double(abs($0.height)) }, duration.flatMap { $0.isFinite && $0 > 0 ? $0 : nil })
+    }
+
+    /// Keeps a video with its still beside it, as a photo under the video's ID plus `-poster`.
+    func addVideo(_ data: Data, name: String, mime: String, vaultId: String, model: AppModel) async throws -> JSONValue {
+        let facts = await Self.videoFacts(data, name: name)
+        let id = UUID().uuidString.lowercased()
+        var extra: [String: JSONValue] = [:]
+        if let poster = facts.poster, let still = try? addPhoto(poster, vaultId: vaultId, model: model, id: Doc.posterId(id)) {
+            extra["poster"] = still["attrs"]?["id"] ?? .null
+        }
+        if let w = facts.width { extra["width"] = .double(w) }
+        if let h = facts.height { extra["height"] = .double(h) }
+        return try addFile(data, name: name, mime: mime, vaultId: vaultId, model: model, duration: facts.duration, extra: extra, id: id)
+    }
+
     func addFile(_ data: Data, name: String, mime: String, vaultId: String, model: AppModel, duration: Double? = nil, extra: [String: JSONValue] = [:], id given: String? = nil) throws -> JSONValue {
         let video = mime.hasPrefix("video/")
         let limit = video ? Self.maxVideoBytes : Self.maxFileBytes
@@ -230,16 +266,25 @@ struct PhotoThumb: View {
 /// An entry's photos and videos under its text, opening full screen; its other files as chips.
 struct BubbleAttachments: View {
     @Environment(AppModel.self) private var model
+    @AppStorage("photoStyle") private var deviceStyle = "large"
     let card: Card
     @State private var viewing: String?
 
     var body: some View {
         let media = Doc.media(card.content)
         let files = Doc.files(card.content).filter { !$0.isVideo }
-        if !media.isEmpty {
+        // How photos show: large, small thumbnails, or a count that opens them; each entry can say for itself.
+        let style = card.payload["preview"]?["photos"]?.stringValue ?? deviceStyle
+        if !media.isEmpty, style == "off" {
+            Button { viewing = media[0].id } label: { Label("\(media.count) \(media.count == 1 ? "photo" : "photos")", systemImage: "photo.on.rectangle") }
+                .buttonStyle(.plain).font(.callout).foregroundStyle(Theme.accent).padding(.top, 4)
+                .sheet(item: Binding(get: { viewing.map(OpenEntry.init) }, set: { viewing = $0?.id })) { start in
+                    MediaViewer(media: media, start: start.id, vaultId: card.vaultId)
+                }
+        } else if !media.isEmpty {
             FlowLayout(spacing: 4) {
                 ForEach(media) { m in
-                    PhotoThumb(media: m, vaultId: card.vaultId, size: media.count == 1 ? 200 : 110)
+                    PhotoThumb(media: m, vaultId: card.vaultId, size: style == "thumbs" ? 64 : media.count == 1 ? 200 : 110)
                         .onTapGesture { viewing = m.id }
                         .contextMenu { PhotoMenu(id: m.id, card: card) }
                 }

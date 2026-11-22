@@ -131,7 +131,7 @@ struct JournalBox: View {
             if video {
                 let type = item.supportedContentTypes.first { $0.conforms(to: .movie) }
                 let mime = type?.preferredMIMEType ?? "video/quicktime"
-                attached.append(try Attachments.shared.addFile(data, name: "Video.\(type?.preferredFilenameExtension ?? "mov")", mime: mime, vaultId: targetVault, model: model))
+                attached.append(try await Attachments.shared.addVideo(data, name: "Video.\(type?.preferredFilenameExtension ?? "mov")", mime: mime, vaultId: targetVault, model: model))
             } else {
                 attached.append(try Attachments.shared.addPhoto(data, vaultId: targetVault, model: model))
             }
@@ -149,7 +149,13 @@ struct JournalBox: View {
         }
         let type = UTType(filenameExtension: url.pathExtension)
         do {
-            if let type, type.conforms(to: .image), !type.conforms(to: .svg) {
+            if let type, type.conforms(to: .movie) {
+                let name = url.lastPathComponent
+                let mime = type.preferredMIMEType ?? "video/mp4"
+                Task {
+                    do { attached.append(try await Attachments.shared.addVideo(data, name: name, mime: mime, vaultId: targetVault, model: model)) } catch { model.say(error.localizedDescription) }
+                }
+            } else if let type, type.conforms(to: .image), !type.conforms(to: .svg) {
                 attached.append(try Attachments.shared.addPhoto(data, vaultId: targetVault, model: model))
             } else {
                 attached.append(try Attachments.shared.addFile(data, name: url.lastPathComponent, mime: type?.preferredMIMEType ?? "application/octet-stream", vaultId: targetVault, model: model))

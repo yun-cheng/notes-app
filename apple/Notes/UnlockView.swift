@@ -17,14 +17,9 @@ struct UnlockView: View {
             Text(useRecoveryKey ? "Enter the recovery key you saved when the vault was encrypted." : "Enter its PIN to open it on this device.")
                 .foregroundStyle(.secondary)
                 .multilineTextAlignment(.center)
-            SecureField(useRecoveryKey ? "Recovery key" : "PIN", text: $pin)
-                .textContentType(.password)
-                #if os(iOS)
-                .keyboardType(useRecoveryKey ? .asciiCapable : .numberPad)
-                #endif
+            PinField(useRecoveryKey ? "Recovery key" : "PIN", text: $pin, onSubmit: unlock)
                 .textFieldStyle(.roundedBorder)
                 .frame(maxWidth: 260)
-                .onSubmit(unlock)
             if wrong {
                 Text(useRecoveryKey ? "That recovery key doesn't open this vault." : "Wrong PIN.").foregroundStyle(.red)
             }

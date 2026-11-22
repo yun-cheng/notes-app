@@ -50,6 +50,25 @@ public actor Repository {
 
     public func vaults() throws -> [Vault] { try store.listVaults() }
 
+    /// Saves vaults as changed here. One no longer withheld has its cards pulled again, as they're older than the cursor.
+    public func putVaults(_ vaults: [Vault]) throws {
+        let known = Dictionary(try store.listVaults().map { ($0.id, $0) }) { a, _ in a }
+        try store.putVaults(vaults)
+        keyring.setVaults(try store.listVaults())
+        if vaults.contains(where: { !$0.isWithheld && (known[$0.id]?.isWithheld ?? false) }) { try store.setMeta("cursor", Int64(0)) }
+        changeHandler?()
+    }
+
+    /// Rewrites a card from what it holds now, if `change` changes it; not logged, as a reseal isn't the user's edit.
+    public func rewrite(_ id: String, _ change: @Sendable (inout Card) -> Void) throws {
+        guard var card = try card(id), !card.sealed else { return }
+        let before = card
+        change(&card)
+        guard card != before else { return }
+        card.updatedAt = now()
+        try write(card)
+    }
+
     // MARK: Writing
 
     private func encode(_ card: Card) throws -> CardRecord {

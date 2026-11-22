@@ -127,21 +127,21 @@ final class Attachments {
     }
 
     /// Keeps a photo for an entry in `vaultId` and queues its upload. Returns the photo node to put in the entry.
-    func addPhoto(_ raw: Data, vaultId: String, model: AppModel) throws -> JSONValue {
+    func addPhoto(_ raw: Data, vaultId: String, model: AppModel, id given: String? = nil) throws -> JSONValue {
         guard let photo = Self.prepare(raw) else { throw AddError.notAPicture }
-        let id = UUID().uuidString.lowercased()
+        let id = given ?? UUID().uuidString.lowercased()
         try keep(id, photo.data, vaultId: vaultId, model: model, pending: Pending(id: id, vaultId: vaultId, mime: photo.mime, sealed: false, width: photo.width, height: photo.height))
         return ["type": "photo", "attrs": ["id": .string(id)]]
     }
 
     /// Keeps a file (a video, a sound, a PDF, anything) and queues its upload. Returns the file node.
-    func addFile(_ data: Data, name: String, mime: String, vaultId: String, model: AppModel, duration: Double? = nil, extra: [String: JSONValue] = [:]) throws -> JSONValue {
+    func addFile(_ data: Data, name: String, mime: String, vaultId: String, model: AppModel, duration: Double? = nil, extra: [String: JSONValue] = [:], id given: String? = nil) throws -> JSONValue {
         let video = mime.hasPrefix("video/")
         let limit = video ? Self.maxVideoBytes : Self.maxFileBytes
         if data.count > limit {
             throw AddError.tooBig("\(name) is \(ByteCountFormatter.string(fromByteCount: Int64(data.count), countStyle: .file)). \(video ? "Videos" : "Files") can be up to \(ByteCountFormatter.string(fromByteCount: Int64(limit), countStyle: .file)).")
         }
-        let id = UUID().uuidString.lowercased()
+        let id = given ?? UUID().uuidString.lowercased()
         try keep(id, data, vaultId: vaultId, model: model, pending: Pending(id: id, vaultId: vaultId, mime: mime, sealed: false, fileName: name, duration: duration))
         var attrs: [String: JSONValue] = ["id": .string(id), "name": .string(name), "mime": .string(mime), "size": .int(Int64(data.count))]
         if let duration { attrs["duration"] = .double(duration) }

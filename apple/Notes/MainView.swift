@@ -192,7 +192,8 @@ struct Sidebar: View {
                 Section("Tags") { row("All tags", "tag", .tags) }
             }
             Section("Vaults") {
-                ForEach(model.vaults) { vault in
+                // A hidden vault stays out of the app until its PIN is entered.
+                ForEach(model.vaults.filter { !$0.hidden || model.openVaults.contains($0.id) }) { vault in
                     let page = Page.journal(StreamFilter(vaultId: vault.id))
                     Button { go(page) } label: {
                         HStack {

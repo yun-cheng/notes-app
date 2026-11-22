@@ -83,3 +83,28 @@ extension View {
     /// The web's page background behind a scrolling page.
     func pageBackground() -> some View { background(Theme.bg.ignoresSafeArea()) }
 }
+
+/// A PIN typed in, hidden, that the system doesn't take for an account's password: no strong-password offer, no
+/// saving it to Passwords. Numbers on a phone's keyboard first.
+struct PinField: View {
+    let title: String
+    @Binding var text: String
+    var onSubmit: () -> Void = {}
+
+    init(_ title: String, text: Binding<String>, onSubmit: @escaping () -> Void = {}) {
+        self.title = title
+        _text = text
+        self.onSubmit = onSubmit
+    }
+
+    var body: some View {
+        SecureField(title, text: $text)
+            .textContentType(.oneTimeCode)
+            #if os(iOS)
+            .keyboardType(.numbersAndPunctuation)
+            .textInputAutocapitalization(.never)
+            #endif
+            .autocorrectionDisabled()
+            .onSubmit(onSubmit)
+    }
+}

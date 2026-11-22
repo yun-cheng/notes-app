@@ -51,6 +51,16 @@ final class AppModel {
 
     init(site: URL = ServerAPI.production) {
         self.site = site
+        // `-page vaults` at launch opens on that page, for testing.
+        switch UserDefaults.standard.string(forKey: "page") {
+        case "vaults": page = .vaults
+        case "tags": page = .tags
+        case "history": page = .history
+        case "calendar": page = .calendar
+        case "trash": page = .trash
+        case "settings": page = .settings
+        default: break
+        }
         let folder = URL.applicationSupportDirectory.appending(path: "Notes", directoryHint: .isDirectory)
         try? FileManager.default.createDirectory(at: folder, withIntermediateDirectories: true)
         repo = try! Repository(path: folder.appending(path: "notes.sqlite").path)
@@ -158,6 +168,15 @@ final class AppModel {
         // Edits made before this device knew the vault's key are encrypted and pushed now.
         sync?.schedule(after: 0.2)
         await refresh()
+        // Encrypting it may have stopped partway on this device: what's left is done now.
+        Task { _ = await VaultEncryption(model: self).finishEncrypting(vaultId) }
+    }
+
+    /// Locks one private vault again and forgets its key.
+    func lock(_ vaultId: String) {
+        openVaults.remove(vaultId)
+        repo.keyring.forget(vaultId)
+        Task { await refresh() }
     }
 
     /// Locks every private vault again and forgets their keys.

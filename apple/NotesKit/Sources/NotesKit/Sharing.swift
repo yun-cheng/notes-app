@@ -23,6 +23,10 @@ public struct VaultPeople: Codable, Sendable, Hashable {
     }
     public var members: [Member]
     public var invites: [Invite]
+    public init(members: [Member], invites: [Invite]) {
+        self.members = members
+        self.invites = invites
+    }
 }
 
 public struct CardShares: Codable, Sendable, Hashable {
@@ -220,5 +224,82 @@ extension ServerAPI {
     public func unfurl(_ url: String) async throws -> LinkPreview {
         struct Body: Encodable { let url: String }
         return try await json(LinkPreview.self, "/unfurl", method: "POST", body: Body(url: url))
+    }
+}
+
+/// A photo or file as the server keeps it.
+public struct StoredAttachment: Codable, Sendable, Hashable {
+    public var id: String
+    public var vault_id: String
+    public var mime: String
+    public var size: Int64
+    public var name: String?
+    public var created_at: Int64
+    public var trashed_at: Int64?
+    public var sealed: Bool?
+    /// The entry it was last in.
+    public var from_card: String?
+}
+
+extension ServerAPI {
+    public func attachments() async throws -> [StoredAttachment] {
+        struct R: Decodable { let attachments: [StoredAttachment] }
+        return try await json(R.self, "/attachments").attachments
+    }
+
+    public struct TrashMark: Encodable, Sendable {
+        public var id: String
+        public var from: String?
+        public var name: String?
+        public init(id: String, from: String?, name: String?) {
+            self.id = id
+            self.from = from
+            self.name = name
+        }
+    }
+
+    /// Sends photos and files no entry holds to the Trash, and brings back those held again.
+    public func markAttachments(trash: [TrashMark], keep: [String]) async throws {
+        struct Body: Encodable { let trash: [TrashMark]; let keep: [String] }
+        let (_, status) = try await send("/attachments/state", method: "POST", body: Body(trash: trash, keep: keep))
+        guard (200..<300).contains(status) else { throw APIError.status(status) }
+    }
+
+    public enum DeleteResult: Sendable { case ok, gone, inUse, needsDrive, error }
+
+    /// Deletes a photo or file in the Trash for good, from Google Drive too.
+    public func deleteAttachment(_ id: String) async throws -> DeleteResult {
+        let (data, status) = try await send("/attachments/" + Self.part(id), method: "DELETE")
+        if (200..<300).contains(status) { return .ok }
+        if status == 404 { return .gone }
+        let error = (try? JSONDecoder().decode([String: String].self, from: data))?["error"]
+        return error == "in_use" ? .inUse : error == "drive_not_connected" ? .needsDrive : .error
+    }
+
+    public struct VaultComment: Codable, Sendable {
+        public var id: String
+        public var card_id: String
+        public var body: String
+    }
+
+    public func vaultComments(_ vaultId: String) async throws -> [VaultComment] {
+        struct R: Decodable { let comments: [VaultComment] }
+        return try await json(R.self, Self.vault(vaultId) + "/comments").comments
+    }
+
+    public func putVaultComments(_ vaultId: String, _ comments: [(id: String, body: String)]) async throws {
+        struct C: Encodable { let id: String; let body: String }
+        struct Body: Encodable { let comments: [C] }
+        for start in stride(from: 0, to: comments.count, by: 500) {
+            let batch = comments[start..<min(comments.count, start + 500)].map { C(id: $0.id, body: $0.body) }
+            let (_, status) = try await send(Self.vault(vaultId) + "/comments", method: "PUT", body: Body(comments: batch))
+            guard (200..<300).contains(status) else { throw APIError.status(status) }
+        }
+    }
+
+    /// Removes plaintext versions from an encrypted vault's history on the server.
+    public func purgePlaintextHistory(_ vaultId: String) async throws {
+        let (_, status) = try await send(Self.vault(vaultId) + "/purge-plaintext", method: "POST", body: [String: String]())
+        guard (200..<300).contains(status) else { throw APIError.status(status) }
     }
 }

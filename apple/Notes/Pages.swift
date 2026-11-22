@@ -426,31 +426,3 @@ struct TagRow: View {
     }
 }
 
-/// This account's vaults: whose they are, who's in them, how they're locked.
-struct VaultsPage: View {
-    @Environment(AppModel.self) private var model
-
-    var body: some View {
-        List(model.vaults) { vault in
-            Button { model.page = .journal(StreamFilter(vaultId: vault.id)) } label: {
-                VStack(alignment: .leading, spacing: 2) {
-                    Text(vault.name).fontWeight(.semibold)
-                    Text(describe(vault)).font(.caption).foregroundStyle(Theme.muted)
-                }
-                .frame(maxWidth: .infinity, alignment: .leading)
-                .contentShape(Rectangle())
-            }
-            .buttonStyle(.plain)
-        }
-        .navigationTitle("Vaults")
-    }
-
-    private func describe(_ vault: Vault) -> String {
-        var parts: [String] = []
-        parts.append(vault.isOwner ? "Yours" : "Shared with you as \(vault.role == .viewer ? "a viewer" : "an editor")")
-        if let n = vault.members, n > 1 { parts.append("\(n) people") }
-        if vault.isEncrypted { parts.append("encrypted") } else if vault.isPrivate { parts.append("locked by a PIN") }
-        if vault.isWithheld { parts.append("waiting for you to set a PIN or be let in") }
-        return parts.joined(separator: " · ")
-    }
-}

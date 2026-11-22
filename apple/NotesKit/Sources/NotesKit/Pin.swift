@@ -13,6 +13,15 @@ public enum VaultPin {
         return pbkdf2(pin, salt: salt, iterations: UInt32(iterations)).base64EncodedString() == hash
     }
 
+    public static let minLength = 4
+
+    /// A verifier for a PIN, as the web app's `hashPin`: PBKDF2-SHA256, 300,000 rounds, a random salt.
+    public static func hash(_ pin: String) -> JSONValue {
+        let salt = VaultKeys.random(16)
+        let iterations: UInt32 = 300_000
+        return ["salt": .string(salt.base64EncodedString()), "hash": .string(pbkdf2(pin, salt: salt, iterations: iterations).base64EncodedString()), "iterations": .int(Int64(iterations))]
+    }
+
     static func pbkdf2(_ pin: String, salt: Data, iterations: UInt32) -> Data {
         var out = Data(count: 32)
         let password = Array(pin.utf8)

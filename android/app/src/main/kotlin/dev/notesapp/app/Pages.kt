@@ -163,7 +163,7 @@ fun FilesPage(openDrawer: (() -> Unit)?) {
                     }.padding(horizontal = 20.dp, vertical = 10.dp),
                     verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(12.dp),
                 ) {
-                    Icon(if (file.isAudio) Icons.Outlined.GraphicEq else if (file.isVideo) Icons.Outlined.Movie else Icons.Outlined.Description, null, tint = Theme.muted)
+                    Icon(fileIcon(file.mime), null, tint = Theme.muted)
                     Column(Modifier.weight(1f)) {
                         Text(file.name, color = Theme.text, maxLines = 1)
                         Text(item.card.displayTitle, Modifier.clickable { model.openEntry = item.card.id }, fontSize = 12.sp, color = Theme.muted, maxLines = 1)

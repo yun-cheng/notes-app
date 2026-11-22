@@ -151,14 +151,7 @@ fun FileChip(file: Doc.FileInfo, vaultId: String) {
     val context = LocalContext.current
     var opening by remember { mutableStateOf(false) }
     if (file.isAudio) { VoicePlayer(file, vaultId); return }
-    val m = file.mime ?: ""
-    val icon = when {
-        m == "application/pdf" -> Icons.Outlined.PictureAsPdf
-        m.startsWith("image/") -> Icons.Outlined.Photo
-        m.contains("zip") -> Icons.Outlined.FolderZip
-        m.contains("sheet") || m.contains("excel") || m.contains("csv") -> Icons.Outlined.TableChart
-        else -> Icons.Outlined.Description
-    }
+    val icon = fileIcon(file.mime)
     Row(
         Modifier.padding(top = 4.dp).clip(RoundedCornerShape(10.dp)).background(Theme.sunken).clickable {
             opening = true
@@ -232,7 +225,7 @@ fun AttachedThumb(node: JsonElement, vaultId: String, remove: () -> Unit) {
         else {
             val mime = node["attrs"]["mime"].str ?: ""
             Column(Modifier.size(width = 76.dp, height = 56.dp).clip(RoundedCornerShape(6.dp)).background(Theme.sunken).padding(4.dp), horizontalAlignment = Alignment.CenterHorizontally, verticalArrangement = Arrangement.Center) {
-                Icon(if (mime.startsWith("audio/")) Icons.Outlined.GraphicEq else if (mime.startsWith("video/")) Icons.Outlined.Movie else Icons.Outlined.Description, null, Modifier.size(18.dp), tint = Theme.text)
+                Icon(fileIcon(mime), null, Modifier.size(18.dp), tint = Theme.text)
                 Text(node["attrs"]["name"].str ?: "File", fontSize = 10.sp, maxLines = 1, color = Theme.text)
             }
         }
@@ -255,7 +248,7 @@ fun TrashedAttachments() {
         Row(Modifier.horizontalScroll(rememberScrollState()), horizontalArrangement = Arrangement.spacedBy(10.dp)) {
             for (a in items) Column(Modifier.width(120.dp), verticalArrangement = Arrangement.spacedBy(4.dp)) {
                 if (a.isFile) Row(Modifier.size(120.dp, 80.dp).clip(RoundedCornerShape(8.dp)).background(Theme.sunken).padding(6.dp), verticalAlignment = Alignment.CenterVertically) {
-                    Icon(if (a.mime.startsWith("video/")) Icons.Outlined.Movie else if (a.mime.startsWith("audio/")) Icons.Outlined.GraphicEq else Icons.Outlined.Description, null, Modifier.size(16.dp), tint = Theme.text)
+                    Icon(fileIcon(a.mime), null, Modifier.size(16.dp), tint = Theme.text)
                     Text(a.name ?: "File", maxLines = 1, fontSize = 13.sp, color = Theme.text)
                 } else PhotoThumb(Doc.Media.Photo(a.id), a.vault_id, 120.dp)
                 Text(a.trashed_from?.let { model.card(it) }?.let { "From “${it.displayTitle}”" } ?: "From an entry", fontSize = 12.sp, maxLines = 1, color = Theme.text)
@@ -276,5 +269,19 @@ fun TrashedAttachments() {
             confirmButton = { TextButton(onClick = { confirming = null; AttachmentKeeper.deleteForGood(a, model) }) { Text("Delete for good", color = Theme.alert) } },
             dismissButton = { TextButton(onClick = { confirming = null }) { Text("Cancel") } },
         )
+    }
+}
+
+/** The icon a file is shown with, the same everywhere it shows. */
+fun fileIcon(mime: String?): androidx.compose.ui.graphics.vector.ImageVector {
+    val m = mime ?: ""
+    return when {
+        m.startsWith("video/") -> Icons.Outlined.Movie
+        m.startsWith("audio/") -> Icons.Outlined.GraphicEq
+        m.startsWith("image/") -> Icons.Outlined.Photo
+        m == "application/pdf" -> Icons.Outlined.PictureAsPdf
+        m.contains("zip") -> Icons.Outlined.FolderZip
+        m.contains("sheet") || m.contains("excel") || m.contains("csv") -> Icons.Outlined.TableChart
+        else -> Icons.Outlined.Description
     }
 }

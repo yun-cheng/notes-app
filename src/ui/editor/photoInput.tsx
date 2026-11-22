@@ -1,4 +1,5 @@
 import { useRef, type RefObject } from 'react';
+import { isAudio, isVideo } from '../../domain/content';
 import { useNavigate } from 'react-router';
 import type { Editor as TiptapEditor } from '@tiptap/react';
 import type { EditorView } from '@tiptap/pm/view';
@@ -62,9 +63,9 @@ export function usePhotoInput(editor: RefObject<TiptapEditor | null>, vaultId: (
         const ed = editor.current;
         if (!ed || ed.isDestroyed) return;
         const mime = String(node.attrs?.mime);
-        if (node.type === 'file') files += mime.startsWith('video/') || mime.startsWith('audio/') ? 0 : 1;
-        if (mime.startsWith('video/')) videos++;
-        if (mime.startsWith('audio/')) voices++;
+        if (node.type === 'file') files += isVideo({ mime }) || isAudio({ mime }) ? 0 : 1;
+        if (isVideo({ mime })) videos++;
+        if (isAudio({ mime })) voices++;
         // At the start of a line with words on it, the picture goes before the line rather than splitting it.
         const { $from, empty } = ed.state.selection;
         // With a photo, a file or a voice message picked (pressing its buttons picks it), it goes after it, not in its place.

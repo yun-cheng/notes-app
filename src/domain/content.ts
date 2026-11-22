@@ -160,7 +160,7 @@ export function previewParts(content: JSONNode, titleOf?: (id: string, label: st
       case 'file': {
         if (!full) return;
         const mime = String(node.attrs?.mime ?? '');
-        line(`${prefix}[${mime.startsWith('video/') ? 'Video' : mime.startsWith('audio/') ? 'Voice' : 'File'}: ${String(node.attrs?.name || 'Untitled')}]`);
+        line(`${prefix}[${isVideo({ mime }) ? 'Video' : isAudio({ mime }) ? 'Voice' : 'File'}: ${String(node.attrs?.name || 'Untitled')}]`);
         if (typeof node.attrs?.transcript === 'string' && node.attrs.transcript) line(`${prefix}“${node.attrs.transcript}”`);
         return;
       }

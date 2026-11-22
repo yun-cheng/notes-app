@@ -1,11 +1,12 @@
 import { createContext, useContext, type MouseEvent } from 'react';
 import type { FileInfo } from '../domain/content';
+import { fileKind, type FileKind } from '../domain/library';
 import { fileSize, SealedUnreadable } from '../photos/service';
 import { UNREADABLE } from './editor/photo';
 import { useCards } from '../state/CardsContext';
 import { canChangeInTheOpen } from '../domain/access';
 import { useShareLink } from './driveLink';
-import { Icon } from './Icon';
+import { Icon, type IconName } from './Icon';
 import { useToast } from './Toast';
 
 /**
@@ -15,10 +16,16 @@ import { useToast } from './Toast';
 const SHOWABLE = /^(application\/pdf|image\/(png|jpeg|gif|webp|avif)|text\/plain|audio\/[\w.+-]+|video\/[\w.+-]+)$/;
 export const showsInTab = (mime: string | null) => !!mime && SHOWABLE.test(mime);
 
-/** A short label for a file's kind, from its name: "PDF", "CSV", or "File". */
-export function fileKind(name: string): string {
+/** A short label for a file's kind, from its name's extension: "PDF", "CSV", or "File". */
+export function extensionLabel(name: string): string {
   const ext = /\.([a-z0-9]{1,5})$/i.exec(name)?.[1];
   return ext ? ext.toUpperCase() : 'File';
+}
+
+/** The icon a file is shown with, by its kind (`fileKind`), the same in every chip. */
+export function fileIcon(file: Pick<FileInfo, 'name' | 'mime'>): IconName {
+  const icons: Partial<Record<FileKind, IconName>> = { video: 'video', audio: 'mic', image: 'image' };
+  return icons[fileKind(file)] ?? 'file';
 }
 
 /**
@@ -73,12 +80,12 @@ export function FileChip({ file, vaultId }: { file: FileInfo; vaultId?: string }
   const sharable = canChangeInTheOpen(vaults.find((v) => v.id === (vaultId ?? inVault)));
   const share = useShareLink();
   const stop = (e: MouseEvent) => e.stopPropagation();
-  const detail = [file.size !== null ? fileSize(file.size) : null, fileKind(file.name)].filter(Boolean).join(' · ');
+  const detail = [file.size !== null ? fileSize(file.size) : null, extensionLabel(file.name)].filter(Boolean).join(' · ');
   return (
     <span className="file-chip">
       <button type="button" className="file-chip__open" title={showsInTab(file.mime) ? `Open ${file.name}` : `Download ${file.name}`} onClick={(e) => (stop(e), void act(file))}>
         <span className="file-chip__icon" aria-hidden="true">
-          <Icon name="file" size={16} />
+          <Icon name={fileIcon(file)} size={16} />
         </span>
         <span className="file-chip__text">
           <span className="file-chip__name">{file.name}</span>

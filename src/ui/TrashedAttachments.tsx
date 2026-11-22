@@ -1,20 +1,20 @@
 import { useEffect, useState, useSyncExternalStore } from 'react';
 import { canWriteIn, permissions } from '../domain/access';
 import { daysLeft, isFile, TRASH_DAYS, type StoredAttachment } from '../domain/attachments';
-import { displayTitle, isPoster, posterId } from '../domain/content';
+import { displayTitle, isPoster, isVideo, posterId } from '../domain/content';
 import type { JSONNode } from '../domain/types';
 import { useCards } from '../state/CardsContext';
 import { SyncOffline } from '../sync/engine';
 import { PhotoViewer } from './Attachments';
 import { usePhotoUrl } from './editor/photo';
-import { fileKind, showsInTab, useFileActions } from './files';
+import { extensionLabel, fileIcon, showsInTab, useFileActions } from './files';
 import { fileSize } from '../photos/service';
 import { Icon } from './Icon';
 import { useToast } from './Toast';
 import { useViewOnly, VIEW_ONLY_NOTE } from './viewOnly';
 import { VideoMark } from './video';
 
-const isVideoItem = (a: StoredAttachment) => a.mime.startsWith('video/');
+const isVideoItem = (a: StoredAttachment) => isVideo(a);
 /** What the server kept of a video's shape and length, for its block when it's put back. */
 const videoFacts = (a: StoredAttachment) => ({ ...(a.width && a.height ? { width: a.width, height: a.height } : {}), ...(a.duration ? { duration: a.duration } : {}) });
 
@@ -100,11 +100,11 @@ function TrashedFile({ item }: { item: StoredAttachment }) {
   return (
     <button type="button" className="trash-held__thumb trash-held__file" title={showsInTab(file.mime) ? `Open ${file.name}` : `Download ${file.name}`} onClick={() => void act(file)}>
       <span className="file-chip__icon" aria-hidden="true">
-        <Icon name="file" size={18} />
+        <Icon name={fileIcon(file)} size={18} />
       </span>
       <span className="trash-held__file-name">{file.name}</span>
       <span className="trash-held__file-detail">
-        {fileSize(file.size)} · {fileKind(file.name)}
+        {fileSize(file.size)} · {extensionLabel(file.name)}
       </span>
     </button>
   );

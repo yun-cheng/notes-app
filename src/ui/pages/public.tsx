@@ -1,4 +1,5 @@
 import { Node } from '@tiptap/core';
+import { isVideo } from '../../domain/content';
 import { EditorContent, useEditor } from '@tiptap/react';
 import { TaskItem, TaskList } from '@tiptap/extension-list';
 import { StarterKit } from '@tiptap/starter-kit';
@@ -46,7 +47,7 @@ function publicFile(token: string) {
       const name = String(node.attrs.name || 'File');
       const size = typeof node.attrs.size === 'number' ? ` · ${fileSize(node.attrs.size)}` : '';
       const href = `/api/public/${encodeURIComponent(token)}/files/${encodeURIComponent(String(node.attrs.id))}`;
-      if (String(node.attrs.mime ?? '').startsWith('video/')) {
+      if (isVideo({ mime: String(node.attrs.mime ?? '') })) {
         const { poster, width, height } = node.attrs as { poster: string | null; width: number | null; height: number | null };
         return [
           'figure',

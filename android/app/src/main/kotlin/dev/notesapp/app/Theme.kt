@@ -109,3 +109,13 @@ fun Chip(text: String, tint: Color? = null, icon: ImageVector? = null, modifier:
 fun PageTitle(text: String, modifier: Modifier = Modifier) {
     Text(text, modifier, fontFamily = Theme.titleFont, fontWeight = FontWeight.SemiBold, fontSize = 22.sp, color = Theme.text, maxLines = 1, overflow = androidx.compose.ui.text.style.TextOverflow.Ellipsis)
 }
+
+/**
+ * A time as the cards and the server keep it (milliseconds since 1970), written as this device writes dates and
+ * times. Leave out `date` or `time` for the other alone.
+ */
+fun formatMillis(ms: Long, date: Int? = java.text.DateFormat.MEDIUM, time: Int? = java.text.DateFormat.SHORT): String = when {
+    date != null && time != null -> java.text.DateFormat.getDateTimeInstance(date, time)
+    date != null -> java.text.DateFormat.getDateInstance(date)
+    else -> java.text.DateFormat.getTimeInstance(time ?: java.text.DateFormat.SHORT)
+}.format(java.util.Date(ms))

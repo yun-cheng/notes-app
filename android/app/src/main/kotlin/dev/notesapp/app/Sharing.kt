@@ -108,7 +108,7 @@ fun SharePanel(id: String) {
                 Column(Modifier.padding(horizontal = 16.dp, vertical = 8.dp)) {
                     SelectionContainer { Text(url, fontFamily = Theme.mono, fontSize = 13.sp, color = Theme.text, maxLines = 1) }
                     Row(verticalAlignment = Alignment.CenterVertically) {
-                        Text(link.expires_at?.let { "Until " + DateFormat.getDateInstance(DateFormat.MEDIUM).format(Date(it)) } ?: "Doesn't expire", Modifier.weight(1f), fontSize = 12.sp, color = Theme.muted)
+                        Text(link.expires_at?.let { "Until " + formatMillis(it, time = null) } ?: "Doesn't expire", Modifier.weight(1f), fontSize = 12.sp, color = Theme.muted)
                         TextButton(onClick = { clipboard.setText(AnnotatedString(url)); model.say("Link copied") }) { Text("Copy") }
                         TextButton(onClick = { run { it.deleteLink(id, link.token) } }) { Text("Stop sharing", color = Theme.alert) }
                     }
@@ -242,7 +242,7 @@ fun EntryHistory(id: String, dismiss: () -> Unit) {
             Column(Modifier.weight(1f).verticalScroll(rememberScrollState())) {
                 for (v in versions) {
                     Column(Modifier.fillMaxWidth().clickable { picked = v.id }.padding(horizontal = 20.dp, vertical = 12.dp)) {
-                        Text(DateFormat.getDateTimeInstance(DateFormat.MEDIUM, DateFormat.SHORT).format(Date(v.saved_at)), color = Theme.text)
+                        Text(formatMillis(v.saved_at), color = Theme.text)
                         val by = listOfNotNull(v.author, v.via?.let { "with $it" }).joinToString(" ")
                         if (by.isNotEmpty()) Text(by, fontSize = 12.sp, color = Theme.muted)
                     }

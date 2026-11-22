@@ -127,7 +127,7 @@ fun SettingsPage(openDrawer: (() -> Unit)?) {
                 model.account?.let { FormRow("Signed in as", "${it.name} (${it.email})") }
                 model.sync?.let { sync ->
                     val s = model.syncStatus
-                    FormRow("Sync", s.summary + (s.lastSyncedAt?.let { ", last at " + DateFormat.getTimeInstance(DateFormat.SHORT).format(Date(it)) } ?: ""))
+                    FormRow("Sync", s.summary + (s.lastSyncedAt?.let { ", last at " + formatMillis(it, date = null) } ?: ""))
                     FormButton("Sync now", enabled = s.state != SyncEngine.State.syncing) { model.scope.launch { sync.sync() } }
                 }
                 FormButton("Add another account") { model.addingAccount = true }
@@ -193,7 +193,7 @@ fun SettingsPage(openDrawer: (() -> Unit)?) {
                 FormButton("Copy address") { clipboard.setText(AnnotatedString(model.api.mcpUrl)); model.say("Copied") }
                 val open = model.vaults.filter { it.lock == "none" && it.ai_access != "off" }
                 FormText(if (open.isEmpty()) "No vault is open to AI yet. Turn it on for a vault under Vaults." else "Open to AI: " + open.joinToString(", ") { "${it.name} (${if (it.ai_access == "write") "read and write" else "read"})" } + ".")
-                for (app in apps ?: emptyList()) FormRow(app.name, app.last_used_at?.let { "Last used " + DateFormat.getDateTimeInstance(DateFormat.MEDIUM, DateFormat.SHORT).format(Date(it)) } ?: "Not used yet") {
+                for (app in apps ?: emptyList()) FormRow(app.name, app.last_used_at?.let { "Last used " + formatMillis(it) } ?: "Not used yet") {
                     TextButton(onClick = { model.scope.launch { runCatching { model.api.disconnectAiApp(app.id) }; reload++ } }) { Text("Disconnect") }
                 }
                 if (apps?.isEmpty() == true) FormText("No AI app is connected.")

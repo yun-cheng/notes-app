@@ -329,7 +329,7 @@ fun HistoryPage(openDrawer: (() -> Unit)?) {
             if (offline) item { FormText("Connect to the internet to see changes made elsewhere.") }
             for (row in rows) {
                 item {
-                    SectionTitle(DateFormat.getDateTimeInstance(DateFormat.MEDIUM, DateFormat.SHORT).format(Date(row.at)) + (row.by?.let { " · $it" } ?: ""))
+                    SectionTitle(formatMillis(row.at) + (row.by?.let { " · $it" } ?: ""))
                 }
                 items(row.changes.size) { i -> val change = row.changes[i]; ChangeRow(change, current[change.cardId] ?: model.card(change.cardId)) }
             }

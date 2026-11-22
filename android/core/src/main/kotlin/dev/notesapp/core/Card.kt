@@ -154,7 +154,7 @@ fun modernPayload(payload: JsonObject, zone: ZoneId = ZoneId.systemDefault()): J
     out = out.with("date", null)
     if (date == null) return out
     val created = out["createdAt"].long
-    if (created != null && DateKey.of(Instant.ofEpochMilli(created), zone) == date) return out
+    if (created != null && DateKey.ofMillis(created, zone) == date) return out
     val day = DateKey.parse(date) ?: return out
     val end = day.plusDays(1).atStartOfDay(zone).toInstant().toEpochMilli() - 1
     return out.with("createdAt", j(end))

@@ -312,7 +312,7 @@ fun BubbleMeta(card: Card, page: Int, pages: Int, setPage: (Int) -> Unit) {
             if (card.viewOnly) Icon(Icons.Outlined.Lock, "View only", Modifier.size(13.dp), tint = Theme.accent)
             val names = model.vaultNames(card).joinToString(", ")
             if (names.isNotEmpty()) Text(names, maxLines = 1)
-            Text(DateFormat.getTimeInstance(DateFormat.SHORT).format(Date(card.createdAt)))
+            Text(formatMillis(card.createdAt, date = null))
         }
     }
 }

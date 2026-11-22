@@ -284,6 +284,12 @@ describe('photos in Google Drive', () => {
     expect((await t.call(`/api/attachments/file-00003/upload?vault=${t.ann.vault}&kind=file&size=${30 * 1024 ** 2}`, { method: 'POST', headers: { 'content-type': 'application/pdf' } }, t.ann.cookie)).status).toBe(413);
     const ben = await t.signIn('ben');
     expect((await start(4, 'video/mp4', t.ann.vault, ben.cookie)).status).toBe(404);
+    // Nor can he take Ann's upload over by starting it again in his own vault, with his own Drive connected.
+    const link = (await (await t.call('/api/drive/connect', { method: 'POST' }, ben.cookie)).json()) as { url: string };
+    await t.call(`/api/drive/callback?code=good&state=${new URL(link.url).searchParams.get('state')}`);
+    const sessions = t.sessions.size;
+    expect((await start(4, 'video/mp4', `vault-${ben.user.id}`, ben.cookie)).status).toBe(409);
+    expect(t.sessions.size).toBe(sessions);
     expect((await t.call('/api/attachments/video-0002/upload', { method: 'PUT', body: new Uint8Array([1]).buffer, headers: { 'content-range': 'bytes 0-0/4' } }, ben.cookie)).status).toBe(409);
   });
   it('rejects bad uploads', async () => {

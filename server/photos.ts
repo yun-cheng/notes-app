@@ -235,6 +235,9 @@ export function photoRoutes(app: Hono<AppEnv>, fetcher: GoogleFetch, now: () => 
       const at = now();
       const row = await uploadRow(c, id);
       if (row && (row.vault_id !== vaultId || row.size !== size || row.mime !== mime)) return c.json({ error: 'Upload exists for another file' }, 409);
+      // One under way in a vault this account can't change is someone else's: never pointed at a new session.
+      if (!row && (await c.env.DB.prepare(`SELECT 1 AS yes FROM attachment_uploads WHERE id = ?`).bind(id).first()))
+        return c.json({ error: 'Upload exists for another file' }, 409);
       if (row) {
         try {
           return await progress(c, row, await sendPiece(c.env.DB, config, row.owner_id, at, row.session_url, row.size, null));

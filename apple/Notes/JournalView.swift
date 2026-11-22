@@ -72,7 +72,10 @@ struct JournalView: View {
                             ForEach(groups(visible), id: \.day) { group in
                                 Section {
                                     ForEach(group.items) { item in
-                                        BubbleView(card: item.card, picked: picked.contains(item.card.id), onPick: { togglePick(item.card.id) }, picking: !picked.isEmpty)
+                                        VStack(alignment: .leading, spacing: 4) {
+                                            BubbleView(card: item.card, picked: picked.contains(item.card.id), onPick: { togglePick(item.card.id) }, picking: !picked.isEmpty)
+                                            EntryAttachments(card: item.card)
+                                        }
                                             .overlay(alignment: .leading) {
                                                 if focusedEntry == item.card.id {
                                                     RoundedRectangle(cornerRadius: 2).fill(Theme.accent).frame(width: 3).offset(x: -8)

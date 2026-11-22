@@ -285,13 +285,8 @@ struct PhotoThumb: View {
                     Theme.sunken.overlay { Image(systemName: model.vault(vaultId)?.isEncrypted == true ? "lock" : "photo").foregroundStyle(Theme.muted) }
                 }
             }
-            .overlay {
-                if case .video = media { Image(systemName: "play.circle.fill").font(.title).foregroundStyle(.white).shadow(radius: 3) }
-            }
-            .overlay(alignment: .bottomTrailing) {
-                if case .video(let file) = media, let d = file.duration {
-                    Text(Doc.clipLength(d)).font(.caption2.weight(.semibold)).padding(3).background(.black.opacity(0.5)).foregroundStyle(.white).padding(4)
-                }
+            .overlay(alignment: .topTrailing) {
+                if case .video(let file) = media { VideoMark(duration: file.duration) }
             }
             .clipShape(RoundedRectangle(cornerRadius: 6))
             .task(id: media.id) {
@@ -306,38 +301,132 @@ struct PhotoThumb: View {
     }
 }
 
-/// An entry's photos and videos under its text, opening full screen; its other files as chips.
-struct BubbleAttachments: View {
+/// An entry's photos, videos, voice messages, files and web links, under its bubble, as the web app's `Attachments`:
+/// photos and videos whole at their own shapes (large, as thumbnails, or as a count, by the device's setting or the
+/// entry's own), four at most with the rest counted on the last; voice messages playing where they are; files as chips;
+/// links as cards.
+struct EntryAttachments: View {
     @Environment(AppModel.self) private var model
     @AppStorage("photoStyle") private var deviceStyle = "large"
     let card: Card
     @State private var viewing: String?
 
+    static let maxPhotos = 4
+
     var body: some View {
         let media = BubbleMemo.value(model, card, "media") { Doc.media(card.content) }
-        let files = BubbleMemo.value(model, card, "files") { Doc.files(card.content).filter { !$0.isVideo } }
-        // How photos show: large, small thumbnails, or a count that opens them; each entry can say for itself.
+        let all = BubbleMemo.value(model, card, "files") { Doc.files(card.content).filter { !$0.isVideo } }
+        let voices = all.filter(\.isAudio)
+        let files = all.filter { !$0.isAudio }
         let style = card.payload["preview"]?["photos"]?.stringValue ?? deviceStyle
-        Group {
-        if !media.isEmpty, style == "off" {
-            Button { viewing = media[0].id } label: { Label("\(media.count) \(media.count == 1 ? "photo" : "photos")", systemImage: "photo.on.rectangle") }
-                .buttonStyle(.plain).font(.callout).foregroundStyle(Theme.accent).padding(.top, 4)
-        } else if !media.isEmpty {
-            FlowLayout(spacing: 4) {
-                ForEach(media) { m in
-                    PhotoThumb(media: m, vaultId: card.vaultId, size: style == "thumbs" ? 64 : media.count == 1 ? 200 : 110)
-                        .onTapGesture { viewing = m.id }
-                        .contextMenu {
-                            PhotoMenu(id: m.id, card: card)
-                            PublicLinkMenu(id: m.id, vaultId: card.vaultId)
+        if !media.isEmpty || !all.isEmpty || BubbleLinks.has(card, model: model) {
+            VStack(alignment: .leading, spacing: 4) {
+                if !media.isEmpty, style == "off" {
+                    Button { viewing = media[0].id } label: {
+                        Label(Self.mediaCount(media), systemImage: media.allSatisfy { if case .video = $0 { true } else { false } } ? "video" : "photo")
+                            .font(.footnote).foregroundStyle(Theme.muted)
+                            .padding(.horizontal, 10).padding(.vertical, 4)
+                            .background(Capsule().fill(Theme.surface)).overlay(Capsule().stroke(Theme.line))
+                    }
+                    .buttonStyle(.plain)
+                } else if !media.isEmpty {
+                    let height: CGFloat = style == "thumbs" ? 180 : 280
+                    FlowLayout(spacing: 4) {
+                        ForEach(Array(media.prefix(Self.maxPhotos).enumerated()), id: \.element.id) { i, m in
+                            let more = i == Self.maxPhotos - 1 ? media.count - Self.maxPhotos : 0
+                            ShapedThumb(media: m, vaultId: card.vaultId, height: height, alone: media.count == 1 && style != "thumbs", more: more)
+                                .onTapGesture { viewing = m.id }
+                                .contextMenu {
+                                    PhotoMenu(id: m.id, card: card)
+                                    PublicLinkMenu(id: m.id, vaultId: card.vaultId)
+                                }
                         }
+                    }
                 }
+                ForEach(voices) { file in VoicePlayer(file: file, vaultId: card.vaultId, card: card) }
+                ForEach(files) { file in FileChip(file: file, vaultId: card.vaultId) }
+                BubbleLinks(card: card)
             }
-            .padding(.top, 4)
+            .frame(maxWidth: 560, alignment: .leading)
+            .padding(.top, 2)
+            .sheet(id: $viewing) { start in MediaViewer(media: media, start: start, vaultId: card.vaultId) }
         }
+    }
+
+    /// "3 photos", "1 video", "2 photos and 1 video".
+    static func mediaCount(_ items: [Doc.Media]) -> String {
+        let videos = items.filter { if case .video = $0 { true } else { false } }.count
+        let photos = items.count - videos
+        func say(_ n: Int, _ one: String) -> String { n == 1 ? "1 \(one)" : "\(n) \(one)s" }
+        if photos > 0 && videos > 0 { return "\(say(photos, "photo")) and \(say(videos, "video"))" }
+        return videos > 0 ? say(videos, "video") : say(photos, "photo")
+    }
+}
+
+/// A photo, or a video's still, whole at its own shape, a row's height tall (a lone one larger, up to 480 points),
+/// as the web's `.thumb`; a video marked with its length, and the last of a row with how many more there are.
+struct ShapedThumb: View {
+    @Environment(AppModel.self) private var model
+    let media: Doc.Media
+    let vaultId: String
+    var height: CGFloat = 280
+    var alone = false
+    var more = 0
+    @State private var image: PlatformImage?
+
+    private var aspect: CGFloat {
+        if let image, image.size.height > 0 { return image.size.width / image.size.height }
+        if case .video(let f) = media, let w = f.width, let h = f.height, h > 0 { return w / h }
+        return 1
+    }
+
+    var body: some View {
+        let tall = alone ? min(480, 440 / max(aspect, 0.3)) : height
+        let width = min(alone ? 560 : 440, max(96, tall * aspect))
+        ZStack {
+            Theme.sunken
+            if let image {
+                Image(platform: image).resizable().scaledToFit()
+            } else {
+                Image(systemName: model.vault(vaultId)?.isEncrypted == true ? "lock" : "photo").foregroundStyle(Theme.muted)
+            }
+            if more > 0 {
+                Color.black.opacity(0.45)
+                Text("+\(more)").font(.title3.weight(.bold)).foregroundStyle(.white)
+            }
         }
-        .sheet(id: $viewing) { start in MediaViewer(media: media, start: start, vaultId: card.vaultId) }
-        ForEach(files) { file in FileChip(file: file, vaultId: card.vaultId) }
+        .frame(width: width, height: tall)
+        .overlay(alignment: .topTrailing) {
+            if case .video(let file) = media, more == 0 { VideoMark(duration: file.duration) }
+        }
+        .clipShape(RoundedRectangle(cornerRadius: 12))
+        .overlay(RoundedRectangle(cornerRadius: 12).stroke(Theme.line))
+        .contentShape(RoundedRectangle(cornerRadius: 12))
+        .task(id: media.id) {
+            let id: String =
+                switch media {
+                case .photo(let id): id
+                case .video(let file): file.poster ?? Doc.posterId(file.id)
+                }
+            image = await Attachments.shared.thumbnail(id, pixels: 1200, model: model)
+        }
+    }
+}
+
+/// A video's length with a play mark, in a dark pill in a corner of its still, as the web's `VideoMark`.
+struct VideoMark: View {
+    let duration: Double?
+
+    var body: some View {
+        HStack(spacing: 3) {
+            if let duration { Text(Doc.clipLength(duration)).monospacedDigit() }
+            Image(systemName: "play.fill").imageScale(.small)
+        }
+        .font(.caption2.weight(.semibold))
+        .foregroundStyle(.white)
+        .padding(.horizontal, 7).padding(.vertical, 3)
+        .background(Capsule().fill(.black.opacity(0.55)))
+        .padding(6)
     }
 }
 
@@ -365,7 +454,9 @@ struct PhotoMenu: View {
     }
 }
 
-/// An attached file as a chip: a sound plays where it is; anything else opens in the app that reads it.
+/// An attached file as a chip, as the web app's: its kind, name, and size with its extension; pressing it opens it in
+/// the app that reads it, the share button shares it by a public link (in a vault that can), and the arrow saves a
+/// copy (to Downloads on a Mac; a phone offers where). A sound plays where it is instead.
 struct FileChip: View {
     @Environment(AppModel.self) private var model
     let file: Doc.FileInfo
@@ -376,20 +467,99 @@ struct FileChip: View {
         if file.isAudio {
             VoicePlayer(file: file, vaultId: vaultId)
         } else {
-            Button(action: open) {
-                HStack(spacing: 6) {
-                    Image(systemName: file.symbol)
-                    Text(file.name).lineLimit(1)
-                    if let size = file.size { Text(ByteCountFormatter.string(fromByteCount: size, countStyle: .file)).foregroundStyle(Theme.muted) }
-                    if opening { ProgressView().controlSize(.small) }
+            HStack(spacing: 0) {
+                Button(action: open) {
+                    HStack(spacing: 10) {
+                        Image(systemName: file.symbol)
+                            .frame(width: 28, height: 28)
+                            .background(RoundedRectangle(cornerRadius: 8).fill(Theme.sunken))
+                            .foregroundStyle(Theme.muted)
+                        VStack(alignment: .leading, spacing: 1) {
+                            Text(file.name).font(.subheadline.weight(.semibold)).lineLimit(1).truncationMode(.middle)
+                            Text(Self.detail(file)).font(.caption).foregroundStyle(Theme.muted)
+                        }
+                        if opening { ProgressView().controlSize(.small) }
+                    }
+                    .padding(.leading, 8).padding(.trailing, 4).padding(.vertical, 6)
+                    .contentShape(Rectangle())
                 }
-                .font(.callout)
-                .padding(.horizontal, 10)
-                .padding(.vertical, 6)
-                .background(RoundedRectangle(cornerRadius: 10).fill(Theme.sunken))
+                .buttonStyle(.plain)
+                .help("Open \(file.name)")
+                if model.vault(vaultId).map({ $0.role != .viewer && !$0.isEncrypted }) ?? false {
+                    Button(action: share) { Image(systemName: "square.and.arrow.up").frame(width: 34, height: 40).contentShape(Rectangle()) }
+                        .buttonStyle(.plain).foregroundStyle(Theme.muted)
+                        .help("Share via public link (anyone with it can open it)")
+                        .accessibilityLabel("Share \(file.name) via a public link")
+                }
+                Button(action: save) { Image(systemName: "arrow.down.to.line").frame(width: 34, height: 40).contentShape(Rectangle()) }
+                    .buttonStyle(.plain).foregroundStyle(Theme.muted)
+                    .help("Download")
+                    .accessibilityLabel("Download \(file.name)")
             }
-            .buttonStyle(.plain)
-            .padding(.top, 4)
+            .frame(maxWidth: 360, alignment: .leading)
+            .fixedSize(horizontal: true, vertical: false)
+            .background(RoundedRectangle(cornerRadius: 12).fill(Theme.surface))
+            .overlay(RoundedRectangle(cornerRadius: 12).stroke(Theme.line))
+        }
+    }
+
+    /// "150 B · TXT", as the web's chip.
+    static func detail(_ file: Doc.FileInfo) -> String {
+        [file.size.map(fileSize), extensionLabel(file.name)].compactMap { $0 }.joined(separator: " · ")
+    }
+
+    /// A file's size as the web app writes it: "150 B", "12 KB", "3.4 MB", "1.2 GB".
+    static func fileSize(_ bytes: Int64) -> String {
+        if bytes < 1024 { return "\(bytes) B" }
+        if bytes < 1024 * 1024 { return "\(Int((Double(bytes) / 1024).rounded())) KB" }
+        if bytes >= 1024 * 1024 * 1024 { return String(format: "%g GB", (Double(bytes) / 1_073_741_824 * 10).rounded() / 10) }
+        let mb = Double(bytes) / 1_048_576
+        return mb < 10 ? String(format: "%.1f MB", mb) : "\(Int(mb.rounded())) MB"
+    }
+
+    /// A file's extension in capitals, "PDF", or "File".
+    static func extensionLabel(_ name: String) -> String {
+        guard let dot = name.lastIndex(of: "."), case let ext = name[name.index(after: dot)...], (1...5).contains(ext.count), ext.allSatisfy({ $0.isLetter || $0.isNumber }) else { return "File" }
+        return ext.uppercased()
+    }
+
+    private func share() {
+        Task {
+            switch await model.api.shareDriveLink(file.id) {
+            case .success(let url):
+                Clipboard.copy(url)
+                model.say("Public link copied")
+            case .failure(let error):
+                model.say(error.localizedDescription)
+            }
+        }
+    }
+
+    private func save() {
+        Task {
+            guard let url = await Attachments.shared.fileURL(file.id, name: file.name, model: model) else {
+                model.say("That file can't be fetched now.")
+                return
+            }
+            #if os(macOS)
+            let downloads = FileManager.default.urls(for: .downloadsDirectory, in: .userDomainMask)[0]
+            var target = downloads.appending(path: file.name)
+            var n = 1
+            while FileManager.default.fileExists(atPath: target.path) {
+                n += 1
+                let base = (file.name as NSString).deletingPathExtension
+                let ext = (file.name as NSString).pathExtension
+                target = downloads.appending(path: ext.isEmpty ? "\(base) \(n)" : "\(base) \(n).\(ext)")
+            }
+            do {
+                try FileManager.default.copyItem(at: url, to: target)
+                NSWorkspace.shared.activateFileViewerSelecting([target])
+            } catch {
+                model.say("It couldn't be saved to Downloads.")
+            }
+            #else
+            model.preview = url
+            #endif
         }
     }
 

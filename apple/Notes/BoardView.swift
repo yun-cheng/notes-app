@@ -46,7 +46,10 @@ struct BoardColumnView: View {
             ScrollView {
                 VStack(alignment: .leading, spacing: 8) {
                     ForEach(Array(column.items.enumerated()), id: \.element.id) { i, item in
-                        BubbleView(card: item.card)
+                        VStack(alignment: .leading, spacing: 4) {
+                            BubbleView(card: item.card)
+                            EntryAttachments(card: item.card)
+                        }
                             .draggable(item.card.id)
                             .dropDestination(for: String.self) { ids, _ in
                                 guard let id = ids.first else { return false }

@@ -57,6 +57,12 @@ enum Theme {
 
     /// The page titles' serif.
     static let mono = Font.system(.body, design: .monospaced)
+    /// An entry's text, as the web's 16-pixel body: the same on a phone, a little smaller on a Mac, whose text runs smaller.
+    #if os(macOS)
+    static let bodyFont = Font.system(size: 14)
+    #else
+    static let bodyFont = Font.system(size: 16)
+    #endif
 }
 
 /// A small rounded chip, as the web's `.chip--small`.

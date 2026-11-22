@@ -13,6 +13,7 @@ struct TrashPage: View {
                 ForEach(trash) { card in
                     VStack(alignment: .leading, spacing: 4) {
                         BubbleView(card: card)
+                        EntryAttachments(card: card)
                         if model.canWrite(card) {
                             Button("Restore") {
                                 let id = card.id

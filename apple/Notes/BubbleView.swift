@@ -1,9 +1,11 @@
 import NotesKit
 import SwiftUI
 
-/// One entry in the journal, as the web app's bubble: a note's text or a todo's checkbox and title, its tags, its dates
-/// and where it lives, its reactions, and its pages to turn through. A double-click (a tap on a phone) opens it; a
-/// right-click opens its menu.
+/// One entry in the journal, as the web app's bubble: a note's title and text or a todo's checkbox and title, its tags
+/// with a todo's dates on their right, and a bottom row of its reactions on the left and its badges, page, More or
+/// Less, vault and time on the right. Its pages turn with the arrows along its sides. A double-click (a tap on a phone)
+/// opens it; a right-click (a long press) opens its menu. Its photos, files and links show under it
+/// (`EntryAttachments`).
 struct BubbleView: View {
     @Environment(AppModel.self) private var model
     let card: Card
@@ -13,13 +15,17 @@ struct BubbleView: View {
     @State private var page = 0
     @State private var unfolded = false
     @State private var revealed = false
+    @State private var hovering = false
 
     var body: some View {
         let pages = BubbleMemo.value(model, card, "pages") { [card.content] + card.turnPages }
         let shown = min(page, pages.count - 1)
         let doc = pages[shown]
+        let long = BubbleMemo.value(model, card, "long\(shown)") { Doc.previewLines(doc).count > 6 }
+        let fold = BubbleFold(long: long, unfolded: $unfolded)
         MaxWidth(fraction: 0.85, limit: 560) {
         VStack(alignment: .leading, spacing: 2) {
+            if page == 0 { BubbleTranslation(card: card) }
             if card.type == .todo {
                 HStack(alignment: .top, spacing: 6) {
                     TodoCheck(card: card)
@@ -41,28 +47,28 @@ struct BubbleView: View {
                 }
                 BubbleText(doc: doc, folded: !unfolded, revealed: revealed, memo: (card, shown))
             }
-            if page == 0 {
-                BubbleAttachments(card: card)
-                BubbleLinks(card: card)
-                BubbleTranslation(card: card)
-            }
-            if BubbleMemo.value(model, card, "long\(shown)", { Doc.previewLines(doc).count > 6 }) {
-                Button(unfolded ? "Less" : "More") { unfolded.toggle() }
-                    .buttonStyle(.plain).font(.caption.weight(.semibold)).foregroundStyle(Theme.accent)
-            }
             BubbleTags(card: card)
-            BubbleMeta(card: card, page: $page, pages: pages.count)
+            BubbleMeta(card: card, page: page, pages: pages.count, fold: fold)
         }
-        .padding(.horizontal, 12)
+        .font(Theme.bodyFont)
+        .padding(.leading, pages.count > 1 ? (card.type == .todo ? 22 : 24) : 12)
+        .padding(.trailing, pages.count > 1 ? 24 : 12)
         .padding(.top, 7)
         .padding(.bottom, 5)
         .background(shape.fill(background))
-        .overlay(shape.stroke(picked ? Theme.accent : card.color.map { Theme.tint($0).opacity(0.5) } ?? Theme.line, lineWidth: picked ? 2 : 1))
+        .overlay(shape.stroke(picked ? Theme.accent : card.color.map { Theme.tint($0).opacity(0.5) } ?? (hovering ? Theme.muted : Theme.line), lineWidth: picked ? 2 : 1))
+        .overlay { if pages.count > 1 { PageEdges(page: $page, count: pages.count, shown: hovering) } }
+        .overlay(alignment: .topTrailing) {
+            #if os(macOS)
+            if hovering { CopyCorner(card: card) }
+            #endif
+        }
         .contentShape(shape)
         #if os(macOS)
         // A double-click opens it on a computer, as on the web; a click picks it while picking.
         .onTapGesture(count: 2) { model.openEntry = card.id }
         .onTapGesture { if picking { onPick() } }
+        .onHover { hovering = $0 }
         #else
         // A tap opens it on a phone, with no wait for a second tap.
         .onTapGesture { if picking { onPick() } else { model.openEntry = card.id } }
@@ -72,6 +78,9 @@ struct BubbleView: View {
         }
         .frame(maxWidth: .infinity, alignment: .leading)
         .accessibilityElement(children: .combine)
+        // Opening is what pressing it does, as on the web; ticking a todo is one of its named actions.
+        .accessibilityAction { model.openEntry = card.id }
+        .accessibilityAction(named: card.isDone ? "Mark not done" : "Mark done") { if card.type == .todo, model.canEdit(card) { model.setDone(card, !card.isDone) } }
     }
 
     private var shape: UnevenRoundedRectangle {
@@ -84,6 +93,68 @@ struct BubbleView: View {
         return Theme.surface
     }
 }
+
+/// Whether a bubble's text is long enough to fold, and whether it's open.
+struct BubbleFold {
+    var long: Bool
+    @Binding var unfolded: Bool
+}
+
+/// A bubble's previous and next page, each the full height of a side, going round past the last or the first; shown
+/// while pointed at on a computer, and always, faint, on a phone, as on the web.
+struct PageEdges: View {
+    @Binding var page: Int
+    let count: Int
+    var shown: Bool
+
+    var body: some View {
+        HStack(spacing: 0) {
+            edge("chevron.left", "Previous page") { page = (page - 1 + count) % count }
+            Spacer(minLength: 0)
+            edge("chevron.right", "Next page") { page = (page + 1) % count }
+        }
+    }
+
+    private func edge(_ icon: String, _ label: String, _ go: @escaping () -> Void) -> some View {
+        Button { withAnimation(.easeOut(duration: 0.2)) { go() } } label: {
+            Image(systemName: icon).font(.system(size: 12, weight: .semibold))
+                .frame(width: 20).frame(maxHeight: .infinity)
+                .contentShape(Rectangle())
+        }
+        .buttonStyle(.plain)
+        .foregroundStyle(Theme.accent)
+        #if os(macOS)
+        .opacity(shown ? 1 : 0)
+        #else
+        .opacity(0.6)
+        #endif
+        .help(label)
+        .accessibilityLabel(label)
+    }
+}
+
+#if os(macOS)
+/// The copy button in a bubble's corner while it's pointed at, as the web's.
+struct CopyCorner: View {
+    @Environment(AppModel.self) private var model
+    let card: Card
+
+    var body: some View {
+        Button { Clipboard.copyEntry(card, model: model) } label: {
+            Image(systemName: "doc.on.doc").font(.system(size: 11))
+                .frame(width: 24, height: 24)
+                .background(RoundedRectangle(cornerRadius: 8).fill(Theme.surface))
+                .overlay(RoundedRectangle(cornerRadius: 8).stroke(Theme.line))
+                .shadow(color: .black.opacity(0.12), radius: 1.5, y: 1)
+        }
+        .buttonStyle(.plain)
+        .foregroundStyle(Theme.muted)
+        .padding(4)
+        .help("Copy")
+        .accessibilityLabel("Copy")
+    }
+}
+#endif
 
 /// What a bubble works out from its card's document, kept until the cards change, so a redraw that changes nothing
 /// about it (the keyboard's focus moving, picking, scrolling back) doesn't walk the document again.
@@ -282,82 +353,188 @@ struct StackPreview: View {
     }
 }
 
-/// An entry's tags, grouped ones first.
+/// An entry's tags, grouped ones first, in their tags' colors, with a todo's dates kept to the right on the same row,
+/// as the web's `bubble__tags`.
 struct BubbleTags: View {
     @Environment(AppModel.self) private var model
     let card: Card
+    /// In the entry's sheet, the dates show in its bar instead.
+    var dates = true
 
     var body: some View {
         let tags = model.index.resolveTags(model.index.tagGroups.order(card.tags))
-        if !tags.isEmpty {
+        let dated = dates && card.type == .todo && (card.due != nil || card.start != nil)
+        if !tags.isEmpty || dated {
             FlowLayout(spacing: 6) {
                 ForEach(tags) { tag in
-                    Button { model.page = .journal(StreamFilter(tagId: tag.id)) } label: { Chip(text: tag.displayTitle, tint: Theme.accent) }
+                    Button { model.page = .journal(StreamFilter(tagId: tag.id)) } label: { TagChip(tag: tag) }
                         .buttonStyle(.plain)
                 }
+                if dated {
+                    Spacer(minLength: 12).layoutPriority(-1)
+                    if card.waiting && !card.isDone { WaitingMark() }
+                    DueLabel(card: card)
+                }
             }
+            .font(.system(size: 11))
+            .foregroundStyle(Theme.muted)
             .padding(.top, 4)
             .padding(.bottom, 2)
         }
     }
 }
 
-/// The bubble's bottom row: reactions, comments, checklist progress, pages, then a todo's due date, where it lives and
-/// when it was written.
+/// A tag as a small chip: in its color, if it has one; a grouped one bolder, as the web's `chip--small`.
+struct TagChip: View {
+    @Environment(AppModel.self) private var model
+    let tag: Card
+    var large = false
+
+    var body: some View {
+        let grouped = model.index.tagGroups.groupOf[tag.id] != nil
+        Text(tag.displayTitle)
+            .font(.system(size: large ? 13 : 12, weight: grouped ? .semibold : .regular))
+            .lineLimit(1)
+            .padding(.horizontal, large ? 10 : 8)
+            .frame(minHeight: large ? 28 : 18)
+            .background(Capsule().fill(tag.color.map { Theme.tint($0).opacity(0.24) } ?? Theme.sunken))
+            .overlay { if grouped { Capsule().stroke(Theme.accent.opacity(0.45)) } }
+            .foregroundStyle(tag.color == nil ? Theme.muted : Theme.text)
+    }
+}
+
+/// On a template's bottom row: Use, which starts an entry from it, or Template where nothing can be changed.
+struct UseTemplateButton: View {
+    @Environment(AppModel.self) private var model
+    let card: Card
+
+    var body: some View {
+        if model.viewOnly || card.deleted {
+            Label("Template", systemImage: "doc.on.doc").labelStyle(.titleAndIcon).foregroundStyle(Theme.accent).help("A template")
+        } else {
+            Button { model.startFrom(card) } label: { Label("Use", systemImage: "doc.on.doc").labelStyle(.titleAndIcon) }
+                .buttonStyle(.plain).foregroundStyle(Theme.accent).fontWeight(.semibold)
+                .help("Start a new entry from this template")
+        }
+    }
+}
+
+/// Waiting on someone else, as the web's mark beside a todo's dates.
+struct WaitingMark: View {
+    var body: some View {
+        Label("Waiting", systemImage: "hourglass").labelStyle(.titleAndIcon).fontWeight(.semibold)
+    }
+}
+
+/// The bubble's bottom row, as the web's: on the left, whether it's view only, its reactions and a way to comment; on
+/// the right, Use template, its checklist and comment counts, the page shown, More or Less, its vaults and the time it
+/// was written.
 struct BubbleMeta: View {
     @Environment(AppModel.self) private var model
     let card: Card
-    @Binding var page: Int
+    let page: Int
     let pages: Int
+    let fold: BubbleFold
 
     var body: some View {
         FlowLayout(spacing: 6) {
+            if card.viewOnly { Image(systemName: "eye").foregroundStyle(Theme.accent).help("View only").accessibilityLabel("View only") }
             Reactions(card: card)
-            if let comments = model.commentCounts[card.id], comments > 0 {
-                Label("\(comments)", systemImage: "bubble.left").labelStyle(.titleAndIcon)
-            }
+            Spacer(minLength: 8).layoutPriority(-1)
+            if card.template { UseTemplateButton(card: card) }
             if let progress = BubbleMemo.value(model, card, "checklist", { Doc.checklistProgress(card.content) }) {
-                Label("\(progress.done)/\(progress.total)", systemImage: "checklist")
-                    .padding(.horizontal, progress.done == progress.total ? 5 : 0)
-                    .background(RoundedRectangle(cornerRadius: 6).fill(progress.done == progress.total ? Theme.tint(.green).opacity(0.22) : .clear))
+                let all = progress.done == progress.total
+                Label("\(progress.done)/\(progress.total)", systemImage: "checklist").labelStyle(.titleAndIcon).monospacedDigit()
+                    .padding(.horizontal, all ? 5 : 0)
+                    .background(RoundedRectangle(cornerRadius: 6).fill(all ? Theme.tint(.green).opacity(0.22) : .clear))
+                    .foregroundStyle(all ? Theme.text : Theme.muted)
+                    .help("\(progress.done) of \(progress.total) checklist items done")
+            }
+            if let comments = model.commentCounts[card.id], comments > 0 {
+                Button { model.openEntry = card.id } label: { Label("\(comments)", systemImage: "bubble.left").labelStyle(.titleAndIcon) }
+                    .buttonStyle(.plain)
+                    .help(comments == 1 ? "1 open comment: show" : "\(comments) open comments: show")
             }
             if pages > 1 {
-                HStack(spacing: 2) {
-                    Button { page = max(0, page - 1) } label: { Image(systemName: "chevron.left") }.disabled(page == 0)
-                    Text("\(page + 1)/\(pages)").foregroundStyle(Theme.accent).fontWeight(.semibold).monospacedDigit()
-                    Button { page = min(pages - 1, page + 1) } label: { Image(systemName: "chevron.right") }.disabled(page == pages - 1)
-                }
-                .buttonStyle(.plain)
+                Text("\(page + 1)/\(pages)").font(.system(size: 12, weight: .semibold)).monospacedDigit().foregroundStyle(Theme.accent)
+                    .help("Page \(page + 1) of \(pages)")
             }
-            if card.template { Label("Template", systemImage: "doc.on.doc").foregroundStyle(Theme.accent) }
-            Spacer(minLength: 8).layoutPriority(-1)
-            if card.type == .todo { DueLabel(card: card) }
-            if card.viewOnly { Image(systemName: "lock.doc").foregroundStyle(Theme.accent).help("View only") }
-            Text(model.vaultNames(card).joined(separator: ", "))
-            Text(Date(ms: card.createdAt), format: .dateTime.hour().minute())
+            if fold.long {
+                Button { fold.unfolded.toggle() } label: {
+                    Label(fold.unfolded ? "Less" : "More", systemImage: fold.unfolded ? "chevron.up" : "chevron.down").labelStyle(.titleAndIcon)
+                }
+                .buttonStyle(.plain).font(.system(size: 12, weight: .semibold)).foregroundStyle(Theme.accent)
+            }
+            if card.type != .todo || (card.due == nil && card.start == nil), card.waiting && !card.isDone { WaitingMark() }
+            VaultLabel(card: card)
+            Text(Date(ms: card.createdAt), format: .dateTime.hour().minute()).padding(.leading, 4)
         }
-        .font(.caption)
+        .font(.system(size: 11))
         .foregroundStyle(Theme.muted)
         .frame(minHeight: 20)
     }
 }
 
-/// A todo's due date, time and repeat, red once overdue, or Waiting.
-struct DueLabel: View {
+/// The vaults an entry is in, as the web's: its own, then any it's also in; left out with only one vault, or when the
+/// journal already shows its one vault. An entry shared with this account alone says so.
+struct VaultLabel: View {
     @Environment(AppModel.self) private var model
     let card: Card
 
     var body: some View {
-        if card.waiting && !card.isDone {
-            Label("Waiting", systemImage: "hourglass")
-        } else if let due = card.due {
+        let ids = [card.vaultId] + (model.sharedInto[card.id] ?? [])
+        let vaults = ids.compactMap { model.vault($0) }
+        if vaults.isEmpty {
+            if model.vault(card.vaultId) == nil { Label("Shared with you", systemImage: "square.and.arrow.up").labelStyle(.titleAndIcon).help("Shared with you from someone else's vault") }
+        } else if model.vaults.count > 1, !(model.page.filter?.vaultId != nil && vaults.count < 2) {
             HStack(spacing: 3) {
-                if card.repeat != nil { Image(systemName: "repeat") }
-                Text(DateKey.relativeDay(due, today: model.today) + (card.dueTime.map { " " + TimeKey.format($0) } ?? ""))
+                ForEach(Array(vaults.enumerated()), id: \.element.id) { i, v in
+                    if v.isPrivate { Image(systemName: "lock").imageScale(.small) }
+                    Text(v.name + (i < vaults.count - 1 ? "," : ""))
+                }
             }
-            .fontWeight(.semibold)
-            .foregroundStyle(card.isOverdue(today: model.today) ? Theme.alert : Theme.muted)
+            .help("In \(vaults.map(\.name).joined(separator: ", "))")
         }
+    }
+}
+
+/// A todo's dates as a sentence, red once overdue, and how it repeats, named, as the web's `DueLabel`: "Due tomorrow at
+/// 6:00 PM", "Starts Mon, Nov 30, due Fri, Dec 4", "↻ Every 3 days".
+struct DueLabel: View {
+    @Environment(AppModel.self) private var model
+    let card: Card
+    var short = false
+
+    var body: some View {
+        let text = Self.text(card, today: model.today, short: short)
+        if !text.isEmpty {
+            HStack(spacing: 6) {
+                Text(text).fontWeight(.semibold)
+                    .foregroundStyle(card.isOverdue(today: model.today) ? Theme.alert : Theme.muted)
+                if let r = card.repeat {
+                    HStack(spacing: 2) {
+                        Image(systemName: "repeat").imageScale(.small)
+                        if !short { Text(r.label) }
+                    }
+                    .help("Repeats: \(r.label.lowercased())")
+                }
+            }
+        }
+    }
+
+    /// The web's `dueText`.
+    static func text(_ card: Card, today: String, short: Bool = false) -> String {
+        let starts = !card.isDone ? card.start.flatMap { $0 > today ? $0 : nil } : nil
+        guard let due = card.due else {
+            guard let starts else { return "" }
+            return short ? "From \(DateKey.relativeDay(starts, today: today))" : "Starts \(DateKey.relativeDayInSentence(starts, today: today))"
+        }
+        let time = card.dueTime.map { TimeKey.format($0) } ?? ""
+        if short {
+            return (starts.map { DateKey.relativeDay($0, today: today) + " – " } ?? "") + DateKey.relativeDay(due, today: today) + (time.isEmpty ? "" : ", \(time)")
+        }
+        let when = DateKey.relativeDayInSentence(due, today: today) + (time.isEmpty ? "" : " at \(time)")
+        return starts.map { "Starts \(DateKey.relativeDayInSentence($0, today: today)), due \(when)" } ?? "Due \(when)"
     }
 }
 

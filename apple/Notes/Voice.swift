@@ -8,6 +8,8 @@ struct VoicePlayer: View {
     @Environment(AppModel.self) private var model
     let file: Doc.FileInfo
     let vaultId: String
+    /// The entry it's in, for Transcribe to write into; nil where it can't be changed.
+    var card: Card? = nil
     @State private var player: AVPlayer?
     @State private var playing = false
     @State private var progress: Double = 0
@@ -40,19 +42,66 @@ struct VoicePlayer: View {
                         .accessibilityLabel(showWords ? "Hide words" : "Show words")
                 }
             }
-            if showWords, let transcript = file.transcript, !transcript.isEmpty {
-                Divider()
-                if file.cues.isEmpty {
-                    Text(transcript).textSelection(.enabled)
-                } else {
-                    FlowText(cues: file.cues, current: currentCue) { seek(to: $0) }
+            if let transcript = file.transcript {
+                if showWords {
+                    VStack(alignment: .leading, spacing: 4) {
+                        if transcript.isEmpty {
+                            Text("No words were heard.").italic().foregroundStyle(Theme.muted)
+                        } else if file.cues.isEmpty {
+                            Text(transcript).textSelection(.enabled)
+                        } else {
+                            FlowText(cues: file.cues, current: currentCue) { seek(to: $0) }
+                        }
+                        HStack(spacing: 12) {
+                            if !transcript.isEmpty {
+                                Button { Clipboard.copy(transcript); model.say("Copied the transcript.") } label: { Label("Copy", systemImage: "doc.on.doc") }
+                            }
+                            if canTranscribe && !working {
+                                Button(action: transcribe) { Label("Transcribe again", systemImage: "repeat") }
+                            }
+                            if working { Text("Transcribing…") }
+                        }
+                        .buttonStyle(.plain)
+                        .font(.caption)
+                        .foregroundStyle(Theme.muted)
+                    }
+                    .font(.subheadline)
+                    .padding(.top, 6)
+                    .overlay(alignment: .top) { Rectangle().fill(Theme.line).frame(height: 1) }
                 }
+            } else if working {
+                Text("Transcribing…").font(.caption).foregroundStyle(Theme.muted)
+            } else if canTranscribe {
+                Button(action: transcribe) { Label("Transcribe", systemImage: "text.alignleft") }
+                    .buttonStyle(.plain).font(.caption.weight(.semibold)).foregroundStyle(Theme.accent)
             }
         }
-        .padding(10)
-        .background(RoundedRectangle(cornerRadius: 12).fill(Theme.sunken.opacity(0.5)))
-        .padding(.top, 4)
+        .padding(.horizontal, 10)
+        .padding(.vertical, 8)
+        .frame(maxWidth: 420, alignment: .leading)
+        .background(RoundedRectangle(cornerRadius: 14).fill(Theme.surface))
+        .overlay(RoundedRectangle(cornerRadius: 14).stroke(Theme.line))
         .onDisappear { player?.pause() }
+    }
+
+    /// Transcribing is for an entry this account can change, outside an encrypted vault, whose words never reach the server.
+    private var canTranscribe: Bool {
+        guard let card else { return false }
+        return model.canEdit(card) && model.vault(vaultId)?.isEncrypted == false
+    }
+
+    private var working: Bool { Transcriber.shared.working.contains(file.id) }
+
+    private func transcribe() {
+        Task {
+            guard let url = await Attachments.shared.fileURL(file.id, name: file.name.isEmpty ? "voice.m4a" : file.name, model: model),
+                let samples = Transcriber.samples(url)
+            else {
+                model.say("That voice message can't be fetched now.")
+                return
+            }
+            Transcriber.shared.start(id: file.id, samples: samples, vaultId: vaultId, model: model)
+        }
     }
 
     private var currentCue: Int? {
@@ -114,20 +163,29 @@ struct Waveform: View {
     }
 }
 
-/// A transcript's sentences, each pressed to play from there, the one being said marked.
+/// A transcript's sentences as one paragraph, wrapping as the web's, each pressed to play from there, the one being
+/// said marked.
 struct FlowText: View {
     let cues: [Doc.Cue]
     let current: Int?
     let play: (Double) -> Void
 
     var body: some View {
-        FlowLayout(spacing: 0) {
-            ForEach(cues.indices, id: \.self) { i in
-                Text(cues[i].text + " ")
-                    .background(i == current ? Theme.accentSoft : .clear)
-                    .onTapGesture { play(cues[i].start) }
-            }
+        var text = AttributedString()
+        for (i, cue) in cues.enumerated() {
+            var piece = AttributedString(cue.text)
+            piece.link = URL(string: "notes-cue:\(i)")
+            if i == current { piece.backgroundColor = Theme.accentSoft }
+            text += piece
+            if i < cues.count - 1 { text += AttributedString(" ") }
         }
+        return Text(text)
+            .tint(Theme.text)
+            .fixedSize(horizontal: false, vertical: true)
+            .environment(\.openURL, OpenURLAction { url in
+                if url.scheme == "notes-cue", let i = Int(url.absoluteString.dropFirst("notes-cue:".count)), cues.indices.contains(i) { play(cues[i].start) }
+                return .handled
+            })
     }
 }
 
@@ -209,8 +267,11 @@ struct VoiceRecordButton: View {
 /// Transcriptions under way, as the web app's `voice.tsx`: a transcription belongs to the app, not to the view that
 /// started it, so one that comes back after its box was saved is written into the entry that has it.
 @MainActor
+@Observable
 final class Transcriber {
     static let shared = Transcriber()
+    /// Voice messages being transcribed now, by file ID.
+    private(set) var working: Set<String> = []
     /// Finished, and not yet written into an entry, by file ID.
     private(set) var done: [String: Voice.Transcript] = [:]
 
@@ -241,7 +302,9 @@ final class Transcriber {
 
     func start(id: String, samples: [Float], vaultId: String, model: AppModel) {
         let api = model.api
+        working.insert(id)
         Task {
+            defer { working.remove(id) }
             let cuts = [0] + Voice.cutPoints(samples) + [samples.count]
             var pieces: [(offset: Double, text: String, language: String?, cues: [Doc.Cue])] = []
             for i in 0..<(cuts.count - 1) where cuts[i] < cuts[i + 1] {

@@ -15,8 +15,9 @@ struct BubbleView: View {
     @State private var revealed = false
 
     var body: some View {
-        let pages = [card.content] + card.turnPages
-        let doc = pages[min(page, pages.count - 1)]
+        let pages = BubbleMemo.value(model, card, "pages") { [card.content] + card.turnPages }
+        let shown = min(page, pages.count - 1)
+        let doc = pages[shown]
         MaxWidth(fraction: 0.85, limit: 560) {
         VStack(alignment: .leading, spacing: 2) {
             if card.type == .todo {
@@ -26,7 +27,9 @@ struct BubbleView: View {
                         Text(card.title)
                             .foregroundStyle(card.isDone ? Theme.muted : Theme.text)
                             .strikethrough(card.isDone, color: Theme.muted)
-                        if !Doc.isBlank(doc) || page > 0 { BubbleText(doc: doc, folded: !unfolded, revealed: revealed) }
+                        if !BubbleMemo.value(model, card, "blank\(shown)", { Doc.isBlank(doc) }) || page > 0 {
+                            BubbleText(doc: doc, folded: !unfolded, revealed: revealed, memo: (card, shown))
+                        }
                     }
                 }
             } else {
@@ -36,14 +39,14 @@ struct BubbleView: View {
                 if card.isStack {
                     StackPreview(stack: card)
                 }
-                BubbleText(doc: doc, folded: !unfolded, revealed: revealed)
+                BubbleText(doc: doc, folded: !unfolded, revealed: revealed, memo: (card, shown))
             }
             if page == 0 {
                 BubbleAttachments(card: card)
                 BubbleLinks(card: card)
                 BubbleTranslation(card: card)
             }
-            if Doc.previewLines(doc).count > 6 {
+            if BubbleMemo.value(model, card, "long\(shown)", { Doc.previewLines(doc).count > 6 }) {
                 Button(unfolded ? "Less" : "More") { unfolded.toggle() }
                     .buttonStyle(.plain).font(.caption.weight(.semibold)).foregroundStyle(Theme.accent)
             }
@@ -79,6 +82,27 @@ struct BubbleView: View {
         if picked { return Theme.accentSoft }
         if let c = card.color { return Theme.tint(c).opacity(0.16) }
         return Theme.surface
+    }
+}
+
+/// What a bubble works out from its card's document, kept until the cards change, so a redraw that changes nothing
+/// about it (the keyboard's focus moving, picking, scrolling back) doesn't walk the document again.
+@MainActor
+enum BubbleMemo {
+    private struct Box<T> { let value: T }
+    private static var version = -1
+    private static var store: [String: Any] = [:]
+
+    static func value<T>(_ model: AppModel, _ card: Card, _ what: String, _ make: () -> T) -> T {
+        if version != model.cardsVersion {
+            store = [:]
+            version = model.cardsVersion
+        }
+        let key = "\(card.id)|\(card.updatedAt)|\(what)"
+        if let hit = store[key] as? Box<T> { return hit.value }
+        let made = make()
+        store[key] = Box(value: made)
+        return made
     }
 }
 
@@ -119,9 +143,12 @@ struct BubbleText: View {
     let doc: JSONValue
     var folded = true
     var revealed = false
+    /// The card and page it shows, to keep its parts between redraws.
+    var memo: (card: Card, page: Int)? = nil
 
     var body: some View {
-        let parts = Doc.previewParts(doc, titleOf: model.index.titleOf, markCode: true, hidden: .mark)
+        let make = { Doc.previewParts(doc, titleOf: model.index.titleOf, markCode: true, hidden: .mark) }
+        let parts = memo.map { m in BubbleMemo.value(model, m.card, "parts\(m.page)", make) } ?? make()
         let limited = folded ? Self.fold(parts, lines: 6) : parts
         VStack(alignment: .leading, spacing: 4) {
             ForEach(Array(limited.enumerated()), id: \.offset) { _, part in
@@ -289,7 +316,7 @@ struct BubbleMeta: View {
             if let comments = model.commentCounts[card.id], comments > 0 {
                 Label("\(comments)", systemImage: "bubble.left").labelStyle(.titleAndIcon)
             }
-            if let progress = Doc.checklistProgress(card.content) {
+            if let progress = BubbleMemo.value(model, card, "checklist", { Doc.checklistProgress(card.content) }) {
                 Label("\(progress.done)/\(progress.total)", systemImage: "checklist")
                     .padding(.horizontal, progress.done == progress.total ? 5 : 0)
                     .background(RoundedRectangle(cornerRadius: 6).fill(progress.done == progress.total ? Theme.tint(.green).opacity(0.22) : .clear))

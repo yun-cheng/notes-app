@@ -312,8 +312,8 @@ struct BubbleAttachments: View {
     @State private var viewing: String?
 
     var body: some View {
-        let media = Doc.media(card.content)
-        let files = Doc.files(card.content).filter { !$0.isVideo }
+        let media = BubbleMemo.value(model, card, "media") { Doc.media(card.content) }
+        let files = BubbleMemo.value(model, card, "files") { Doc.files(card.content).filter { !$0.isVideo } }
         // How photos show: large, small thumbnails, or a count that opens them; each entry can say for itself.
         let style = card.payload["preview"]?["photos"]?.stringValue ?? deviceStyle
         if !media.isEmpty, style == "off" {

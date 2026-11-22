@@ -40,7 +40,7 @@ struct BubbleLinks: View {
         let style = card.payload["preview"]?["links"]?.stringValue.flatMap(LinkStyle.init(rawValue:)) ?? LinkStyle(rawValue: deviceStyle) ?? .card
         let encrypted = model.vault(card.vaultId)?.isEncrypted == true
         if style != .off, !encrypted {
-            ForEach(Doc.linkUrls(card.content).filter { !Doc.isImageUrl($0) }.prefix(3), id: \.self) { url in
+            ForEach(BubbleMemo.value(model, card, "links") { Array(Doc.linkUrls(card.content).filter { !Doc.isImageUrl($0) }.prefix(3)) }, id: \.self) { url in
                 LinkCard(url: url, compact: style == .compact)
             }
         }

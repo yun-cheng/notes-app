@@ -1,5 +1,7 @@
 package dev.notesapp.app
 
+import kotlinx.coroutines.withContext
+import kotlinx.coroutines.Dispatchers
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.horizontalScroll
@@ -269,56 +271,70 @@ fun GroupBlock(group: TagGroup) {
  * other devices, by AI apps and by people sharing, each marked with who or what made it and with an Undo of its own.
  * A filter narrows it as it narrows the journal.
  */
+private data class HistoryRow(val group: String, val changes: List<Change>, val at: Long, val by: String? = null)
+
 @Composable
 fun HistoryPage(openDrawer: (() -> Unit)?) {
     val model = LocalModel.current
     var local by remember { mutableStateOf<List<Change>>(emptyList()) }
     var current by remember { mutableStateOf<Map<String, Card>>(emptyMap()) }
     var versions by remember { mutableStateOf<List<RecentVersion>>(emptyList()) }
+    // The server's versions read as changes, worked out when they or the cards change rather than on every redraw.
+    var synced by remember { mutableStateOf<List<Pair<RecentVersion, Change>>>(emptyList()) }
     var next by remember { mutableStateOf<String?>(null) }
     var offline by remember { mutableStateOf(false) }
     var filter by remember { mutableStateOf(StreamFilter()) }
     var fetched by remember { mutableStateOf(0L) }
     var loadMore by remember { mutableStateOf(0) }
-    LaunchedEffect(model.cards, loadMore) {
+    LaunchedEffect(model.cardsVersion, loadMore) {
         val rows = model.repo.changes()
         local = rows.map { it.first }
         current = rows.mapNotNull { r -> r.second?.let { r.first.cardId to it } }.toMap()
         // The server's history is asked again at most every half minute; this device's log at each change.
         val more = loadMore > 0 && next != null
-        if (!more && System.currentTimeMillis() - fetched < 30_000) return@LaunchedEffect
-        fetched = System.currentTimeMillis()
-        try {
-            val page = model.api.recentVersions(if (more) next else null)
-            versions = if (more) versions + page.versions.filter { v -> versions.none { it.id == v.id } } else page.versions
-            next = page.next
-            offline = false
-        } catch (_: Exception) { offline = true }
+        if (more || System.currentTimeMillis() - fetched >= 30_000) {
+            fetched = System.currentTimeMillis()
+            try {
+                val page = model.api.recentVersions(if (more) next else null)
+                val known = versions.map { it.id }.toSet()
+                versions = if (more) versions + page.versions.filter { it.id !in known } else page.versions
+                next = page.next
+                offline = false
+            } catch (_: Exception) { offline = true }
+        }
+        // Each is decoded, and opened if sealed, off the main thread; again when the cards change, as a vault opened
+        // or locked reads differently.
+        val repo = model.repo
+        val all = versions
+        synced = withContext(Dispatchers.Default) { all.mapNotNull { v -> repo.syncedChange(v)?.let { v to it } } }
     }
-    data class Row(val group: String, val changes: List<Change>, val at: Long, val by: String? = null)
     val locked = model.lockedVaults
-    val shown = { c: Change -> c.after.vaultId !in locked && Changes.matches(c, filter, model.today) }
-    var rows = Changes.grouped(local.filter(shown)).map { Row(it.group, it.changes, it.at) }
-    // Older changes here wait for the server's versions of their time, so the history has no gaps.
-    val reach = next?.split("-")?.firstOrNull()?.toLongOrNull() ?: Long.MIN_VALUE
-    rows = rows.filter { it.at >= reach || next == null }
-    for (v in versions) {
-        val change = model.repo.syncedChange(v) ?: continue
-        if (!shown(change) || Changes.inLog(change, v, local)) continue
-        rows = rows + Row(change.group, listOf(change.copy(by = v.madeBy)), change.until, v.madeBy)
+    val rows = remember(local, synced, filter, locked, model.today, next) {
+        val shown = { c: Change -> c.after.vaultId !in locked && Changes.matches(c, filter, model.today) }
+        // Older changes here wait for the server's versions of their time, so the history has no gaps.
+        val reach = next?.split("-")?.firstOrNull()?.toLongOrNull() ?: Long.MIN_VALUE
+        val mine = Changes.grouped(local.filter(shown)).map { HistoryRow(it.group, it.changes, it.at) }.filter { it.at >= reach || next == null }
+        val logOf = local.groupBy { it.cardId }
+        val theirs = synced.mapNotNull { (v, change) ->
+            if (!shown(change) || Changes.inLog(change, v, logOf[change.cardId] ?: emptyList())) null
+            else HistoryRow(change.group, listOf(change.copy(by = v.madeBy)), change.until, v.madeBy)
+        }
+        (mine + theirs).sortedByDescending { it.at }
     }
-    rows = rows.sortedByDescending { it.at }
     Column(Modifier.fillMaxSize().background(Theme.bg)) {
         TopBar("History", openDrawer)
         FilterRow(filter, { filter = it }) {}
-        Column(Modifier.weight(1f).verticalScroll(rememberScrollState()).padding(bottom = 24.dp)) {
-            if (offline) FormText("Connect to the internet to see changes made elsewhere.")
+        // Lazy, as the history can be long: only the rows on screen are laid out.
+        androidx.compose.foundation.lazy.LazyColumn(Modifier.weight(1f), contentPadding = androidx.compose.foundation.layout.PaddingValues(bottom = 24.dp)) {
+            if (offline) item { FormText("Connect to the internet to see changes made elsewhere.") }
             for (row in rows) {
-                SectionTitle(DateFormat.getDateTimeInstance(DateFormat.MEDIUM, DateFormat.SHORT).format(Date(row.at)) + (row.by?.let { " · $it" } ?: ""))
-                for (change in row.changes) ChangeRow(change, current[change.cardId] ?: model.card(change.cardId))
+                item {
+                    SectionTitle(DateFormat.getDateTimeInstance(DateFormat.MEDIUM, DateFormat.SHORT).format(Date(row.at)) + (row.by?.let { " · $it" } ?: ""))
+                }
+                items(row.changes.size) { i -> val change = row.changes[i]; ChangeRow(change, current[change.cardId] ?: model.card(change.cardId)) }
             }
-            if (next != null) TextButton(onClick = { loadMore++ }, Modifier.padding(horizontal = 12.dp)) { Text("Show older changes") }
-            if (rows.isEmpty()) FormText("No changes yet")
+            if (next != null) item { TextButton(onClick = { loadMore++ }, Modifier.padding(horizontal = 12.dp)) { Text("Show older changes") } }
+            if (rows.isEmpty()) item { FormText("No changes yet") }
         }
     }
 }

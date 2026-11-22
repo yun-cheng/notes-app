@@ -104,7 +104,7 @@ public struct DocText: Sendable {
             case "paragraph":
                 newLine()
                 out += marker(prefix)
-                inline(node["content"]?.arrayValue ?? [], font: DocText.bodyFont)
+                paragraph(node["content"]?.arrayValue ?? [])
             case "heading":
                 let level = min(max(Int(node["attrs"]?["level"]?.intValue ?? 1), 1), 3)
                 let font = DocText.headingFont(level)
@@ -157,7 +157,7 @@ public struct DocText: Sendable {
                     case "paragraph":
                         newLine()
                         out += marker(prefix + indent + (first ? box : "  "))
-                        inline(child["content"]?.arrayValue ?? [], font: DocText.bodyFont)
+                        paragraph(child["content"]?.arrayValue ?? [])
                         first = false
                     default:
                         newLine()
@@ -197,7 +197,7 @@ public struct DocText: Sendable {
                     } else if type == "paragraph" {
                         newLine()
                         out += marker(prefix + indent + (first ? bullet : "  "))
-                        inline(child["content"]?.arrayValue ?? [], font: DocText.bodyFont)
+                        paragraph(child["content"]?.arrayValue ?? [])
                         first = false
                     } else {
                         newLine()
@@ -209,16 +209,31 @@ public struct DocText: Sendable {
             }
         }
 
+        /// A paragraph's words. Words that would be read back as a list, heading, quote or rule start with
+        /// `DocText.literal`, so they stay words.
+        mutating func paragraph(_ nodes: [JSONValue]) {
+            if nodes.first?["type"]?.stringValue == "text", DocText.readsAsBlock(nodes.first?["text"]?.stringValue ?? "") {
+                out += plain(DocText.literal)
+            }
+            inline(nodes, font: DocText.bodyFont)
+        }
+
         mutating func inline(_ nodes: [JSONValue], font: Font) {
             for node in nodes {
                 switch node["type"]?.stringValue {
                 case "text":
-                    out += styled(node["text"]?.stringValue ?? "", marks: node["marks"]?.arrayValue ?? [], font: font)
+                    out += styled(DocText.keepingBars(node["text"]?.stringValue ?? ""), marks: node["marks"]?.arrayValue ?? [], font: font)
                 case "hardBreak":
                     out += plain("\u{2028}", font: font)
                 case "cardLink":
                     let id = node["attrs"]?["id"]?.stringValue ?? ""
-                    var a = plain(titleOf(id, node["attrs"]?["label"]?.stringValue ?? ""), font: font)
+                    let label = node["attrs"]?["label"]?.stringValue ?? ""
+                    let shown = titleOf(id, label)
+                    // Shown as "Locked" or "Not shared" here, but saved back with its own label.
+                    if shown != label, shown == CardIndex.lockedTitle || shown == CardIndex.unsharedTitle {
+                        stash[DocText.labelKey(id, shown)] = .string(label)
+                    }
+                    var a = plain(shown, font: font)
                     a.link = DocText.cardURL(id)
                     out += a
                 default:
@@ -507,7 +522,8 @@ public struct DocText: Sendable {
                 let s = String(line.text[run.range].characters)
                 if s.isEmpty { continue }
                 if let url = run.link, let id = DocText.cardId(from: url) {
-                    out.append(["type": "cardLink", "attrs": ["id": .string(id), "label": .string(s)]])
+                    let label = stash[DocText.labelKey(id, s)]?.stringValue ?? s
+                    out.append(["type": "cardLink", "attrs": ["id": .string(id), "label": .string(label)]])
                     continue
                 }
                 if let node = stashed(run.link) {
@@ -529,8 +545,12 @@ public struct DocText: Sendable {
                 for (k, part) in s.split(separator: "\u{2028}", omittingEmptySubsequences: false).enumerated() {
                     if k > 0 { out.append(["type": "hardBreak"]) }
                     if part.isEmpty { continue }
-                    // `||words||` typed in hides them, as in the web app's editor.
-                    for (piece, typedHidden) in DocText.hiddenRuns(String(part)) {
+                    // `||words||` typed in hides them, as in the web app's editor; not in code. Bars kept apart by
+                    // `literal` were in the words already, and stay.
+                    let code = marks.contains { $0["type"]?.stringValue == "code" }
+                    for (typed, typedHidden) in code ? [(String(part), false)] : DocText.hiddenRuns(String(part)) {
+                    let piece = typed.replacingOccurrences(of: DocText.literal, with: "")
+                    if piece.isEmpty { continue }
                     var pieceMarks = marks
                     if hidden || typedHidden { pieceMarks.append(["type": "hidden"]) }
                     var node: JSONValue = ["type": "text", "text": .string(piece)]
@@ -549,6 +569,34 @@ public struct DocText: Sendable {
 }
 
 extension DocText {
+    /// An invisible character that keeps words that look like editor syntax as words: put before a paragraph that
+    /// starts like a list, and between bars that would hide words. Never saved.
+    public static let literal = "\u{2060}"
+
+    /// Whether a line starting with these words would be read as something other than a paragraph.
+    static func readsAsBlock(_ s: String) -> Bool {
+        if s.hasPrefix(" ") || s.hasPrefix(">") || s.hasPrefix("```") || s.trimmingCharacters(in: .whitespaces) == "---" { return true }
+        if listMarker(s) != nil || taskMarker(s) != nil { return true }
+        let hashes = s.prefix { $0 == "#" }.count
+        return (1...3).contains(hashes) && s.dropFirst(hashes).hasPrefix(" ")
+    }
+
+    /// Words with `literal` between any two bars, so they aren't read as `||hidden||` again.
+    static func keepingBars(_ s: String) -> String {
+        guard s.contains("||") else { return s }
+        var out = ""
+        var last: Character?
+        for c in s {
+            if c == "|", last == "|" { out += literal }
+            out.append(c)
+            last = c
+        }
+        return out
+    }
+
+    /// Where a card link's own label is kept while it's shown under another title.
+    static func labelKey(_ id: String, _ shown: String) -> String { "label:\(id):\(shown)" }
+
     /// Text cut where `||words||` marks words to hide; the bars go.
     static func hiddenRuns(_ s: String) -> [(String, Bool)] {
         var out: [(String, Bool)] = []

@@ -195,9 +195,13 @@ public struct CardIndex: Sendable {
     }
 
     /// The title to show for a linked card: never its stored title when the target is locked or not shared.
+    /// What a link shows in place of a card this device can't read; never saved as the link's label.
+    public static let lockedTitle = "Locked"
+    public static let unsharedTitle = "Not shared"
+
     public func linkTitle(_ id: String, fallback: String) -> String {
-        if lockedCards[id] != nil { return "Locked" }
-        guard let target = byId[id] else { return "Not shared" }
+        if lockedCards[id] != nil { return Self.lockedTitle }
+        guard let target = byId[id] else { return Self.unsharedTitle }
         return target.deleted ? fallback : target.displayTitle
     }
 

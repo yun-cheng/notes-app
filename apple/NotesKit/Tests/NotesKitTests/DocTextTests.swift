@@ -32,6 +32,27 @@ import Testing
         #expect(String(DocText(doc: d).text.characters) == "Plain, bold and both\n\ncode gone under")
     }
 
+    @Test func wordsThatLookLikeSyntaxStayWords() {
+        let d = doc(
+            para(text("- milk")), para(text("1. first")), para(text("# not a heading")), para(text("> not a quote")),
+            para(text("---")), para(text("[ ] not a box")), para(text("  indented")),
+            para(text("if a || b || c")), para(text("x || y", ["code"])),
+        )
+        #expect(roundTrip(d) == d)
+        // Typed in, they still make lists and hide words.
+        let typed = DocText(text: AttributedString("- milk\nsay ||this||"), stash: [:]).doc(in: context)
+        #expect(typed["content"]?[0]?["type"] == "bulletList")
+        #expect(typed["content"]?[1]?["content"]?[1]?["marks"]?[0]?["type"] == "hidden")
+    }
+
+    @Test func linksShownUnderAnotherTitleKeepTheirLabel() {
+        let card: JSONValue = ["type": "cardLink", "attrs": ["id": "c-9", "label": "Plans"]]
+        let d = doc(para(text("See "), card))
+        let shown = DocText(doc: d, titleOf: { _, _ in "Locked" })
+        #expect(String(shown.text.characters) == "See Locked")
+        #expect(shown.doc(in: context) == d)
+    }
+
     @Test func linksCardLinksAndBreaks() {
         let link: JSONValue = ["type": "text", "text": "site", "marks": [["type": "link", "attrs": ["href": "https://example.com/a"]]]]
         let card: JSONValue = ["type": "cardLink", "attrs": ["id": "c-1", "label": "Groceries"]]

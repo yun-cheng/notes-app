@@ -8,12 +8,17 @@ struct DocEditor: View {
     @State private var doc: DocText
     @State private var selection = AttributedTextSelection()
     @State private var pendingSave: Task<Void, Never>?
+    /// The text as opened, and the body it reads back as: what was last saved, so a close with no edits saves nothing.
+    @State private var loaded: AttributedString
+    @State private var saved: JSONValue?
     @Environment(\.fontResolutionContext) private var fontContext
 
     init(content: JSONValue, editable: Bool, titleOf: @escaping (String, String) -> String, onSave: @escaping (JSONValue) -> Void) {
         self.editable = editable
         self.onSave = onSave
-        _doc = State(initialValue: DocText(doc: content, titleOf: titleOf))
+        let doc = DocText(doc: content, titleOf: titleOf)
+        _doc = State(initialValue: doc)
+        _loaded = State(initialValue: doc.text)
     }
 
     var body: some View {
@@ -58,8 +63,11 @@ struct DocEditor: View {
     private func saveNow() {
         pendingSave?.cancel()
         pendingSave = nil
-        guard editable else { return }
-        onSave(doc.doc(in: fontContext))
+        guard editable, doc.text != loaded || saved != nil else { return }
+        let before = saved ?? DocText(text: loaded, stash: doc.stash).doc(in: fontContext)
+        let out = doc.doc(in: fontContext)
+        saved = out
+        if out != before { onSave(out) }
     }
 
     private static func marker(_ s: String) -> AttributedString {

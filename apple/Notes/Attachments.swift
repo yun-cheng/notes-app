@@ -57,7 +57,7 @@ final class Attachments {
     /// The bytes as stored: from this device, or fetched once from the server.
     func stored(_ id: String, api: ServerAPI) async -> Data? {
         let url = file(id)
-        if let data = try? Data(contentsOf: url) { return data }
+        if let data = await Task.detached(operation: { try? Data(contentsOf: url) }).value { return data }
         if let task = loading[id] { return await task.value }
         let task = Task<Data?, Never> {
             guard let data = try? await api.attachment(id) else { return nil }
@@ -75,7 +75,37 @@ final class Attachments {
         guard let stored = await stored(id, api: model.api) else { return nil }
         guard let vault = AttachmentSeal.sealedVault(stored) else { return stored }
         guard let key = model.repo.keyring.key(vault) else { return nil }
-        return AttachmentSeal.open(stored, id: id, key: key)?.data
+        return await Task.detached { AttachmentSeal.open(stored, id: id, key: key)?.data }.value
+    }
+
+    private let thumbs = NSCache<NSString, PlatformImage>()
+
+    /// A photo no bigger than `pixels` on its longest side, for a thumbnail: read, opened and shrunk off the main
+    /// thread rather than decoded whole, and kept in memory for when it scrolls by again.
+    func thumbnail(_ id: String, pixels: Int, model: AppModel) async -> PlatformImage? {
+        let key = "\(id)@\(pixels)" as NSString
+        if let hit = thumbs.object(forKey: key) { return hit }
+        guard let data = await data(id, model: model) else { return nil }
+        guard let cg = await Task.detached(operation: { Self.shrink(data, pixels: pixels) }).value else { return nil }
+        #if os(macOS)
+        let image = NSImage(cgImage: cg, size: NSSize(width: cg.width, height: cg.height))
+        #else
+        let image = UIImage(cgImage: cg)
+        #endif
+        thumbs.setObject(image, forKey: key)
+        return image
+    }
+
+    /// Drops the thumbnails kept in memory, when a vault locks or the account signs out.
+    func forgetThumbnails() { thumbs.removeAllObjects() }
+
+    nonisolated static func shrink(_ data: Data, pixels: Int) -> CGImage? {
+        guard let source = CGImageSourceCreateWithData(data as CFData, nil) else { return nil }
+        let options: [CFString: Any] = [
+            kCGImageSourceCreateThumbnailFromImageAlways: true, kCGImageSourceThumbnailMaxPixelSize: pixels,
+            kCGImageSourceCreateThumbnailWithTransform: true, kCGImageSourceShouldCacheImmediately: true,
+        ]
+        return CGImageSourceCreateThumbnailAtIndex(source, 0, options as CFDictionary)
     }
 
     /// The bytes in a file of their own, with the name given, for a player or for opening in another app.
@@ -262,7 +292,8 @@ struct PhotoThumb: View {
                     case .photo(let id): id
                     case .video(let file): file.poster ?? Doc.posterId(file.id)
                     }
-                if let data = await Attachments.shared.data(id, model: model) { image = PlatformImage(data: data) }
+                // Three pixels a point, for the size it's shown at; a grid cell when it fills its space.
+                image = await Attachments.shared.thumbnail(id, pixels: Int((size ?? 200) * 3), model: model)
             }
     }
 }

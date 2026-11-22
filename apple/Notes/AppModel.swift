@@ -193,6 +193,7 @@ final class AppModel {
         page = .journal(StreamFilter())
         // Its todos remind no more; the next account's are scheduled once it opens.
         Reminders.reschedule(index)
+        Attachments.shared.forgetThumbnails()
         Task {
             if let token { await ServerAPI(site: site, token: token).signOut() }
             try? await old.clear()
@@ -308,6 +309,7 @@ final class AppModel {
     func lock(_ vaultId: String) {
         openVaults.remove(vaultId)
         repo.keyring.forget(vaultId)
+        Attachments.shared.forgetThumbnails()
         Task { await refresh() }
     }
 
@@ -315,6 +317,7 @@ final class AppModel {
     func lockAll() {
         openVaults = []
         repo.keyring.forgetAll()
+        Attachments.shared.forgetThumbnails()
         Task { await refresh() }
     }
 

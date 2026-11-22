@@ -185,11 +185,15 @@ struct VoiceRecordButton: View {
     }
 
     private func finish(_ url: URL) {
+        Task { await keep(url) }
+    }
+
+    private func keep(_ url: URL) async {
         guard let data = try? Data(contentsOf: url) else { return }
         let samples = Transcriber.samples(url) ?? []
         let duration = Double(samples.count) / Double(Voice.rate)
         do {
-            let node = try Attachments.shared.addFile(
+            let node = try await Attachments.shared.addFile(
                 data, name: Voice.name(at: Date(), ext: "m4a"), mime: "audio/mp4", vaultId: vaultId, model: model, duration: duration > 0 ? duration : nil,
                 extra: ["peaks": .array(Voice.peaks(samples).map(JSONValue.double))])
             add(node)

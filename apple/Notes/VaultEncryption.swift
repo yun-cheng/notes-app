@@ -185,9 +185,9 @@ struct VaultEncryption {
         do {
             let node: JSONValue
             if let file {
-                node = try Attachments.shared.addFile(data, name: file.name, mime: file.mime ?? "application/octet-stream", vaultId: vaultId, model: model, duration: file.duration, id: newId, seal: seal)
+                node = try await Attachments.shared.addFile(data, name: file.name, mime: file.mime ?? "application/octet-stream", vaultId: vaultId, model: model, duration: file.duration, id: newId, seal: seal)
             } else {
-                node = try Attachments.shared.addPhoto(data, vaultId: vaultId, model: model, id: newId, seal: seal)
+                node = try await Attachments.shared.addPhoto(data, vaultId: vaultId, model: model, id: newId, seal: seal)
             }
             return node["attrs"]?["id"]?.stringValue
         } catch {

@@ -1,4 +1,5 @@
 import AVKit
+import CryptoKit
 import ImageIO
 import NotesKit
 import SwiftUI
@@ -122,7 +123,7 @@ final class Attachments {
 
     /// A photo shrunk as the web app's `prepare.ts` does: no edge over 2048 points, a JPEG at 0.85, except a small
     /// PNG, GIF or WebP, which stays as it is.
-    static func prepare(_ data: Data) -> (data: Data, mime: String, width: Double, height: Double)? {
+    nonisolated static func prepare(_ data: Data) -> (data: Data, mime: String, width: Double, height: Double)? {
         guard let source = CGImageSourceCreateWithData(data as CFData, nil),
             let props = CGImageSourceCopyPropertiesAtIndex(source, 0, nil) as? [CFString: Any]
         else { return nil }
@@ -160,10 +161,10 @@ final class Attachments {
 
     /// Keeps a photo for an entry in `vaultId` and queues its upload. Returns the photo node to put in the entry.
     /// `seal` overrides whether it's sealed, which otherwise follows the vault.
-    func addPhoto(_ raw: Data, vaultId: String, model: AppModel, id given: String? = nil, seal: Bool? = nil) throws -> JSONValue {
-        guard let photo = Self.prepare(raw) else { throw AddError.notAPicture }
+    func addPhoto(_ raw: Data, vaultId: String, model: AppModel, id given: String? = nil, seal: Bool? = nil) async throws -> JSONValue {
+        guard let photo = await Task.detached(operation: { Self.prepare(raw) }).value else { throw AddError.notAPicture }
         let id = given ?? UUID().uuidString.lowercased()
-        try keep(id, photo.data, vaultId: vaultId, model: model, seal: seal, pending: Pending(id: id, vaultId: vaultId, mime: photo.mime, sealed: false, width: photo.width, height: photo.height))
+        try await keep(id, photo.data, vaultId: vaultId, model: model, seal: seal, pending: Pending(id: id, vaultId: vaultId, mime: photo.mime, sealed: false, width: photo.width, height: photo.height))
         return ["type": "photo", "attrs": ["id": .string(id)]]
     }
 
@@ -196,40 +197,44 @@ final class Attachments {
         let facts = await Self.videoFacts(data, name: name)
         let id = UUID().uuidString.lowercased()
         var extra: [String: JSONValue] = [:]
-        if let poster = facts.poster, let still = try? addPhoto(poster, vaultId: vaultId, model: model, id: Doc.posterId(id)) {
+        if let poster = facts.poster, let still = try? await addPhoto(poster, vaultId: vaultId, model: model, id: Doc.posterId(id)) {
             extra["poster"] = still["attrs"]?["id"] ?? .null
         }
         if let w = facts.width { extra["width"] = .double(w) }
         if let h = facts.height { extra["height"] = .double(h) }
-        return try addFile(data, name: name, mime: mime, vaultId: vaultId, model: model, duration: facts.duration, extra: extra, id: id)
+        return try await addFile(data, name: name, mime: mime, vaultId: vaultId, model: model, duration: facts.duration, extra: extra, id: id)
     }
 
-    func addFile(_ data: Data, name: String, mime: String, vaultId: String, model: AppModel, duration: Double? = nil, extra: [String: JSONValue] = [:], id given: String? = nil, seal: Bool? = nil) throws -> JSONValue {
+    func addFile(_ data: Data, name: String, mime: String, vaultId: String, model: AppModel, duration: Double? = nil, extra: [String: JSONValue] = [:], id given: String? = nil, seal: Bool? = nil) async throws -> JSONValue {
         let video = mime.hasPrefix("video/")
         let limit = video ? Self.maxVideoBytes : Self.maxFileBytes
         if data.count > limit {
             throw AddError.tooBig("\(name) is \(ByteCountFormatter.string(fromByteCount: Int64(data.count), countStyle: .file)). \(video ? "Videos" : "Files") can be up to \(ByteCountFormatter.string(fromByteCount: Int64(limit), countStyle: .file)).")
         }
         let id = given ?? UUID().uuidString.lowercased()
-        try keep(id, data, vaultId: vaultId, model: model, seal: seal, pending: Pending(id: id, vaultId: vaultId, mime: mime, sealed: false, fileName: name, duration: duration))
+        try await keep(id, data, vaultId: vaultId, model: model, seal: seal, pending: Pending(id: id, vaultId: vaultId, mime: mime, sealed: false, fileName: name, duration: duration))
         var attrs: [String: JSONValue] = ["id": .string(id), "name": .string(name), "mime": .string(mime), "size": .int(Int64(data.count))]
         if let duration { attrs["duration"] = .double(duration) }
         attrs.merge(extra) { _, new in new }
         return ["type": "file", "attrs": .object(attrs)]
     }
 
-    private func keep(_ id: String, _ data: Data, vaultId: String, model: AppModel, seal: Bool?, pending item: Pending) throws {
+    /// Seals it if it's to be sealed and writes it here, both off the main thread (a video can be a gigabyte).
+    private func keep(_ id: String, _ data: Data, vaultId: String, model: AppModel, seal: Bool?, pending item: Pending) async throws {
         var item = item
         item.account = model.accountId
-        var stored = data
+        var key: SymmetricKey?
         if seal ?? (model.vault(vaultId)?.isEncrypted == true) {
-            guard let key = model.repo.keyring.key(vaultId) else { throw AddError.locked }
-            stored = try AttachmentSeal.seal(
-                data, id: id, vaultId: vaultId, key: key,
-                facts: .init(mime: item.mime, size: data.count, name: item.fileName, width: item.width, height: item.height, duration: item.duration))
+            guard let k = model.repo.keyring.key(vaultId) else { throw AddError.locked }
+            key = k
             item.sealed = true
         }
-        try stored.write(to: file(id))
+        let url = file(id)
+        let facts = AttachmentSeal.Facts(mime: item.mime, size: data.count, name: item.fileName, width: item.width, height: item.height, duration: item.duration)
+        try await Task.detached {
+            let stored = try key.map { try AttachmentSeal.seal(data, id: id, vaultId: vaultId, key: $0, facts: facts) } ?? data
+            try stored.write(to: url)
+        }.value
         pending.append(item)
         Task { await upload(model: model) }
     }
@@ -240,7 +245,8 @@ final class Attachments {
         uploading = true
         defer { uploading = false }
         for item in pending where item.account == nil || item.account == model.accountId {
-            guard let data = try? Data(contentsOf: file(item.id)) else {
+            let url = file(item.id)
+            guard let data = await Task.detached(operation: { try? Data(contentsOf: url) }).value else {
                 pending.removeAll { $0.id == item.id }
                 continue
             }

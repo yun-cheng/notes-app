@@ -147,7 +147,9 @@ struct JournalBox: View {
             return
         }
         if let data = board.data(forType: .png) ?? board.data(forType: .tiff) {
-            do { attached.append(try Attachments.shared.addPhoto(data, vaultId: targetVault, model: model)) } catch { model.say(error.localizedDescription) }
+            Task {
+                do { attached.append(try await Attachments.shared.addPhoto(data, vaultId: targetVault, model: model)) } catch { model.say(error.localizedDescription) }
+            }
             return
         }
     }
@@ -162,7 +164,7 @@ struct JournalBox: View {
                 let mime = type?.preferredMIMEType ?? "video/quicktime"
                 attached.append(try await Attachments.shared.addVideo(data, name: "Video.\(type?.preferredFilenameExtension ?? "mov")", mime: mime, vaultId: targetVault, model: model))
             } else {
-                attached.append(try Attachments.shared.addPhoto(data, vaultId: targetVault, model: model))
+                attached.append(try await Attachments.shared.addPhoto(data, vaultId: targetVault, model: model))
             }
         } catch {
             model.say(error.localizedDescription)
@@ -173,31 +175,34 @@ struct JournalBox: View {
         // A picture's address from a web page: fetched by the server, since most sites don't let others fetch it.
         if url.scheme?.hasPrefix("http") == true {
             Task {
-                do { attached.append(try Attachments.shared.addPhoto(try await model.api.fetchPicture(url.absoluteString), vaultId: targetVault, model: model)) } catch { model.say(error.localizedDescription) }
+                do { attached.append(try await Attachments.shared.addPhoto(try await model.api.fetchPicture(url.absoluteString), vaultId: targetVault, model: model)) } catch { model.say(error.localizedDescription) }
             }
-            return
-        }
-        let scoped = url.startAccessingSecurityScopedResource()
-        defer { if scoped { url.stopAccessingSecurityScopedResource() } }
-        guard let data = try? Data(contentsOf: url) else {
-            model.say("That file can't be read. Save it to a folder first, then add it from there.")
             return
         }
         let type = UTType(filenameExtension: url.pathExtension)
-        do {
-            if let type, type.conforms(to: .movie) {
-                let name = url.lastPathComponent
-                let mime = type.preferredMIMEType ?? "video/mp4"
-                Task {
-                    do { attached.append(try await Attachments.shared.addVideo(data, name: name, mime: mime, vaultId: targetVault, model: model)) } catch { model.say(error.localizedDescription) }
-                }
-            } else if let type, type.conforms(to: .image), !type.conforms(to: .svg) {
-                attached.append(try Attachments.shared.addPhoto(data, vaultId: targetVault, model: model))
-            } else {
-                attached.append(try Attachments.shared.addFile(data, name: url.lastPathComponent, mime: type?.preferredMIMEType ?? "application/octet-stream", vaultId: targetVault, model: model))
+        let vault = targetVault
+        Task {
+            // Read off the main thread: a video can be a gigabyte.
+            let data = await Task.detached { () -> Data? in
+                let scoped = url.startAccessingSecurityScopedResource()
+                defer { if scoped { url.stopAccessingSecurityScopedResource() } }
+                return try? Data(contentsOf: url)
+            }.value
+            guard let data else {
+                model.say("That file can't be read. Save it to a folder first, then add it from there.")
+                return
             }
-        } catch {
-            model.say(error.localizedDescription)
+            do {
+                if let type, type.conforms(to: .movie) {
+                    attached.append(try await Attachments.shared.addVideo(data, name: url.lastPathComponent, mime: type.preferredMIMEType ?? "video/mp4", vaultId: vault, model: model))
+                } else if let type, type.conforms(to: .image), !type.conforms(to: .svg) {
+                    attached.append(try await Attachments.shared.addPhoto(data, vaultId: vault, model: model))
+                } else {
+                    attached.append(try await Attachments.shared.addFile(data, name: url.lastPathComponent, mime: type?.preferredMIMEType ?? "application/octet-stream", vaultId: vault, model: model))
+                }
+            } catch {
+                model.say(error.localizedDescription)
+            }
         }
     }
 

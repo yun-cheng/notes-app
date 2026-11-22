@@ -205,14 +205,17 @@ struct JournalBox: View {
         let typed = text
         let added = Transcriber.shared.fill(attached)
         guard !typed.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty || !added.isEmpty else { return }
-        var entries: [Entry]
-        if added.isEmpty {
-            entries = EntryParser.parseEntries(typed, today: model.today, allTodos: todos)
-        } else {
-            // Photos and files go in with the words, read as the web's box reads its rich text.
-            let words = typed.trimmingCharacters(in: .whitespacesAndNewlines)
-            let blocks = (words.isEmpty ? [] : Doc.fromText(todos && !words.hasPrefix("[") ? "[] " + words : words)["content"]?.arrayValue ?? []) + added
-            entries = EntryParser.entries(from: ["type": "doc", "content": .array(blocks)], today: model.today)
+        let words = typed.trimmingCharacters(in: .whitespacesAndNewlines)
+        // Photos and files go with the last entry written, as in the web's box, where they sit after the words; alone
+        // they're a note of their own, or a todo named Photo.
+        var entries = EntryParser.parseEntries(words.isEmpty && todos && !added.isEmpty ? "Photo" : typed, today: model.today, allTodos: todos)
+        if !added.isEmpty {
+            if let last = entries.indices.last {
+                let words = (entries[last].content["content"]?.arrayValue ?? []).filter { !($0["type"] == "paragraph" && $0["content"] == nil) }
+                entries[last].content = ["type": "doc", "content": .array(words + added)]
+            } else {
+                entries = EntryParser.entries(from: ["type": "doc", "content": .array(added)], today: model.today)
+            }
         }
         let opts = SaveOptions(journal: filter, today: model.today)
         Task {

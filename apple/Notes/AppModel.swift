@@ -12,7 +12,9 @@ final class AppModel {
     enum Phase { case loading, signedOut, signedIn }
 
     private(set) var phase: Phase = .loading
-    private(set) var account: Account?
+    private(set) var account: Account? {
+        didSet { cachedAPI = nil }
+    }
     private(set) var vaults: [Vault] = []
     private(set) var shared: [SharedCard] = []
     /// Every card on the device, sealed ones too: `index` keeps locked ones out of every list.
@@ -102,6 +104,7 @@ final class AppModel {
         if accounts.isEmpty, let data = UserDefaults.standard.data(forKey: Self.accountKey), let saved = try? JSONDecoder().decode(Account.self, from: data) {
             if let token = Keychain.token() {
                 Keychain.save(token, for: saved.id)
+                cachedAPI = nil
                 Keychain.clear(for: "session")
             }
             // SQLite keeps recent writes in a -wal file beside the database: all three move together.
@@ -161,6 +164,7 @@ final class AppModel {
     /// Signed in, on its own or as another account: it goes first in the list, and is opened.
     func signedIn(_ info: SessionInfo, token: String) async {
         Keychain.save(token, for: info.user.id)
+        cachedAPI = nil
         accounts = [info.user] + accounts.filter { $0.id != info.user.id }
         saveAccounts()
         addingAccount = false
@@ -197,8 +201,18 @@ final class AppModel {
         }
     }
 
-    var api: ServerAPI { ServerAPI(site: site, token: account.flatMap { Keychain.token(for: $0.id) }, device: device) }
-    @ObservationIgnored private var device: (id: String, name: String)?
+    /// The server, as the open account. Kept once made, so the token is read from the Keychain only when the
+    /// account or this device's ID changes, not on every use.
+    var api: ServerAPI {
+        if let cachedAPI { return cachedAPI }
+        let made = ServerAPI(site: site, token: account.flatMap { Keychain.token(for: $0.id) }, device: device)
+        cachedAPI = made
+        return made
+    }
+    @ObservationIgnored private var cachedAPI: ServerAPI?
+    @ObservationIgnored private var device: (id: String, name: String)? {
+        didSet { cachedAPI = nil }
+    }
 
     /// What this device calls itself in the history its account sees, as the web's "Safari on Mac".
     static var deviceName: String {

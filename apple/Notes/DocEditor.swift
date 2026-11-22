@@ -4,6 +4,9 @@ import SwiftUI
 /// Edits a card body as rich text. Lists continue when Return is pressed, and end on an empty item.
 struct DocEditor: View {
     let editable: Bool
+    /// The formatting buttons, under the text, as the web sheet's Aa shows them.
+    var tools = false
+    var placeholder = ""
     let onSave: (JSONValue) -> Void
     @State private var doc: DocText
     @State private var selection = AttributedTextSelection()
@@ -13,43 +16,95 @@ struct DocEditor: View {
     @State private var saved: JSONValue?
     @Environment(\.fontResolutionContext) private var fontContext
 
-    init(content: JSONValue, editable: Bool, titleOf: @escaping (String, String) -> String, onSave: @escaping (JSONValue) -> Void) {
+    @State private var showHidden = false
+
+    init(content: JSONValue, editable: Bool, titleOf: @escaping (String, String) -> String, tools: Bool = false, placeholder: String = "", onSave: @escaping (JSONValue) -> Void) {
         self.editable = editable
+        self.tools = tools
+        self.placeholder = placeholder
         self.onSave = onSave
-        let doc = DocText(doc: content, titleOf: titleOf)
+        var doc = DocText(doc: content, titleOf: titleOf)
+        Self.dress(&doc.text, showHidden: false)
         _doc = State(initialValue: doc)
         _loaded = State(initialValue: doc.text)
     }
 
     var body: some View {
-        Group {
+        VStack(alignment: .leading, spacing: 6) {
             if editable {
                 TextEditor(text: $doc.text, selection: $selection)
                     .scrollContentBackground(.hidden)
+                    .scrollDisabled(true)
+                    .overlay(alignment: .topLeading) {
+                        if doc.text.characters.isEmpty && !placeholder.isEmpty {
+                            Text(placeholder).foregroundStyle(Theme.muted.opacity(0.7)).padding(.leading, 5).padding(.top, 1).allowsHitTesting(false)
+                        }
+                    }
                     .onChange(of: doc.text) { old, new in
                         continueList(old: old, new: new)
                         scheduleSave()
                     }
-                    .toolbar {
-                        ToolbarItemGroup(placement: .secondaryAction) {
-                            Button { toggleMarker("☐ ") } label: { Label("Checklist", systemImage: "checklist") }
-                            Button(action: tick) { Label("Tick", systemImage: "checkmark.square") }
-                            Button(action: hide) { Label("Hide", systemImage: "eye.slash") }
+                if tools {
+                    ScrollView(.horizontal, showsIndicators: false) {
+                        HStack(spacing: 2) {
+                            tool("checklist", "Checklist") { toggleMarker("☐ ") }
+                            tool("checkmark.square", "Tick") { tick() }
+                            tool("list.bullet", "Bulleted list") { toggleMarker("• ") }
+                            tool("list.number", "Numbered list") { toggleMarker("1. ") }
+                            tool("textformat.size", "Heading") { toggleMarker("## ") }
+                            tool("text.quote", "Quote") { toggleMarker("> ") }
+                            tool("eye.slash", "Hide the selected words") { hide() }
                                 .keyboardShortcut("h", modifiers: [.command, .shift])
-                            Button { toggleMarker("• ") } label: { Label("Bulleted list", systemImage: "list.bullet") }
-                            Button { toggleMarker("1. ") } label: { Label("Numbered list", systemImage: "list.number") }
-                            Button { toggleMarker("## ") } label: { Label("Heading", systemImage: "textformat.size") }
-                            Button { toggleMarker("> ") } label: { Label("Quote", systemImage: "text.quote") }
+                            tool(showHidden ? "eye" : "eye.circle", showHidden ? "Cover hidden words" : "Show hidden words") {
+                                showHidden.toggle()
+                                Self.dress(&doc.text, showHidden: showHidden)
+                            }
                         }
                     }
-            } else {
-                ScrollView {
-                    Text(doc.text).textSelection(.enabled).frame(maxWidth: .infinity, alignment: .leading)
+                    .buttonStyle(.plain)
+                    .foregroundStyle(Theme.muted)
                 }
+            } else {
+                Text(doc.text).frame(maxWidth: .infinity, alignment: .leading)
             }
         }
         .font(DocText.bodyFont)
         .onDisappear { saveNow() }
+    }
+
+    private func tool(_ icon: String, _ label: String, action: @escaping () -> Void) -> some View {
+        Button(action: action) {
+            Image(systemName: icon).frame(width: 34, height: 30).background(RoundedRectangle(cornerRadius: 7).fill(Theme.sunken)).contentShape(Rectangle())
+        }
+        .help(label)
+        .accessibilityLabel(label)
+    }
+
+    /// How the text looks, as the web editor shows it, without changing what it reads back as: a heading's # marks
+    /// drawn as nothing (the space after them keeps the heading's size for what's typed there), a ticked box in the
+    /// accent, and hidden words covered unless shown.
+    static func dress(_ text: inout AttributedString, showHidden: Bool) {
+        var start = text.startIndex
+        while start < text.endIndex {
+            var end = start
+            while end < text.endIndex, text.characters[end] != "\n" { end = text.characters.index(after: end) }
+            let line = String(text.characters[start..<end])
+            let hashes = line.prefix { $0 == "#" }.count
+            if (1...3).contains(hashes), line.dropFirst(hashes).hasPrefix(" ") {
+                let marks = start..<text.characters.index(start, offsetBy: hashes)
+                text[marks].font = .system(size: 1)
+                text[marks].foregroundColor = .clear
+            }
+            if let task = DocText.taskMarker(line), task.checked {
+                let box = text.characters.index(start, offsetBy: task.indent * 2)
+                text[box..<text.characters.index(after: box)].foregroundColor = Theme.accent
+            }
+            start = end < text.endIndex ? text.characters.index(after: end) : end
+        }
+        for run in text.runs where run.backgroundColor != nil {
+            text[run.range].foregroundColor = showHidden ? nil : .clear
+            text[run.range].backgroundColor = showHidden ? DocText.hiddenTint : Theme.muted.opacity(0.55)
+        }
     }
 
     private func scheduleSave() {
@@ -154,8 +209,10 @@ struct DocEditor: View {
             for range in ranges.ranges {
                 let hidden = text[range].runs.allSatisfy { $0.backgroundColor != nil }
                 text[range].backgroundColor = hidden ? nil : DocText.hiddenTint
+                if hidden { text[range].foregroundColor = nil }
             }
         }
+        Self.dress(&doc.text, showHidden: showHidden)
     }
 
     /// Adds a block marker to the cursor's line, or removes it if the line already has it.
@@ -172,5 +229,6 @@ struct DocEditor: View {
             }
             text.insert(Self.marker(marker), at: start)
         }
+        Self.dress(&doc.text, showHidden: showHidden)
     }
 }

@@ -11,6 +11,12 @@ struct EntrySheet: View {
     @State private var title = ""
     /// The title as last taken from the card: the field differs from it only once something is typed there.
     @State private var opened = ""
+    /// The formatting buttons, shown from the bar's Aa.
+    @State private var tools = false
+    /// A title added to a note from the bar's T.
+    @State private var titled = false
+    /// The entry as it was when opened, for Discard to put back.
+    @State private var original: [String: JSONValue]?
 
     var body: some View {
         NavigationStack {
@@ -32,52 +38,59 @@ struct EntrySheet: View {
         // Its pages, and a blank one being added: kept only once something is written on it.
         let stored = [card.content] + card.morePages
         let pages = stored + Array(repeating: Doc.empty, count: max(0, page + 1 - stored.count))
-        ScrollView {
-            VStack(alignment: .leading, spacing: 12) {
-                if card.viewOnly || !model.canWrite(card) {
-                    Label(card.viewOnly ? "View only. Turn it off in the entry's menu to change it." : "You can view this entry.", systemImage: "lock.doc")
-                        .font(.callout).foregroundStyle(Theme.muted)
-                }
-                if card.type == .todo {
-                    HStack(alignment: .firstTextBaseline, spacing: 8) {
-                        TodoCheck(card: card)
-                        TextField("Todo", text: $title, axis: .vertical)
-                            .font(.title3.weight(.semibold))
-                            .textFieldStyle(.plain)
-                            .disabled(!edit)
-                            .onSubmit { saveTitle(card) }
+        let behind = max(stored.count - 1, page)
+        let isTodo = card.type == .todo
+        let showTitle = isTodo || !card.title.trimmingCharacters(in: .whitespaces).isEmpty || titled || card.isStack
+        VStack(spacing: 0) {
+            ScrollView {
+                VStack(alignment: .leading, spacing: 12) {
+                    if card.viewOnly || !model.canWrite(card) {
+                        Label(card.viewOnly ? "View only. Turn it off in the entry's menu to change it." : "You can view this entry.", systemImage: "eye")
+                            .font(.callout).foregroundStyle(Theme.muted)
                     }
-                    TodoDates(card: card)
-                } else if card.isStack || !card.title.isEmpty {
-                    TextField(card.isStack ? "Stack" : "Title", text: $title)
-                        .font(.title3.weight(.semibold))
-                        .textFieldStyle(.plain)
-                        .disabled(!edit)
-                        .onSubmit { saveTitle(card) }
-                }
-                if pages.count > 1 || page > 0 {
-                    Picker("Page", selection: $page) {
-                        ForEach(pages.indices, id: \.self) { Text("Page \($0 + 1)").tag($0) }
+                    if card.template { TemplateNote(card: card) }
+                    if showTitle {
+                        HStack(alignment: .firstTextBaseline, spacing: 8) {
+                            if isTodo { TodoCheck(card: card).scaleEffect(1.25) }
+                            TextField(isTodo ? "Todo" : card.isStack ? "Stack" : "Title", text: $title, axis: .vertical)
+                                .font(.title3.weight(isTodo ? .regular : .semibold))
+                                .textFieldStyle(.plain)
+                                .disabled(!edit)
+                                .onSubmit { saveTitle(card) }
+                        }
                     }
-                    .pickerStyle(.segmented)
+                    if behind > 0 {
+                        PageTabs(page: $page, count: behind + 1, canAdd: edit && page <= stored.count - 1 + 1 && page < stored.count, canRemove: edit && page > 0) {
+                            removePage(card, stored: stored.count)
+                        }
+                    }
+                    DocEditor(content: pages[page], editable: edit, titleOf: model.index.titleOf, tools: tools, placeholder: page > 0 ? "Page \(page + 1)" : isTodo ? "Details" : "Note") { doc in
+                        savePage(card.id, page, doc)
+                    }
+                    .frame(minHeight: 200)
+                    .id("\(card.id):\(page)")
+                    SheetTags(card: card, edit: edit)
+                    FlowLayout(spacing: 6) { Reactions(card: card, large: true) }
+                    if card.isStack && page == 0 { StackPreview(stack: card) }
+                    CommentsSection(card: card)
+                    Backlinks(card: card)
                 }
-                DocEditor(content: pages[page], editable: edit, titleOf: model.index.titleOf) { doc in
-                    savePage(card.id, page, doc)
-                }
-                .frame(minHeight: 240)
-                .id("\(card.id):\(page)")
-                if card.isStack { StackPreview(stack: card) }
-                BubbleTags(card: card)
-                Backlinks(card: card)
-                CommentsSection(card: card)
+                .padding(20)
             }
-            .padding(20)
+            Divider()
+            SheetBar(card: card, edit: edit, tools: $tools, titled: $titled, showTitle: showTitle, addPage: { page = stored.count }, behind: behind, original: original) {
+                saveTitle(card)
+                dismiss()
+            }
         }
         .pageBackground()
-        .navigationTitle(card.type == .todo ? "Todo" : card.isStack ? "Stack" : "Note")
+        #if os(iOS)
+        .toolbar(.hidden, for: .navigationBar)
+        #endif
         .onAppear {
             title = card.title
             opened = card.title
+            if original == nil { original = card.payload }
         }
         // Renamed elsewhere while open: the field follows, unless something was typed in it.
         .onChange(of: card.title) { _, renamed in
@@ -85,22 +98,22 @@ struct EntrySheet: View {
             opened = renamed
         }
         .onDisappear { saveTitle(card) }
-        .toolbar {
-            ToolbarItem(placement: .confirmationAction) {
-                Button("Done") {
-                    saveTitle(card)
-                    dismiss()
-                }
-            }
-            ToolbarItemGroup(placement: .primaryAction) {
-                if edit {
-                    Button { model.panel = .tags(card.id) } label: { Label("Tags", systemImage: "tag") }
-                    Button { page = pages.count } label: { Label("Add a page", systemImage: "doc.badge.plus") }
-                }
-                Button { model.panel = .history(card.id) } label: { Label("History", systemImage: "clock.arrow.circlepath") }
-                Menu { EntryMenu(card: card) } label: { Label("More", systemImage: "ellipsis.circle") }
-            }
+        #if os(macOS)
+        .onExitCommand { dismiss() }
+        #endif
+    }
+
+    private func removePage(_ card: Card, stored: Int) {
+        let at = page
+        page -= 1
+        guard at < stored else { return }
+        let id = card.id
+        model.update(id) { c in
+            var more = c.morePages
+            if at - 1 < more.count { more.remove(at: at - 1) }
+            c.morePages = more
         }
+        model.say("Took out page \(at + 1)", undoable: true)
     }
 
     private func saveTitle(_ card: Card) {
@@ -126,37 +139,316 @@ struct EntrySheet: View {
     }
 }
 
-/// A todo's due date, time, start and repeat, and Waiting.
-struct TodoDates: View {
+/// What links here, as the web's: "Linked from (2)", each entry named with a line of its text, opening it.
+struct Backlinks: View {
     @Environment(AppModel.self) private var model
     let card: Card
+    @State private var open = true
 
     var body: some View {
-        let edit = model.canEdit(card)
-        HStack(spacing: 10) {
-            DueLabel(card: card).font(.callout)
-            if card.due == nil && !(card.waiting && !card.isDone) { Text("No due date").font(.callout).foregroundStyle(Theme.muted) }
-            Spacer()
-            if edit { Button("Change…") { model.panel = .due(card.id) }.buttonStyle(.borderless) }
+        let links = (model.index.backlinks[card.id] ?? []).filter { $0.kind != .tag || card.type == .tag }
+        if !links.isEmpty {
+            DisclosureGroup(isExpanded: $open) {
+                VStack(alignment: .leading, spacing: 6) {
+                    ForEach(links.prefix(30), id: \.from.id) { link in
+                        Button { model.openEntry = link.from.id } label: {
+                            VStack(alignment: .leading, spacing: 2) {
+                                Text(link.from.displayTitle).fontWeight(.semibold).foregroundStyle(Theme.text).lineLimit(1)
+                                let preview = Doc.previewLines(link.from.content, hidden: .mask).joined(separator: " ")
+                                if !preview.isEmpty { Text(preview).font(.footnote).foregroundStyle(Theme.muted).lineLimit(2) }
+                            }
+                            .padding(10)
+                            .frame(maxWidth: .infinity, alignment: .leading)
+                            .background(RoundedRectangle(cornerRadius: 10).fill(Theme.surface))
+                            .overlay(RoundedRectangle(cornerRadius: 10).stroke(Theme.line))
+                        }
+                        .buttonStyle(.plain)
+                    }
+                }
+                .padding(.top, 6)
+            } label: {
+                Text("\(card.type == .tag ? "Tagged" : "Linked from") (\(links.count))").font(.subheadline.weight(.semibold)).foregroundStyle(Theme.muted)
+            }
+            .padding(.top, 4)
         }
     }
 }
 
-/// What links here and what's tagged with it.
-struct Backlinks: View {
+/// Over a template's text: that it is one, and a button that starts an entry from it.
+struct TemplateNote: View {
     @Environment(AppModel.self) private var model
     let card: Card
 
     var body: some View {
-        let links = model.index.backlinks[card.id] ?? []
-        if !links.isEmpty {
-            VStack(alignment: .leading, spacing: 6) {
-                Text(card.type == .tag ? "Tagged" : "Linked from").font(.headline)
-                ForEach(links.prefix(30), id: \.from.id) { link in
-                    Button(link.from.displayTitle) { model.openEntry = link.from.id }.buttonStyle(.borderless)
+        HStack(alignment: .firstTextBaseline, spacing: 8) {
+            Image(systemName: "doc.on.doc").foregroundStyle(Theme.accent)
+            Text("Template: entries started from it get a copy, its checklists unticked and {date} filled in.").font(.callout).foregroundStyle(Theme.muted)
+            Spacer(minLength: 8)
+            if !model.viewOnly { Button("Use it") { model.startFrom(card) }.buttonStyle(.borderedProminent) }
+        }
+    }
+}
+
+/// The sheet's pages, as the web's tabs: numbered, + for another after them, and a way to take the one shown out.
+struct PageTabs: View {
+    @Binding var page: Int
+    let count: Int
+    let canAdd: Bool
+    let canRemove: Bool
+    let remove: () -> Void
+
+    var body: some View {
+        HStack(spacing: 4) {
+            Image(systemName: "book.pages").font(.caption).foregroundStyle(Theme.muted)
+            ForEach(0..<count, id: \.self) { i in
+                Button { withAnimation(.easeOut(duration: 0.2)) { page = i } } label: {
+                    Text("\(i + 1)").font(.footnote.weight(.semibold)).monospacedDigit()
+                        .frame(minWidth: 26, minHeight: 26)
+                        .background(Circle().fill(page == i ? Theme.accentSoft : .clear))
+                        .overlay(Circle().stroke(page == i ? Theme.accent : Theme.line))
+                        .foregroundStyle(page == i ? Theme.text : Theme.muted)
+                }
+                .buttonStyle(.plain)
+            }
+            if canAdd {
+                Button { page = count } label: {
+                    Image(systemName: "plus").font(.caption.weight(.semibold)).frame(width: 26, height: 26).overlay(Circle().stroke(Theme.line))
+                }
+                .buttonStyle(.plain).foregroundStyle(Theme.muted)
+                .help("Add a page after the others")
+                .accessibilityLabel("Add a page")
+            }
+            if canRemove {
+                Button("Take out page \(page + 1)", action: remove).buttonStyle(.plain).font(.footnote).foregroundStyle(Theme.muted).padding(.leading, 6)
+            }
+        }
+    }
+}
+
+/// An entry's tags in its sheet, as the web's: each in its color, a group's empty choice dashed to pick one, all
+/// opening the tag picker.
+struct SheetTags: View {
+    @Environment(AppModel.self) private var model
+    let card: Card
+    let edit: Bool
+
+    var body: some View {
+        let tags = model.index.resolveTags(model.index.tagGroups.order(card.tags))
+        let unset = edit ? model.index.tagGroups.groups.filter { $0.choosesOne && !$0.members.isEmpty && !$0.members.contains { card.tags.contains($0.id) } } : []
+        if !tags.isEmpty || !unset.isEmpty {
+            FlowLayout(spacing: 6) {
+                ForEach(tags) { tag in
+                    Button { if edit { model.panel = .tags(card.id) } else { model.page = .journal(StreamFilter(tagId: tag.id)) } } label: { TagChip(tag: tag, large: true) }
+                        .buttonStyle(.plain)
+                }
+                ForEach(unset, id: \.id) { group in
+                    Button { model.panel = .tags(card.id) } label: {
+                        Text(group.title).font(.system(size: 13)).foregroundStyle(Theme.muted)
+                            .padding(.horizontal, 10).frame(minHeight: 28)
+                            .overlay(Capsule().strokeBorder(Theme.line, style: StrokeStyle(lineWidth: 1, dash: [3, 3])))
+                    }
+                    .buttonStyle(.plain)
+                    .help("No \(group.title.lowercased())")
                 }
             }
-            .padding(.top, 8)
+        }
+    }
+}
+
+/// The sheet's bar, as the web's: note or todo, the due date, Aa for formatting, tags, a page, a title, the color and
+/// previews, view only, save as template, take out of the stack, copy, share, archive, trash and the vault; then when
+/// it was edited (its history), Undo and Redo, and Discard, which puts it back as it was when opened, and closes.
+struct SheetBar: View {
+    @Environment(AppModel.self) private var model
+    let card: Card
+    let edit: Bool
+    @Binding var tools: Bool
+    @Binding var titled: Bool
+    let showTitle: Bool
+    let addPage: () -> Void
+    let behind: Int
+    let original: [String: JSONValue]?
+    let close: () -> Void
+
+    var body: some View {
+        ViewThatFits(in: .horizontal) {
+            HStack(spacing: 2) { buttons; Spacer(minLength: 8); end }
+            VStack(alignment: .leading, spacing: 4) {
+                ScrollView(.horizontal, showsIndicators: false) { HStack(spacing: 2) { buttons } }
+                HStack { Spacer(minLength: 0); end }
+            }
+        }
+        .buttonStyle(.plain)
+        .foregroundStyle(Theme.muted)
+        .padding(.horizontal, 12)
+        .padding(.vertical, 8)
+        .background(Theme.surface)
+    }
+
+    @ViewBuilder
+    private var buttons: some View {
+        let isStack = card.isStack
+        if edit && !isStack {
+            icon(card.type == .todo ? "checkmark.square" : "doc.text", card.type == .todo ? "Make it a note" : "Make it a todo") {
+                let id = card.id
+                let to: CardType = card.type == .todo ? .note : .todo
+                model.perform { try await $0.retype(id, to: to) }
+            }
+        }
+        if card.type == .todo && edit {
+            Button { model.panel = .due(card.id) } label: {
+                HStack(spacing: 4) {
+                    Image(systemName: "calendar")
+                    let text = DueLabel.text(card, today: model.today, short: true)
+                    Text(text.isEmpty ? "Due date" : text).font(.footnote)
+                        .foregroundStyle(card.isOverdue(today: model.today) ? Theme.alert : Theme.muted)
+                }
+                .padding(.horizontal, 8).frame(height: 32).contentShape(Rectangle())
+            }
+            .help("Due date, start date, time, repeat and waiting")
+        }
+        if edit {
+            Button { tools.toggle() } label: {
+                Text("Aa").font(.system(size: 15, weight: .semibold)).frame(minWidth: 34, minHeight: 32)
+                    .background(RoundedRectangle(cornerRadius: 7).fill(tools ? Theme.accentSoft : .clear))
+            }
+            .help("Formatting")
+            icon("tag", "Tags") { model.panel = .tags(card.id) }
+            if behind == 0 { icon("book.pages", "Add a second page", action: addPage) }
+            if !showTitle {
+                Button { titled = true } label: { Text("T").font(.system(size: 15, weight: .semibold)).frame(minWidth: 34, minHeight: 32) }.help("Add title")
+            }
+            StyleMenu(card: card)
+        }
+        if model.canWrite(card) && !model.viewOnly {
+            icon("eye", card.viewOnly ? "Turn off view only" : "View only", on: card.viewOnly) {
+                let on = !card.viewOnly
+                model.update(card.id) { $0.viewOnly = on }
+            }
+        }
+        if edit && !isStack && !card.template {
+            icon("doc.on.doc", "Save a copy as a template, to start new entries from") { model.saveAsTemplate(card) }
+        }
+        if let stack = model.index.stackOf[card.id], edit {
+            icon("square.stack", "Take out of the stack, back into the journal") {
+                let id = card.id
+                model.update(stack) { $0.stack = ($0.stack ?? []).filter { $0 != id } }
+            }
+        }
+        icon("square.on.square", "Copy") { Clipboard.copyEntry(card, model: model) }
+        if model.canManage(card) {
+            icon("square.and.arrow.up", "Share") { model.panel = .share(card.id) }
+            icon("archivebox", card.archived ? "Unarchive: back to the journal" : "Archive: out of the journal, still in search") {
+                model.archive([card.id], !card.archived)
+                close()
+            }
+            icon("trash", "Move to Trash") {
+                model.trash([card.id])
+                close()
+            }
+            Button { model.panel = .vaults(card.id) } label: {
+                HStack(spacing: 3) {
+                    Text(model.vaultNames(card).joined(separator: ", ")).font(.footnote).lineLimit(1)
+                    Image(systemName: "chevron.up.chevron.down").font(.caption2)
+                }
+                .padding(.horizontal, 8).frame(height: 28)
+                .overlay(RoundedRectangle(cornerRadius: 7).stroke(Theme.line))
+            }
+            .help("Vaults")
+            .padding(.leading, 4)
+        }
+    }
+
+    @ViewBuilder
+    private var end: some View {
+        HStack(spacing: 6) {
+            Button { model.panel = .history(card.id) } label: { Text(Self.edited(card)).font(.footnote) }.help("See every version")
+            icon("arrow.uturn.backward", "Undo") { model.undo() }
+            icon("arrow.uturn.forward", "Redo") { model.redo() }
+            if edit {
+                Button("Discard") {
+                    if let original {
+                        let back = original
+                        model.update(card.id) { $0.payload = back }
+                        model.say("Discarded changes", undoable: true)
+                    }
+                    close()
+                }
+                .font(.footnote.weight(.semibold))
+                .foregroundStyle(original == card.payload ? Theme.muted.opacity(0.5) : Theme.text)
+                .disabled(original == card.payload)
+                .help("Put back how it was when opened, and close")
+                .padding(.horizontal, 6)
+            }
+            #if os(iOS)
+            Button("Done", action: close).font(.footnote.weight(.semibold)).foregroundStyle(Theme.accent).padding(.leading, 4)
+            #endif
+        }
+    }
+
+    private func icon(_ name: String, _ label: String, on: Bool = false, action: @escaping () -> Void) -> some View {
+        Button(action: action) {
+            Image(systemName: name).font(.system(size: 15))
+                .frame(width: 34, height: 32)
+                .background(RoundedRectangle(cornerRadius: 7).fill(on ? Theme.accentSoft : .clear))
+                .contentShape(Rectangle())
+        }
+        .help(label)
+        .accessibilityLabel(label)
+    }
+
+    /// "Edited 3:55 AM" today, "Edited Nov 18" before, as the web's.
+    static func edited(_ card: Card) -> String {
+        let at = Date(ms: card.updatedAt)
+        return "Edited " + (Calendar.current.isDateInToday(at) ? at.formatted(date: .omitted, time: .shortened) : at.formatted(.dateTime.month(.abbreviated).day()))
+    }
+}
+
+/// An entry's color and how its links and photos show, from a dot in its color, as the web's style menu.
+struct StyleMenu: View {
+    @Environment(AppModel.self) private var model
+    let card: Card
+
+    var body: some View {
+        Menu {
+            Section("Color") {
+                Picker("Color", selection: Binding(get: { card.color.map { $0.rawValue } ?? "" }, set: { v in model.update(card.id) { $0.color = CardColor(rawValue: v) } })) {
+                    Image(platform: Swatch.image(nil)).tag("")
+                    ForEach(CardColor.allCases, id: \.self) { c in Image(platform: Swatch.image(c)).tag(c.rawValue) }
+                }
+                .pickerStyle(.palette)
+            }
+            Picker("Link previews", selection: Binding(get: { card.payload["preview"]?["links"]?.stringValue ?? "" }, set: { setPreview("links", $0) })) {
+                Text("As set on this device").tag("")
+                Text("Cards").tag("card")
+                Text("One line").tag("compact")
+                Text("Off").tag("off")
+            }
+            Picker("Photos", selection: Binding(get: { card.payload["preview"]?["photos"]?.stringValue ?? "" }, set: { setPreview("photos", $0) })) {
+                Text("As set on this device").tag("")
+                Text("Large").tag("large")
+                Text("Thumbnails").tag("thumbs")
+                Text("Off").tag("off")
+            }
+        } label: {
+            Circle().fill(card.color.map(Theme.tint) ?? .clear)
+                .overlay(Circle().stroke(card.color.map { Theme.tint($0) } ?? Theme.muted, lineWidth: 1.5))
+                .frame(width: 18, height: 18)
+                .frame(width: 34, height: 32)
+        }
+        .menuIndicator(.hidden)
+        .fixedSize()
+        .help("Color and previews")
+    }
+
+    private func setPreview(_ key: String, _ value: String) {
+        let id = card.id
+        model.perform {
+            try await $0.update(id) { c in
+                var preview = c.payload["preview"]?.objectValue ?? [:]
+                if value.isEmpty { preview.removeValue(forKey: key) } else { preview[key] = .string(value) }
+                if preview.isEmpty { c.payload.removeValue(forKey: "preview") } else { c.payload["preview"] = .object(preview) }
+            }
         }
     }
 }

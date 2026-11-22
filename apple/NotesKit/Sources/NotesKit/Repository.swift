@@ -142,7 +142,7 @@ public actor Repository {
         if logged % Self.trimEvery == 0 { try store.trimChanges(Self.logLimit) }
     }
 
-    private func defaultVaultId() throws -> String {
+    func defaultVaultId() throws -> String {
         let vaults = try store.listVaults()
         if let id = mainVaultId, vaults.contains(where: { $0.id == id }) { return id }
         if let first = vaults.sorted(by: { $0.created_at < $1.created_at }).first { return first.id }

@@ -181,7 +181,7 @@ extension Repository {
     /// account's own vault.
     public func importBackup(_ cards: [Card]) throws -> ImportResult {
         let known = Set(try vaults().map(\.id))
-        let target = try vaults().sorted { $0.created_at < $1.created_at }.first?.id
+        let target = try? defaultVaultId()
         var result = ImportResult()
         for var card in cards {
             if !known.contains(card.vaultId), let target { card.vaultId = target }

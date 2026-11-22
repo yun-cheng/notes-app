@@ -262,4 +262,15 @@ func makeRepo(_ clock: Clock = Clock()) async throws -> Repository {
         let zip = Backup.zip(files)
         #expect(zip.prefix(4) == Data([0x50, 0x4B, 0x03, 0x04]) && Backup.crc32(Data("abc".utf8)) == 0x3524_41C2)
     }
+
+    @Test func cardsFromAnotherAccountGoIntoThisAccountsOwnVault() async throws {
+        let repo = try Repository(path: ":memory:")
+        let shared = Vault(id: "vault-team", name: "Team", owner_id: "u2", lock: .none, ai_access: .off, created_at: 1, pin: nil, hidden: false)
+        let own = Vault(id: "vault-u1", name: "Personal", owner_id: "u1", lock: .none, ai_access: .off, created_at: 5, pin: nil, hidden: false)
+        _ = try await repo.applyAccess(vaults: [shared, own], shared: [])
+        await repo.setMainVault("vault-u1")
+        let card = Card(id: "c-from-u3", vaultId: "vault-u3", updatedAt: 9, deleted: false, seq: 0, payload: ["type": "note", "title": "Mine"])
+        _ = try await repo.importBackup([card])
+        #expect(try await repo.card("c-from-u3")?.vaultId == "vault-u1")
+    }
 }

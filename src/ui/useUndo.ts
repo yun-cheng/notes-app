@@ -90,6 +90,9 @@ export function useUndo() {
   );
 
   const within = (changes: Change[]) => (scope ? changes.filter((c) => matchesChange(c, scope, today)) : changes);
+  const undoAction = (action: string) => run('undo', (all, usable) => all.filter((c) => c.group === action && usable(c)));
+  /** A toast's button that takes back `action`. */
+  const undoButton = (action: string) => ({ label: 'Undo', run: () => void undoAction(action) });
 
   return {
     /** Takes back the last action, among the changes in scope. */
@@ -97,7 +100,10 @@ export function useUndo() {
     /** Puts back what was undone last. */
     redo: () => run('redo', (all, usable) => nextRedo(within(all), usable)),
     /** Takes back one action, named with `repo.action()` when it was made. */
-    undoAction: (action: string) => run('undo', (all, usable) => all.filter((c) => c.group === action && usable(c))),
+    undoAction,
+    undoButton,
+    /** Says what was done, in a toast with an Undo that takes back `action`. */
+    said: (message: string, action: string) => toast(message, { action: undoButton(action) }),
     /** Undoes or redoes these changes, by their place in the log. */
     revert: (ns: number[], direction: Direction) => run(direction, (all, usable) => all.filter((c) => ns.includes(c.n) && usable(c))),
   };

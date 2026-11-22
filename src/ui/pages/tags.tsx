@@ -298,14 +298,13 @@ function TagScope({ tag }: { tag: TagCard }) {
 function TrashTag({ tag }: { tag: TagCard }) {
   const { index, repo } = useCards();
   const can = usePermissions();
-  const toast = useToast();
-  const { undoAction } = useUndo();
+  const { said } = useUndo();
   if (!can(tag).manage) return null;
   const trash = () => {
     const count = tagCount(index, tag.id);
     const action = repo.action();
     void repo.setDeleted(tag.id, true);
-    toast(`Moved ${tag.title} to Trash${count ? `, off ${count} ${count === 1 ? 'entry' : 'entries'}` : ''}`, { action: { label: 'Undo', run: () => void undoAction(action) } });
+    said(`Moved ${tag.title} to Trash${count ? `, off ${count} ${count === 1 ? 'entry' : 'entries'}` : ''}`, action);
   };
   return (
     <button type="button" className="icon-btn" aria-label={`Move ${tag.title} to Trash`} title="Move to Trash" onClick={trash}>
@@ -323,7 +322,7 @@ function TagLink({ tag }: { tag: TagCard }) {
   const { index, repo, sharedInto } = useCards();
   const can = usePermissions();
   const toast = useToast();
-  const { undoAction } = useUndo();
+  const { said } = useUndo();
   const [editing, setEditing] = useState<string | null>(null);
   const count = tagCount(index, tag.id);
 
@@ -337,7 +336,7 @@ function TagLink({ tag }: { tag: TagCard }) {
     if (isGroupName(name, index.tagGroups.groups)) return toast(`${name} is a group's name.`);
     const action = repo.action();
     void repo.update(tag.id, { title: name });
-    toast(`Renamed ${tag.title} to ${name}`, { action: { label: 'Undo', run: () => void undoAction(action) } });
+    said(`Renamed ${tag.title} to ${name}`, action);
   };
 
   if (editing !== null) {
@@ -387,8 +386,7 @@ function TagLink({ tag }: { tag: TagCard }) {
 /** One group: its name, its rule, and its tags in order. */
 function GroupBlock({ group }: { group: TagGroup }) {
   const { index, repo } = useCards();
-  const toast = useToast();
-  const { undoAction } = useUndo();
+  const { said } = useUndo();
   const edits = useGroupEdits();
   const [name, setName] = useState(group.title);
   const [adding, setAdding] = useState('');
@@ -408,7 +406,7 @@ function GroupBlock({ group }: { group: TagGroup }) {
   const remove = () => {
     const action = repo.action();
     void repo.setDeleted(group.id, true);
-    toast(`Removed the ${group.title} group. Its tags stay on entries.`, { action: { label: 'Undo', run: () => void undoAction(action) } });
+    said(`Removed the ${group.title} group. Its tags stay on entries.`, action);
   };
 
   return (

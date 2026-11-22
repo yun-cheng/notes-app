@@ -394,8 +394,7 @@ function GroupChoices({ group, tagIds, onChange }: { group: TagGroup; tagIds: st
 export function useVaultMove(card: Card) {
   const { repo, vaults, locked } = useCards();
   const may = usePermissions();
-  const toast = useToast();
-  const { undoAction } = useUndo();
+  const { said } = useUndo();
   const options = vaults.filter((v) => !locked.has(v.id) && !v.withheld && (v.role ?? 'owner') !== 'viewer');
   if (options.length < 2 || !may(card).manage) return null;
   const move = (vaultId: string) => {
@@ -403,7 +402,7 @@ export function useVaultMove(card: Card) {
     const action = repo.action();
     void repo.moveToVault(card.id, vaultId);
     const name = vaults.find((v) => v.id === vaultId)?.name ?? 'another vault';
-    toast(`Moved to ${name}`, { action: { label: 'Undo', run: () => void undoAction(action) } });
+    said(`Moved to ${name}`, action);
   };
   return { options, move };
 }
@@ -476,14 +475,13 @@ export function Backlinks({ cardId, isTag }: { cardId: string; isTag?: boolean }
 /** Soft-deletes a card and offers an undo. `goTo` null leaves navigation to the caller, as a sheet closes itself. */
 export function useDeleteCard() {
   const { repo } = useCards();
-  const toast = useToast();
   const navigate = useNavigate();
-  const { undoAction } = useUndo();
+  const { said } = useUndo();
   return (card: Card, goTo: string | null) => {
     const action = repo.action();
     void repo.setDeleted(card.id, true);
     if (goTo) void navigate(goTo, { replace: true });
-    toast('Moved to Trash', { action: { label: 'Undo', run: () => void undoAction(action) } });
+    said('Moved to Trash', action);
   };
 }
 

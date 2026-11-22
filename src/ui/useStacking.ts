@@ -19,7 +19,7 @@ export function useStacking() {
   const { index, repo } = useCards();
   const may = usePermissions();
   const toast = useToast();
-  const { undoAction } = useUndo();
+  const { undoButton } = useUndo();
 
   return async (ids: string[]) => {
     const picked = ids.map((id) => index.byId.get(id)).filter((c): c is NoteCard | TodoCard => !!c && !c.deleted && (c.type === 'note' || c.type === 'todo'));
@@ -32,7 +32,7 @@ export function useStacking() {
     const stacks = index.live.filter((c): c is NoteCard => isStack(c));
     // Asked for together, with no waiting in between, so it's one change to undo.
     const action = repo.action();
-    const undo = { label: 'Undo', run: () => void undoAction(action) };
+    const undo = undoButton(action);
     if (into) {
       const lists = stackPlan(stacking.map((c) => c.id), into, stacks);
       for (const [id, stack] of lists) void repo.update(id, { stack });
@@ -58,8 +58,7 @@ export function useStacking() {
 export function useTakeOut() {
   const { index, repo } = useCards();
   const may = usePermissions();
-  const toast = useToast();
-  const { undoAction } = useUndo();
+  const { said } = useUndo();
   const stackOf = (card: NoteCard | TodoCard): NoteCard | null => {
     const stack = index.byId.get(stacksOf(index).get(card.id) ?? '');
     return isStack(stack) && may(stack).edit ? stack : null;
@@ -69,7 +68,7 @@ export function useTakeOut() {
     if (!stack) return;
     const action = repo.action();
     void repo.update(stack.id, { stack: stack.stack!.filter((id) => id !== card.id) });
-    toast(`Took “${displayTitle(card)}” out of the stack`, { action: { label: 'Undo', run: () => void undoAction(action) } });
+    said(`Took “${displayTitle(card)}” out of the stack`, action);
   };
   return { stackOf, takeOut };
 }

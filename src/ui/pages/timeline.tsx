@@ -10,7 +10,6 @@ import { firstDayOfWeek } from '../DatesDialog';
 import { colorClass } from '../EntryStyle';
 import { FilterBar, useJournalFilter } from '../FilterPanel';
 import { datedParams, datedPath } from '../paths';
-import { useToast } from '../Toast';
 import { useUndo } from '../useUndo';
 import { usePermissions } from '../viewOnly';
 import { DatedActions, dateNav, useDatedTodos, useMoveTodo, useOpenCard } from './calendar';
@@ -45,8 +44,7 @@ export function TimelinePage() {
   const { index, repo } = useCards();
   const today = useToday();
   const may = usePermissions();
-  const toast = useToast();
-  const { undoAction } = useUndo();
+  const { said } = useUndo();
   const move = useMoveTodo();
   const open = useOpenCard();
   const filter = useJournalFilter();
@@ -88,8 +86,8 @@ export function TimelinePage() {
     const patch = endPatch(span, handle, n);
     const action = repo.action();
     void repo.update(todo.id, patch);
-    const said = handle === 'start' ? (patch.start ? `Starts ${relativeDayInSentence(patch.start, today)}` : 'No start date') : `Due ${relativeDayInSentence(patch.due!, today)}`;
-    toast(`${said}: ${displayTitle(todo)}`, { action: { label: 'Undo', run: () => void undoAction(action) } });
+    const what = handle === 'start' ? (patch.start ? `Starts ${relativeDayInSentence(patch.start, today)}` : 'No start date') : `Due ${relativeDayInSentence(patch.due!, today)}`;
+    said(`${what}: ${displayTitle(todo)}`, action);
   };
 
   const startDrag = (e: ReactPointerEvent, span: Span, handle: Handle) => {

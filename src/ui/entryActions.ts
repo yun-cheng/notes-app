@@ -65,7 +65,7 @@ export function useEntryActions() {
   const canRestore = useCanRestore();
   const toast = useToast();
   const { saveEntries } = useSaveEntries();
-  const { undoAction } = useUndo();
+  const { said, undoButton } = useUndo();
 
   const cardsFor = (ids: string[]) => ids.map((id) => index.byId.get(id)).filter(live);
 
@@ -111,7 +111,7 @@ export function useEntryActions() {
     const action = repo.action();
     await Promise.all(removable.map((id) => repo.setDeleted(id, true)));
     toast(`${verb} ${entries(removable.length)}${verb === 'Moved' ? ' to Trash' : ''}${note}`, {
-      action: { label: 'Undo', run: () => void undoAction(action) },
+      action: undoButton(action),
     });
   };
 
@@ -122,7 +122,7 @@ export function useEntryActions() {
     const action = repo.action();
     await Promise.all(cards.map((c) => repo.setDeleted(c.id, false)));
     const what = cards.length === 1 ? `“${displayTitle(cards[0])}”` : cards.some((c) => c.type === 'tag') ? `${cards.length} items` : entries(cards.length);
-    toast(`Restored ${what}`, { action: { label: 'Undo', run: () => void undoAction(action) } });
+    said(`Restored ${what}`, action);
   };
 
   /**
@@ -142,7 +142,7 @@ export function useEntryActions() {
     const action = repo.action();
     await Promise.all(changing.map((c) => repo.update(c.id, { archived: on })));
     toast(`${on ? 'Archived' : 'Unarchived'} ${entries(changing.length)}${note}`, {
-      action: { label: 'Undo', run: () => void undoAction(action) },
+      action: undoButton(action),
     });
   };
 
@@ -163,13 +163,13 @@ export function useEntryActions() {
     if (result.unlock) return toast(`Unlock ${vaults.find((v) => v.id === result.unlock)?.name ?? 'the vault'} to paste into it.`);
     if (!result.saved) return;
     const { action } = result;
-    toast(`Pasted ${entries(result.saved)}`, { action: action ? { label: 'Undo', run: () => void undoAction(action) } : undefined });
+    toast(`Pasted ${entries(result.saved)}`, { action: action ? undoButton(action) : undefined });
   };
 
   /** Turns a note into a todo or a todo into a note, in one click, with an undo. */
   const retype = async (id: string, type: EntryType) => {
     const action = repo.action();
-    if (await repo.retype(id, type)) toast(type === 'todo' ? 'Made it a todo' : 'Made it a note', { action: { label: 'Undo', run: () => void undoAction(action) } });
+    if (await repo.retype(id, type)) said(type === 'todo' ? 'Made it a todo' : 'Made it a note', action);
   };
 
   return { copy, cut, trash, restore, archive, paste, retype };

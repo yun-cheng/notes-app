@@ -27,7 +27,7 @@ export function BatchBar({ selection }: { selection: Selection }) {
   const toast = useToast();
   const today = useToday();
   const actions = useEntryActions();
-  const { undoAction } = useUndo();
+  const { undoButton } = useUndo();
   const [panel, setPanel] = useState<'tags' | 'due' | null>(null);
   const cards = selection.ids.map((id) => index.byId.get(id)).filter((c): c is Card => !!c && !c.deleted);
   const editable = cards.filter((c) => may(c).edit);
@@ -54,7 +54,7 @@ export function BatchBar({ selection }: { selection: Selection }) {
     const action = repo.action();
     await Promise.all(steps.map((s) => repo.update(s.id, s.patch)));
     toast(`${done(steps.length)}${skipped(cards.length - editable.length)}`, {
-      action: { label: 'Undo', run: () => void undoAction(action) },
+      action: undoButton(action),
     });
   };
 
@@ -80,7 +80,7 @@ export function BatchBar({ selection }: { selection: Selection }) {
     await Promise.all(moving.map((c) => repo.moveToVault(c.id, vaultId)));
     const name = vaults.find((v) => v.id === vaultId)?.name ?? 'another vault';
     toast(`Moved ${entries(moving.length)} to ${name}${skipped(cards.length - manageable.length)}`, {
-      action: { label: 'Undo', run: () => void undoAction(action) },
+      action: undoButton(action),
     });
   };
 

@@ -20,7 +20,7 @@ export function useTickTodo() {
   const { repo, index } = useCards();
   const today = useToday();
   const toast = useToast();
-  const { undoAction } = useUndo();
+  const { undoButton } = useUndo();
   // Only a change of tags goes in the patch, so a todo on no board changes as it always has.
   const retag = (todo: TodoCard, status: 'open' | 'done') => {
     const tags = tagsForStatus(todo.tags, index.tagGroups.groups, status);
@@ -31,7 +31,7 @@ export function useTickTodo() {
     const { patch, next } = completeTodo(todo, today);
     const action = repo.action();
     void repo.update(todo.id, { ...patch, ...(patch.status === 'done' ? retag(todo, 'done') : {}) });
-    const back = { label: 'Undo', run: () => void undoAction(action) };
+    const back = undoButton(action);
     if (next) toast(`Done for now. “${displayTitle(todo)}” is due again ${relativeDayInSentence(next, today)}`, { action: back });
     else if (announce) toast(`Done: ${displayTitle(todo)}`, { action: back });
   };
@@ -43,13 +43,12 @@ export function useTickTodo() {
  */
 export function useToggleWaiting() {
   const { repo } = useCards();
-  const toast = useToast();
-  const { undoAction } = useUndo();
+  const { said } = useUndo();
   return (todo: TodoCard) => {
     const waiting = !todo.waiting;
     const action = repo.action();
     void repo.update(todo.id, { waiting });
-    toast(waiting ? `Waiting: ${displayTitle(todo)}` : `No longer waiting: ${displayTitle(todo)}`, { action: { label: 'Undo', run: () => void undoAction(action) } });
+    said(waiting ? `Waiting: ${displayTitle(todo)}` : `No longer waiting: ${displayTitle(todo)}`, action);
   };
 }
 

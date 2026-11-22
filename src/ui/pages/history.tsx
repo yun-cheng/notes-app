@@ -17,7 +17,6 @@ import { ReadOnlyDoc } from '../editor/ReadOnlyDoc';
 import { Icon } from '../Icon';
 import { LockPanel } from '../LockPanel';
 import { cardPath } from '../paths';
-import { useToast } from '../Toast';
 import { useUndo } from '../useUndo';
 
 /** A row on the history page: a saved version, or this device's changes that haven't synced yet. */
@@ -80,8 +79,7 @@ function History({ card }: { card: Card }) {
   const { index, repo } = useCards();
   const may = usePermissions();
   const canEdit = may(card).edit;
-  const toast = useToast();
-  const { undoAction } = useUndo();
+  const { said } = useUndo();
   const navigate = useNavigate();
   const [versions, setVersions] = useState<VersionInfo[] | null>(null);
   const [error, setError] = useState<string | null>(null);
@@ -162,7 +160,7 @@ function History({ card }: { card: Card }) {
     await sealVersions(card.id).catch(() => undefined);
     const action = repo.action();
     await repo.update(card.id, restorePatch(version));
-    toast(`Restored the version from ${label}`, { action: { label: 'Undo', run: () => void undoAction(action) } });
+    said(`Restored the version from ${label}`, action);
     void navigate(cardPath(card));
   };
 

@@ -34,7 +34,7 @@ export function useMoveTodo() {
   const may = usePermissions();
   const toast = useToast();
   const today = useToday();
-  const { undoAction } = useUndo();
+  const { said } = useUndo();
   return (id: string, days: number) => {
     const card = index.byId.get(id);
     if (card?.type !== 'todo' || !days) return;
@@ -43,7 +43,7 @@ export function useMoveTodo() {
     const action = repo.action();
     void repo.update(id, patch);
     const when = patch.due ?? patch.start!;
-    toast(`${patch.due ? 'Now due' : 'Now starts'} ${relativeDayInSentence(when, today)}: ${displayTitle(card)}`, { action: { label: 'Undo', run: () => void undoAction(action) } });
+    said(`${patch.due ? 'Now due' : 'Now starts'} ${relativeDayInSentence(when, today)}: ${displayTitle(card)}`, action);
   };
 }
 

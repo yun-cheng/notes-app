@@ -952,7 +952,7 @@ function translatedParts(parts: PreviewPart[], pieces: string[]): PreviewPart[] 
 function useBubble(card: NoteCard | TodoCard, title: string, titleFromText = false) {
   const { index, keyring, repo } = useCards();
   const may = usePermissions();
-  const { undoAction } = useUndo();
+  const { said } = useUndo();
   const toast = useToast();
   const pager = usePager(card);
   const doc = pager.at ? pager.pages[pager.at - 1] : card.content;
@@ -994,7 +994,7 @@ function useBubble(card: NoteCard | TodoCard, title: string, titleFromText = fal
   const saveAsPage = (pieces: string[]) => {
     const action = repo.action();
     void repo.update(card.id, withNewPage(card, translationPage(pieces)));
-    toast(`Saved as page ${pager.count + 1}`, { action: { label: 'Undo', run: () => void undoAction(action) } });
+    said(`Saved as page ${pager.count + 1}`, action);
   };
   const menu = useEntryMenu(card, {
     open,
@@ -1317,8 +1317,7 @@ function EntryDetail({ card, fresh, edit, comments, onClose }: { card: NoteCard 
   const [toolbarHost, setToolbarHost] = useState<HTMLDivElement | null>(null);
   const [historyHost, setHistoryHost] = useState<HTMLSpanElement | null>(null);
   const discard = useDiscard(card, fresh);
-  const toast = useToast();
-  const { undoAction } = useUndo();
+  const { said } = useUndo();
   // Which page of the entry the text below is: 0 for the first. One past the pages it has is a new one, kept once
   // something is written on it.
   const [page, setPage] = useState(0);
@@ -1337,7 +1336,7 @@ function EntryDetail({ card, fresh, edit, comments, onClose }: { card: NoteCard 
     if (page > stored.length) return;
     const action = repo.action();
     void repo.update(card.id, withoutPage(card, page - 1));
-    toast(`Took out page ${page + 1}`, { action: { label: 'Undo', run: () => void undoAction(action) } });
+    said(`Took out page ${page + 1}`, action);
   };
   const isTodo = card.type === 'todo';
   const showTitle = isTodo || !!card.title.trim() || titled;
@@ -1596,8 +1595,7 @@ const sameAs = (a: NoteCard | TodoCard, b: NoteCard | TodoCard) =>
  */
 function useDiscard(card: NoteCard | TodoCard, fresh: boolean) {
   const { repo } = useCards();
-  const toast = useToast();
-  const { undoAction } = useUndo();
+  const { said } = useUndo();
   const remove = useDeleteCard();
   const [opened] = useState(card);
   return {
@@ -1619,7 +1617,7 @@ function useDiscard(card: NoteCard | TodoCard, fresh: boolean) {
         ...(was.type === 'todo' ? { status: was.status, due: was.due, dueTime: was.dueTime ?? null, start: was.start ?? null, repeat: was.repeat ?? null } : {}),
       });
       if (card.vaultId !== was.vaultId) void repo.moveToVault(card.id, was.vaultId);
-      toast('Discarded changes', { action: { label: 'Undo', run: () => void undoAction(action) } });
+      said('Discarded changes', action);
     },
   };
 }

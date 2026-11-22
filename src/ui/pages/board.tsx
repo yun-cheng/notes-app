@@ -159,7 +159,7 @@ export function Board({ kind, filter }: { kind: BoardKind; filter: StreamFilter 
   const may = usePermissions();
   const toast = useToast();
   const today = useToday();
-  const { undoAction } = useUndo();
+  const { undoButton } = useUndo();
   const { columns } = kind;
   const [folded, setFolded] = useState(readFolded);
   const foldKey = (key: string) => `${kind.id}:${key || 'none'}`;
@@ -192,7 +192,7 @@ export function Board({ kind, filter }: { kind: BoardKind; filter: StreamFilter 
     if (!move) return;
     // Whichever change is made below, its toast's Undo takes back all of it.
     let action = '';
-    const undo = { label: 'Undo', run: () => void undoAction(action) };
+    const undo = undoButton(action);
     if (move.next) {
       // A repeating todo is never done: like its box, Done moves it on to its next date, and it stays where it was.
       action = repo.action();

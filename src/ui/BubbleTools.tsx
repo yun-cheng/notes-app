@@ -2,7 +2,6 @@ import type { NoteCard, TodoCard } from '../domain/types';
 import { useCards } from '../state/CardsContext';
 import { useEntryActions } from './entryActions';
 import { Icon } from './Icon';
-import { useToast } from './Toast';
 import { useUndo } from './useUndo';
 
 type Entry = NoteCard | TodoCard;
@@ -37,13 +36,12 @@ export function TypeSwitch({ card, className, size }: { card: NoteCard | TodoCar
 /** Turns an entry's own view only on or off, with an undo. */
 export function useEntryViewOnly(card: Entry) {
   const { repo } = useCards();
-  const toast = useToast();
-  const { undoAction } = useUndo();
+  const { said } = useUndo();
   return () => {
     const on = !card.viewOnly;
     const action = repo.action();
     void repo.update(card.id, { viewOnly: on });
-    toast(on ? 'Made view only' : 'It can be changed again', { action: { label: 'Undo', run: () => void undoAction(action) } });
+    said(on ? 'Made view only' : 'It can be changed again', action);
   };
 }
 

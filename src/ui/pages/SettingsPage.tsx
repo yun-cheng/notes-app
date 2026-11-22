@@ -35,7 +35,7 @@ export function SettingsPage() {
   const fileInput = useRef<HTMLInputElement>(null);
   const importInput = useRef<HTMLInputElement>(null);
   const { saveEntries } = useSaveEntries();
-  const { undoAction } = useUndo();
+  const { undoButton } = useUndo();
 
   useEffect(() => {
     void navigator.storage?.persisted?.().then(setPersisted);
@@ -82,7 +82,7 @@ export function SettingsPage() {
       if (!plan.entries.length) return toast(`Nothing new to import${left ? ` (${left})` : ''}`);
       const { saved, action } = await saveEntries(plan.entries);
       if (!saved) return;
-      toast(`Imported ${saved} ${saved === 1 ? 'entry' : 'entries'}${left ? `; ${left}` : ''}`, action ? { action: { label: 'Undo', run: () => void undoAction(action) } } : undefined);
+      toast(`Imported ${saved} ${saved === 1 ? 'entry' : 'entries'}${left ? `; ${left}` : ''}`, action ? { action: undoButton(action) } : undefined);
     } catch (err) {
       console.error('Import failed', err);
       toast('Those files could not be imported.');

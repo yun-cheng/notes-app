@@ -170,7 +170,7 @@ export function WordItems({ words, vaultId, onClose }: { words: string; vaultId?
   const { repo } = useCards();
   const viewOnly = useViewOnly();
   const toast = useToast();
-  const { undoAction } = useUndo();
+  const { undoButton } = useUndo();
   const navigate = useNavigate();
   const location = useLocation();
   const run = (work: () => unknown) => () => {
@@ -183,7 +183,7 @@ export function WordItems({ words, vaultId, onClose }: { words: string; vaultId?
     toast('Made a new note from the selection', {
       actions: [
         { label: 'Open', run: () => void navigate(cardPath(note), { state: sheetState(location, note, { edit: true }) }) },
-        { label: 'Undo', run: () => void undoAction(action) },
+        undoButton(action),
       ],
     });
   };

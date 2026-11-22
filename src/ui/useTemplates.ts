@@ -46,7 +46,7 @@ export function useSaveAsTemplate() {
   const { repo } = useCards();
   const navigate = useNavigate();
   const toast = useToast();
-  const { undoAction } = useUndo();
+  const { undoButton } = useUndo();
   const vaultFor = useVaultFor();
   return (card: Entry) => {
     const action = repo.action();
@@ -55,7 +55,7 @@ export function useSaveAsTemplate() {
     toast(`Saved a template of “${displayTitle(card)}”`, {
       actions: [
         { label: 'Show', run: () => void navigate(TEMPLATES_PATH) },
-        { label: 'Undo', run: () => void undoAction(action) },
+        undoButton(action),
       ],
     });
   };

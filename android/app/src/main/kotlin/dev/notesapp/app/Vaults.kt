@@ -100,7 +100,10 @@ fun RecoveryKeySheet(key: String, dismiss: () -> Unit) {
             Text("Save this recovery key", fontSize = 22.sp, fontWeight = FontWeight.Bold, color = Theme.text)
             Text("It's the only way into this vault if the PIN is forgotten. It isn't stored anywhere, and won't be shown again.", color = Theme.muted, textAlign = TextAlign.Center)
             androidx.compose.foundation.text.selection.SelectionContainer {
-                Text(key, Modifier.clip(RoundedCornerShape(10.dp)).background(Theme.sunken).padding(14.dp), fontFamily = Theme.mono, fontSize = 18.sp, color = Theme.text, textAlign = TextAlign.Center)
+                // Four groups to a line, so a group never breaks.
+                val groups = key.split("-")
+                val shown = if (groups.size > 4) groups.take(4).joinToString("-") + "-\n" + groups.drop(4).joinToString("-") else key
+                Text(shown, Modifier.clip(RoundedCornerShape(10.dp)).background(Theme.sunken).padding(14.dp), fontFamily = Theme.mono, fontSize = 18.sp, color = Theme.text, textAlign = TextAlign.Center)
             }
             Row(horizontalArrangement = Arrangement.spacedBy(10.dp)) {
                 TextButton(onClick = { clipboard.setText(AnnotatedString(key)) }) { Text("Copy") }

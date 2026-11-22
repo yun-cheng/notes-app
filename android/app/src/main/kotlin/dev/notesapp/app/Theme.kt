@@ -107,5 +107,5 @@ fun Chip(text: String, tint: Color? = null, icon: ImageVector? = null, modifier:
 /** A page title in the web app's serif. */
 @Composable
 fun PageTitle(text: String, modifier: Modifier = Modifier) {
-    Text(text, modifier, fontFamily = Theme.titleFont, fontWeight = FontWeight.SemiBold, fontSize = 22.sp, color = Theme.text, maxLines = 1)
+    Text(text, modifier, fontFamily = Theme.titleFont, fontWeight = FontWeight.SemiBold, fontSize = 22.sp, color = Theme.text, maxLines = 1, overflow = androidx.compose.ui.text.style.TextOverflow.Ellipsis)
 }

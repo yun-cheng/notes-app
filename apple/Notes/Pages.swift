@@ -1,25 +1,6 @@
 import NotesKit
 import SwiftUI
 
-/// A page's list of entries under day headings, as the Trash and the search show them.
-struct EntryList: View {
-    let cards: [Card]
-    var empty: String = "Nothing here"
-
-    var body: some View {
-        ScrollView {
-            LazyVStack(alignment: .leading, spacing: 8) {
-                ForEach(cards) { BubbleView(card: $0) }
-                if cards.isEmpty { ContentUnavailableView(empty, systemImage: "tray").padding(.top, 60) }
-            }
-            .padding(16)
-            .frame(maxWidth: 720)
-            .frame(maxWidth: .infinity)
-        }
-        .pageBackground()
-    }
-}
-
 /// The Trash: entries put there, to read, copy and restore, one by one or all at once.
 struct TrashPage: View {
     @Environment(AppModel.self) private var model

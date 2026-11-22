@@ -227,7 +227,6 @@ final class AppModel {
         return UIDevice.current.userInterfaceIdiom == .pad ? "Notes app on iPad" : "Notes app on iPhone"
         #endif
     }
-    var siteURL: URL { site }
     var accountId: String { account?.id ?? "" }
 
     // MARK: Cards

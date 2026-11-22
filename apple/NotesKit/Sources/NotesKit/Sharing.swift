@@ -524,13 +524,6 @@ extension ServerAPI {
 }
 
 extension ServerAPI {
-    /// Whether a photo, video or file is shared by its Google Drive link, and the link.
-    public func driveLink(_ id: String) async throws -> (url: String?, can: Bool) {
-        struct R: Decodable { let url: String?; let can: Bool }
-        let r = try await json(R.self, "/attachments/" + Self.part(id) + "/link")
-        return (r.url, r.can)
-    }
-
     /// Lets anyone with its Drive link open it, and answers with the link, or a sentence saying why not.
     public func shareDriveLink(_ id: String) async -> Result<String, NSError> {
         guard let (data, status) = try? await send("/attachments/" + Self.part(id) + "/link", method: "POST", body: [String: String]()) else {

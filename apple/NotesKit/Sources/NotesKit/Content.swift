@@ -146,20 +146,6 @@ extension Doc {
         return shortened(stripMarker(line))
     }
 
-    /// The first line of a preview when it starts with words, not code: what a stack with no title is called.
-    public static func leadLine(_ parts: [PreviewPart]) -> String {
-        guard case .text(let lines) = parts.first, let line = lines.first(where: { !$0.trimmingCharacters(in: .whitespaces).isEmpty }) else { return "" }
-        return shortened(stripMarker(line))
-    }
-
-    /// A preview without the line `leadLine` names, or the blank lines after it.
-    public static func withoutLeadLine(_ parts: [PreviewPart]) -> [PreviewPart] {
-        guard case .text(let lines) = parts.first, let at = lines.firstIndex(where: { !$0.trimmingCharacters(in: .whitespaces).isEmpty }) else { return parts }
-        var rest = Array(lines[(at + 1)...])
-        while let first = rest.first, first.trimmingCharacters(in: .whitespaces).isEmpty { rest.removeFirst() }
-        return rest.isEmpty ? Array(parts.dropFirst()) : [.text(rest)] + parts.dropFirst()
-    }
-
     // MARK: Links
 
     /// A web address in text. It stops before trailing punctuation.

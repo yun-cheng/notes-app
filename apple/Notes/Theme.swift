@@ -56,7 +56,6 @@ enum Theme {
     static func colorName(_ color: CardColor) -> String { color.rawValue.capitalized }
 
     /// The page titles' serif.
-    static let titleFont = Font.system(size: 28, weight: .semibold, design: .serif)
     static let mono = Font.system(.body, design: .monospaced)
 }
 

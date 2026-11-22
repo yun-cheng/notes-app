@@ -121,16 +121,6 @@ struct VaultEncryption {
         return try await api.giveVaultKey(vault.id, userId: userId, publicKey: publicKey, grant: grant)
     }
 
-    /// Opens an encrypted vault with its recovery key and sets a new PIN. False if the recovery key is wrong.
-    func recover(_ vault: Vault, recoveryKey: String, newPin: String) async throws -> Bool {
-        guard let encryption = vault.encryption, !vault.isMemberCopy, let key = VaultCrypto.unlock(encryption: encryption, recoveryKey: recoveryKey) else { return false }
-        let next = try await Task.detached { try VaultKeys.changePin(encryption, key: key, newPin: newPin) }.value
-        try await save(vault, VaultChanges(pin: .some(VaultPin.hash(newPin)), encryption: .some(next)))
-        repo.keyring.set(vault.id, key: key)
-        await model.open(vault.id)
-        return true
-    }
-
     /// Copies each photo and file the vault's cards hold that isn't kept as the vault keeps them (sealed or open)
     /// under a new ID, has its entries hold the copy, and sends the old one to the Trash and deletes it once the copy is
     /// up, as the web app's `reseal.ts`. Returns how many couldn't be had now.

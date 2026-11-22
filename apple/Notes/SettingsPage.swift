@@ -175,7 +175,12 @@ struct SettingsPage: View {
         for url in urls {
             let scoped = url.startAccessingSecurityScopedResource()
             defer { if scoped { url.stopAccessingSecurityScopedResource() } }
-            if let text = try? String(contentsOf: url, encoding: .utf8) { files.append((url.lastPathComponent, text)) }
+            if url.pathExtension.lowercased() == "zip" {
+                // An export from this app, Obsidian or Bear: its Markdown and text files.
+                if let data = try? Data(contentsOf: url) { files += MarkdownImport.filesFromZip(data) }
+            } else if let text = try? String(contentsOf: url, encoding: .utf8) {
+                files.append((url.lastPathComponent, text))
+            }
         }
         let entries = MarkdownImport.entries(files, today: model.today)
         Task {

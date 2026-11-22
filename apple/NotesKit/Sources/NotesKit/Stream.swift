@@ -91,11 +91,6 @@ public struct StreamFilter: Sendable, Hashable {
         return f
     }
 
-    /// A filter as the calendar and the timeline take it: a todo status, a tag and a vault. Nil for one they can't show.
-    public var dated: StreamFilter? {
-        if type == .note || type == .stack || when != nil || has != nil || status == .undated || template || archived { return nil }
-        return StreamFilter(status: status, tagId: tagId, vaultId: vaultId)
-    }
 }
 
 extension StreamFilter.Sort {

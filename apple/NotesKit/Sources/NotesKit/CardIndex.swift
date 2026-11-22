@@ -232,19 +232,6 @@ public struct CardIndex: Sendable {
     }
 }
 
-/// A stack's list with `id` moved to `index` among the entries it shows, the rest kept in place.
-public func moveInStack(_ list: [String], shown: [String], _ id: String, to index: Int) -> [String] {
-    var others = shown.filter { $0 != id }
-    others.insert(id, at: max(0, min(index, others.count)))
-    var next = 0
-    let visible = Set(shown)
-    return list.map { s in
-        guard visible.contains(s) else { return s }
-        defer { next += 1 }
-        return others[next]
-    }
-}
-
 /// What stacking entries changes, as each stack's new list: the stack they go into gets them at its end, in the
 /// order given, and any other stack they were in lets them go.
 public func stackPlan(_ ids: [String], into: Card, stacks: [Card]) -> [String: [String]] {

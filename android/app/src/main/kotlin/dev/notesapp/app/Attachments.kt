@@ -277,10 +277,24 @@ object Attachments {
         override fun sizeOf(key: String, value: Bitmap) = value.byteCount
     }
 
-    /** A photo decoded no bigger than `edge` pixels, kept a while. */
+    private val decoding = mutableMapOf<String, CompletableDeferred<Bitmap?>>()
+
+    /** A photo decoded no bigger than `edge` pixels, kept a while. Two asking for the same one at once share it. */
     suspend fun bitmap(id: String, model: AppModel, edge: Int): Bitmap? {
         val key = "$id@$edge"
         bitmaps.get(key)?.let { return it }
+        decoding[key]?.let { return it.await() }
+        val waiting = CompletableDeferred<Bitmap?>()
+        decoding[key] = waiting
+        try {
+            return decode(id, model, edge, key).also { waiting.complete(it) }
+        } finally {
+            decoding.remove(key)
+            if (!waiting.isCompleted) waiting.complete(null)
+        }
+    }
+
+    private suspend fun decode(id: String, model: AppModel, edge: Int, key: String): Bitmap? {
         val data = data(id, model) ?: return null
         val b = withContext(Dispatchers.Default) {
             runCatching {

@@ -304,20 +304,41 @@ fun AccountBadge(onPick: () -> Unit) {
     }
 }
 
-/** Pictures from the web (an account's photo, a link's preview), fetched once and kept for the session. */
+/**
+ * Pictures from the web (an account's photo, a link's preview), fetched once and decoded no bigger than they're shown,
+ * kept a while in a cache of bounded size. Two asking for the same one at once share one download.
+ */
 object WebImages {
-    private val cache = mutableMapOf<String, ImageBitmap?>()
+    /** The longest edge kept, in pixels: a preview is shown at most about 360dp wide. */
+    private const val EDGE = 1024
+    private val cache = object : android.util.LruCache<String, ImageBitmap>(24 * 1024 * 1024) {
+        override fun sizeOf(key: String, value: ImageBitmap) = value.width * value.height * 4
+    }
+    private val failed = mutableSetOf<String>()
+    private val loading = mutableMapOf<String, kotlinx.coroutines.CompletableDeferred<ImageBitmap?>>()
+
     suspend fun load(url: String): ImageBitmap? {
-        if (cache.containsKey(url)) return cache[url]
+        cache.get(url)?.let { return it }
+        if (url in failed) return null
+        loading[url]?.let { return it.await() }
+        val waiting = kotlinx.coroutines.CompletableDeferred<ImageBitmap?>()
+        loading[url] = waiting
         val image = withContext(Dispatchers.IO) {
             runCatching {
                 val c = URI(url).toURL().openConnection()
                 c.connectTimeout = 10_000
                 c.readTimeout = 15_000
-                c.getInputStream().use { android.graphics.BitmapFactory.decodeStream(it) }?.asImageBitmap()
+                val bytes = c.getInputStream().use { it.readBytes() }
+                val bounds = android.graphics.BitmapFactory.Options().apply { inJustDecodeBounds = true }
+                android.graphics.BitmapFactory.decodeByteArray(bytes, 0, bytes.size, bounds)
+                var sample = 1
+                while (maxOf(bounds.outWidth, bounds.outHeight) / (sample * 2) >= EDGE) sample *= 2
+                android.graphics.BitmapFactory.decodeByteArray(bytes, 0, bytes.size, android.graphics.BitmapFactory.Options().apply { inSampleSize = sample })?.asImageBitmap()
             }.getOrNull()
         }
-        cache[url] = image
+        if (image != null) cache.put(url, image) else failed.add(url)
+        loading.remove(url)
+        waiting.complete(image)
         return image
     }
 }

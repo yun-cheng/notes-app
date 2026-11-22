@@ -133,22 +133,7 @@ struct CommandPalette: View {
     }
 
     private var commands: [Command] {
-        [
-            Command(id: "Journal", icon: "doc.text") { model.page = .journal(StreamFilter()) },
-            Command(id: "Today", icon: "sun.max") { model.page = .journal(StreamFilter(status: .today)) },
-            Command(id: "Upcoming", icon: "calendar.badge.clock") { model.page = .journal(StreamFilter(status: .upcoming)) },
-            Command(id: "History", icon: "clock.arrow.circlepath") { model.page = .history },
-            Command(id: "Calendar", icon: "calendar") { model.page = .calendar },
-            Command(id: "Timeline", icon: "chart.bar.xaxis") { model.page = .timeline },
-            Command(id: "Photos", icon: "photo") { model.page = .photos },
-            Command(id: "Links", icon: "link") { model.page = .links },
-            Command(id: "Files", icon: "doc") { model.page = .files },
-            Command(id: "Archive", icon: "archivebox") { model.page = .journal(StreamFilter(archived: true)) },
-            Command(id: "Templates", icon: "doc.on.doc") { model.page = .journal(StreamFilter(template: true)) },
-            Command(id: "Trash", icon: "trash") { model.page = .trash },
-            Command(id: "All tags", icon: "tag") { model.page = .tags },
-            Command(id: "Vaults", icon: "tray.2") { model.page = .vaults },
-            Command(id: "Settings", icon: "gear") { model.page = .settings },
+        Page.destinations.map { d in Command(id: d.title, icon: d.icon) { model.page = d.page } } + [
             Command(id: "Undo", icon: "arrow.uturn.backward") { model.undo() },
             Command(id: "Redo", icon: "arrow.uturn.forward") { model.redo() },
             Command(id: "Lock private vaults", icon: "lock") { model.lockAll() },

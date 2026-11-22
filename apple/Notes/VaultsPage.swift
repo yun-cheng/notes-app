@@ -16,7 +16,7 @@ struct VaultsPage: View {
     var body: some View {
         Form {
             Section("Vaults") {
-                ForEach(model.vaults.filter { !$0.hidden || model.openVaults.contains($0.id) }) { vault in
+                ForEach(model.shownVaults) { vault in
                     NavigationLink(value: vault.id) {
                         VStack(alignment: .leading, spacing: 2) {
                             Text(vault.name).fontWeight(.semibold)

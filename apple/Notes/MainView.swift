@@ -134,20 +134,23 @@ struct Sidebar: View {
         onPick()
     }
 
-    private func row(_ title: String, _ icon: String, _ page: Page, count: Int? = nil) -> some View {
-        Button { go(page) } label: {
+    /// One row: a name with its icon and a count, tinted while it's the page shown.
+    private func row(_ title: String, _ icon: String, selected: Bool, count: Int = 0, go action: @escaping () -> Void) -> some View {
+        Button(action: action) {
             HStack {
                 Label(title, systemImage: icon)
                 Spacer()
-                if let count, count > 0 { Text("\(count)").foregroundStyle(Theme.muted).monospacedDigit() }
+                if count > 0 { Text("\(count)").foregroundStyle(Theme.muted).monospacedDigit() }
             }
             .contentShape(Rectangle())
         }
         .buttonStyle(.plain)
-        .listRowBackground(model.page == page ? Theme.accentSoft.clipShape(RoundedRectangle(cornerRadius: 8)) : nil)
+        .listRowBackground(selected ? Theme.accentSoft.clipShape(RoundedRectangle(cornerRadius: 8)) : nil)
     }
 
-    private var journalFilter: StreamFilter { model.page.filter ?? StreamFilter() }
+    private func row(_ d: Page.Destination, count: Int = 0) -> some View {
+        row(d.title, d.icon, selected: model.page == d.page, count: count) { go(d.page) }
+    }
 
     var body: some View {
         let index = model.index
@@ -173,45 +176,25 @@ struct Sidebar: View {
                     }
                 }
                 .buttonStyle(.plain)
-                row("Journal", "doc.text", .journal(StreamFilter()))
-                row("History", "clock.arrow.circlepath", .history)
-                row("Calendar", "calendar", .calendar)
-                row("Timeline", "chart.bar.xaxis", .timeline)
-                row("Photos", "photo", .photos)
-                row("Links", "link", .links)
-                row("Files", "doc", .files)
-                row("Archive", "archivebox", .journal(StreamFilter(archived: true)), count: archived)
-                row("Trash", "trash", .trash, count: index.trash.count)
+                ForEach(Page.destinations.filter(\.listed), id: \.key) { d in
+                    row(d, count: d.page == .trash ? index.trash.count : d.key == "archive" ? archived : 0)
+                }
             }
             ForEach(index.tagGroups.groups) { group in
                 Section(group.title) {
                     ForEach(group.members) { tag in tagRow(tag) }
                 }
             }
-            let loose = index.tagGroups.loose
-            if !loose.isEmpty {
-                Section("Tags") {
-                    ForEach(loose) { tag in tagRow(tag) }
-                    row("All tags", "tag", .tags)
-                }
-            } else {
-                Section("Tags") { row("All tags", "tag", .tags) }
+            Section("Tags") {
+                ForEach(index.tagGroups.loose) { tag in tagRow(tag) }
+                row(Page.destination("tags"))
             }
             Section("Vaults") {
-                // A hidden vault stays out of the app until its PIN is entered.
-                ForEach(model.vaults.filter { !$0.hidden || model.openVaults.contains($0.id) }) { vault in
-                    let page = Page.journal(StreamFilter(vaultId: vault.id))
-                    Button { go(page) } label: {
-                        HStack {
-                            Label(vault.name, systemImage: vault.isPrivate ? (model.lockedVaults.contains(vault.id) ? "lock" : "lock.open") : (vault.members ?? 1) > 1 ? "person.2" : "tray")
-                            Spacer()
-                        }
-                        .contentShape(Rectangle())
-                    }
-                    .buttonStyle(.plain)
-                    .listRowBackground(journalFilter.vaultId == vault.id && model.page.filter != nil ? Theme.accentSoft.clipShape(RoundedRectangle(cornerRadius: 8)) : nil)
+                ForEach(model.shownVaults) { vault in
+                    let icon = vault.isPrivate ? (model.lockedVaults.contains(vault.id) ? "lock" : "lock.open") : (vault.members ?? 1) > 1 ? "person.2" : "tray"
+                    row(vault.name, icon, selected: model.page.filter?.vaultId == vault.id) { go(.journal(StreamFilter(vaultId: vault.id))) }
                 }
-                row("All vaults", "square.stack.3d.up", .vaults)
+                row(Page.destination("vaults"))
             }
         }
         .listStyle(.sidebar)
@@ -221,17 +204,7 @@ struct Sidebar: View {
 
     private func tagRow(_ tag: Card) -> some View {
         let count = model.index.backlinks[tag.id]?.filter { $0.kind == .tag && $0.from.isEntry && !$0.from.archived && !$0.from.template }.count ?? 0
-        let selected = model.page.filter?.tagId == tag.id
-        return Button { go(.journal(StreamFilter(tagId: tag.id))) } label: {
-            HStack {
-                Label(tag.displayTitle, systemImage: "tag")
-                Spacer()
-                if count > 0 { Text("\(count)").foregroundStyle(Theme.muted).monospacedDigit() }
-            }
-            .contentShape(Rectangle())
-        }
-        .buttonStyle(.plain)
-        .listRowBackground(selected ? Theme.accentSoft.clipShape(RoundedRectangle(cornerRadius: 8)) : nil)
+        return row(tag.displayTitle, "tag", selected: model.page.filter?.tagId == tag.id, count: count) { go(.journal(StreamFilter(tagId: tag.id))) }
     }
 }
 

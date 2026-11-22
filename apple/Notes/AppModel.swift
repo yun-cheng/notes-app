@@ -76,15 +76,7 @@ final class AppModel {
     init(site: URL = ServerAPI.production) {
         self.site = site
         // `-page vaults` at launch opens on that page, for testing.
-        switch UserDefaults.standard.string(forKey: "page") {
-        case "vaults": page = .vaults
-        case "tags": page = .tags
-        case "history": page = .history
-        case "calendar": page = .calendar
-        case "trash": page = .trash
-        case "settings": page = .settings
-        default: break
-        }
+        if let key = UserDefaults.standard.string(forKey: "page"), let named = Page.destinations.first(where: { $0.key == key }) { page = named.page }
         repo = try! Repository(path: ":memory:")
         Task { await start() }
     }
@@ -325,6 +317,9 @@ final class AppModel {
     }
 
     /// Vaults with a PIN that this device hasn't opened. Their cards never reach a screen.
+    /// The vaults the app shows: a hidden one stays out until its PIN is entered.
+    var shownVaults: [Vault] { vaults.filter { !$0.hidden || openVaults.contains($0.id) } }
+
     var lockedVaults: Set<String> {
         Set(vaults.filter { $0.isPrivate && !openVaults.contains($0.id) }.map(\.id))
     }
@@ -466,6 +461,37 @@ enum Page: Hashable {
         if case .journal(let f) = self { return f }
         return nil
     }
+
+    /// A page to go to by name: from the sidebar, the command palette, or `-page` at launch.
+    struct Destination {
+        let key: String
+        let title: String
+        let icon: String
+        let page: Page
+        /// In the sidebar's list of pages; the others are reached from the palette, or (tags, vaults) their own sections.
+        var listed = true
+    }
+
+    /// Every page with a name, in the sidebar's order.
+    static let destinations: [Destination] = [
+        .init(key: "journal", title: "Journal", icon: "doc.text", page: .journal(StreamFilter())),
+        .init(key: "today", title: "Today", icon: "sun.max", page: .journal(StreamFilter(status: .today)), listed: false),
+        .init(key: "upcoming", title: "Upcoming", icon: "calendar.badge.clock", page: .journal(StreamFilter(status: .upcoming)), listed: false),
+        .init(key: "history", title: "History", icon: "clock.arrow.circlepath", page: .history),
+        .init(key: "calendar", title: "Calendar", icon: "calendar", page: .calendar),
+        .init(key: "timeline", title: "Timeline", icon: "chart.bar.xaxis", page: .timeline),
+        .init(key: "photos", title: "Photos", icon: "photo", page: .photos),
+        .init(key: "links", title: "Links", icon: "link", page: .links),
+        .init(key: "files", title: "Files", icon: "doc", page: .files),
+        .init(key: "archive", title: "Archive", icon: "archivebox", page: .journal(StreamFilter(archived: true))),
+        .init(key: "templates", title: "Templates", icon: "doc.on.doc", page: .journal(StreamFilter(template: true)), listed: false),
+        .init(key: "trash", title: "Trash", icon: "trash", page: .trash),
+        .init(key: "tags", title: "All tags", icon: "tag", page: .tags, listed: false),
+        .init(key: "vaults", title: "All vaults", icon: "square.stack.3d.up", page: .vaults, listed: false),
+        .init(key: "settings", title: "Settings", icon: "gear", page: .settings, listed: false),
+    ]
+
+    static func destination(_ key: String) -> Destination { destinations.first { $0.key == key }! }
 }
 
 extension AppModel {

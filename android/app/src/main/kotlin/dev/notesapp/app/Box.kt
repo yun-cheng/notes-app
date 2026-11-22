@@ -199,21 +199,17 @@ fun BatchBar(picked: Set<String>, all: List<String>, set: (Set<String>) -> Unit)
                     for (tag in tagsForAll(model.index.tags, cards.map { it.vaultId }.distinct(), model.sharedInto)) {
                         DropdownMenuItem(text = { Text(tag.displayTitle) }, onClick = {
                             tagging = false
-                            val group = model.repo.action()
                             val groups = model.index.tagGroups
                             val ids = picked.toList()
-                            model.perform { repo -> for (id in ids) repo.update(id, group) { it.withTags(groups.with(it.tags, tag.id)) } }
-                            model.say("Tagged ${ids.size}", undoable = true)
+                            model.performEach(ids, "Tagged ${ids.size}") { repo, id, group -> repo.update(id, group) { it.withTags(groups.with(it.tags, tag.id)) } }
                         })
                     }
                 }
             }
             if (cards.any { it.type == CardType.todo && !it.isDone }) TextButton(onClick = {
-                val group = model.repo.action()
                 val today = model.today
                 val ids = cards.filter { it.type == CardType.todo && !it.isDone }.map { it.id }
-                model.perform { repo -> for (id in ids) repo.setDone(id, true, today, group) }
-                model.say("Done", undoable = true)
+                model.performEach(ids, "Done") { repo, id, group -> repo.setDone(id, true, today, group) }
             }) { Text("Done") }
             TextButton(onClick = { stack(model, cards); set(emptySet()) }, enabled = cards.size >= 2) { Text("Stack") }
             TextButton(onClick = {

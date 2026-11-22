@@ -402,17 +402,21 @@ class AppModel(private val context: Context, val site: String) {
         }
     }
 
-    fun archive(ids: List<String>, on: Boolean) {
+    /**
+     * Does `change` to each entry as one action to undo (it's given the repository, the entry and the action), then
+     * says `done` with an Undo.
+     */
+    fun performEach(ids: List<String>, done: String, change: suspend (Repository, String, String) -> Unit) {
         val group = repo.action()
-        perform { repo -> for (id in ids) repo.update(id, group) { it.withArchived(on) } }
-        say(if (on) (if (ids.size == 1) "Archived" else "Archived ${ids.size} entries") else "Unarchived", undoable = true)
+        perform { repo -> for (id in ids) change(repo, id, group) }
+        say(done, undoable = true)
     }
 
-    fun trash(ids: List<String>) {
-        val group = repo.action()
-        perform { repo -> for (id in ids) repo.setDeleted(id, true, group) }
-        say(if (ids.size == 1) "Moved to Trash" else "Moved ${ids.size} entries to Trash", undoable = true)
-    }
+    fun archive(ids: List<String>, on: Boolean) =
+        performEach(ids, if (on) (if (ids.size == 1) "Archived" else "Archived ${ids.size} entries") else "Unarchived") { repo, id, group -> repo.update(id, group) { it.withArchived(on) } }
+
+    fun trash(ids: List<String>) =
+        performEach(ids, if (ids.size == 1) "Moved to Trash" else "Moved ${ids.size} entries to Trash") { repo, id, group -> repo.setDeleted(id, true, group) }
 
     /** Saves typed text as entries. Answers Unlock when a vault they need is locked, leaving the text to keep. */
     suspend fun save(entries: List<Entry>, opts: SaveOptions): SaveResult {

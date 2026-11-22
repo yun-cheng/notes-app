@@ -105,10 +105,8 @@ fun TrashPage(openDrawer: (() -> Unit)?) {
     Column(Modifier.fillMaxSize().background(Theme.bg)) {
         TopBar("Trash", openDrawer) {
             if (trash.isNotEmpty()) TextButton(onClick = {
-                val group = model.repo.action()
                 val ids = trash.filter { model.canWrite(it) }.map { it.id }
-                model.perform { repo -> for (id in ids) repo.setDeleted(id, false, group) }
-                model.say("Restored ${ids.size}", undoable = true)
+                model.performEach(ids, "Restored ${ids.size}") { repo, id, group -> repo.setDeleted(id, false, group) }
             }) { Text("Restore all") }
         }
         BubbleColumn(trash, if (AttachmentKeeper.trash.value.isEmpty()) "The Trash is empty" else "", header = { TrashedAttachments() }) { card ->

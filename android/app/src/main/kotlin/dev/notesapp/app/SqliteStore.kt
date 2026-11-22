@@ -75,12 +75,15 @@ class SqliteStore(context: Context, name: String) : CardStore {
 
     override fun listDirty() = query("SELECT c.id, c.vault_id, c.updated_at, c.deleted, c.seq, c.payload FROM cards c JOIN dirty d ON d.id = c.id").map(::record)
 
-    override fun applyRemote(records: List<CardRecord>) = tx {
+    override fun applyRemote(records: List<CardRecord>): Int = tx {
+        var stored = 0
         for (r in records) {
             if (query("SELECT 1 FROM dirty WHERE id = ?", r.id).isNotEmpty()) continue
-            if (getCard(r.id)?.seq == r.seq) continue
+            if (query("SELECT seq FROM cards WHERE id = ?", r.id).firstOrNull()?.firstOrNull() == r.seq) continue
             put(r)
+            stored++
         }
+        stored
     }
 
     override fun forceRemote(record: CardRecord, ifUpdatedAt: Long?): Boolean = tx {

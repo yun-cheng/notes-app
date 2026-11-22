@@ -14,7 +14,8 @@ interface CardStore {
     fun putCards(records: List<CardRecord>)
     fun listDirty(): List<CardRecord>
     /** Changes from the server; a card with unpushed changes keeps them. */
-    fun applyRemote(records: List<CardRecord>)
+    /** Stores what the server sent, but not over a change waiting to go up; says how many it stored. */
+    fun applyRemote(records: List<CardRecord>): Int
     /** The server's version wins, unless the card changed since `ifUpdatedAt`. */
     fun forceRemote(record: CardRecord, ifUpdatedAt: Long?): Boolean
     fun markSynced(id: String, updatedAt: Long, seq: Long)
@@ -45,12 +46,15 @@ class MemoryStore : CardStore {
     @Synchronized override fun getCard(id: String) = cards[id]
     @Synchronized override fun putCards(records: List<CardRecord>) = records.forEach { cards[it.id] = it; dirty.add(it.id) }
     @Synchronized override fun listDirty() = dirty.mapNotNull { cards[it] }
-    @Synchronized override fun applyRemote(records: List<CardRecord>) {
+    @Synchronized override fun applyRemote(records: List<CardRecord>): Int {
+        var stored = 0
         for (r in records) {
             if (r.id in dirty) continue
             if (cards[r.id]?.seq == r.seq) continue
             cards[r.id] = r
+            stored++
         }
+        return stored
     }
     @Synchronized override fun forceRemote(record: CardRecord, ifUpdatedAt: Long?): Boolean {
         if (ifUpdatedAt != null && cards[record.id]?.updated_at != ifUpdatedAt) return false

@@ -310,7 +310,8 @@ class Repository(
         onChange?.invoke()
     }
 
-    suspend fun applyRemote(records: List<CardRecord>) = locked { store.applyRemote(records); if (records.isNotEmpty()) onChange?.invoke() }
+    /** A pull that only echoes this device's own pushes changes nothing to show, so it says nothing. */
+    suspend fun applyRemote(records: List<CardRecord>) = locked { if (store.applyRemote(records) > 0) onChange?.invoke() }
     suspend fun forceRemote(record: CardRecord, ifUpdatedAt: Long? = null): Boolean = locked { store.forceRemote(record, ifUpdatedAt).also { if (it) onChange?.invoke() } }
     suspend fun markSynced(id: String, updatedAt: Long, seq: Long) = locked { store.markSynced(id, updatedAt, seq) }
     suspend fun cursor() = locked { store.getMeta("cursor")?.toLongOrNull() ?: 0L }

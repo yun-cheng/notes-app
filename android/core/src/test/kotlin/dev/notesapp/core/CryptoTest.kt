@@ -11,13 +11,18 @@ import kotlin.test.assertTrue
 class CryptoTest {
     private val rawKey = "NumxWqjRaxqTH/cZae5pbj+iXJYtaaJ6QGZudOs8NFE="
     private val vaultKey = unb64(rawKey)!!
-    private val encryption = jobj(
+    companion object {
+        val ENCRYPTION = jobj(
         "version" to j(1),
         "kdf" to jobj("name" to j("argon2id"), "salt" to j("UdG8McNxBKga+AkND5BO6A=="), "memory" to j(64L), "iterations" to j(1L), "parallelism" to j(1L)),
         "wrapped" to j("j9QUtfKym3mFCfhZLA06kYQaLDWCy3RBHP57Cw0dtC4r9bzkzFpdEHYerFEw85H4Dm6S1TY9w9Bol5d/"),
         "recovery" to j("2Im3QIq3MJ3aTelWXJR71EMlK1yyjleLNu/Akta1vIu5tY9jtQ0n0BqIymb5z6Agm6SyfU0JTi74g1d9"),
     )
-    private val payload = "e1:IUhZ3PNrJsDhgwfcJzFiTstho5VHFxnJG19z0mSLpaoEU4us3VbaUYEnCEzxZbYqx+BWKONybxFIg7/fNfEvNoWrb+7QSBUcvWYA5BNtoarJRYksnWM8aF7CixHFqlaDNDhMgEj5BCY0Cp1O"
+        const val RECOVERY = "4J66-R6XW-KDJY-9XRC-CN6B-GR8T-HEA9-YJRK"
+        const val PAYLOAD = "e1:IUhZ3PNrJsDhgwfcJzFiTstho5VHFxnJG19z0mSLpaoEU4us3VbaUYEnCEzxZbYqx+BWKONybxFIg7/fNfEvNoWrb+7QSBUcvWYA5BNtoarJRYksnWM8aF7CixHFqlaDNDhMgEj5BCY0Cp1O"
+    }
+    private val encryption = ENCRYPTION
+    private val payload = PAYLOAD
     private val member = jobj(
         "kdf" to jobj("name" to j("argon2id"), "salt" to j("lZzrYH35XzG7gPtLZCQsMg=="), "memory" to j(64L), "iterations" to j(1L), "parallelism" to j(1L)),
         "wrapped" to j("HesSL2rbAghnlq5FbqMLjoj0FXlW5SkCIxbWp92kz0PQtD/Bd6i4+PFcJVTzAROg4I3FYyas/LEu5IayeMZvTMk8+CnaE5UNHqEvT5FzG0rvjr2YHtyAV4liSJCkl6tthLY1cvVN/ZXSPi2UhaaDA8kzlDsXxNHr/l9JN/NkSotuJ4gZmlB/00W0a+DR6N324T//SZ7gB3RTPlJ1b9v5hdZL8Utg+A=="),

@@ -104,11 +104,16 @@ fun JournalBox(filter: StreamFilter) {
         val typed = text
         val added = Transcriber.fill(attached.toList())
         if (typed.isBlank() && added.isEmpty()) return
-        val entries = if (added.isEmpty()) EntryParser.parseEntries(typed, model.today, allTodos = todos) else {
-            // Photos and files go in with the words, read as the web's box reads its rich text.
-            val words = typed.trim()
-            val blocks = (if (words.isEmpty()) emptyList() else Doc.fromText(if (todos && !words.startsWith("[")) "[] $words" else words)["content"].arr ?: emptyList()) + added
-            EntryParser.entries(jobj("type" to j("doc"), "content" to jarr(blocks)), model.today)
+        // Photos and files go with the last entry written, as in the web's box, where they sit after the words; alone
+        // they're a note of their own, or a todo named Photo.
+        var entries = EntryParser.parseEntries(if (typed.isBlank() && todos && added.isNotEmpty()) "Photo" else typed, model.today, allTodos = todos)
+        if (added.isNotEmpty()) {
+            entries = if (entries.isEmpty()) EntryParser.entries(jobj("type" to j("doc"), "content" to jarr(added)), model.today)
+            else {
+                val last = entries.last()
+                val words = (last.content["content"].arr ?: emptyList()).filterNot { it["type"].str == "paragraph" && it["content"] == null }
+                entries.dropLast(1) + last.copy(content = jobj("type" to j("doc"), "content" to jarr(words + added)))
+            }
         }
         val opts = SaveOptions.journal(filter, model.today)
         model.scope.launch {

@@ -40,6 +40,14 @@ data class TrashMark(val id: String, val from: String? = null, val name: String?
 
 /** Which photos and files go to the Trash, come back from it, or go for good, as the web app's `planSweep`. */
 object AttachmentSweep {
+    /**
+     * Vaults this device can't read all of: locked here, holding a card it couldn't open, or encrypted with no key
+     * here, as when another device has just encrypted one this device had open. Which of their photos are held can't
+     * be told here, so the sweep leaves them alone.
+     */
+    fun unreadVaults(locked: Set<String>, vaults: List<Vault>, cards: List<Card>, hasKey: (String) -> Boolean): Set<String> =
+        locked + cards.filter { it.sealed }.map { it.vaultId } + vaults.filter { it.isEncrypted && !hasKey(it.id) }.map { it.id }
+
     @Serializable
     data class Holder(val card: String, val name: String? = null)
 

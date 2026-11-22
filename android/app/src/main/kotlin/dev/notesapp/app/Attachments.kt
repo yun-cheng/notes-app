@@ -329,10 +329,11 @@ object AttachmentKeeper {
             val api = model.api
             val stored = runCatching { api.attachments() }.getOrNull() ?: return
             val holders = model.repo.metaString("attachmentHolders")?.let { runCatching { json.decodeFromString(holdersSer, it) }.getOrNull() } ?: emptyMap()
-            val locked = model.lockedVaults
+            // A vault this device can't read all of (locked, or just encrypted elsewhere) isn't judged.
+            val unread = AttachmentSweep.unreadVaults(model.lockedVaults, model.vaults, model.cards) { model.repo.keyring.key(it) != null }
             val plan = AttachmentSweep.plan(
-                stored, model.cards.filter { it.vaultId !in locked && !it.sealed },
-                judges = { id -> model.vault(id)?.let { it.role != "viewer" && id !in locked } ?: false }, mayDelete = locked.isEmpty(),
+                stored, model.cards.filter { it.vaultId !in unread },
+                judges = { id -> model.vault(id)?.let { it.role != "viewer" && id !in unread } ?: false }, mayDelete = unread.isEmpty(),
                 holders = holders, now = System.currentTimeMillis(),
             )
             model.repo.setMetaString("attachmentHolders", json.encodeToString(holdersSer, plan.holders))

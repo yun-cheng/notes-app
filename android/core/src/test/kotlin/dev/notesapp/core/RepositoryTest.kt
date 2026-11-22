@@ -268,3 +268,18 @@ class SyncTest {
         assertEquals("Still secret", repo.card("card-1")?.title)
     }
 }
+
+class AttachmentSweepTest {
+    private fun vault(id: String, encrypted: Boolean = false) =
+        Vault(id = id, name = id, owner_id = "u1", encryption = if (encrypted) jobj("version" to j(1)) else null)
+
+    @Test fun aVaultItCantReadAllOfIsLeftAlone() {
+        val vaults = listOf(vault("plain"), vault("sealedCards"), vault("noKey", true), vault("keyed", true))
+        val cards = listOf(
+            Card("a", "plain", 1, false, 0, jobj()),
+            Card("b", "sealedCards", 1, false, 0, jobj(), sealed = true),
+        )
+        val unread = AttachmentSweep.unreadVaults(setOf("locked"), vaults, cards) { it == "keyed" }
+        kotlin.test.assertEquals(setOf("locked", "noKey", "sealedCards"), unread)
+    }
+}

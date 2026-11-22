@@ -396,11 +396,28 @@ struct MediaViewer: View {
             #endif
             .background(.black)
             .toolbar { ToolbarItem(placement: .confirmationAction) { Button("Done") { dismiss() } } }
+            .focusable()
+            .focusEffectDisabled()
+            .onKeyPress(.leftArrow) { step(-1) }
+            .onKeyPress(.rightArrow) { step(1) }
+            .onKeyPress(.escape) {
+                dismiss()
+                return .handled
+            }
         }
         .onAppear { current = start }
         #if os(macOS)
         .frame(minWidth: 700, minHeight: 520)
         #endif
+    }
+}
+
+extension MediaViewer {
+    /// The previous or next photo, round from the last to the first.
+    func step(_ by: Int) -> KeyPress.Result {
+        guard let at = media.firstIndex(where: { $0.id == current }), !media.isEmpty else { return .ignored }
+        current = media[(at + by + media.count) % media.count].id
+        return .handled
     }
 }
 

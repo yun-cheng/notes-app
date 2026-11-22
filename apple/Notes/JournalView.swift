@@ -11,6 +11,10 @@ struct JournalView: View {
     @State private var shown = JournalView.pageSize
     @State private var picked: Set<String> = []
     @State private var pickDates = false
+    /// The entry the keyboard is on: ↑ ↓ move, Space picks, Enter opens.
+    @State private var focusedEntry: String?
+    @State private var showShortcuts = false
+    @FocusState private var streamFocused: Bool
 
     static let pageSize = 150
 
@@ -63,6 +67,11 @@ struct JournalView: View {
                                 Section {
                                     ForEach(group.items) { item in
                                         BubbleView(card: item.card, picked: picked.contains(item.card.id), onPick: { togglePick(item.card.id) }, picking: !picked.isEmpty)
+                                            .overlay(alignment: .leading) {
+                                                if focusedEntry == item.card.id {
+                                                    RoundedRectangle(cornerRadius: 2).fill(Theme.accent).frame(width: 3).offset(x: -8)
+                                                }
+                                            }
                                             .id(item.card.id)
                                     }
                                 } header: {
@@ -82,6 +91,10 @@ struct JournalView: View {
                         .frame(maxWidth: .infinity)
                     }
                     .defaultScrollAnchor(chat ? .bottom : .top)
+                    .focusable()
+                    .focused($streamFocused)
+                    .focusEffectDisabled()
+                    .onKeyPress { press in keys(press, visible.map(\.card.id), all: all.map(\.card.id), proxy: proxy) }
                     .onChange(of: model.lastSaved) { _, id in
                         if let id { withAnimation(nil) { proxy.scrollTo(id, anchor: .bottom) } }
                     }
@@ -97,6 +110,7 @@ struct JournalView: View {
         .navigationTitle(title)
         .toolbar { toolbar(count: all.count) }
         .sheet(isPresented: $pickDates) { DatesDialog(filter: $filter) }
+        .sheet(isPresented: $showShortcuts) { ShortcutsSheet() }
         .onChange(of: filter) { _, f in
             shown = Self.pageSize
             model.page = .journal(f)
@@ -110,6 +124,50 @@ struct JournalView: View {
     private var lockedVault: Vault? {
         guard let id = filter.vaultId, model.lockedVaults.contains(id) else { return nil }
         return model.vault(id)
+    }
+
+    /// The journal's keys, as the web app's `useEntryShortcuts`.
+    private func keys(_ press: KeyPress, _ ids: [String], all: [String], proxy: ScrollViewProxy) -> KeyPress.Result {
+        let command = press.modifiers.contains(.command)
+        func move(_ by: Int) {
+            guard !ids.isEmpty else { return }
+            let at = focusedEntry.flatMap { ids.firstIndex(of: $0) } ?? (by > 0 ? -1 : ids.count)
+            let next = ids[max(0, min(ids.count - 1, at + by))]
+            if press.modifiers.contains(.shift) { picked.insert(next) }
+            focusedEntry = next
+            withAnimation(nil) { proxy.scrollTo(next, anchor: .center) }
+        }
+        switch press.key {
+        case .downArrow: move(1)
+        case .upArrow: move(-1)
+        case .home: move(-ids.count)
+        case .end: move(ids.count)
+        case .space:
+            if let f = focusedEntry { togglePick(f) } else { move(0) }
+        case .return:
+            if let f = focusedEntry { model.openEntry = f } else { return .ignored }
+        case .delete, .deleteForward:
+            let ids = picked.isEmpty ? focusedEntry.map { [$0] } ?? [] : Array(picked)
+            guard !ids.isEmpty else { return .ignored }
+            model.trash(ids.filter { model.card($0).map(model.canManage) ?? false })
+            picked = []
+        case .escape:
+            if !picked.isEmpty { picked = [] } else if focusedEntry != nil { focusedEntry = nil } else { return .ignored }
+        default:
+            if command && press.characters == "a" {
+                picked = Set(all)
+            } else if command && (press.characters == "c" || press.characters == "x"), !picked.isEmpty {
+                let cards = picked.compactMap { model.card($0) }.sorted { $0.createdAt < $1.createdAt }
+                Clipboard.copy(Markdown.entries(cards, index: model.index))
+                if press.characters == "x" { model.trash(cards.filter(model.canManage).map(\.id)) } else { model.say("Copied \(cards.count)") }
+                picked = []
+            } else if press.characters == "?" {
+                showShortcuts = true
+            } else {
+                return .ignored
+            }
+        }
+        return .handled
     }
 
     private func togglePick(_ id: String) {

@@ -501,10 +501,14 @@ final class AttachmentKeeper {
         last = Date()
         guard let stored = try? await model.api.attachments() else { return }
         let holders = (try? await model.repo.meta("attachmentHolders", as: [String: AttachmentSweep.Holder].self)) ?? [:]
-        let locked = model.lockedVaults
+        // A vault this device can't read all of says nothing about which of its photos are held: locked here, or
+        // with cards it can't open, as when another device has just encrypted it and the key isn't here yet.
+        let unread = model.lockedVaults
+            .union(model.cards.filter(\.sealed).map(\.vaultId))
+            .union(model.vaults.filter { $0.isEncrypted && model.repo.keyring.key($0.id) == nil }.map(\.id))
         let plan = AttachmentSweep.plan(
-            stored: stored, cards: model.cards.filter { !locked.contains($0.vaultId) && !$0.sealed },
-            judges: { id in model.vault(id).map { $0.role != .viewer && !locked.contains(id) } ?? false }, mayDelete: locked.isEmpty,
+            stored: stored, cards: model.cards.filter { !unread.contains($0.vaultId) },
+            judges: { id in model.vault(id).map { $0.role != .viewer && !unread.contains(id) } ?? false }, mayDelete: unread.isEmpty,
             holders: holders, now: Repository.milliseconds())
         try? await model.repo.setMeta("attachmentHolders", plan.holders)
         if !plan.trash.isEmpty || !plan.keep.isEmpty { try? await model.api.markAttachments(trash: plan.trash, keep: plan.keep) }

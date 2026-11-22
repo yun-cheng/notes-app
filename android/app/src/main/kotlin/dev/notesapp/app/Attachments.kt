@@ -78,9 +78,14 @@ object Attachments {
     private fun file(id: String) = File(folder, id.replace("/", "_"))
     private val queueFile get() = File(folder, "pending.json")
 
+    /** What waits to go up: read from its file once, then kept in memory and written back as it changes. */
+    private var queue: List<Pending>? = null
     var pending: List<Pending>
-        get() = runCatching { json.decodeFromString(ListSerializer(Pending.serializer()), queueFile.readText()) }.getOrDefault(emptyList())
-        set(v) { queueFile.writeText(json.encodeToString(ListSerializer(Pending.serializer()), v)) }
+        get() = queue ?: runCatching { json.decodeFromString(ListSerializer(Pending.serializer()), queueFile.readText()) }.getOrDefault(emptyList()).also { queue = it }
+        set(v) {
+            queue = v
+            queueFile.writeText(json.encodeToString(ListSerializer(Pending.serializer()), v))
+        }
 
     /** Deletes an account's photos and files from this device as it signs out, with any still waiting to go up. */
     fun forget(accountId: String, ids: Set<String>) {
@@ -162,8 +167,8 @@ object Attachments {
      * Keeps a photo for an entry in `vaultId` and queues its upload. Returns the photo node to put in the entry. `seal`
      * says whether it's sealed, which otherwise follows the vault.
      */
-    fun addPhoto(raw: ByteArray, vaultId: String, model: AppModel, given: String? = null, seal: Boolean? = null): JsonElement {
-        val photo = prepare(raw) ?: throw AddError("That isn't a picture this app can read.")
+    suspend fun addPhoto(raw: ByteArray, vaultId: String, model: AppModel, given: String? = null, seal: Boolean? = null): JsonElement {
+        val photo = withContext(Dispatchers.Default) { prepare(raw) } ?: throw AddError("That isn't a picture this app can read.")
         val id = given ?: newId()
         keep(id, photo.data, vaultId, model, seal, Pending(id, vaultId, photo.mime, width = photo.width, height = photo.height))
         return jobj("type" to j("photo"), "attrs" to jobj("id" to j(id)))
@@ -210,7 +215,7 @@ object Attachments {
     }
 
     /** Keeps a file (a video, a sound, a PDF, anything) and queues its upload. Returns the file node. */
-    fun addFile(data: ByteArray, name: String, mime: String, vaultId: String, model: AppModel, duration: Double? = null, extra: JsonObject = jobj(), given: String? = null, seal: Boolean? = null): JsonElement {
+    suspend fun addFile(data: ByteArray, name: String, mime: String, vaultId: String, model: AppModel, duration: Double? = null, extra: JsonObject = jobj(), given: String? = null, seal: Boolean? = null): JsonElement {
         val video = mime.startsWith("video/")
         val limit = if (video) MAX_VIDEO_BYTES else MAX_FILE_BYTES
         if (data.size > limit) throw AddError("$name is ${size(data.size.toLong())}. ${if (video) "Videos" else "Files"} can be up to ${size(limit.toLong())}.")
@@ -224,15 +229,20 @@ object Attachments {
 
     fun size(bytes: Long): String = Formatter.formatShortFileSize(null, bytes).ifEmpty { "$bytes B" }
 
-    private fun keep(id: String, data: ByteArray, vaultId: String, model: AppModel, seal: Boolean?, item0: Pending) {
+    /** Seals it if it's to be sealed and writes it here, both off the main thread (a video can be large). */
+    private suspend fun keep(id: String, data: ByteArray, vaultId: String, model: AppModel, seal: Boolean?, item0: Pending) {
         var item = item0.copy(account = model.accountId)
-        var stored = data
+        var key: ByteArray? = null
         if (seal ?: (model.vault(vaultId)?.isEncrypted == true)) {
-            val key = model.repo.keyring.key(vaultId) ?: throw AddError("Open the vault first.")
-            stored = AttachmentSeal.seal(data, id, vaultId, key, AttachmentSeal.Facts(item.mime, data.size, item.fileName, item.width, item.height, item.duration))
+            key = model.repo.keyring.key(vaultId) ?: throw AddError("Open the vault first.")
             item = item.copy(sealed = true)
         }
-        file(id).writeBytes(stored)
+        val facts = AttachmentSeal.Facts(item.mime, data.size, item.fileName, item.width, item.height, item.duration)
+        val f = file(id)
+        withContext(Dispatchers.Default) {
+            val stored = key?.let { AttachmentSeal.seal(data, id, vaultId, it, facts) } ?: data
+            withContext(Dispatchers.IO) { f.writeBytes(stored) }
+        }
         pending = pending + item
         model.scope.launch { upload(model) }
     }
@@ -301,6 +311,10 @@ fun rememberAttachmentPickers(vaultId: String, add: (JsonElement) -> Unit): Pick
                     val i = c.getColumnIndex(android.provider.OpenableColumns.DISPLAY_NAME)
                     if (i >= 0 && c.moveToFirst()) c.getString(i) else null
                 } ?: "File"
+                // Too big is said before reading it all into memory.
+                val size = resolver.query(uri, arrayOf(android.provider.OpenableColumns.SIZE), null, null, null)?.use { c -> if (c.moveToFirst() && !c.isNull(0)) c.getLong(0) else null }
+                val limit = if (mime.startsWith("video/")) Attachments.MAX_VIDEO_BYTES else Attachments.MAX_FILE_BYTES
+                if (size != null && size > limit && !mime.startsWith("image/")) throw Attachments.AddError("$name is ${Attachments.size(size)}. ${if (mime.startsWith("video/")) "Videos" else "Files"} can be up to ${Attachments.size(limit.toLong())}.")
                 val data = withContext(Dispatchers.IO) { resolver.openInputStream(uri)?.use { it.readBytes() } } ?: throw Attachments.AddError("That file can't be read.")
                 val node = when {
                     mime.startsWith("video/") -> Attachments.addVideo(data, name, mime, vaultId, model)

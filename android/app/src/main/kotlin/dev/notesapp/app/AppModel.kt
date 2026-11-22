@@ -185,6 +185,7 @@ class AppModel(private val context: Context, val site: String) {
     /** Signed in, on its own or as another account: it goes first in the list, and is opened. */
     suspend fun signedIn(info: SessionInfo, token: String) {
         tokens.save(token, info.user.id)
+        tokenVersion++
         saveAccounts(listOf(info.user) + accounts.filter { it.id != info.user.id })
         addingAccount = false
         repo = openRepo(info.user.id)
@@ -201,6 +202,7 @@ class AppModel(private val context: Context, val site: String) {
         Drafts.forget()
         val token = tokens.token(leaving.id)
         tokens.clear(leaving.id)
+        tokenVersion++
         saveAccounts(accounts.filter { it.id != leaving.id })
         val old = repo
         val engine = sync
@@ -232,7 +234,18 @@ class AppModel(private val context: Context, val site: String) {
         }
     }
 
-    val api: ServerApi get() = ServerApi(site, account?.let { tokens.token(it.id) }, device)
+    /**
+     * The server, as the open account. Kept once made, so the token is read from the Keystore only when the account,
+     * its token or this device's ID changes, not on every use.
+     */
+    val api: ServerApi get() {
+        val key = Triple(account?.id, device, tokenVersion)
+        cachedApi?.let { if (cachedApiKey == key) return it }
+        return ServerApi(site, account?.let { tokens.token(it.id) }, device).also { cachedApi = it; cachedApiKey = key }
+    }
+    private var cachedApi: ServerApi? = null
+    private var cachedApiKey: Triple<String?, Pair<String, String>?, Int>? = null
+    private var tokenVersion = 0
     val accountId get() = account?.id ?: ""
 
     companion object {

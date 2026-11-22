@@ -114,15 +114,11 @@ class AppModel(private val context: Context, val site: String) {
     private fun saveAccounts(list: List<Account>) { accounts = list; tokens.accounts = list }
 
     private suspend fun start() {
-        val t0 = System.currentTimeMillis()
         accounts = tokens.accounts
-        android.util.Log.i("Notes", "accounts in ${System.currentTimeMillis() - t0} ms")
         val current = tokens.current
         val account = accounts.firstOrNull { it.id == current } ?: accounts.firstOrNull()
         val token = account?.let { tokens.token(it.id) }
-        android.util.Log.i("Notes", "token in ${System.currentTimeMillis() - t0} ms")
         if (account != null && token != null) open(account, token) else phase = Phase.signedOut
-        android.util.Log.i("Notes", "started in ${System.currentTimeMillis() - t0} ms")
     }
 
     private fun openRepo(id: String): Repository {

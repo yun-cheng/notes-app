@@ -11,7 +11,6 @@ import dev.notesapp.core.StreamFilter
 import dev.notesapp.core.Vault
 import kotlinx.serialization.json.JsonElement
 
-@Composable fun UnlockView(vault: Vault, modifier: Modifier = Modifier) { Text("Locked: ${vault.name}", modifier) }
 @Composable fun BoardView(filter: StreamFilter, board: String) {}
 @Composable fun BubbleLinks(card: Card) {}
 @Composable fun BubbleTranslation(card: Card) {}
@@ -25,7 +24,6 @@ import kotlinx.serialization.json.JsonElement
 @Composable fun LinksPage(openDrawer: () -> Unit) = Stub("Links", openDrawer)
 @Composable fun FilesPage(openDrawer: () -> Unit) = Stub("Files", openDrawer)
 @Composable fun TagsPage(openDrawer: () -> Unit) = Stub("Tags", openDrawer)
-@Composable fun VaultsPage(openDrawer: () -> Unit) = Stub("Vaults", openDrawer)
 @Composable fun SettingsPage(openDrawer: () -> Unit) = Stub("Settings", openDrawer)
 @Composable fun SearchPage(openDrawer: () -> Unit) = Stub("Search", openDrawer)
 

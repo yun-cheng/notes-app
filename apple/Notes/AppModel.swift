@@ -88,6 +88,8 @@ final class AppModel {
         if let id = try? await repo.deviceId() { device = (id, Self.deviceName) }
         let engine = SyncEngine(repo: repo, api: ServerAPI(site: site, token: token, device: device))
         sync = engine
+        Drafts.shared.accountId = account.id
+        Drafts.shared.api = ServerAPI(site: site, token: token, device: device)
         phase = .signedIn
         await refresh()
         await engine.sync()
@@ -104,6 +106,7 @@ final class AppModel {
     }
 
     func signOut() {
+        Drafts.shared.forget()
         let token = Keychain.token()
         Keychain.clear()
         UserDefaults.standard.removeObject(forKey: Self.accountKey)
@@ -323,6 +326,7 @@ extension AppModel {
     func syncPeriodically() async {
         while !Task.isCancelled {
             await Attachments.shared.upload(model: self)
+            await Drafts.shared.sync()
             try? await Task.sleep(for: .seconds(60))
             await sync?.sync()
         }

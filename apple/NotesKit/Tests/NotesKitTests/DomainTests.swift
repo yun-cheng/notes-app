@@ -318,3 +318,12 @@ import Testing
         #expect(unzipped.map(\.name) == ["notes/a.md"] && unzipped.first?.text == "# A\nhello")
     }
 }
+
+@Suite struct JournalPathTests {
+    @Test func namesDraftsAsTheWebDoes() {
+        #expect(StreamFilter().journalPath == "/journal")
+        #expect(StreamFilter(type: .todo, tagId: "t1", vaultId: "v1").journalPath == "/journal?type=todo&tag=t1&vault=v1")
+        #expect(StreamFilter(sort: .group("g"), when: "2026-11-03..2026-11-09").journalPath == "/journal?sort=group%3Ag&when=2026-11-03..2026-11-09")
+        #expect(StreamFilter(archived: true).journalPath == "/archive")
+    }
+}

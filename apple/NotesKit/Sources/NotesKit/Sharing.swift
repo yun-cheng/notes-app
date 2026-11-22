@@ -385,3 +385,62 @@ extension ServerAPI {
         return .done(from: from, to: r.to ?? to, pieces: pieces)
     }
 }
+
+extension ServerAPI {
+    public struct DraftChange: Codable, Sendable {
+        public var kind: String
+        public var key: String
+        public var value: JSONValue
+        public init(kind: String, key: String, value: JSONValue) {
+            self.kind = kind
+            self.key = key
+            self.value = value
+        }
+    }
+
+    public struct ServerDraft: Codable, Sendable {
+        public var kind: String
+        public var key: String
+        public var value: JSONValue?
+        public var at: Int64
+    }
+
+    public func drafts(since: Int64) async throws -> (drafts: [ServerDraft], at: Int64) {
+        struct R: Decodable { let drafts: [ServerDraft]; let at: Int64 }
+        let r = try await json(R.self, "/drafts?since=\(since)")
+        return (r.drafts, r.at)
+    }
+
+    public func sendDrafts(_ drafts: [DraftChange]) async throws {
+        struct Body: Encodable { let drafts: [DraftChange] }
+        let (_, status) = try await send("/drafts", method: "PUT", body: Body(drafts: drafts))
+        guard (200..<300).contains(status) else { throw APIError.status(status) }
+    }
+}
+
+extension StreamFilter {
+    /// The web app's address for this view of the journal, which names its draft: `/journal?tag=…&vault=…`.
+    public var journalPath: String {
+        var items: [(String, String)] = []
+        switch sort {
+        case .newest: items.append(("sort", "newest"))
+        case .edited: items.append(("sort", "edited"))
+        case .due: items.append(("sort", "due"))
+        case .group(let id): items.append(("sort", "group:\(id)"))
+        case .written: break
+        }
+        if let type { items.append(("type", type.rawValue)) }
+        if let status { items.append(("status", status.rawValue)) }
+        if let when { items.append(("when", when)) }
+        if let tagId { items.append(("tag", tagId)) }
+        if let vaultId { items.append(("vault", vaultId)) }
+        if let has { items.append(("has", has.rawValue)) }
+        if template { items.append(("template", "1")) }
+        if let board { items.append(("board", board)) }
+        var c = URLComponents()
+        c.queryItems = items.map { URLQueryItem(name: $0.0, value: $0.1) }
+        // As URLSearchParams writes it: spaces as +, the rest percent-encoded.
+        let query = (c.percentEncodedQuery ?? "").replacingOccurrences(of: "%20", with: "+").replacingOccurrences(of: ":", with: "%3A")
+        return (archived ? "/archive" : "/journal") + (query.isEmpty ? "" : "?" + query)
+    }
+}

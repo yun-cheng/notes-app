@@ -19,7 +19,11 @@ struct JournalBox: View {
     @State private var importing = false
     @FocusState private var focused: Bool
 
-    private var draftKey: String { "draft:" + String(describing: filter.with { $0.sort = .written }) }
+    /// The web's name for this view's draft, so the box's draft follows the account to its other devices.
+    private var draftKey: String { filter.with { $0.sort = .written }.journalPath }
+
+    /// A draft bound for an encrypted vault stays on this device, in memory only.
+    private var encrypted: Bool { model.vault(targetVault)?.isEncrypted == true }
 
     var body: some View {
         VStack(spacing: 6) {
@@ -93,11 +97,15 @@ struct JournalBox: View {
         .frame(maxWidth: .infinity)
         .background(Theme.bg)
         .onAppear {
-            text = UserDefaults.standard.string(forKey: draftKey) ?? ""
+            text = Drafts.shared.get("journal", draftKey).map(Drafts.text) ?? ""
             todos = filter.effectiveType == .todo
         }
         .onChange(of: text) { _, t in
-            if t.isEmpty { UserDefaults.standard.removeObject(forKey: draftKey) } else { UserDefaults.standard.set(t, forKey: draftKey) }
+            Drafts.shared.set("journal", draftKey, Drafts.doc(t), onlyHere: encrypted)
+        }
+        .onChange(of: Drafts.shared.arrived["journal:\(draftKey)"]) {
+            // From another device: taken in while the box here is empty.
+            if text.isEmpty, let doc = Drafts.shared.get("journal", draftKey) { text = Drafts.text(doc) }
         }
         .onChange(of: model.focusBox) { focused = true }
         .onChange(of: picking) { _, items in

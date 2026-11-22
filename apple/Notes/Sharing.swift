@@ -138,6 +138,7 @@ struct CommentsSection: View {
     let card: Card
     @State private var comments: [CardComment] = []
     @State private var draft = ""
+    private var sealed: Bool { model.vault(card.vaultId)?.isEncrypted == true }
     @State private var failed = false
     @State private var showResolved = false
 
@@ -177,7 +178,11 @@ struct CommentsSection: View {
             if failed { Text("Comments need a connection.").font(.caption).foregroundStyle(Theme.alert) }
         }
         .padding(.top, 12)
-        .task(id: card.id) { run { try await $0.comments(card.id) } }
+        .task(id: card.id) {
+            draft = Drafts.shared.get("comment", card.id)?.stringValue ?? ""
+            run { try await $0.comments(card.id) }
+        }
+        .onChange(of: draft) { _, t in Drafts.shared.set("comment", card.id, t.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty ? nil : .string(t), onlyHere: sealed) }
     }
 
     private func text(_ comment: CardComment) -> String {

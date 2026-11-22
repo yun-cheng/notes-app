@@ -72,6 +72,8 @@ struct VaultEncryption {
 
     /// Stores the vault's cards readable again and drops its PIN, or with `keepPin`, keeps it locked by the PIN alone.
     func decrypt(_ vault: Vault, keepPin: Bool = false) async throws {
+        // Its cards can only be stored readable again with its key open here; without it they'd stay sealed for good.
+        guard repo.keyring.key(vault.id) != nil else { throw NeedsPin() }
         await model.sync?.sync()
         // Its photos and files are opened first, while the key is here.
         let failed = try await reseal(vault.id, seal: false)

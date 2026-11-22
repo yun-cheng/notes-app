@@ -111,6 +111,8 @@ class VaultEncryption(private val model: AppModel) {
 
     /** Stores the vault's cards readable again and drops its PIN, or with `keepPin`, keeps it locked by the PIN alone. */
     suspend fun decrypt(vault: Vault, keepPin: Boolean = false) {
+        // Its cards can only be stored readable again with its key open here; without it they'd stay sealed for good.
+        if (repo.keyring.key(vault.id) == null) throw NeedsPin()
         model.sync?.sync()
         // Its photos and files are opened first, while the key is here.
         val failed = reseal(vault.id, seal = false)

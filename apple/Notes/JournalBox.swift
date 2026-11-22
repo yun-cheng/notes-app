@@ -328,7 +328,7 @@ struct AttachedThumb: View {
                 PhotoThumb(media: .photo(id), vaultId: vaultId, size: 56)
             } else {
                 VStack(spacing: 2) {
-                    Image(systemName: (node["attrs"]?["mime"]?.stringValue ?? "").hasPrefix("audio/") ? "waveform" : "doc")
+                    Image(systemName: Doc.fileSymbol(mime: node["attrs"]?["mime"]?.stringValue))
                     Text(node["attrs"]?["name"]?.stringValue ?? "File").font(.caption2).lineLimit(1)
                 }
                 .frame(width: 76, height: 56)

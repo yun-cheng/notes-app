@@ -81,7 +81,7 @@ struct FilesPage: View {
             ForEach(items) { item in
                 ForEach(Doc.files(item.card.content).filter { query.isEmpty || $0.name.localizedCaseInsensitiveContains(query) }) { file in
                     HStack {
-                        Image(systemName: file.isAudio ? "waveform" : file.isVideo ? "film" : "doc")
+                        Image(systemName: file.symbol)
                         VStack(alignment: .leading) {
                             Text(file.name)
                             Button(item.card.displayTitle) { model.openEntry = item.card.id }.buttonStyle(.plain).font(.caption).foregroundStyle(Theme.muted)

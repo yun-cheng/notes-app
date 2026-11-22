@@ -376,7 +376,7 @@ struct FileChip: View {
         } else {
             Button(action: open) {
                 HStack(spacing: 6) {
-                    Image(systemName: icon)
+                    Image(systemName: file.symbol)
                     Text(file.name).lineLimit(1)
                     if let size = file.size { Text(ByteCountFormatter.string(fromByteCount: size, countStyle: .file)).foregroundStyle(Theme.muted) }
                     if opening { ProgressView().controlSize(.small) }
@@ -389,15 +389,6 @@ struct FileChip: View {
             .buttonStyle(.plain)
             .padding(.top, 4)
         }
-    }
-
-    private var icon: String {
-        let m = file.mime ?? ""
-        if m == "application/pdf" { return "doc.richtext" }
-        if m.hasPrefix("image/") { return "photo" }
-        if m.contains("zip") { return "doc.zipper" }
-        if m.contains("sheet") || m.contains("excel") || m.contains("csv") { return "tablecells" }
-        return "doc"
     }
 
     private func open() {
@@ -591,7 +582,7 @@ struct TrashedAttachments: View {
                         ForEach(items) { a in
                             VStack(alignment: .leading, spacing: 4) {
                                 if a.isFile {
-                                    Label(a.name ?? "File", systemImage: a.mime.hasPrefix("video/") ? "film" : a.mime.hasPrefix("audio/") ? "waveform" : "doc")
+                                    Label(a.name ?? "File", systemImage: Doc.fileSymbol(mime: a.mime))
                                         .lineLimit(1).frame(width: 120, height: 80).background(RoundedRectangle(cornerRadius: 8).fill(Theme.sunken))
                                 } else {
                                     PhotoThumb(media: .photo(a.id), vaultId: a.vault_id, size: 120)

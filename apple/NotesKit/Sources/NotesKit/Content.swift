@@ -244,6 +244,19 @@ extension Doc {
 
         public var isVideo: Bool { mime?.hasPrefix("video/") ?? false }
         public var isAudio: Bool { mime?.hasPrefix("audio/") ?? false }
+        public var symbol: String { Doc.fileSymbol(mime: mime) }
+    }
+
+    /// The SF Symbol a file is shown with, the same everywhere it shows.
+    public static func fileSymbol(mime: String?) -> String {
+        let m = mime ?? ""
+        if m.hasPrefix("video/") { return "film" }
+        if m.hasPrefix("audio/") { return "waveform" }
+        if m.hasPrefix("image/") { return "photo" }
+        if m == "application/pdf" { return "doc.richtext" }
+        if m.contains("zip") { return "doc.zipper" }
+        if m.contains("sheet") || m.contains("excel") || m.contains("csv") { return "tablecells" }
+        return "doc"
     }
 
     public struct Cue: Sendable, Hashable {

@@ -36,10 +36,8 @@ struct TrashPage: View {
         .toolbar {
             if !trash.isEmpty {
                 Button("Restore all") {
-                    let group = model.repo.action()
                     let ids = trash.filter { model.canWrite($0) }.map(\.id)
-                    model.perform { repo in for id in ids { try await repo.setDeleted(id, false, group: group) } }
-                    model.say("Restored \(ids.count)", undoable: true)
+                    model.performEach(ids, say: "Restored \(ids.count)") { repo, id, group in try await repo.setDeleted(id, false, group: group) }
                 }
             }
         }

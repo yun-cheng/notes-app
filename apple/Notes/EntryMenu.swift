@@ -141,15 +141,15 @@ enum EntryPanel: Identifiable, Hashable {
 extension AppModel {
     /// Archives or unarchives entries together, as one action to undo.
     func archive(_ ids: [String], _ on: Bool) {
-        let group = repo.action()
-        perform { repo in for id in ids { try await repo.update(id, group: group) { $0.archived = on } } }
-        say(on ? (ids.count == 1 ? "Archived" : "Archived \(ids.count) entries") : "Unarchived", undoable: true)
+        performEach(ids, say: on ? (ids.count == 1 ? "Archived" : "Archived \(ids.count) entries") : "Unarchived") { repo, id, group in
+            try await repo.update(id, group: group) { $0.archived = on }
+        }
     }
 
     func trash(_ ids: [String]) {
-        let group = repo.action()
-        perform { repo in for id in ids { try await repo.setDeleted(id, true, group: group) } }
-        say(ids.count == 1 ? "Moved to Trash" : "Moved \(ids.count) entries to Trash", undoable: true)
+        performEach(ids, say: ids.count == 1 ? "Moved to Trash" : "Moved \(ids.count) entries to Trash") { repo, id, group in
+            try await repo.setDeleted(id, true, group: group)
+        }
     }
 
     /// A copy under Templates, to start new entries from; the entry stays where it is.

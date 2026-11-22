@@ -372,6 +372,14 @@ final class AppModel {
         }
     }
 
+    /// Does `work` to each entry as one action to undo (it's given the repository, the entry and the action), then
+    /// says `done` with an Undo.
+    func performEach(_ ids: [String], say done: String, _ work: @escaping @Sendable (Repository, String, String) async throws -> Void) {
+        let group = repo.action()
+        perform { repo in for id in ids { try await work(repo, id, group) } }
+        say(done, undoable: true)
+    }
+
     /// Shows a toast, with Undo when `undoable`, which takes back the last action.
     func say(_ message: String, undoable: Bool = false) {
         toast = Toast(message: message, undo: undoable)

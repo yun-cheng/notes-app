@@ -261,11 +261,9 @@ struct BatchBar: View {
             }
             if cards.contains(where: { $0.type == .todo && !$0.isDone }) {
                 Button("Done") {
-                    let group = model.repo.action()
                     let today = model.today
                     let ids = cards.filter { $0.type == .todo && !$0.isDone }.map(\.id)
-                    model.perform { repo in for id in ids { try await repo.setDone(id, true, today: today, group: group) } }
-                    model.say("Done", undoable: true)
+                    model.performEach(ids, say: "Done") { repo, id, group in try await repo.setDone(id, true, today: today, group: group) }
                 }
             }
             Button("Stack") { stack(cards) }.disabled(cards.count < 2)
@@ -291,11 +289,11 @@ struct BatchBar: View {
     }
 
     private func tagAll(_ tagId: String) {
-        let group = model.repo.action()
         let groups = model.index.tagGroups
         let ids = Array(picked)
-        model.perform { repo in for id in ids { try await repo.update(id, group: group) { $0.tags = groups.with($0.tags, tagId) } } }
-        model.say("Tagged \(ids.count)", undoable: true)
+        model.performEach(ids, say: "Tagged \(ids.count)") { repo, id, group in
+            try await repo.update(id, group: group) { $0.tags = groups.with($0.tags, tagId) }
+        }
     }
 
     /// A new stack of the picked entries, or, with a stack among them, into that one.

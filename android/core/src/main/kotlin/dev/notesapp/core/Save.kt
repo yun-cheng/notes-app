@@ -84,15 +84,11 @@ suspend fun Repository.save(entries: List<Entry>, opts: SaveOptions = SaveOption
         val tags = tagIds(entry.tags, vault ?: main)
         val createdAt = entry.createdAt ?: at?.plus(i)
         val extra = if (opts.template || entry.template) jobj("template" to j(true)) else jobj()
-        val card = if (entry.kind == Entry.Kind.note) {
-            createNote(id = entry.id, title = entry.title, content = entry.content, pages = entry.pages, tags = tags, vaultId = vault, createdAt = createdAt, extra = extra, group = group)
-        } else {
-            createTodo(
-                id = entry.id, title = entry.title, due = entry.due ?: opts.due, dueTime = entry.dueTime, start = entry.start, repeat = entry.repeat,
-                content = entry.content, pages = entry.pages, tags = tags, vaultId = vault, done = entry.done, waiting = opts.waiting, createdAt = createdAt,
-                extra = extra, group = group,
-            )
-        }
+        val card = createEntry(
+            entry.kind == Entry.Kind.todo, id = entry.id, title = entry.title, content = entry.content, pages = entry.pages, tags = tags, vaultId = vault,
+            due = entry.due ?: opts.due, dueTime = entry.dueTime, start = entry.start, repeat = entry.repeat, done = entry.done, waiting = opts.waiting,
+            createdAt = createdAt, extra = extra, group = group,
+        )
         ids.add(card.id)
     }
     return SaveResult.Saved(ids, group)

@@ -102,6 +102,16 @@ class Repository(
         return Card(id ?: newId(), vaultId ?: defaultVaultId(), at, false, 0, payload)
     }
 
+    /** A new note or todo: a todo takes its dates, its repeat and whether it's done; a note leaves them. */
+    suspend fun createEntry(
+        todo: Boolean, id: String? = null, title: String, content: JsonElement = Doc.empty, pages: List<JsonElement> = emptyList(),
+        tags: List<String> = emptyList(), vaultId: String? = null, due: String? = null, dueTime: String? = null, start: String? = null,
+        repeat: Repeat? = null, done: Boolean = false, waiting: Boolean = false, createdAt: Long? = null, extra: JsonObject = JsonObject(emptyMap()),
+        group: String? = null,
+    ): Card =
+        if (todo) createTodo(id, title, due, dueTime, start, repeat, content, pages, tags, vaultId, done, waiting, createdAt, extra, group)
+        else createNote(id, title, content, pages, null, tags, vaultId, createdAt, extra, group)
+
     suspend fun createNote(
         id: String? = null, title: String = "", content: JsonElement = Doc.empty, pages: List<JsonElement> = emptyList(), stack: List<String>? = null,
         tags: List<String> = emptyList(), vaultId: String? = null, createdAt: Long? = null, extra: JsonObject = JsonObject(emptyMap()), group: String? = null,

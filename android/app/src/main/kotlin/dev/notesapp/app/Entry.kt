@@ -330,8 +330,7 @@ fun AppModel.saveAsTemplate(source: Card) {
     perform { repo ->
         var extra = jobj("template" to j(true))
         source.color?.let { extra = extra.with("color", j(it.name)) }
-        if (source.type == CardType.todo) repo.createTodo(title = source.title, content = source.content, pages = source.turnPages, tags = source.tags, vaultId = source.vaultId, extra = extra)
-        else repo.createNote(title = source.title, content = source.content, pages = source.turnPages, tags = source.tags, vaultId = source.vaultId, extra = extra)
+        repo.createEntry(source.type == CardType.todo, title = source.title, content = source.content, pages = source.turnPages, tags = source.tags, vaultId = source.vaultId, extra = extra)
     }
     say("Saved as a template", undoable = true)
 }
@@ -345,8 +344,7 @@ fun AppModel.startFrom(template: Card) {
         var extra = jobj()
         fields["color"]?.let { extra = extra.with("color", it) }
         fields["preview"]?.let { extra = extra.with("preview", it) }
-        val card = if (fields["type"].str == "todo") repo.createTodo(title = fields["title"].str ?: "", content = fields["content"] ?: Doc.empty, pages = pages, tags = tags, vaultId = template.vaultId, extra = extra)
-        else repo.createNote(title = fields["title"].str ?: "", content = fields["content"] ?: Doc.empty, pages = pages, tags = tags, vaultId = template.vaultId, extra = extra)
+        val card = repo.createEntry(fields["type"].str == "todo", title = fields["title"].str ?: "", content = fields["content"] ?: Doc.empty, pages = pages, tags = tags, vaultId = template.vaultId, extra = extra)
         openEntry = card.id
     }
 }

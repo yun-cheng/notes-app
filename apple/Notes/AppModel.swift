@@ -327,6 +327,7 @@ extension AppModel {
         while !Task.isCancelled {
             await Attachments.shared.upload(model: self)
             await Drafts.shared.sync()
+            await AttachmentKeeper.shared.sweep(model: self)
             try? await Task.sleep(for: .seconds(60))
             await sync?.sync()
         }

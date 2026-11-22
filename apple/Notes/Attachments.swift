@@ -457,3 +457,125 @@ struct MediaPage: View {
         .onDisappear { player?.pause() }
     }
 }
+
+/// Sends photos and files no entry holds to the Trash, brings back those held again, and deletes for good those
+/// 30 days in it, as the web app's `AttachmentKeeper`: after a sync that left nothing waiting, every ten minutes.
+@MainActor
+@Observable
+final class AttachmentKeeper {
+    static let shared = AttachmentKeeper()
+    private(set) var trash: [StoredAttachment] = []
+    @ObservationIgnored private var last = Date.distantPast
+    @ObservationIgnored private var running = false
+
+    func sweep(model: AppModel, now: Bool = false) async {
+        guard !running, now || Date().timeIntervalSince(last) > 600, let sync = model.sync, sync.state == .idle, sync.pending == 0, sync.lastSyncedAt != nil else { return }
+        running = true
+        defer { running = false }
+        last = Date()
+        guard let stored = try? await model.api.attachments() else { return }
+        let holders = (try? await model.repo.meta("attachmentHolders", as: [String: AttachmentSweep.Holder].self)) ?? [:]
+        let locked = model.lockedVaults
+        let plan = AttachmentSweep.plan(
+            stored: stored, cards: model.cards.filter { !locked.contains($0.vaultId) && !$0.sealed },
+            judges: { id in model.vault(id).map { $0.role != .viewer && !locked.contains(id) } ?? false }, mayDelete: locked.isEmpty,
+            holders: holders, now: Repository.milliseconds())
+        try? await model.repo.setMeta("attachmentHolders", plan.holders)
+        if !plan.trash.isEmpty || !plan.keep.isEmpty { try? await model.api.markAttachments(trash: plan.trash, keep: plan.keep) }
+        for id in plan.remove { _ = try? await model.api.deleteAttachment(id) }
+        let changed = !plan.trash.isEmpty || !plan.keep.isEmpty || !plan.remove.isEmpty
+        let latest = changed ? ((try? await model.api.attachments()) ?? stored) : stored
+        trash = latest.filter { $0.trashed_at != nil }.sorted { ($0.trashed_at ?? 0) > ($1.trashed_at ?? 0) }
+    }
+
+    /// Puts a photo or file back: at the end of the entry it was in, or in a new note in its vault.
+    func putBack(_ a: StoredAttachment, model: AppModel) {
+        let stillId = Doc.posterId(a.id)
+        let still = a.mime.hasPrefix("video/") && trash.contains { $0.id == stillId } ? stillId : nil
+        var attrs: [String: JSONValue] = ["id": .string(a.id)]
+        let node: JSONValue
+        if a.isFile {
+            attrs["name"] = .string(a.name ?? "Untitled")
+            attrs["mime"] = .string(a.mime)
+            attrs["size"] = .int(a.size)
+            if let still { attrs["poster"] = .string(still) }
+            if let w = a.width { attrs["width"] = .double(w) }
+            if let h = a.height { attrs["height"] = .double(h) }
+            if let d = a.duration { attrs["duration"] = .double(d) }
+            node = ["type": "file", "attrs": .object(attrs)]
+        } else {
+            node = ["type": "photo", "attrs": .object(attrs)]
+        }
+        let from = a.trashed_from.flatMap { model.card($0) }
+        model.perform { repo in
+            if let from, from.isEntry, !from.deleted, await model.canEdit(from) {
+                try await repo.update(from.id) { c in c.content["content"] = .array((c.content["content"]?.arrayValue ?? []) + [node]) }
+                await MainActor.run { model.say("Put back in “\(from.displayTitle)”", undoable: true) }
+            } else {
+                try await repo.createNote(content: ["type": "doc", "content": [node]], vaultId: a.vault_id)
+                await MainActor.run { model.say("Put back, in a new note", undoable: true) }
+            }
+            try? await model.api.markAttachments(trash: [], keep: [a.id] + (still.map { [$0] } ?? []))
+        }
+        trash.removeAll { $0.id == a.id || $0.id == still }
+    }
+
+    func deleteForGood(_ a: StoredAttachment, model: AppModel) {
+        Task {
+            switch try? await model.api.deleteAttachment(a.id) {
+            case .ok?, .gone?:
+                trash.removeAll { $0.id == a.id }
+                model.say("Deleted for good")
+            case .needsDrive?: model.say("Connect Google Drive to delete it from there too.")
+            case .inUse?: model.say("An entry holds it again, so it stays.")
+            default: model.say("It couldn't be deleted now. Try again.")
+            }
+        }
+    }
+}
+
+/// Photos and files taken out of every entry, at the top of the Trash: each with the entry it was in and the days
+/// left, to put back or delete for good.
+struct TrashedAttachments: View {
+    @Environment(AppModel.self) private var model
+    @State private var confirming: StoredAttachment?
+
+    var body: some View {
+        let items = AttachmentKeeper.shared.trash
+        if !items.isEmpty {
+            VStack(alignment: .leading, spacing: 8) {
+                Text("Photos and files").font(.headline)
+                ScrollView(.horizontal, showsIndicators: false) {
+                    HStack(alignment: .top, spacing: 10) {
+                        ForEach(items) { a in
+                            VStack(alignment: .leading, spacing: 4) {
+                                if a.isFile {
+                                    Label(a.name ?? "File", systemImage: a.mime.hasPrefix("video/") ? "film" : a.mime.hasPrefix("audio/") ? "waveform" : "doc")
+                                        .lineLimit(1).frame(width: 120, height: 80).background(RoundedRectangle(cornerRadius: 8).fill(Theme.sunken))
+                                } else {
+                                    PhotoThumb(media: .photo(a.id), vaultId: a.vault_id, size: 120)
+                                }
+                                Text(a.trashed_from.flatMap { model.card($0) }.map { "From “\($0.displayTitle)”" } ?? "From an entry").font(.caption).lineLimit(1).frame(width: 120, alignment: .leading)
+                                let left = a.daysLeft(now: Repository.milliseconds())
+                                Text(left == 0 ? "Deleted at the next check" : left == 1 ? "1 day left" : "\(left) days left").font(.caption2).foregroundStyle(Theme.muted)
+                                if model.vault(a.vault_id).map({ $0.role != .viewer }) ?? false {
+                                    HStack {
+                                        Button("Restore") { AttachmentKeeper.shared.putBack(a, model: model) }
+                                        Button(role: .destructive) { confirming = a } label: { Image(systemName: "trash") }.accessibilityLabel("Delete for good")
+                                    }
+                                    .buttonStyle(.borderless).font(.caption)
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+            .padding(.bottom, 12)
+            .confirmationDialog("Delete it for good?", isPresented: Binding(get: { confirming != nil }, set: { if !$0 { confirming = nil } }), presenting: confirming) { a in
+                Button("Delete for good", role: .destructive) { AttachmentKeeper.shared.deleteForGood(a, model: model) }
+            } message: { _ in
+                Text("It's deleted from Google Drive too, and can't be undone.")
+            }
+        }
+    }
+}

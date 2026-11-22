@@ -228,17 +228,82 @@ extension ServerAPI {
 }
 
 /// A photo or file as the server keeps it.
-public struct StoredAttachment: Codable, Sendable, Hashable {
+public struct StoredAttachment: Codable, Sendable, Hashable, Identifiable {
     public var id: String
     public var vault_id: String
     public var mime: String
     public var size: Int64
     public var name: String?
+    public var width: Double?
+    public var height: Double?
+    public var duration: Double?
     public var created_at: Int64
+    /// When it was found in no entry, and so went to the Trash.
     public var trashed_at: Int64?
-    public var sealed: Bool?
-    /// The entry it was last in.
-    public var from_card: String?
+    /// The entry it was last in, to put it back there.
+    public var trashed_from: String?
+    /// 1 when it's sealed with its vault's key.
+    public var sealed: Int?
+
+    public var isSealed: Bool { (sealed ?? 0) != 0 }
+    /// A file, as against a photo: it has a name, or isn't a picture.
+    public var isFile: Bool { name != nil || !mime.hasPrefix("image/") }
+    public static let trashDays = 30
+
+    /// Days left before it's deleted for good.
+    public func daysLeft(now: Int64) -> Int {
+        guard let at = trashed_at else { return Self.trashDays }
+        return max(0, Int((Double(at + Int64(Self.trashDays) * 86_400_000 - now) / 86_400_000).rounded(.up)))
+    }
+}
+
+/// Which photos and files go to the Trash, come back from it, or go for good, as the web app's `planSweep`.
+public enum AttachmentSweep {
+    public struct Holder: Codable, Sendable, Hashable {
+        public var card: String
+        public var name: String?
+    }
+
+    public struct Plan: Sendable {
+        public var trash: [ServerAPI.TrashMark] = []
+        public var keep: [String] = []
+        public var remove: [String] = []
+        public var holders: [String: Holder] = [:]
+    }
+
+    /// The photos and files a card holds, on every page, a video's still too.
+    public static func held(_ card: Card) -> [(id: String, name: String?)] {
+        guard card.isEntry else { return [] }
+        return ([card.content] + card.morePages).flatMap { page in
+            Doc.photoIds(page).map { ($0, nil) } + Doc.files(page).flatMap { f in [(f.id, Optional(f.name))] + (f.poster.map { [($0, nil)] } ?? []) }
+        }
+    }
+
+    /// Held ones stay or come back; ones no entry holds go to the Trash (in vaults this device can judge, and not
+    /// just made); ones in the Trash 30 days go for good, when this device may.
+    public static func plan(stored: [StoredAttachment], cards: [Card], judges: (String) -> Bool, mayDelete: Bool, holders: [String: Holder], now: Int64) -> Plan {
+        var heldBy: [String: Holder] = [:]
+        for card in cards.filter({ !$0.deleted }) + cards.filter(\.deleted) {
+            for (id, name) in held(card) where heldBy[id] == nil { heldBy[id] = Holder(card: card.id, name: name) }
+        }
+        var plan = Plan()
+        for a in stored {
+            if let holder = heldBy[a.id] {
+                plan.holders[a.id] = holder
+                if a.trashed_at != nil { plan.keep.append(a.id) }
+                continue
+            }
+            let last = holders[a.id]
+            if let last { plan.holders[a.id] = last }
+            if !judges(a.vault_id) || now - a.created_at < 10 * 60_000 { continue }
+            if a.trashed_at == nil {
+                plan.trash.append(.init(id: a.id, from: last?.card, name: last?.name))
+            } else if mayDelete, let at = a.trashed_at, now - at >= Int64(StoredAttachment.trashDays) * 86_400_000 {
+                plan.remove.append(a.id)
+            }
+        }
+        return plan
+    }
 }
 
 extension ServerAPI {

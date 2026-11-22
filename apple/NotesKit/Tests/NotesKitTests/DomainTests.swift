@@ -327,3 +327,19 @@ import Testing
         #expect(StreamFilter(archived: true).journalPath == "/archive")
     }
 }
+
+@Suite struct AttachmentSweepTests {
+    @Test func trashesWhatNoEntryHolds() {
+        let day: Int64 = 86_400_000
+        let now: Int64 = 100 * day
+        func stored(_ id: String, trashed: Int64? = nil) -> StoredAttachment {
+            StoredAttachment(id: id, vault_id: "v1", mime: "image/jpeg", size: 1, created_at: 0, trashed_at: trashed)
+        }
+        let card = StreamTests.card("c", ["content": ["type": "doc", "content": [["type": "photo", "attrs": ["id": "kept"]]]]])
+        let plan = AttachmentSweep.plan(
+            stored: [stored("kept", trashed: now - day), stored("loose"), stored("old", trashed: now - 31 * day)], cards: [card], judges: { _ in true }, mayDelete: true,
+            holders: ["loose": .init(card: "c", name: nil)], now: now)
+        #expect(plan.keep == ["kept"] && plan.trash.map(\.id) == ["loose"] && plan.trash.first?.from == "c" && plan.remove == ["old"])
+        #expect(stored("x", trashed: now - day).daysLeft(now: now) == 29)
+    }
+}

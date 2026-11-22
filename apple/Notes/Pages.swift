@@ -28,6 +28,7 @@ struct TrashPage: View {
         let trash = model.index.trash
         ScrollView {
             LazyVStack(alignment: .leading, spacing: 8) {
+                TrashedAttachments()
                 ForEach(trash) { card in
                     VStack(alignment: .leading, spacing: 4) {
                         BubbleView(card: card)
@@ -42,7 +43,7 @@ struct TrashPage: View {
                         }
                     }
                 }
-                if trash.isEmpty { ContentUnavailableView("The Trash is empty", systemImage: "trash").padding(.top, 60) }
+                if trash.isEmpty && AttachmentKeeper.shared.trash.isEmpty { ContentUnavailableView("The Trash is empty", systemImage: "trash").padding(.top, 60) }
             }
             .padding(16)
             .frame(maxWidth: 720)
@@ -50,6 +51,7 @@ struct TrashPage: View {
         }
         .pageBackground()
         .navigationTitle("Trash")
+        .task { await AttachmentKeeper.shared.sweep(model: model, now: true) }
         .toolbar {
             if !trash.isEmpty {
                 Button("Restore all") {

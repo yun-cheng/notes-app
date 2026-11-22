@@ -149,7 +149,7 @@ struct VaultEncryption {
         var failed = 0
         for (id, file) in held {
             guard let there = stored[id] else { continue }
-            let wrong = seal ? !(there.sealed ?? false) || there.vault_id != vaultId : (there.sealed ?? false)
+            let wrong = seal ? !there.isSealed || there.vault_id != vaultId : there.isSealed
             guard wrong else { continue }
             guard let by = await copy(id, vaultId: vaultId, file: file) else {
                 failed += 1

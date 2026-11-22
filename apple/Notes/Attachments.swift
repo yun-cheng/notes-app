@@ -286,7 +286,10 @@ struct BubbleAttachments: View {
                 ForEach(media) { m in
                     PhotoThumb(media: m, vaultId: card.vaultId, size: style == "thumbs" ? 64 : media.count == 1 ? 200 : 110)
                         .onTapGesture { viewing = m.id }
-                        .contextMenu { PhotoMenu(id: m.id, card: card) }
+                        .contextMenu {
+                            PhotoMenu(id: m.id, card: card)
+                            PublicLinkMenu(id: m.id, vaultId: card.vaultId)
+                        }
                 }
             }
             .padding(.top, 4)

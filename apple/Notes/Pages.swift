@@ -118,28 +118,6 @@ struct FilesPage: View {
     }
 }
 
-/// Every photo and video in the journal, under the day each entry was written.
-struct PhotosPage: View {
-    @Environment(AppModel.self) private var model
-
-    var body: some View {
-        let items = Stream.items(model.index, StreamFilter(sort: .newest, has: .photo), today: model.today)
-        ScrollView {
-            LazyVGrid(columns: [GridItem(.adaptive(minimum: 120), spacing: 4)], spacing: 4) {
-                ForEach(items) { item in
-                    ForEach(Doc.media(item.card.content)) { media in
-                        PhotoThumb(media: media, vaultId: item.card.vaultId)
-                            .onTapGesture { model.openEntry = item.card.id }
-                    }
-                }
-            }
-            .padding(16)
-        }
-        .pageBackground()
-        .navigationTitle("Photos")
-    }
-}
-
 /// Search over everything, as on the phone's Search tab.
 struct SearchPage: View {
     @Environment(AppModel.self) private var model

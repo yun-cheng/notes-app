@@ -522,3 +522,32 @@ extension ServerAPI {
         return data
     }
 }
+
+extension ServerAPI {
+    /// Whether a photo, video or file is shared by its Google Drive link, and the link.
+    public func driveLink(_ id: String) async throws -> (url: String?, can: Bool) {
+        struct R: Decodable { let url: String?; let can: Bool }
+        let r = try await json(R.self, "/attachments/" + Self.part(id) + "/link")
+        return (r.url, r.can)
+    }
+
+    /// Lets anyone with its Drive link open it, and answers with the link, or a sentence saying why not.
+    public func shareDriveLink(_ id: String) async -> Result<String, NSError> {
+        guard let (data, status) = try? await send("/attachments/" + Self.part(id) + "/link", method: "POST", body: [String: String]()) else {
+            return .failure(NSError(domain: "notes", code: 0, userInfo: [NSLocalizedDescriptionKey: "Sharing needs a connection."]))
+        }
+        let body = (try? JSONDecoder().decode([String: String].self, from: data)) ?? [:]
+        if (200..<300).contains(status), let url = body["url"] { return .success(url) }
+        let why: String =
+            status == 404 ? "It isn't uploaded yet. Try again in a moment."
+            : body["error"] == "drive_not_connected" ? "Connect Google Drive in Settings first."
+            : body["error"] == "drive_refused" ? "Google Drive won't share it by a link (a Workspace that forbids it)."
+            : body["error"] == "not_in_drive" ? "It isn't in a Google Drive." : "It couldn't be shared. Try again."
+        return .failure(NSError(domain: "notes", code: status, userInfo: [NSLocalizedDescriptionKey: why]))
+    }
+
+    public func stopDriveLink(_ id: String) async -> Bool {
+        guard let (_, status) = try? await send("/attachments/" + Self.part(id) + "/link", method: "DELETE") else { return false }
+        return (200..<300).contains(status)
+    }
+}

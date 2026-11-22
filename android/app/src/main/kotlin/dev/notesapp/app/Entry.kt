@@ -133,7 +133,7 @@ fun EntrySheet(id: String, dismiss: () -> Unit) {
         // Only what was typed here: a title it opened with mustn't undo a rename made elsewhere since.
         if (!model.canEdit(c) || title == opened || title == c.title) return
         val t = title
-        model.perform { it.update(id, typed = true) { x -> x.withTitle(t) } }
+        model.update(id, typed = true) { x -> x.withTitle(t) }
     }
     DisposableEffect(id) { onDispose { saveTitle() } }
 
@@ -252,9 +252,9 @@ fun EntryMenu(card: Card, open: Boolean, onDismiss: () -> Unit, revealHidden: ()
     DropdownMenu(open, onDismiss) {
         when (level) {
             "color" -> {
-                item("None") { setColor(model, card, null) }()
+                item("None") { model.update(card.id) { it.withColor(null) } }()
                 for (c in CardColor.entries) DropdownMenuItem(
-                    text = { Text(Theme.colorName(c)) }, onClick = { onDismiss(); setColor(model, card, c) },
+                    text = { Text(Theme.colorName(c)) }, onClick = { onDismiss(); model.update(card.id) { it.withColor(c) } },
                     leadingIcon = { Icon(if (card.color == c) Icons.Outlined.Check else Icons.Outlined.Circle, null, tint = Theme.tint(c)) },
                 )
             }
@@ -275,14 +275,14 @@ fun EntryMenu(card: Card, open: Boolean, onDismiss: () -> Unit, revealHidden: ()
                 if (!card.template && card.isEntry) item("Save as template") { model.saveAsTemplate(card) }()
                 if (model.canManage(card)) item("Share…") { model.panel = EntryPanel.Share(card.id) }()
                 if (model.canWrite(card) && !model.viewOnly) DropdownMenuItem(
-                    text = { Text("View only") }, onClick = { onDismiss(); model.perform { it.update(card.id) { c -> c.withViewOnly(!card.viewOnly) } } },
+                    text = { Text("View only") }, onClick = { onDismiss(); model.update(card.id) { c -> c.withViewOnly(!card.viewOnly) } },
                     trailingIcon = { Switch(card.viewOnly, null) },
                 )
                 item("History") { model.panel = EntryPanel.History(card.id) }()
                 HorizontalDivider()
                 if (model.canManage(card)) item("Vaults…") { model.panel = EntryPanel.Vaults(card.id) }()
                 val stack = model.index.stackOf[card.id]
-                if (stack != null && edit) item("Take out of the stack") { model.perform { it.update(stack) { s -> s.withStack((s.stack ?: emptyList()).filter { x -> x != card.id }) } } }()
+                if (stack != null && edit) item("Take out of the stack") { model.update(stack) { s -> s.withStack((s.stack ?: emptyList()).filter { x -> x != card.id }) } }()
                 if (!inSheet) item("Pick") { onPick() }()
             }
             else -> {
@@ -299,7 +299,7 @@ fun EntryMenu(card: Card, open: Boolean, onDismiss: () -> Unit, revealHidden: ()
                         model.perform { it.retype(card.id, if (card.type == CardType.todo) CardType.note else CardType.todo) }
                     }()
                     if (card.type == CardType.todo && !card.isDone) item(if (card.waiting) "No longer waiting" else "Waiting") {
-                        model.perform { it.update(card.id) { c -> c.withWaiting(!card.waiting) } }
+                        model.update(card.id) { c -> c.withWaiting(!card.waiting) }
                     }()
                     sub("Style", "style")()
                     sub("Color", "color")()
@@ -319,17 +319,11 @@ fun EntryMenu(card: Card, open: Boolean, onDismiss: () -> Unit, revealHidden: ()
 fun copyPlain(model: AppModel) = Settings.copyStyle == "plain"
 
 /** One entry's own preview style; what it leaves out follows the device's setting. */
-private fun setPreview(model: AppModel, card: Card, key: String, value: String) {
-    model.perform {
-        it.update(card.id) { c ->
-            var preview = c.payload["preview"].obj ?: JsonObject(emptyMap())
-            preview = if (value.isEmpty()) preview.with(key, null) else preview.with(key, j(value))
-            c.with("preview", if (preview.isEmpty()) null else preview)
-        }
-    }
+private fun setPreview(model: AppModel, card: Card, key: String, value: String) = model.update(card.id) { c ->
+    var preview = c.payload["preview"].obj ?: JsonObject(emptyMap())
+    preview = if (value.isEmpty()) preview.with(key, null) else preview.with(key, j(value))
+    c.with("preview", if (preview.isEmpty()) null else preview)
 }
-
-private fun setColor(model: AppModel, card: Card, color: CardColor?) = model.perform { it.update(card.id) { c -> c.withColor(color) } }
 
 /** A copy under Templates, to start new entries from; the entry stays where it is. */
 fun AppModel.saveAsTemplate(source: Card) {
@@ -400,12 +394,12 @@ fun TagPicker(id: String) {
     val offered = tagsFor(model.index.tags, card.vaultId, model.sharedInto)
     val groups = model.index.tagGroups
     val shown = offered.filter { query.isEmpty() || it.title.contains(query, ignoreCase = true) }
-    fun change(next: List<String>) = model.perform { it.update(id) { c -> c.withTags(next) } }
+    fun change(next: List<String>) = model.update(id) { c -> c.withTags(next) }
     fun make() {
         val name = query.trim().replace("#", "")
         if (name.isEmpty()) return
         val existing = tagNamed(name, model.index.tags, card.vaultId, model.sharedInto)
-        if (existing != null) model.perform { it.update(id) { c -> c.withTags(groups.with(c.tags, existing.id)) } }
+        if (existing != null) model.update(id) { c -> c.withTags(groups.with(c.tags, existing.id)) }
         else model.perform { repo ->
             val group = repo.action()
             val tag = repo.createTag(title = name, vaultId = card.vaultId, group = group)
@@ -449,7 +443,7 @@ fun DuePicker(id: String) {
     val card = model.card(id) ?: return
     var picking by remember { mutableStateOf<String?>(null) }
     var repeating by remember { mutableStateOf(false) }
-    fun set(change: (Card) -> Card) = model.perform { it.update(id, change = change) }
+    fun set(change: (Card) -> Card) = model.update(id, change = change)
     Column(Modifier.fillMaxSize().verticalScroll(rememberScrollState())) {
         SwitchRow("Due date", card.due != null) { on ->
             // Taking the date off takes the time and repeat with it.

@@ -230,7 +230,7 @@ fun BubbleTranslation(card: Card) {
                 if (model.canEdit(card)) Text("Save as a page", Modifier.clickable {
                     // The translation as a page of its own.
                     val doc = Doc.fromText(s.kept.pieces.filter { it.isNotBlank() }.joinToString("\n"))
-                    model.perform { it.update(card.id) { c -> c.withMorePages(c.morePages.filter { p -> !Doc.isBlank(p) } + doc) } }
+                    model.update(card.id) { c -> c.withMorePages(c.morePages.filter { p -> !Doc.isBlank(p) } + doc) }
                     model.say("Saved as page ${card.turnPages.size + 2}", undoable = true)
                 }, fontSize = 12.sp, color = Theme.accent)
             }

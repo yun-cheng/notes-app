@@ -209,7 +209,7 @@ val Card.span: Pair<String, String>?
 /** Moves a todo by some days: its due date and start date both, so a span keeps its length. */
 fun AppModel.shift(id: String, days: Int) {
     if (days == 0) return
-    perform { it.update(id) { c -> var n = c; c.due?.let { d -> n = n.withDue(DateKey.adding(days, d)) }; c.start?.let { s -> n = n.withStart(DateKey.adding(days, s)) }; n } }
+    update(id) { c -> var n = c; c.due?.let { d -> n = n.withDue(DateKey.adding(days, d)) }; c.start?.let { s -> n = n.withStart(DateKey.adding(days, s)) }; n }
 }
 
 /** Moves one end of a todo's span: its start (a start on its due date is none) or its due date. An end can't pass the other. */

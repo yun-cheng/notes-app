@@ -345,7 +345,7 @@ object Transcriber {
             val card = model.index.live.firstOrNull { id in Doc.fileIds(it.content) } ?: continue
             if (!model.canEdit(card)) continue
             done.remove(id)
-            model.perform { it.update(card.id) { c -> Voice.withTranscript(c.content, id, words)?.let(c::withContent) ?: c } }
+            model.update(card.id) { c -> Voice.withTranscript(c.content, id, words)?.let(c::withContent) ?: c }
         }
     }
 

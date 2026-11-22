@@ -345,7 +345,7 @@ fun Reactions(card: Card) {
     var picking by remember { mutableStateOf(false) }
     fun toggle(emoji: String) {
         val me = model.accountId
-        model.perform { it.update(card.id) { c -> c.toggleReaction(emoji, me) } }
+        model.update(card.id) { c -> c.toggleReaction(emoji, me) }
     }
     for ((emoji, by) in card.reactions.toSortedMap()) {
         val mine = model.accountId in by

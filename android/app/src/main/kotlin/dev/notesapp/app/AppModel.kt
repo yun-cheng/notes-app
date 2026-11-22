@@ -402,6 +402,9 @@ class AppModel(private val context: Context, val site: String) {
         }
     }
 
+    /** Changes one card, as an action of its own; `typed` folds it into the typing just before, as typing is logged. */
+    fun update(id: String, typed: Boolean = false, change: (Card) -> Card) = perform { it.update(id, typed = typed, change = change) }
+
     /**
      * Does `change` to each entry as one action to undo (it's given the repository, the entry and the action), then
      * says `done` with an Undo.

@@ -166,10 +166,10 @@ fun TagRow(tag: Card, group: TagGroup? = null, rank: Int? = null) {
         }
         if (model.index.tagGroups.isGroupName(name)) { model.say("$name is a group's name."); return }
         val old = tag.title
-        model.perform { it.update(tag.id) { c -> c.withTitle(name) } }
+        model.update(tag.id) { c -> c.withTitle(name) }
         model.say("Renamed $old to $name", undoable = true)
     }
-    fun members(next: List<String>) = group?.let { g -> model.perform { it.update(g.id) { c -> c.with("members", jstrings(next)) } } }
+    fun members(next: List<String>) = group?.let { g -> model.update(g.id) { c -> c.with("members", jstrings(next)) } }
     val e = editing
     if (e != null) {
         FormField(e, { editing = it }, "Name", onDone = { rename(e) })
@@ -192,7 +192,7 @@ fun TagRow(tag: Card, group: TagGroup? = null, rank: Int? = null) {
         DropdownMenu(menu, { menu = false }, Modifier.align(Alignment.TopEnd)) {
             DropdownMenuItem(text = { Text("Rename") }, onClick = { menu = false; editing = tag.title })
             DropdownMenuItem(text = { Text("Vaults…") }, onClick = { menu = false; vaultsMenu = true })
-            DropdownMenuItem(text = { Text(if (tag.pinned) "Unpin from the sidebar" else "Pin to the sidebar") }, onClick = { menu = false; model.perform { it.update(tag.id) { c -> c.with("pinned", j(!tag.pinned)) } } })
+            DropdownMenuItem(text = { Text(if (tag.pinned) "Unpin from the sidebar" else "Pin to the sidebar") }, onClick = { menu = false; model.update(tag.id) { c -> c.with("pinned", j(!tag.pinned)) } })
             if (group != null) DropdownMenuItem(text = { Text("Take out of the group (the tag stays)") }, onClick = { menu = false; members(group.members.map { it.id }.filter { it != tag.id }) })
             if (model.canManage(tag)) DropdownMenuItem(text = { Text("Move to Trash", color = Theme.alert) }, onClick = {
                 menu = false
@@ -224,7 +224,7 @@ fun GroupBlock(group: TagGroup) {
     val model = LocalModel.current
     var name by remember(group.id) { mutableStateOf(group.title) }
     var adding by remember { mutableStateOf("") }
-    fun set(key: String, value: kotlinx.serialization.json.JsonElement) = model.perform { it.update(group.id) { c -> c.with(key, value) } }
+    fun set(key: String, value: kotlinx.serialization.json.JsonElement) = model.update(group.id) { c -> c.with(key, value) }
     /** Adds a tag to this group; it leaves any other group it was in. */
     fun addTag(tagId: String) {
         val groupCards = model.index.live.filter { it.isGroup }

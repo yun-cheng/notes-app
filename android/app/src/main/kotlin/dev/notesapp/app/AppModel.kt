@@ -11,6 +11,7 @@ import dev.notesapp.core.Account
 import dev.notesapp.core.Board
 import dev.notesapp.core.Card
 import dev.notesapp.core.CardIndex
+import dev.notesapp.core.CardSearch
 import dev.notesapp.core.Doc
 import dev.notesapp.core.DateKey
 import dev.notesapp.core.Entry
@@ -83,6 +84,18 @@ class AppModel(private val context: Context, val site: String) {
     /** Every card on the device, sealed ones too: `index` keeps locked ones out of every list. */
     // Set only when a card changed (see refresh), so a plain reference check is enough, not comparing every card.
     var cards by mutableStateOf<List<Card>>(emptyList(), referentialEqualityPolicy()); private set
+    /** Search over `index`, built when first asked for after it changes rather than on every keystroke. */
+    val search: CardSearch get() {
+        val now = index
+        if (searchedIndex !== now) {
+            cachedSearch = CardSearch(now)
+            searchedIndex = now
+        }
+        return cachedSearch!!
+    }
+    private var searchedIndex: CardIndex? = null
+    private var cachedSearch: CardSearch? = null
+
     /** Goes up each time `cards` changes: a cheap key for an effect to watch instead of every card. */
     var cardsVersion by mutableIntStateOf(0); private set
     var index by mutableStateOf(CardIndex()); private set

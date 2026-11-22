@@ -118,9 +118,10 @@ fun JournalView(initial: StreamFilter, openDrawer: (() -> Unit)?, fixed: Boolean
         filter.status == StreamFilter.TodoStatus.today -> "Today"
         else -> "Journal"
     }
-    var all = Stream.items(model.index, filter, model.today, model.sharedInto)
+    // Worked out again only when the cards, the filter or the day change, not on every redraw (a pick, a keystroke).
+    var all = remember(model.index, filter, model.today, model.sharedInto) { Stream.items(model.index, filter, model.today, model.sharedInto) }
     all = if (searching && query.isNotBlank()) {
-        val hits = CardSearch(model.index).search(query).map { it.card.id }.toSet()
+        val hits = remember(model.index, query) { model.search.search(query).map { it.card.id }.toSet() }
         all.filter { it.card.id in hits }
     } else Stream.foldStacks(all, model.index.stackOf)
     // Whether the stream reads like a chat, newest at the bottom.

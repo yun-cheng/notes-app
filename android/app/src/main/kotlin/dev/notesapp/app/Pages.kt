@@ -183,7 +183,7 @@ fun FilesPage(openDrawer: (() -> Unit)?) {
 fun SearchPage(openDrawer: (() -> Unit)?) {
     val model = LocalModel.current
     var query by remember { mutableStateOf("") }
-    val hits = remember(query, model.index) { CardSearch(model.index).search(query) }
+    val hits = remember(query, model.index) { model.search.search(query) }
     Column(Modifier.fillMaxSize().background(Theme.bg)) {
         TopBar("Search", openDrawer)
         PageSearchField(query, { query = it }) { query = "" }

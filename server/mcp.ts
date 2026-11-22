@@ -67,6 +67,19 @@ async function loadScope(db: Database, userId: string, withCards = true): Promis
   const open = withCards ? [...vaults.keys()] : [];
   const closed = withCards ? all.map((v) => v.id).filter((id) => !vaults.has(id)) : [];
   const marks = (ids: string[]) => ids.map(() => '?').join(',');
+  if (!withCards) return { vaults, all, index: buildIndex([], new Set()), records: new Map() };
+
+  // The cards as last read for this account, while nothing in its vaults has changed since: an AI app makes many
+  // calls in a row, and reading and parsing every card for each was most of the work. Any write raises the highest
+  // seq; a card leaving lowers the count.
+  const ids = all.map((v) => v.id);
+  const latest = ids.length
+    ? await db.prepare(`SELECT MAX(seq) AS seq, COUNT(*) AS n FROM cards WHERE vault_id IN (${marks(ids)})`).bind(...ids).first<{ seq: number | null; n: number }>()
+    : null;
+  const key = JSON.stringify([all, latest?.seq ?? 0, latest?.n ?? 0]);
+  const kept = scopes.get(userId);
+  if (kept && kept.key === key) return { vaults, all, index: kept.index, records: kept.records };
+
   const [{ results: rows }, { results: hidden }] = await Promise.all([
     open.length
       ? db.prepare(`SELECT id, vault_id, updated_at, deleted, seq, payload FROM cards WHERE vault_id IN (${marks(open)})`).bind(...open).all<Omit<CardRecord, 'deleted'> & { deleted: number }>()
@@ -88,8 +101,16 @@ async function loadScope(db: Database, userId: string, withCards = true): Promis
   for (const { id, vault_id } of hidden) {
     cards.push({ id, vaultId: vault_id, type: 'note', title: '', content: EMPTY_DOC, tags: [], createdAt: 0, updatedAt: 0, deleted: false, seq: 0 });
   }
-  return { vaults, all, index: buildIndex(cards, new Set(closed)), records };
+  const index = buildIndex(cards, new Set(closed));
+  scopes.delete(userId);
+  scopes.set(userId, { key, index, records });
+  // A few accounts' at most, the least recently used let go.
+  while (scopes.size > 20) scopes.delete(scopes.keys().next().value!);
+  return { vaults, all, index, records };
 }
+
+/** Each account's cards as last read for its AI apps, in this Worker's memory, while they stay as they were. */
+const scopes = new Map<string, { key: string; index: CardIndex; records: Map<string, CardRecord> }>();
 
 // Reading
 

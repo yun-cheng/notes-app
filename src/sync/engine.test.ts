@@ -172,6 +172,23 @@ describe('conflicts', () => {
     }
   });
 
+  it('keeps the other side of a conflict on a later page as a copy, with its pages', async () => {
+    const t = await twoDevices();
+    const card = await t.phone.repo.createNote({ title: 'Base', pages: [doc('page two')] });
+    await t.phone.engine.sync();
+    await t.mac.engine.sync();
+    await t.phone.repo.update(card.id, { pages: [doc('older page edit')] });
+    await t.mac.repo.update(card.id, { pages: [doc('newer page edit')] });
+    await t.phone.engine.sync();
+    await t.mac.engine.sync();
+    await t.phone.engine.sync();
+    for (const device of [t.phone, t.mac]) {
+      const cards = await device.cards();
+      expect(cards.find((c) => c.id === card.id)?.pages).toEqual([doc('newer page edit')]);
+      expect(cards.find((c) => c.title === 'Base (conflict copy)')?.pages).toEqual([doc('older page edit')]);
+    }
+  });
+
   it('reaches the same result when the newer side pushes first', async () => {
     const { first, second, card } = await bothEdit('phone');
     await second.engine.sync();

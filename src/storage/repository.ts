@@ -1,7 +1,7 @@
 import { EMPTY_DOC, type Card, type CardColor, type CardPayload, type CardRecord, type JSONNode, type PreviewStyle, type Repeat, type Vault } from '../domain/types';
 import type { Backup } from '../domain/backup';
 import { canRedo, canUndo, changedFields, isTextChange, revertCard, type Change, type ChangeEntry } from '../domain/changes';
-import { isBlank } from '../domain/content';
+import { isBlank, storedPages } from '../domain/content';
 import { isEncryptedPayload } from '../crypto/vaultKeys';
 import { rehomeCards } from '../domain/rehome';
 import { changeType, retypePatch, type EntryType } from '../domain/retype';
@@ -723,7 +723,9 @@ export class CardRepository {
     return this.enqueue(async () => {
       const [loser, winner] = await Promise.all([this.decode(loserRecord), this.decode(winnerRecord)]);
       if (loser.deleted || loser.type === 'tag' || isBlank(loser)) return;
-      if (loser.title === winner.title && JSON.stringify(loser.content) === JSON.stringify(winner.content)) return;
+      // Its other pages count too: an edit on page 2 is as much the losing side's words as one on page 1.
+      const pages = storedPages(loser);
+      if (loser.title === winner.title && JSON.stringify([loser.content, pages]) === JSON.stringify([winner.content, storedPages(winner)])) return;
 
       const at = this.now();
       const title = `${loser.title.trim() || 'Untitled'} (conflict copy)`;
@@ -736,6 +738,7 @@ export class CardRepository {
         seq: 0,
         title,
         content: loser.content,
+        ...(pages.length ? { pages } : {}),
         tags: loser.tags,
       };
       await this.write(

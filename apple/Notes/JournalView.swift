@@ -18,10 +18,14 @@ struct JournalView: View {
     @State private var showShortcuts = false
     @FocusState private var streamFocused: Bool
 
+    /// Whether its filter is the page the app shows, kept as the page changes; the phone's Today tab keeps its own.
+    let isPage: Bool
+
     static let pageSize = 150
 
-    init(filter: StreamFilter) {
+    init(filter: StreamFilter, isPage: Bool = true) {
         _filter = State(initialValue: filter)
+        self.isPage = isPage
     }
 
     private var title: String {
@@ -120,7 +124,7 @@ struct JournalView: View {
         .sheet(isPresented: $showShortcuts) { ShortcutsSheet() }
         .onChange(of: filter) { _, f in
             shown = Self.pageSize
-            model.page = .journal(f)
+            if isPage { model.page = .journal(f) }
         }
         #if os(macOS)
         .navigationSubtitle("\(all.count)")

@@ -15,7 +15,6 @@ import kotlinx.serialization.json.JsonElement
 @Composable fun BubbleTranslation(card: Card) {}
 @Composable fun VoiceRecordButton(vaultId: String, add: (JsonElement) -> Unit) {}
 @Composable private fun Stub(title: String, openDrawer: () -> Unit) { Column(Modifier.fillMaxSize()) { TopBar(title, openDrawer) } }
-@Composable fun SettingsPage(openDrawer: () -> Unit) = Stub("Settings", openDrawer)
 
 object Translations {
     sealed class State { data class Done(val to: String, val shown: Boolean) : State() }

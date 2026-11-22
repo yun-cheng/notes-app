@@ -9,6 +9,8 @@ struct HistoryPage: View {
     @State private var local: [Change] = []
     @State private var current: [String: Card] = [:]
     @State private var versions: [RecentVersion] = []
+    /// The server's versions read as changes, worked out when either changes rather than on every redraw.
+    @State private var synced: [(version: RecentVersion, change: Change)] = []
     @State private var next: String?
     @State private var offline = false
     @State private var filter = StreamFilter()
@@ -38,7 +40,7 @@ struct HistoryPage: View {
             if rows.isEmpty { ContentUnavailableView("No changes yet", systemImage: "clock.arrow.circlepath") }
         }
         .navigationTitle("History")
-        .task(id: model.cards) { await load() }
+        .task(id: model.cardsVersion) { await load() }
     }
 
     private func changeRow(_ change: Change) -> some View {
@@ -75,8 +77,10 @@ struct HistoryPage: View {
         // Older changes here wait for the server's versions of their time, so the history has no gaps.
         let reach = next.flatMap { $0.split(separator: "-").first.flatMap { Int64($0) } } ?? Int64.min
         rows = rows.filter { $0.at >= reach || next == nil }
-        for v in versions {
-            guard var change = model.repo.syncedChange(v), shown(change), !Changes.inLog(change, v, local) else { continue }
+        let logOf = Dictionary(grouping: local, by: \.cardId)
+        for (v, change) in synced {
+            var change = change
+            guard shown(change), !Changes.inLog(change, v, logOf[change.cardId] ?? []) else { continue }
             change.by = Changes.madeBy(v)
             rows.append(Row(group: change.group, changes: [change], at: change.until, by: change.by))
         }
@@ -89,7 +93,11 @@ struct HistoryPage: View {
             current = Dictionary(rows.compactMap { r in r.current.map { (r.change.cardId, $0) } }) { a, _ in a }
         }
         // The server's history is asked again at most every half minute; this device's log at each change.
-        guard more || Date().timeIntervalSince(fetched) > 30 else { return }
+        guard more || Date().timeIntervalSince(fetched) > 30 else {
+            // A vault opened or locked since: its versions read differently now.
+            await readSynced()
+            return
+        }
         fetched = Date()
         do {
             let page = try await model.api.recentVersions(before: more ? next : nil)
@@ -104,6 +112,14 @@ struct HistoryPage: View {
         } catch {
             offline = true
         }
+        await readSynced()
+    }
+
+    /// Reads the server's versions as changes, off the main thread: each is decoded, and opened if sealed.
+    private func readSynced() async {
+        let repo = model.repo
+        let all = versions
+        synced = await Task.detached { all.compactMap { v in repo.syncedChange(v).map { (v, $0) } } }.value
     }
 
     private func revert(_ change: Change, undo: Bool) {

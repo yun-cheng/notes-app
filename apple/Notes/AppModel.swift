@@ -18,7 +18,11 @@ final class AppModel {
     private(set) var vaults: [Vault] = []
     private(set) var shared: [SharedCard] = []
     /// Every card on the device, sealed ones too: `index` keeps locked ones out of every list.
-    private(set) var cards: [Card] = []
+    private(set) var cards: [Card] = [] {
+        didSet { cardsVersion += 1 }
+    }
+    /// Goes up each time `cards` changes: a cheap thing for a view to watch instead of every card.
+    private(set) var cardsVersion = 0
     /// Derived from the cards, with locked vaults' cards left out.
     private(set) var index = CardIndex() {
         didSet { cachedSearch = nil }

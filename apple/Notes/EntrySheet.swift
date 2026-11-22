@@ -9,6 +9,8 @@ struct EntrySheet: View {
     let id: String
     @State private var page = 0
     @State private var title = ""
+    /// The title as last taken from the card: the field differs from it only once something is typed there.
+    @State private var opened = ""
 
     var body: some View {
         NavigationStack {
@@ -73,7 +75,15 @@ struct EntrySheet: View {
         }
         .pageBackground()
         .navigationTitle(card.type == .todo ? "Todo" : card.isStack ? "Stack" : "Note")
-        .onAppear { title = card.title }
+        .onAppear {
+            title = card.title
+            opened = card.title
+        }
+        // Renamed elsewhere while open: the field follows, unless something was typed in it.
+        .onChange(of: card.title) { _, renamed in
+            if title == opened { title = renamed }
+            opened = renamed
+        }
         .onDisappear { saveTitle(card) }
         .toolbar {
             ToolbarItem(placement: .confirmationAction) {
@@ -94,7 +104,8 @@ struct EntrySheet: View {
     }
 
     private func saveTitle(_ card: Card) {
-        guard model.canEdit(card), title != card.title else { return }
+        // Only what was typed here: a title it opened with mustn't undo a rename made elsewhere since.
+        guard model.canEdit(card), title != opened, title != card.title else { return }
         let t = title
         model.update(card.id, typed: true) { $0.title = t }
     }

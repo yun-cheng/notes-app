@@ -40,6 +40,7 @@ import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.DisposableEffect
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.mutableStateOf
@@ -115,6 +116,13 @@ fun EntrySheet(id: String, dismiss: () -> Unit) {
     val edit = model.canEdit(card)
     var page by remember(id) { mutableIntStateOf(0) }
     var title by remember(id) { mutableStateOf(card.title) }
+    // The title as last taken from the card: the field differs from it only once something is typed there.
+    var opened by remember(id) { mutableStateOf(card.title) }
+    // Renamed elsewhere while open: the field follows, unless something was typed in it.
+    LaunchedEffect(card.title) {
+        if (title == opened) title = card.title
+        opened = card.title
+    }
     var menu by remember { mutableStateOf(false) }
     var tools by remember { mutableStateOf<(@Composable () -> Unit)?>(null) }
     // Its pages, and a blank one being added: kept only once something is written on it.
@@ -122,7 +130,8 @@ fun EntrySheet(id: String, dismiss: () -> Unit) {
     val pages = stored + List(maxOf(0, page + 1 - stored.size)) { Doc.empty }
     fun saveTitle() {
         val c = model.card(id) ?: return
-        if (!model.canEdit(c) || title == c.title) return
+        // Only what was typed here: a title it opened with mustn't undo a rename made elsewhere since.
+        if (!model.canEdit(c) || title == opened || title == c.title) return
         val t = title
         model.perform { it.update(id, typed = true) { x -> x.withTitle(t) } }
     }

@@ -3,7 +3,7 @@ import { Link, Navigate, Outlet, useLocation, useNavigate, useParams } from 'rea
 import { diaryVault } from '../../domain/access';
 import { linkTitle, resolveTags } from '../../domain/cardIndex';
 import { cardPages, checklistProgress, linkedCardIds, CODE_CLOSE, CODE_OPEN, displayTitle, HIDE_CLOSE, HIDE_OPEN, leadLine, previewParts, splitLinks, storedPages, translationPage, pagesHaveTranslation, withNewPage, withoutLeadLine, withoutPage, withPage, type PreviewPart } from '../../domain/content';
-import { isDateKey, relativeDay, relativeDayInSentence, toDateKey } from '../../domain/dates';
+import { formatClock, isDateKey, relativeDay, relativeDayInSentence, toDateKey } from '../../domain/dates';
 import { STATE_BOARD } from '../../domain/board';
 import { isFiltered, parseFilter, sortGroup, streamItems, type StreamFilter, type StreamItem, type StreamSort } from '../../domain/stream';
 import { EMPTY_DOC, type JSONNode, type NoteCard, type TodoCard } from '../../domain/types';
@@ -49,7 +49,7 @@ import { useSaveAsTemplate, useStartFromTemplate } from '../useTemplates';
 import { googleTranslateUrl, languageName, openOutside, showTranslation, translateEntry, translatesOnDevice, useTranslation } from '../translate';
 import { useBackdropClose } from '../useBackdrop';
 
-const time = (at: number) => new Date(at).toLocaleTimeString(undefined, { hour: 'numeric', minute: '2-digit' });
+const time = formatClock;
 
 /**
  * The one place for everything written: notes and todos, the diary's among them, in a stream like a chat. The sidebar's

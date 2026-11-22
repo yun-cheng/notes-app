@@ -4,7 +4,7 @@ import { linkTitle } from '../../domain/cardIndex';
 import {
   canRedo, canUndo, changeTitle, describeChange, groupChanges, inLog, madeBy, matchesChange, mergeHistory, nextRedo, nextUndo, sealLocked, type Change, type ChangeGroup,
 } from '../../domain/changes';
-import { relativeDay, toDateKey } from '../../domain/dates';
+import { formatClock, relativeDay, toDateKey } from '../../domain/dates';
 import { cardLines, diffExcerpt, diffLines } from '../../domain/history';
 import { isFiltered } from '../../domain/stream';
 import type { Card } from '../../domain/types';
@@ -30,7 +30,7 @@ const PAGES_AT_ONCE = 3;
 /** How long the page waits for the server before showing this device's changes alone. */
 const PATIENCE = 3000;
 
-const time = (at: number) => new Date(at).toLocaleTimeString(undefined, { hour: 'numeric', minute: '2-digit' });
+const time = formatClock;
 
 /**
  * This device's change log, each change with its card as it is now, oldest first. Read again whenever the log

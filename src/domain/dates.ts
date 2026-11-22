@@ -92,6 +92,24 @@ export function toTimeKey(d: Date): string {
 }
 
 /** "3:00 PM" or "15:00", as the locale writes times. */
+/** A moment (milliseconds since 1970) as the clock time it was: "3:05 PM". */
+export function formatClock(ms: number, locale?: string): string {
+  return new Date(ms).toLocaleTimeString(locale, { hour: 'numeric', minute: '2-digit' });
+}
+
+/** A moment as its day and clock time: "Nov 3, 2026, 3:05 PM". */
+export function formatMoment(ms: number, locale?: string): string {
+  return new Date(ms).toLocaleString(locale, { dateStyle: 'medium', timeStyle: 'short' });
+}
+
+/** Two days as one short range, with the year when either isn't this one: "Nov 3 – 9", "Dec 28, 2026 – Jan 3, 2027". */
+export function formatRange(from: string, to: string, today: string, locale?: string): string {
+  const year = today.slice(0, 4);
+  const opts: Intl.DateTimeFormatOptions = { month: 'short', day: 'numeric' };
+  if (from.slice(0, 4) !== year || to.slice(0, 4) !== year) opts.year = 'numeric';
+  return new Intl.DateTimeFormat(locale, opts).formatRange(parseDateKey(from), parseDateKey(to));
+}
+
 export function formatTime(key: string, locale?: string): string {
   const [h, m] = key.split(':').map(Number);
   return new Date(2000, 0, 1, h, m).toLocaleTimeString(locale, { hour: 'numeric', minute: '2-digit' });

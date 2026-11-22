@@ -1,4 +1,5 @@
 import { useEffect, useRef, useState, type FormEvent } from 'react';
+import { formatMoment } from '../domain/dates';
 import type { Card } from '../domain/types';
 import { useCards } from '../state/CardsContext';
 import { usePermissions } from './viewOnly';
@@ -8,9 +9,7 @@ import { decryptComment, encryptComment } from '../crypto/vaultKeys';
 import type { Keyring } from '../crypto/keyring';
 import { useToast } from './Toast';
 
-function when(at: number) {
-  return new Date(at).toLocaleString(undefined, { dateStyle: 'medium', timeStyle: 'short' });
-}
+const when = formatMoment;
 
 /**
  * Whether a comment can be written on it: synced, this account may comment, and others can see it (on a card only

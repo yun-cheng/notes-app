@@ -1,4 +1,5 @@
 import { useEffect, useState } from 'react';
+import { formatMoment } from '../../domain/dates';
 import { Link, useLocation } from 'react-router';
 import { useAccount } from '../../auth/AuthContext';
 import { useCards } from '../../state/CardsContext';
@@ -105,7 +106,7 @@ export function ConnectPage() {
 
 function lastUsed(app: ConnectedApp): string {
   if (!app.last_used_at) return 'Not used yet';
-  return `Last used ${new Date(app.last_used_at).toLocaleString(undefined, { dateStyle: 'medium', timeStyle: 'short' })}`;
+  return `Last used ${formatMoment(app.last_used_at)}`;
 }
 
 /** Settings: how to connect an AI app, and the apps already connected. */

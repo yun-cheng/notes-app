@@ -2,7 +2,7 @@ import { useEffect, useMemo, useRef, useState } from 'react';
 import { Link, useNavigate, useParams } from 'react-router';
 import { linkTitle } from '../../domain/cardIndex';
 import { displayTitle } from '../../domain/content';
-import { DAY } from '../../domain/dates';
+import { DAY, formatClock } from '../../domain/dates';
 import { cardLines, changeSize, diffLines, restorePatch, sameContent, type DiffLine } from '../../domain/history';
 import type { Card } from '../../domain/types';
 import { useCards } from '../../state/CardsContext';
@@ -36,7 +36,7 @@ function describe(entry: Entry, first: boolean): string {
 
 function when(at: number): string {
   const d = new Date(at);
-  const time = d.toLocaleTimeString(undefined, { hour: 'numeric', minute: '2-digit' });
+  const time = formatClock(at);
   const day = new Date(d.getFullYear(), d.getMonth(), d.getDate());
   const today = new Date();
   today.setHours(0, 0, 0, 0);

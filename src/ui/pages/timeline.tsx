@@ -2,7 +2,7 @@ import { useEffect, useLayoutEffect, useRef, useState, type CSSProperties, type 
 import { Link, useSearchParams } from 'react-router';
 import { endPatch, placeIn, type Span } from '../../domain/calendar';
 import { displayTitle } from '../../domain/content';
-import { addDays, formatDay, isDateKey, parseDateKey, relativeDayInSentence } from '../../domain/dates';
+import { addDays, formatDay, formatRange, isDateKey, parseDateKey, relativeDayInSentence } from '../../domain/dates';
 import { isFiltered } from '../../domain/stream';
 import { useCards, useToday } from '../../state/CardsContext';
 import { Empty, Page } from '../components';
@@ -59,9 +59,8 @@ export function TimelinePage() {
   });
   // Other weeks keep the filter.
   const go = (day: string) => setParams(datedParams(filter, { from: day }), { replace: true });
-  const short = (d: string) => parseDateKey(d).toLocaleDateString(undefined, { month: 'short', day: 'numeric' });
   const nav = dateNav({
-    label: `${short(days[0])} – ${short(days[days.length - 1])}`,
+    label: formatRange(days[0], days[days.length - 1], today),
     earlier: 'Two weeks earlier',
     later: 'Two weeks later',
     onEarlier: () => go(addDays(from, -STEP)),

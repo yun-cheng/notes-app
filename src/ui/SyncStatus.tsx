@@ -1,4 +1,5 @@
 import { useIsUnsynced, useCards, useSyncStatus, useUnsynced } from '../state/CardsContext';
+import { formatClock } from '../domain/dates';
 import { syncSummary, type SyncLook } from '../sync/engine';
 import { Icon, type IconName } from './Icon';
 import { usePopover } from './usePopover';
@@ -7,7 +8,7 @@ const ICONS: Record<SyncLook, IconName> = { synced: 'cloud', sending: 'sync', of
 
 const PANEL_WIDTH = 250;
 
-const time = (at: number) => new Date(at).toLocaleTimeString(undefined, { hour: 'numeric', minute: '2-digit' });
+const time = formatClock;
 
 /**
  * How sync is going, in every page's title bar: Synced, Syncing…, Offline or Not synced, with what that means and

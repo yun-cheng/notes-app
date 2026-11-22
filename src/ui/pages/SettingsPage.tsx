@@ -1,4 +1,5 @@
 import { useEffect, useRef, useState, type ChangeEvent } from 'react';
+import { formatClock } from '../../domain/dates';
 import { makeBackup, markdownFiles, parseBackup, zipMarkdown } from '../../domain/backup';
 import { filesFromZip, IMPORT_LIMIT, IMPORTABLE, readImport, type TextFile } from '../../domain/importNotes';
 import { isDemoAccount } from '../../auth/account';
@@ -94,7 +95,7 @@ export function SettingsPage() {
       <Section title="Account">
         <p className="prose-note">
           Signed in as {account.name} ({account.email}). {describeSync(sync)}
-          {sync.lastSyncedAt ? `, last synced at ${new Date(sync.lastSyncedAt).toLocaleTimeString([], { hour: 'numeric', minute: '2-digit' })}` : ''}.
+          {sync.lastSyncedAt ? `, last synced at ${formatClock(sync.lastSyncedAt)}` : ''}.
         </p>
         {isDemoAccount(account) && (
           <div className="banner">

@@ -207,3 +207,96 @@ extension Card {
         return out
     }
 }
+
+/// One version from the server's history of every card, with the version it replaced, as `GET /api/versions` gives.
+public struct RecentVersion: Codable, Sendable, Hashable {
+    public struct Before: Codable, Sendable, Hashable {
+        public var payload: String
+        public var deleted: Bool
+    }
+    public struct Device: Codable, Sendable, Hashable {
+        public var here: Bool
+        public var name: String?
+    }
+    public var id: Int64
+    public var card_id: String
+    public var vault_id: String
+    public var started_at: Int64
+    public var saved_at: Int64
+    public var author: String?
+    public var via: String?
+    public var payload: String
+    public var deleted: Bool
+    public var before: Before?
+    public var mine: Bool
+    public var device: Device?
+}
+
+public struct RecentVersions: Codable, Sendable {
+    public var versions: [RecentVersion]
+    public var next: String?
+}
+
+extension ServerAPI {
+    /// A page of the newest versions of every card, with what each replaced; `before` is the last page's `next`.
+    public func recentVersions(before: String? = nil) async throws -> RecentVersions {
+        try await json(RecentVersions.self, "/versions" + (before.map { "?before=" + Self.part($0) } ?? ""))
+    }
+}
+
+extension Changes {
+    /// A version read as an entry of the change log, to be read the same way.
+    public static func entry(_ v: RecentVersion) -> ChangeEntry {
+        func record(_ payload: String, _ deleted: Bool, _ at: Int64) -> CardRecord {
+            CardRecord(id: v.card_id, vault_id: v.vault_id, updated_at: at, deleted: deleted, seq: 0, payload: payload)
+        }
+        return ChangeEntry(
+            n: -v.id, at: v.started_at, until: v.saved_at, group: "v:\(v.id)", cardId: v.card_id,
+            before: v.before.map { record($0.payload, $0.deleted, v.started_at) }, after: record(v.payload, v.deleted, v.saved_at), fields: [])
+    }
+
+    /// Who or what made a change that came by sync, in a few words.
+    public static func madeBy(_ v: RecentVersion) -> String {
+        let who = v.author ?? "Someone"
+        if let via = v.via { return v.mine ? "\(via) (AI)" : "\(who) via \(via) (AI)" }
+        if !v.mine { return who }
+        if v.device?.here == true { return "This device" }
+        return v.device.map { $0.name ?? "Another device" } ?? "One of your devices"
+    }
+
+    /// Whether this device's log already shows a change that came by sync, because this device made it.
+    public static func inLog(_ change: Change, _ v: RecentVersion, _ log: [Change]) -> Bool {
+        guard v.mine, v.via == nil, v.device.map(\.here) ?? true else { return false }
+        return log.contains { $0.cardId == change.cardId && $0.at <= change.until && max($0.until, $0.undoneAt ?? 0, $0.redoneAt ?? 0) >= change.at }
+    }
+}
+
+extension Repository {
+    /// A version from the server read as a change: what it changed and who made it. Nil when it changed nothing a
+    /// card says. As in the log, a card's first words make it.
+    public nonisolated func syncedChange(_ v: RecentVersion) -> Change? {
+        var entry = Changes.entry(v)
+        entry.n = -v.id
+        let after = decodeOpen(entry.after)
+        let before = entry.before.map(decodeOpen)
+        var change = Change(
+            n: -v.id, at: entry.at, until: entry.until, group: entry.group, cardId: entry.cardId, before: before, after: after, fields: [],
+            sealed: after.sealed || (before?.sealed ?? false), by: Changes.madeBy(v))
+        if change.sealed { return change }
+        guard let b = before, !b.isBlank else {
+            if after.isBlank { return nil }
+            change.before = nil
+            return change
+        }
+        change.fields = Changes.changed(b, after)
+        return change.fields.isEmpty ? nil : change
+    }
+
+    /// A record opened with the keyring as it is, without waiting on the store.
+    nonisolated func decodeOpen(_ r: CardRecord) -> Card {
+        if let payload = keyring.decode(r.payload, id: r.id, vaultId: r.vault_id) {
+            return Card(id: r.id, vaultId: r.vault_id, updatedAt: r.updated_at, deleted: r.deleted, seq: r.seq, payload: modernPayload(payload))
+        }
+        return Card(id: r.id, vaultId: r.vault_id, updatedAt: r.updated_at, deleted: r.deleted, seq: r.seq, payload: ["type": "note", "title": "", "tags": [], "content": Doc.empty], sealed: true)
+    }
+}

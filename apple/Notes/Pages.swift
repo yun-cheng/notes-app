@@ -65,54 +65,6 @@ struct TrashPage: View {
     }
 }
 
-/// What was changed on this device, newest first, each with Undo or Redo, as the web app's History page.
-struct HistoryPage: View {
-    @Environment(AppModel.self) private var model
-    @State private var groups: [Changes.Group] = []
-    @State private var current: [String: Card] = [:]
-
-    var body: some View {
-        List {
-            ForEach(groups) { group in
-                Section(Date(timeIntervalSince1970: Double(group.at) / 1000).formatted(date: .abbreviated, time: .shortened)) {
-                    ForEach(group.changes) { change in
-                        HStack(alignment: .firstTextBaseline) {
-                            VStack(alignment: .leading, spacing: 2) {
-                                Text(change.sealed ? "Locked entry" : (current[change.cardId] ?? change.after).displayTitle).lineLimit(1)
-                                Text(Changes.describe(change) + (change.undoneAt != nil ? " · undone" : "")).font(.caption).foregroundStyle(Theme.muted)
-                            }
-                            Spacer()
-                            let card = current[change.cardId]
-                            if change.undoneAt == nil, Changes.canUndo(change, card) {
-                                Button("Undo") { revert(change, undo: true) }.buttonStyle(.borderless)
-                            } else if change.undoneAt != nil, Changes.canRedo(change, card) {
-                                Button("Redo") { revert(change, undo: false) }.buttonStyle(.borderless)
-                            }
-                        }
-                        .contentShape(Rectangle())
-                        .onTapGesture { if !change.sealed { model.openEntry = change.cardId } }
-                    }
-                }
-            }
-            if groups.isEmpty { ContentUnavailableView("No changes yet", systemImage: "clock.arrow.circlepath") }
-        }
-        .navigationTitle("History")
-        .task(id: model.cards) { await load() }
-    }
-
-    private func load() async {
-        guard let rows = try? await model.repo.changes() else { return }
-        let filtered = rows.filter { row in !model.lockedVaults.contains(row.change.after.vaultId) }
-        current = Dictionary(filtered.compactMap { r in r.current.map { (r.change.cardId, $0) } }) { a, _ in a }
-        groups = Changes.grouped(filtered.map(\.change))
-    }
-
-    private func revert(_ change: Change, undo: Bool) {
-        let n = change.n
-        model.perform { _ = try await $0.revert([n], undo: undo) }
-    }
-}
-
 /// Every web link in the journal, under the day its entry was written.
 struct LinksPage: View {
     @Environment(AppModel.self) private var model

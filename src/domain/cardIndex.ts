@@ -27,6 +27,25 @@ export interface CardIndex {
 
 const byTitle = (a: Card, b: Card) => a.title.localeCompare(b.title);
 
+// What the index works out from each card's documents, kept per card object: cards are never changed in place, and
+// an unchanged card keeps its object between reads (CardsContext), so rebuilding after one edit walks one document,
+// not every one.
+const blankOf = new WeakMap<Card, boolean>();
+const linksOf = new WeakMap<Card, string[]>();
+
+function blank(card: Card): boolean {
+  let known = blankOf.get(card);
+  if (known === undefined) blankOf.set(card, (known = isBlank(card)));
+  return known;
+}
+
+function links(card: Card): string[] {
+  let known = linksOf.get(card);
+  // A link on a page behind a card's front counts as much as one on its front.
+  if (!known) linksOf.set(card, (known = [...new Set([card.content, ...cardPages(card)].flatMap((doc) => linkedCardIds(doc)))]));
+  return known;
+}
+
 /** Cards in `locked` vaults go no further than this function, so no list, search or backlink can show them. */
 export function buildIndex(allCards: Card[], locked: ReadonlySet<string> = new Set()): CardIndex {
   const cards: Card[] = [];
@@ -37,7 +56,7 @@ export function buildIndex(allCards: Card[], locked: ReadonlySet<string> = new S
   }
 
   const byId = new Map(cards.map((c) => [c.id, c]));
-  const live = cards.filter((c) => !c.deleted && !isBlank(c)).sort((a, b) => b.updatedAt - a.updatedAt);
+  const live = cards.filter((c) => !c.deleted && !blank(c)).sort((a, b) => b.updatedAt - a.updatedAt);
   const backlinks = new Map<string, Backlink[]>();
   const add = (to: string, link: Backlink) => {
     if (to === link.from.id || lockedCards.has(to)) return;
@@ -48,8 +67,7 @@ export function buildIndex(allCards: Card[], locked: ReadonlySet<string> = new S
 
   for (const card of live) {
     card.tags.forEach((to) => add(to, { from: card, kind: 'tag' }));
-    // A link on a page behind a card's front counts as much as one on its front.
-    new Set([card.content, ...cardPages(card)].flatMap((doc) => linkedCardIds(doc))).forEach((to) => add(to, { from: card, kind: 'link' }));
+    links(card).forEach((to) => add(to, { from: card, kind: 'link' }));
   }
 
   const tagCards = live.filter((c): c is TagCard => c.type === 'tag').sort(byTitle);
@@ -63,7 +81,7 @@ export function buildIndex(allCards: Card[], locked: ReadonlySet<string> = new S
     pinnedTags: tags.filter((t) => t.pinned),
     tagGroups,
     todos: live.filter((c): c is TodoCard => c.type === 'todo' && !c.archived && !c.template),
-    trash: cards.filter((c) => c.deleted && !isBlank(c)).sort((a, b) => b.updatedAt - a.updatedAt),
+    trash: cards.filter((c) => c.deleted && !blank(c)).sort((a, b) => b.updatedAt - a.updatedAt),
     backlinks,
   };
 }

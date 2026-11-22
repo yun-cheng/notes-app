@@ -131,7 +131,8 @@ fun JournalBox(filter: StreamFilter) {
         if (v != null && v.id !in model.lockedVaults) { unlock = null; send() }
     }
 
-    Column(Modifier.fillMaxWidth().background(Theme.bg).imePadding().padding(horizontal = 16.dp, vertical = 8.dp), verticalArrangement = Arrangement.spacedBy(6.dp)) {
+    Box(Modifier.fillMaxWidth().background(Theme.bg).imePadding(), contentAlignment = Alignment.Center) {
+    Column(Modifier.widthIn(max = 720.dp).fillMaxWidth().padding(horizontal = 16.dp, vertical = 8.dp), verticalArrangement = Arrangement.spacedBy(6.dp)) {
         unlock?.let { UnlockView(it, Modifier.heightIn(max = 300.dp)) }
         if (attached.isNotEmpty()) {
             Row(Modifier.horizontalScroll(rememberScrollState()), horizontalArrangement = Arrangement.spacedBy(6.dp)) {
@@ -156,7 +157,7 @@ fun JournalBox(filter: StreamFilter) {
                 Modifier.weight(1f).padding(vertical = 8.dp).focusRequester(focus).onFocusChanged { focused = it.isFocused },
                 textStyle = TextStyle(color = Theme.text, fontSize = 16.sp), cursorBrush = SolidColor(Theme.accent), maxLines = 8,
                 decorationBox = { inner ->
-                    if (text.isEmpty()) Text(if (todos) "Write a todo · @fri · #tag" else "Write a note · [] todo · #tag", color = Theme.muted, fontSize = 16.sp)
+                    if (text.isEmpty()) Text(if (todos) "Write a todo · @fri · #tag" else "Write a note · [] todo · #tag", color = Theme.muted, fontSize = 16.sp, maxLines = 1, overflow = androidx.compose.ui.text.style.TextOverflow.Ellipsis)
                     inner()
                 },
             )
@@ -168,6 +169,7 @@ fun JournalBox(filter: StreamFilter) {
                 contentAlignment = Alignment.Center,
             ) { Icon(Icons.Outlined.ArrowUpward, "Save", tint = if (empty) Theme.muted else Theme.onAccent) }
         }
+    }
     }
 }
 

@@ -122,7 +122,7 @@ fun describe(vault: Vault): String {
 
 /** This account's vaults, as the web app's Vaults page: a new one, hidden ones opened by their PIN, and each one's settings and people. */
 @Composable
-fun VaultsPage(openDrawer: () -> Unit) {
+fun VaultsPage(openDrawer: (() -> Unit)?) {
     val model = LocalModel.current
     var detail by remember { mutableStateOf<String?>(null) }
     var name by remember { mutableStateOf("") }

@@ -99,7 +99,7 @@ fun setTagVaults(tag: Card, next: List<String>?, model: AppModel) {
  * in place, pinned to the sidebar, kept to one or more vaults or offered in all, and moved to the Trash.
  */
 @Composable
-fun TagsPage(openDrawer: () -> Unit) {
+fun TagsPage(openDrawer: (() -> Unit)?) {
     val model = LocalModel.current
     var newGroup by remember { mutableStateOf("") }
     var newTag by remember { mutableStateOf("") }
@@ -270,7 +270,7 @@ fun GroupBlock(group: TagGroup) {
  * A filter narrows it as it narrows the journal.
  */
 @Composable
-fun HistoryPage(openDrawer: () -> Unit) {
+fun HistoryPage(openDrawer: (() -> Unit)?) {
     val model = LocalModel.current
     var local by remember { mutableStateOf<List<Change>>(emptyList()) }
     var current by remember { mutableStateOf<Map<String, Card>>(emptyMap()) }

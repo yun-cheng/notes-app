@@ -98,7 +98,7 @@ fun BubbleColumn(cards: List<Card>, empty: String, header: @Composable () -> Uni
 
 /** The Trash: entries put there, to read, copy and restore, one by one or all at once. */
 @Composable
-fun TrashPage(openDrawer: () -> Unit) {
+fun TrashPage(openDrawer: (() -> Unit)?) {
     val model = LocalModel.current
     val trash = model.index.trash
     LaunchedEffect(Unit) { AttachmentKeeper.sweep(model, now = true) }
@@ -119,7 +119,7 @@ fun TrashPage(openDrawer: () -> Unit) {
 
 /** Every web link in the journal, under the entry it's in. */
 @Composable
-fun LinksPage(openDrawer: () -> Unit) {
+fun LinksPage(openDrawer: (() -> Unit)?) {
     val model = LocalModel.current
     val uri = LocalUriHandler.current
     val clipboard = LocalClipboardManager.current
@@ -149,7 +149,7 @@ fun LinksPage(openDrawer: () -> Unit) {
 
 /** Every file attached in the journal. */
 @Composable
-fun FilesPage(openDrawer: () -> Unit) {
+fun FilesPage(openDrawer: (() -> Unit)?) {
     val model = LocalModel.current
     val context = androidx.compose.ui.platform.LocalContext.current
     var query by remember { mutableStateOf("") }
@@ -180,7 +180,7 @@ fun FilesPage(openDrawer: () -> Unit) {
 
 /** Search over everything, as on the phone's Search tab. */
 @Composable
-fun SearchPage(openDrawer: () -> Unit) {
+fun SearchPage(openDrawer: (() -> Unit)?) {
     val model = LocalModel.current
     var query by remember { mutableStateOf("") }
     val hits = remember(query, model.index) { CardSearch(model.index).search(query) }
@@ -258,7 +258,7 @@ fun DatedFilter(filter: StreamFilter, set: (StreamFilter) -> Unit) {
  * another day from its menu; a day opens the journal for that day.
  */
 @Composable
-fun CalendarPage(openDrawer: () -> Unit) {
+fun CalendarPage(openDrawer: (() -> Unit)?) {
     val model = LocalModel.current
     var month by remember { mutableStateOf(DateKey.monthKey(DateKey.today())) }
     var filter by remember { mutableStateOf(StreamFilter(type = StreamFilter.EntryType.todo)) }
@@ -318,7 +318,7 @@ private fun DayCell(day: String, inMonth: Boolean, todos: List<Card>, diary: Boo
 
 /** Todos with dates as bars from their start to their due date, dragged to move them and stretched at either end, as the web app's Timeline. */
 @Composable
-fun TimelinePage(openDrawer: () -> Unit) {
+fun TimelinePage(openDrawer: (() -> Unit)?) {
     val model = LocalModel.current
     var first by remember { mutableStateOf(DateKey.adding(-7, DateKey.today())) }
     var filter by remember { mutableStateOf(StreamFilter(type = StreamFilter.EntryType.todo, status = StreamFilter.TodoStatus.open)) }
@@ -383,7 +383,7 @@ private fun TimelineBar(todo: Card, first: String, dayWidth: androidx.compose.ui
  */
 @OptIn(ExperimentalFoundationApi::class)
 @Composable
-fun PhotosPage(openDrawer: () -> Unit) {
+fun PhotosPage(openDrawer: (() -> Unit)?) {
     val model = LocalModel.current
     val context = androidx.compose.ui.platform.LocalContext.current
     var kind by remember { mutableStateOf("All") }

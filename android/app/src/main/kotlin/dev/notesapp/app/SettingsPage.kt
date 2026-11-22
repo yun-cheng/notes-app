@@ -53,7 +53,7 @@ import java.util.Date
  * shows, copy and paste, photos and Google Drive, AI apps, and deleting the account.
  */
 @Composable
-fun SettingsPage(openDrawer: () -> Unit) {
+fun SettingsPage(openDrawer: (() -> Unit)?) {
     val model = LocalModel.current
     val context = LocalContext.current
     val clipboard = LocalClipboardManager.current

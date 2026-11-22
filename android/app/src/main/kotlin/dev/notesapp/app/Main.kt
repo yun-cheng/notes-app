@@ -95,6 +95,7 @@ import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 import java.net.URI
 import androidx.compose.foundation.layout.statusBars
+import androidx.compose.foundation.layout.navigationBarsPadding
 import androidx.compose.foundation.layout.isImeVisible
 import androidx.compose.material.icons.outlined.Menu
 
@@ -105,7 +106,10 @@ fun Root() {
         when (model.phase) {
             AppModel.Phase.loading -> {}
             AppModel.Phase.signedOut -> SignInView()
-            AppModel.Phase.signedIn -> if (model.addingAccount) SignInView() else PhoneFrame()
+            AppModel.Phase.signedIn -> if (model.addingAccount) SignInView() else androidx.compose.foundation.layout.BoxWithConstraints {
+                // A tablet or an unfolded phone shows the sidebar beside the page, as the web app does on a wide screen.
+                if (maxWidth >= 840.dp) WideFrame() else PhoneFrame()
+            }
         }
     }
 }
@@ -118,7 +122,7 @@ fun PhoneFrame() {
     val drawer = rememberDrawerState(DrawerValue.Closed)
     val scope = rememberCoroutineScope()
     var tab by remember { mutableStateOf(0) }
-    val openDrawer: () -> Unit = { scope.launch { drawer.open() } }
+    val openDrawer: (() -> Unit)? = { scope.launch { drawer.open() } }
     // A page picked from another tab (a day on the calendar, a tag in a result) shows in the Journal tab.
     var shownPage by remember { mutableStateOf(model.page) }
     if (model.page != shownPage) { shownPage = model.page; tab = 0 }
@@ -163,9 +167,25 @@ fun PhoneFrame() {
     model.panel?.let { EntryPanelView(it) { model.panel = null } }
 }
 
+/** A wide screen's frame: the sidebar always beside the page, as the web app's. */
+@Composable
+fun WideFrame() {
+    val model = LocalModel.current
+    Row(Modifier.fillMaxSize().background(Theme.bg).navigationBarsPadding()) {
+        Box(Modifier.width(280.dp).fillMaxSize().padding(top = statusBarTop())) { Sidebar(onPick = {}) }
+        androidx.compose.material3.VerticalDivider(color = Theme.line)
+        Box(Modifier.weight(1f)) {
+            PageView(model.page, null)
+            ToastView(Modifier.align(Alignment.BottomCenter))
+        }
+    }
+    model.openEntry?.let { EntrySheet(it) { model.openEntry = null } }
+    model.panel?.let { EntryPanelView(it) { model.panel = null } }
+}
+
 /** The page the main column shows. */
 @Composable
-fun PageView(page: Page, openDrawer: () -> Unit) {
+fun PageView(page: Page, openDrawer: (() -> Unit)?) {
     when (page) {
         is Page.Journal -> androidx.compose.runtime.key(page.filter) { JournalView(page.filter, openDrawer) }
         Page.Trash -> TrashPage(openDrawer)

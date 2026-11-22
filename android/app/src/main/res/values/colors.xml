@@ -2,4 +2,5 @@
 <resources>
     <color name="bg">#F5F2EA</color>
     <color name="accent">#1F5C57</color>
+    <color name="icon_back">#1F5C57</color>
 </resources>

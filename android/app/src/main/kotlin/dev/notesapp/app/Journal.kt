@@ -97,7 +97,7 @@ private const val PAGE_SIZE = 150
  */
 @OptIn(ExperimentalFoundationApi::class, androidx.compose.foundation.layout.ExperimentalLayoutApi::class)
 @Composable
-fun JournalView(initial: StreamFilter, openDrawer: () -> Unit, fixed: Boolean = false) {
+fun JournalView(initial: StreamFilter, openDrawer: (() -> Unit)?, fixed: Boolean = false) {
     val model = LocalModel.current
     var filter by remember { mutableStateOf(initial) }
     var searching by remember { mutableStateOf(false) }
@@ -163,7 +163,7 @@ fun JournalView(initial: StreamFilter, openDrawer: () -> Unit, fixed: Boolean = 
                 LaunchedEffect(model.lastSaved) { model.lastSaved?.let { id -> rowOf[id]?.let { list.animateScrollToItem(it) } } }
                 BoxWithConstraints(Modifier.weight(1f).fillMaxWidth()) {
                     val bubbleWidth = minOf(560.dp, (minOf(maxWidth, 720.dp) - 32.dp) * 0.85f)
-                    LazyColumn(Modifier.fillMaxSize(), state = list, contentPadding = PaddingValues(start = 16.dp, end = 16.dp, bottom = 10.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                    LazyColumn(Modifier.fillMaxHeight().widthIn(max = 720.dp).fillMaxWidth().align(Alignment.TopCenter), state = list, contentPadding = PaddingValues(start = 16.dp, end = 16.dp, bottom = 10.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
                         if (chat && all.size > visible.size) item { TextButton(onClick = { shown += PAGE_SIZE }, Modifier.fillMaxWidth()) { Text("Show earlier entries") } }
                         for ((day, items) in groups) {
                             stickyHeader(key = "day:$day:${items.first().id}") {

@@ -24,4 +24,7 @@ dependencies {
 
 tasks.test {
     useJUnitPlatform()
+    // `-Pout=file` has a test write values made here, for the web code to check.
+    if (project.hasProperty("out")) systemProperty("out", project.property("out")!!)
+    outputs.upToDateWhen { !project.hasProperty("out") }
 }

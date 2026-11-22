@@ -106,7 +106,9 @@ class AppModel(private val context: Context, val site: String) {
     var repo: Repository = Repository(MemoryStore()); private set
     private var store: SqliteStore? = null
     private var device: Pair<String, String>? = null
-    private var refreshQueued = false
+    /** A refresh is running for local changes, and whether another change came after it started. */
+    private var refreshing = false
+    private var refreshAgain = false
     private var watching: Job? = null
 
     init { scope.launch { start() } }
@@ -215,10 +217,17 @@ class AppModel(private val context: Context, val site: String) {
     /** Local changes refresh the screens at once and sync shortly after. */
     private suspend fun changed() {
         sync?.schedule(scope)
-        if (refreshQueued) return
-        refreshQueued = true
-        refresh()
-        refreshQueued = false
+        // A change made while a refresh runs may come after it read the cards, so one more runs after it.
+        if (refreshing) { refreshAgain = true; return }
+        refreshing = true
+        try {
+            do {
+                refreshAgain = false
+                refresh()
+            } while (refreshAgain)
+        } finally {
+            refreshing = false
+        }
     }
 
     suspend fun refresh() {

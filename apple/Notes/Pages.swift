@@ -243,9 +243,27 @@ struct CommandPalette: View {
         ]
     }
 
+    /// Typed text with markers (`[]`, `#tag`, `@friday`) is offered for saving first; other text lists commands,
+    /// then entries, then saving.
+    private var marked: Bool {
+        query.firstMatch(of: /(^|\s)(\[[ xX]?\]|TODO\s|#[\p{L}\p{N}_-]+|@[\p{L}\p{N}:-]+)/) != nil
+    }
+
+    private func saveTyped() {
+        let entries = EntryParser.parseEntries(query, today: model.today)
+        guard !entries.isEmpty else { return }
+        let filter = model.page.filter ?? StreamFilter()
+        Task {
+            if case .saved(let ids, _) = await model.save(entries, SaveOptions(journal: filter, today: model.today)) {
+                model.say("Saved \(ids.count == 1 ? "it" : "\(ids.count) entries")", undoable: true)
+            }
+        }
+        dismiss()
+    }
+
     var body: some View {
         let q = query.trimmingCharacters(in: .whitespaces)
-        let matching = commands.filter { q.isEmpty || $0.id.localizedCaseInsensitiveContains(q) }
+        let matching = marked ? [] : commands.filter { q.isEmpty || $0.id.localizedCaseInsensitiveContains(q) }
         let hits = q.isEmpty ? [] : CardSearch(model.index).search(q).prefix(20)
         VStack(spacing: 0) {
             TextField("Search or run a command", text: $query)
@@ -254,10 +272,13 @@ struct CommandPalette: View {
                 .padding(14)
                 .focused($focused)
                 .onSubmit {
-                    if let first = matching.first { first.run(); dismiss() } else if let hit = hits.first { model.openEntry = hit.card.id; dismiss() }
+                    if marked { saveTyped() } else if let first = matching.first { first.run(); dismiss() } else if let hit = hits.first { model.openEntry = hit.card.id; dismiss() } else if !q.isEmpty { saveTyped() }
                 }
             Divider()
             List {
+                if marked {
+                    Button(action: saveTyped) { Label("Save “\(q)”", systemImage: "square.and.arrow.down") }.buttonStyle(.plain)
+                }
                 if !matching.isEmpty {
                     Section("Commands") {
                         ForEach(matching) { c in
@@ -279,6 +300,11 @@ struct CommandPalette: View {
                             }
                             .buttonStyle(.plain)
                         }
+                    }
+                }
+                if !q.isEmpty && !marked {
+                    Section {
+                        Button(action: saveTyped) { Label("Save “\(q)” as a note", systemImage: "square.and.pencil") }.buttonStyle(.plain)
                     }
                 }
             }

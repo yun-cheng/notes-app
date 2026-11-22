@@ -101,6 +101,9 @@ struct JournalView: View {
                         .frame(maxWidth: .infinity)
                     }
                     .defaultScrollAnchor(chat ? .bottom : .top)
+                    // Made again once there's something in it: a list laid out empty, before the cards are read, keeps
+                    // an offset that the anchor doesn't move, past the end of what then arrives.
+                    .id(all.isEmpty)
                     .focusable()
                     .focused($streamFocused)
                     .focusEffectDisabled()

@@ -102,7 +102,8 @@ fun BubbleLinks(card: Card) {
     val model = LocalModel.current
     val style = card.payload["preview"]["links"].str ?: Settings.linkStyle
     if (style == "off" || model.vault(card.vaultId)?.isEncrypted == true) return
-    for (url in Doc.linkUrls(card.content).filter { !Doc.isImageUrl(it) }.take(3)) LinkCard(url, style == "compact")
+    val urls = remember(card.id, card.updatedAt) { Doc.linkUrls(card.content).filter { !Doc.isImageUrl(it) }.take(3) }
+    for (url in urls) LinkCard(url, style == "compact")
 }
 
 @Composable

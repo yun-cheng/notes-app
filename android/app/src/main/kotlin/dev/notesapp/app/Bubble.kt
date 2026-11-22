@@ -89,8 +89,13 @@ fun BubbleView(card: Card, maxWidth: Dp, picked: Boolean = false, picking: Boole
     var unfolded by remember(card.id) { mutableStateOf(false) }
     var revealed by remember(card.id) { mutableStateOf(false) }
     var menu by remember { mutableStateOf(false) }
-    val pages = listOf(card.content) + card.turnPages
-    val doc = pages[minOf(page, pages.size - 1)]
+    // What the bubble works out from its document is kept per version of the card, so a redraw that changes nothing
+    // about it (a pick, focus, scrolling back) doesn't walk the document again.
+    val pages = remember(card.id, card.updatedAt) { listOf(card.content) + card.turnPages }
+    val shown = minOf(page, pages.size - 1)
+    val doc = pages[shown]
+    val blank = remember(card.id, card.updatedAt, shown) { Doc.isBlank(doc) }
+    val long = remember(card.id, card.updatedAt, shown) { Doc.previewLines(doc).size > 6 }
     val tint = card.color?.let { Theme.tint(it) }
     val background = if (picked) Theme.accentSoft else tint?.copy(alpha = 0.16f) ?: Theme.surface
     Box {
@@ -111,20 +116,20 @@ fun BubbleView(card: Card, maxWidth: Dp, picked: Boolean = false, picking: Boole
                             card.title, color = if (card.isDone) Theme.muted else Theme.text, fontSize = 16.sp,
                             textDecoration = if (card.isDone) TextDecoration.LineThrough else null,
                         )
-                        if (!Doc.isBlank(doc) || page > 0) BubbleText(doc, folded = !unfolded, revealed = revealed)
+                        if (!blank || page > 0) BubbleText(doc, folded = !unfolded, revealed = revealed, memo = "${card.id}:${card.updatedAt}:$shown")
                     }
                 }
             } else {
                 if (card.title.isNotBlank() && page == 0) Text(card.title, fontWeight = FontWeight.SemiBold, color = Theme.text, fontSize = 16.sp)
                 if (card.isStack) StackPreview(card)
-                BubbleText(doc, folded = !unfolded, revealed = revealed)
+                BubbleText(doc, folded = !unfolded, revealed = revealed, memo = "${card.id}:${card.updatedAt}:$shown")
             }
             if (page == 0) {
                 BubbleAttachments(card)
                 BubbleLinks(card)
                 BubbleTranslation(card)
             }
-            if (Doc.previewLines(doc).size > 6) {
+            if (long) {
                 Text(if (unfolded) "Less" else "More", Modifier.clickable { unfolded = !unfolded }, fontSize = 12.sp, fontWeight = FontWeight.SemiBold, color = Theme.accent)
             }
             BubbleTags(card)
@@ -155,9 +160,10 @@ fun TodoCheck(card: Card) {
  * under dots until shown, folded to six lines.
  */
 @Composable
-fun BubbleText(doc: JsonElement, folded: Boolean = true, revealed: Boolean = false) {
+fun BubbleText(doc: JsonElement, folded: Boolean = true, revealed: Boolean = false, memo: String? = null) {
     val model = LocalModel.current
-    val parts = Doc.previewParts(doc, model.index.titleOf, markCode = true, hidden = Doc.Hidden.mark)
+    // `memo` names the card version and page shown, a cheaper key than the document; links show under the index's titles.
+    val parts = remember(memo ?: doc, model.index) { Doc.previewParts(doc, model.index.titleOf, markCode = true, hidden = Doc.Hidden.mark) }
     val limited = if (folded) fold(parts, 6) else parts
     val sunken = Theme.sunken
     val muted = Theme.muted
@@ -287,7 +293,7 @@ fun BubbleMeta(card: Card, page: Int, pages: Int, setPage: (Int) -> Unit) {
         FlowRow(Modifier.padding(top = 1.dp), horizontalArrangement = Arrangement.spacedBy(6.dp), verticalArrangement = Arrangement.Center, itemVerticalAlignment = Alignment.CenterVertically) {
             Reactions(card)
             model.commentCounts[card.id]?.takeIf { it > 0 }?.let { IconText(Icons.AutoMirrored.Outlined.Comment, "$it") }
-            Doc.checklistProgress(card.content)?.let { (done, total) ->
+            remember(card.id, card.updatedAt) { Doc.checklistProgress(card.content) }?.let { (done, total) ->
                 val all = done == total
                 Box(Modifier.clip(RoundedCornerShape(6.dp)).background(if (all) Theme.tint(dev.notesapp.core.CardColor.green).copy(alpha = 0.22f) else androidx.compose.ui.graphics.Color.Transparent).padding(horizontal = if (all) 5.dp else 0.dp)) {
                     IconText(Icons.Outlined.Checklist, "$done/$total")

@@ -101,8 +101,8 @@ fun PhotoThumb(media: Doc.Media, vaultId: String, size: Dp, modifier: Modifier =
 @Composable
 fun BubbleAttachments(card: Card) {
     val model = LocalModel.current
-    val media = Doc.media(card.content)
-    val files = Doc.files(card.content).filter { !it.isVideo }
+    val media = remember(card.id, card.updatedAt) { Doc.media(card.content) }
+    val files = remember(card.id, card.updatedAt) { Doc.files(card.content).filter { !it.isVideo } }
     var viewing by remember(card.id) { mutableStateOf<String?>(null) }
     var menuFor by remember(card.id) { mutableStateOf<String?>(null) }
     // How photos show: large, small thumbnails, or a count that opens them; each entry can say for itself.

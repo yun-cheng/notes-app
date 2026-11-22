@@ -149,10 +149,7 @@ fun PhoneFrame() {
             }
             // The keyboard takes the tabs' place while it's up.
             if (!androidx.compose.foundation.layout.WindowInsets.isImeVisible) NavigationBar(containerColor = Theme.surface, tonalElevation = 0.dp) {
-                val items = listOf(
-                    "Journal" to Icons.AutoMirrored.Outlined.Article, "Today" to Icons.Outlined.WbSunny,
-                    "Calendar" to Icons.Outlined.CalendarMonth, "Search" to Icons.Outlined.Search,
-                )
+                val items = listOf("journal", "today", "calendar", "search").map { destination(it).let { d -> d.title to d.icon } }
                 items.forEachIndexed { i, (label, icon) ->
                     NavigationBarItem(
                         selected = tab == i, onClick = { if (tab == i && i == 0) model.page = Page.Journal(); tab = i },
@@ -202,6 +199,28 @@ fun PageView(page: Page, openDrawer: (() -> Unit)?) {
     }
 }
 
+/** A page to go to by name, with its icon. `listed` ones are in the sidebar's list of pages. */
+class Destination(val key: String, val title: String, val icon: ImageVector, val page: Page, val listed: Boolean = true)
+
+/** Every page with a name, in the sidebar's order: the sidebar, the phone's tabs and the drawer all take them from here. */
+val destinations = listOf(
+    Destination("journal", "Journal", Icons.AutoMirrored.Outlined.Article, Page.Journal()),
+    Destination("today", "Today", Icons.Outlined.WbSunny, Page.Journal(StreamFilter(status = StreamFilter.TodoStatus.today)), listed = false),
+    Destination("history", "History", Icons.Outlined.History, Page.History),
+    Destination("calendar", "Calendar", Icons.Outlined.CalendarMonth, Page.Calendar),
+    Destination("timeline", "Timeline", Icons.Outlined.Timeline, Page.Timeline),
+    Destination("photos", "Photos", Icons.Outlined.Photo, Page.Photos),
+    Destination("links", "Links", Icons.Outlined.Link, Page.Links),
+    Destination("files", "Files", Icons.Outlined.InsertDriveFile, Page.Files),
+    Destination("archive", "Archive", Icons.Outlined.Archive, Page.Journal(StreamFilter(archived = true))),
+    Destination("trash", "Trash", Icons.Outlined.Delete, Page.Trash),
+    Destination("tags", "All tags", Icons.Outlined.Label, Page.Tags, listed = false),
+    Destination("vaults", "All vaults", Icons.Outlined.Layers, Page.Vaults, listed = false),
+    Destination("search", "Search", Icons.Outlined.Search, Page.Search, listed = false),
+)
+
+fun destination(key: String) = destinations.first { it.key == key }
+
 /**
  * The sidebar, as the web app's: New note, the pages, tag groups with their tags, other tags, vaults, and the account
  * at the foot.
@@ -219,29 +238,28 @@ fun Sidebar(onPick: () -> Unit) {
                 Text("Notes", Modifier.padding(start = 10.dp, bottom = 10.dp), fontFamily = Theme.titleFont, fontWeight = FontWeight.SemiBold, fontSize = 24.sp, color = Theme.text)
                 Button(onClick = { go(Page.Journal()); model.focusBox++ }, Modifier.fillMaxWidth().padding(bottom = 8.dp)) { Text("New note") }
             }
-            item { SideRow("Journal", Icons.AutoMirrored.Outlined.Article, model.page == Page.Journal()) { go(Page.Journal()) } }
-            item { SideRow("History", Icons.Outlined.History, model.page == Page.History) { go(Page.History) } }
-            item { SideRow("Calendar", Icons.Outlined.CalendarMonth, model.page == Page.Calendar) { go(Page.Calendar) } }
-            item { SideRow("Timeline", Icons.Outlined.Timeline, model.page == Page.Timeline) { go(Page.Timeline) } }
-            item { SideRow("Photos", Icons.Outlined.Photo, model.page == Page.Photos) { go(Page.Photos) } }
-            item { SideRow("Links", Icons.Outlined.Link, model.page == Page.Links) { go(Page.Links) } }
-            item { SideRow("Files", Icons.Outlined.InsertDriveFile, model.page == Page.Files) { go(Page.Files) } }
-            item { SideRow("Archive", Icons.Outlined.Archive, filter?.archived == true, archived) { go(Page.Journal(StreamFilter(archived = true))) } }
-            item { SideRow("Trash", Icons.Outlined.Delete, model.page == Page.Trash, index.trash.size) { go(Page.Trash) } }
+            items(destinations.filter { it.listed }, key = { "p:${it.key}" }) { d ->
+                when (d.key) {
+                    // The Archive is the journal narrowed to archived entries, whatever else it's narrowed by.
+                    "archive" -> SideRow(d.title, d.icon, filter?.archived == true, archived) { go(d.page) }
+                    "trash" -> SideRow(d.title, d.icon, model.page == d.page, index.trash.size) { go(d.page) }
+                    else -> SideRow(d.title, d.icon, model.page == d.page) { go(d.page) }
+                }
+            }
             for (group in index.tagGroups.groups) {
                 item { SideHeader(group.title) }
                 items(group.members, key = { "g${group.id}:${it.id}" }) { tag -> TagRow(tag, filter?.tagId == tag.id) { go(Page.Journal(StreamFilter(tagId = tag.id))) } }
             }
             item { SideHeader("Tags") }
             items(index.tagGroups.loose, key = { "t:${it.id}" }) { tag -> TagRow(tag, filter?.tagId == tag.id) { go(Page.Journal(StreamFilter(tagId = tag.id))) } }
-            item { SideRow("All tags", Icons.Outlined.Label, model.page == Page.Tags) { go(Page.Tags) } }
+            item { destination("tags").let { d -> SideRow(d.title, d.icon, model.page == d.page) { go(d.page) } } }
             item { SideHeader("Vaults") }
             // A hidden vault stays out of the app until its PIN is entered.
             items(model.vaults.filter { !it.hidden || it.id in model.openVaults }, key = { "v:${it.id}" }) { vault ->
                 val icon = if (vault.isPrivate) (if (vault.id in model.lockedVaults) Icons.Outlined.Lock else Icons.Outlined.LockOpen) else if ((vault.members ?: 1) > 1) Icons.Outlined.Group else Icons.Outlined.Inbox
                 SideRow(vault.name, icon, filter?.vaultId == vault.id) { go(Page.Journal(StreamFilter(vaultId = vault.id))) }
             }
-            item { SideRow("All vaults", Icons.Outlined.Layers, model.page == Page.Vaults) { go(Page.Vaults) } }
+            item { destination("vaults").let { d -> SideRow(d.title, d.icon, model.page == d.page) { go(d.page) } } }
         }
         HorizontalDivider(color = Theme.line)
         AccountBadge(onPick)

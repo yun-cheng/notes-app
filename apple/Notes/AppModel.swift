@@ -372,6 +372,11 @@ final class AppModel {
         }
     }
 
+    /// Changes one card, as an action of its own; `typed` folds it into the typing just before, as typing is logged.
+    func update(_ id: String, typed: Bool = false, _ change: @escaping @Sendable (inout Card) -> Void) {
+        perform { _ = try await $0.update(id, typed: typed, change) }
+    }
+
     /// Does `work` to each entry as one action to undo (it's given the repository, the entry and the action), then
     /// says `done` with an Undo.
     func performEach(_ ids: [String], say done: String, _ work: @escaping @Sendable (Repository, String, String) async throws -> Void) {

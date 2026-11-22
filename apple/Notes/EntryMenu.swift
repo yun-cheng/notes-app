@@ -31,9 +31,8 @@ struct EntryMenu: View {
             }
             if card.type == .todo && !card.isDone {
                 Button(card.waiting ? "No longer waiting" : "Waiting") {
-                    let id = card.id
                     let on = !card.waiting
-                    model.perform { try await $0.update(id) { $0.waiting = on } }
+                    model.update(card.id) { $0.waiting = on }
                 }
             }
             Menu("Style") {
@@ -87,8 +86,7 @@ struct EntryMenu: View {
         if model.canManage(card) { Button("Share…") { model.panel = .share(card.id) } }
         if model.canWrite(card) && !model.viewOnly {
             Toggle("View only", isOn: Binding(get: { card.viewOnly }, set: { on in
-                let id = card.id
-                model.perform { try await $0.update(id) { $0.viewOnly = on } }
+                model.update(card.id) { $0.viewOnly = on }
             }))
         }
         Divider()
@@ -96,7 +94,7 @@ struct EntryMenu: View {
         if let stack = model.index.stackOf[card.id], model.canEdit(card) {
             Button("Take out of the stack") {
                 let id = card.id
-                model.perform { try await $0.update(stack) { $0.stack = ($0.stack ?? []).filter { $0 != id } } }
+                model.update(stack) { $0.stack = ($0.stack ?? []).filter { $0 != id } }
             }
         }
     }
@@ -114,8 +112,7 @@ struct EntryMenu: View {
     }
 
     private func setColor(_ color: CardColor?) {
-        let id = card.id
-        model.perform { try await $0.update(id) { $0.color = color } }
+        model.update(card.id) { $0.color = color }
     }
 }
 

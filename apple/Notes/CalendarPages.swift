@@ -13,17 +13,17 @@ extension AppModel {
     /// Moves a todo by some days: its due date and start date both, so a span keeps its length.
     func shift(_ id: String, by days: Int) {
         guard days != 0 else { return }
-        perform { try await $0.update(id) { c in
+        update(id) { c in
             if let d = c.due { c.due = DateKey.adding(days, to: d) }
             if let s = c.start { c.start = DateKey.adding(days, to: s) }
-        } }
+        }
     }
 
     /// Moves one end of a todo's span: its start (a start on its due date is none) or its due date. An end can't pass
     /// the other.
     func stretch(_ id: String, end: Bool, by days: Int) {
         guard days != 0, let card = card(id), let span = card.span else { return }
-        perform { try await $0.update(id) { c in
+        update(id) { c in
             if end {
                 let to = max(span.from, DateKey.adding(days, to: span.to))
                 c.due = to
@@ -33,7 +33,7 @@ extension AppModel {
                 c.start = from == span.to ? nil : from
                 if c.due == nil { c.due = span.to }
             }
-        } }
+        }
     }
 
     /// Todos the calendar and the timeline show: the journal's filter for them, if it has one.

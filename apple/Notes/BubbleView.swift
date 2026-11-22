@@ -389,8 +389,7 @@ struct Reactions: View {
 
     private func toggle(_ emoji: String) {
         let me = model.accountId
-        let id = card.id
-        model.perform { try await $0.update(id) { $0.toggleReaction(emoji, me: me) } }
+        model.update(card.id) { $0.toggleReaction(emoji, me: me) }
     }
 }
 

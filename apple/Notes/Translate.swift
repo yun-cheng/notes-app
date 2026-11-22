@@ -119,8 +119,7 @@ struct BubbleTranslation: View {
     /// The translation as a page of its own, unless a page has its words already.
     private func saveAsPage(_ pieces: [String]) {
         let doc = Doc.fromText(pieces.filter { !$0.trimmingCharacters(in: .whitespaces).isEmpty }.joined(separator: "\n"))
-        let id = card.id
-        model.perform { try await $0.update(id) { c in c.morePages = c.morePages.filter { !Doc.isBlank($0) } + [doc] } }
+        model.update(card.id) { c in c.morePages = c.morePages.filter { !Doc.isBlank($0) } + [doc] }
         model.say("Saved as page \(card.turnPages.count + 2)", undoable: true)
     }
 }

@@ -157,9 +157,8 @@ struct TagRow: View {
             }
             Button { editing = tag.title } label: { Image(systemName: "pencil") }.help("Rename")
             Button {
-                let id = tag.id
                 let on = !tag.pinned
-                model.perform { try await $0.update(id) { $0.payload["pinned"] = .bool(on) } }
+                model.update(tag.id) { $0.payload["pinned"] = .bool(on) }
             } label: { Image(systemName: tag.pinned ? "pin.slash" : "pin") }.help(tag.pinned ? "Unpin from the sidebar" : "Pin to the sidebar")
             if model.canManage(tag) {
                 Button(role: .destructive) { trash(count) } label: { Image(systemName: "trash") }.help("Move to Trash")
@@ -183,9 +182,8 @@ struct TagRow: View {
             model.say("\(name) is a group's name.")
             return
         }
-        let id = tag.id
         let old = tag.title
-        model.perform { try await $0.update(id) { $0.title = name } }
+        model.update(tag.id) { $0.title = name }
         model.say("Renamed \(old) to \(name)", undoable: true)
     }
 
@@ -197,12 +195,12 @@ struct TagRow: View {
 
     private func move(_ group: TagGroup, _ by: Int) {
         let next = moveMember(group.members.map(\.id), tag.id, by: by)
-        model.perform { try await $0.update(group.id) { $0.payload["members"] = .array(next.map(JSONValue.string)) } }
+        model.update(group.id) { $0.payload["members"] = .array(next.map(JSONValue.string)) }
     }
 
     private func takeOut(_ group: TagGroup) {
         let next = group.members.map(\.id).filter { $0 != tag.id }
-        model.perform { try await $0.update(group.id) { $0.payload["members"] = .array(next.map(JSONValue.string)) } }
+        model.update(group.id) { $0.payload["members"] = .array(next.map(JSONValue.string)) }
     }
 }
 
@@ -250,8 +248,7 @@ struct GroupBlock: View {
     }
 
     private func set(_ key: String, _ value: JSONValue) {
-        let id = group.id
-        model.perform { try await $0.update(id) { $0.payload[key] = value } }
+        model.update(group.id) { $0.payload[key] = value }
     }
 
     private func rename() {

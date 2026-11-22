@@ -270,7 +270,7 @@ final class Transcriber {
             guard let card = model.index.live.first(where: { Doc.fileIds($0.content).contains(id) }), model.canEdit(card) else { continue }
             done[id] = nil
             let cardId = card.id
-            model.perform { try await $0.update(cardId) { c in if let next = Voice.withTranscript(c.content, fileId: id, words) { c.content = next } } }
+            model.update(cardId) { c in if let next = Voice.withTranscript(c.content, fileId: id, words) { c.content = next } }
         }
     }
 

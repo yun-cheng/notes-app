@@ -95,9 +95,8 @@ struct EntrySheet: View {
 
     private func saveTitle(_ card: Card) {
         guard model.canEdit(card), title != card.title else { return }
-        let id = card.id
         let t = title
-        model.perform { try await $0.update(id, typed: true) { $0.title = t } }
+        model.update(card.id, typed: true) { $0.title = t }
     }
 
     private func savePage(_ id: String, _ page: Int, _ doc: JSONValue) {
@@ -215,9 +214,8 @@ struct TagPicker: View {
 
     private func row(_ tag: Card, _ card: Card, change: @escaping ([String]) -> [String]) -> some View {
         Button {
-            let id = card.id
             let next = change(card.tags)
-            model.perform { try await $0.update(id) { $0.tags = next } }
+            model.update(card.id) { $0.tags = next }
         } label: {
             HStack {
                 Text(tag.displayTitle)
@@ -235,7 +233,7 @@ struct TagPicker: View {
         if let existing = tagNamed(name, in: model.index.tags, vaultId: card.vaultId, model.sharedInto) {
             let id = card.id
             let groups = model.index.tagGroups
-            model.perform { try await $0.update(id) { $0.tags = groups.with($0.tags, existing.id) } }
+            model.update(id) { $0.tags = groups.with($0.tags, existing.id) }
         } else {
             let id = card.id
             let vault = card.vaultId
@@ -307,8 +305,7 @@ struct DuePicker: View {
     }
 
     private func set(_ change: @escaping @Sendable (inout Card) -> Void) {
-        let id = id
-        model.perform { try await $0.update(id, change) }
+        model.update(id, change)
     }
 }
 

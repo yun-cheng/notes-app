@@ -1,5 +1,5 @@
 import { useEffect, useState, useSyncExternalStore } from 'react';
-import { permissions } from '../domain/access';
+import { canWriteIn, permissions } from '../domain/access';
 import { daysLeft, isFile, TRASH_DAYS, type StoredAttachment } from '../domain/attachments';
 import { displayTitle, isPoster, posterId } from '../domain/content';
 import type { JSONNode } from '../domain/types';
@@ -36,7 +36,7 @@ export function TrashedAttachments({ vaultId }: { vaultId?: string }) {
   const photos = shown.filter((a) => !isFile(a));
   const writable = (a: StoredAttachment) => {
     const vault = vaults.find((v) => v.id === a.vault_id);
-    return !!vault && (vault.role ?? 'owner') !== 'viewer' && !locked.has(a.vault_id);
+    return !!vault && canWriteIn(vault, locked);
   };
 
   return (

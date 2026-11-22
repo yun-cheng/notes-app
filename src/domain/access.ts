@@ -52,6 +52,12 @@ function reach(card: Card, vaults: Vault[], shared: ReadonlyMap<string, SharedCa
  * Whether the server may work on what's in a vault for this account: one it can change, and not private (encrypted),
  * whose contents never reach the server. Sharing by a Google Drive link and transcribing voice both ask this.
  */
+/**
+ * Whether this account can write in a vault right now: not locked here, not waiting to be let into it, and not only
+ * a viewer of it.
+ */
+export const canWriteIn = (vault: Vault, locked: ReadonlySet<string>) => !locked.has(vault.id) && !vault.withheld && (vault.role ?? 'owner') !== 'viewer';
+
 export const canChangeInTheOpen = (vault: Vault | undefined) => !!vault && vault.role !== 'viewer' && !vault.encryption;
 
 export const mainVault = (vaults: Vault[], accountId: string) => vaults.find((v) => v.id === `vault-${accountId}`) ?? vaults[0];

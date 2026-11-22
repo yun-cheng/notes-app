@@ -1,4 +1,5 @@
 import { useState } from 'react';
+import { canWriteIn } from '../domain/access';
 import { planBatch, tagCounts, type BatchEdit } from '../domain/batch';
 import { addDays } from '../domain/dates';
 import type { Card } from '../domain/types';
@@ -72,7 +73,7 @@ export function BatchBar({ selection }: { selection: Selection }) {
     void actions.trash(ids);
   };
 
-  const targets = vaults.filter((v) => !locked.has(v.id) && !v.withheld && (v.role ?? 'owner') !== 'viewer');
+  const targets = vaults.filter((v) => canWriteIn(v, locked));
   const move = (vaultId: string) => void actions.move(cards.map((c) => c.id), vaultId);
 
   const toggle = (p: 'tags' | 'due') => setPanel(panel === p ? null : p);

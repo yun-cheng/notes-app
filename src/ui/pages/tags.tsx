@@ -13,7 +13,7 @@ import { useUndo } from '../useUndo';
 import { usePopover } from '../usePopover';
 import { composing } from '../composing';
 import { usePermissions } from '../viewOnly';
-import { mainVault } from '../../domain/access';
+import { canWriteIn, mainVault } from '../../domain/access';
 import { tagNamedIn, tagVaults } from '../../domain/tagScope';
 import { SyncOffline } from '../../sync/engine';
 import { shareCard, unshareCard } from '../../sync/http';
@@ -181,7 +181,7 @@ function TagColor({ tag }: { tag: TagCard }) {
 /** The vaults a tag can be kept to: open ones this account can write in. */
 function useTagHomes(): Vault[] {
   const { vaults, locked } = useCards();
-  return vaults.filter((v) => !locked.has(v.id) && !v.withheld && (v.role ?? 'owner') !== 'viewer');
+  return vaults.filter((v) => canWriteIn(v, locked));
 }
 
 function ScopeSelect({ value, vaults, label, onChange }: { value: string; vaults: Vault[]; label: string; onChange: (vaultId: string) => void }) {

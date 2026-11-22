@@ -1,4 +1,5 @@
 import { useEffect, useRef, useState, type ReactNode } from 'react';
+import { canWriteIn } from '../domain/access';
 import { Link, useLocation, useNavigate } from 'react-router';
 import { cardText, resolveTags, type Backlink } from '../domain/cardIndex';
 import { displayTitle } from '../domain/content';
@@ -396,7 +397,7 @@ export function useVaultMove(card: Card) {
   const { vaults, locked } = useCards();
   const may = usePermissions();
   const actions = useEntryActions();
-  const options = vaults.filter((v) => !locked.has(v.id) && !v.withheld && (v.role ?? 'owner') !== 'viewer');
+  const options = vaults.filter((v) => canWriteIn(v, locked));
   if (options.length < 2 || !may(card).manage) return null;
   const move = (vaultId: string) => void actions.move([card.id], vaultId);
   return { options, move };

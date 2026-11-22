@@ -1,4 +1,5 @@
 import Dexie from 'dexie';
+import { canWriteIn } from '../domain/access';
 import { createContext, useContext, useEffect, useMemo, useRef, useState, useSyncExternalStore, type ReactNode } from 'react';
 import { buildIndex, type CardIndex } from '../domain/cardIndex';
 import { toDateKey } from '../domain/dates';
@@ -196,7 +197,7 @@ export function CardsProvider({ accountId, children }: { accountId: string; chil
         fresh: async () => (await repo.exportAll(shut)).cards,
         judges: (id) => {
           const vault = all?.find((v) => v.id === id);
-          return !!vault && (vault.role ?? 'owner') !== 'viewer' && !unread.has(id);
+          return !!vault && canWriteIn(vault, unread);
         },
         mayDelete: unread.size === 0,
       };
@@ -246,7 +247,7 @@ export function CardsProvider({ accountId, children }: { accountId: string; chil
   const commentsSealed = useRef(new Set<string>());
   useEffect(() => {
     if (!index || !vaults) return;
-    const open = new Set(vaults.filter((v) => v.encryption && !locked.has(v.id) && !v.withheld && (v.role ?? 'owner') !== 'viewer').map((v) => v.id));
+    const open = new Set(vaults.filter((v) => v.encryption && canWriteIn(v, locked)).map((v) => v.id));
     const due = new Set([...open].filter((id) => !commentsSealed.current.has(id)));
     const homes = commentHomes.current;
     for (const [id, card] of index.byId) {
@@ -281,7 +282,7 @@ export function CardsProvider({ accountId, children }: { accountId: string; chil
     () =>
       JSON.stringify(
         vaults?.some((v) => v.encryption)
-          ? vaults.filter((v) => !locked.has(v.id) && !v.withheld && (v.role ?? 'owner') !== 'viewer').map((v) => ({ vaultId: v.id, seal: !!v.encryption }))
+          ? vaults.filter((v) => canWriteIn(v, locked)).map((v) => ({ vaultId: v.id, seal: !!v.encryption }))
           : [],
       ),
     [vaults, locked],
@@ -313,7 +314,7 @@ export function CardsProvider({ accountId, children }: { accountId: string; chil
   // cards change, and every half hour, as browsers turn reminders on elsewhere and reminders pass.
   // Only what reminds counts, so edits elsewhere don't start it.
   const sealing = useMemo(() => {
-    const open = (vaults ?? []).filter((v) => v.encryption && !locked.has(v.id) && (v.role ?? 'owner') !== 'viewer');
+    const open = (vaults ?? []).filter((v) => v.encryption && canWriteIn(v, locked));
     const ids = new Set(open.map((v) => v.id));
     const todos = (index?.live ?? []).filter((c) => c.type === 'todo' && ids.has(c.vaultId));
     const key = JSON.stringify([open.map((v) => v.id), todos.map((c) => [c.id, c.vaultId, reminderOf(c)])]);

@@ -1,0 +1,10 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- The web app's icon.svg. -->
+<vector xmlns:android="http://schemas.android.com/apk/res/android" android:width="108dp" android:height="108dp" android:viewportWidth="512" android:viewportHeight="512">
+    <path android:fillColor="#FF1F5C57" android:pathData="M0,0h512v512h-512z" />
+    <path android:fillColor="#FF8FBDB4" android:pathData="M202,118h162a26,26 0 0 1 26,26v224a26,26 0 0 1 -26,26h-162a26,26 0 0 1 -26,-26v-224a26,26 0 0 1 26,-26z" />
+    <path android:fillColor="#FFF7F4EE" android:pathData="M148,150h162a26,26 0 0 1 26,26v224a26,26 0 0 1 -26,26h-162a26,26 0 0 1 -26,-26v-224a26,26 0 0 1 26,-26z" />
+    <path android:fillColor="#FF1F5C57" android:pathData="M170,204h118a10,10 0 0 1 10,10v0a10,10 0 0 1 -10,10h-118a10,10 0 0 1 -10,-10v-0a10,10 0 0 1 10,-10z" />
+    <path android:fillColor="#FF9AA9A4" android:pathData="M167,256h124a7,7 0 0 1 7,7v0a7,7 0 0 1 -7,7h-124a7,7 0 0 1 -7,-7v-0a7,7 0 0 1 7,-7z" />
+    <path android:fillColor="#FF9AA9A4" android:pathData="M167,296h90a7,7 0 0 1 7,7v0a7,7 0 0 1 -7,7h-90a7,7 0 0 1 -7,-7v-0a7,7 0 0 1 7,-7z" />
+</vector>

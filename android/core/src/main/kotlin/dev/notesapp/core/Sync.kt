@@ -15,7 +15,7 @@ import kotlinx.coroutines.sync.withLock
 class SyncEngine(private val repo: Repository, private val api: SyncApi) {
     enum class State { idle, syncing, offline, signedOut, error }
 
-    data class Status(val state: State = State.idle, val pending: Int = 0, val lastSyncedAt: Long? = null) {
+    data class Status(val state: State = State.idle, val pending: Int = 0, val lastSyncedAt: Long? = null, val problem: String? = null) {
         val summary: String
             get() {
                 val waiting = if (pending == 0) "" else "$pending ${if (pending == 1) "change" else "changes"} waiting"
@@ -66,6 +66,7 @@ class SyncEngine(private val repo: Repository, private val api: SyncApi) {
         _status.value = _status.value.copy(state = State.syncing)
         var next = State.idle
         var synced = _status.value.lastSyncedAt
+        var problem: String? = null
         try {
             val refused = push()
             // Vaults first, so a card in a newly private vault is never shown before its lock is known.
@@ -84,11 +85,12 @@ class SyncEngine(private val repo: Repository, private val api: SyncApi) {
             next = State.signedOut
         } catch (e: kotlinx.coroutines.CancellationException) {
             throw e
-        } catch (_: Exception) {
+        } catch (e: Exception) {
             next = State.error
+            problem = e.toString()
         }
         val pending = runCatching { repo.pendingCount() }.getOrDefault(0)
-        _status.value = Status(next, pending, synced)
+        _status.value = Status(next, pending, synced, problem)
     }
 
     /** Pushes until nothing is left that can be pushed. Returns how many records the server refused. */

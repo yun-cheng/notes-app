@@ -15,4 +15,4 @@ dependencyResolutionManagement {
 }
 
 rootProject.name = "Notes"
-include(":core")
+include(":core", ":app")

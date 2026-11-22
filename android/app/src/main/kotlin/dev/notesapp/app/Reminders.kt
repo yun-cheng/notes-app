@@ -23,8 +23,8 @@ import java.time.ZoneId
 object Reminders {
     private const val MOST = 60
     private const val CHANNEL = "due"
-    private var scheduled = ""
-    private var ids = listOf<String>()
+    /** What's scheduled now; null until this run of the app first schedules, so what an earlier run left is cleared. */
+    private var scheduled: String? = null
 
     private fun prefs(c: Context) = c.getSharedPreferences("reminders", Context.MODE_PRIVATE)
     fun on(c: Context) = prefs(c).getBoolean("on", false)
@@ -64,9 +64,20 @@ object Reminders {
         if (signature == scheduled) return
         scheduled = signature
         val alarms = c.getSystemService(AlarmManager::class.java)
-        for (id in ids) alarms.cancel(pending(c, id))
+        for (id in scheduledIds(c)) alarms.cancel(pending(c, id))
         for ((card, at) in soon) alarms.setAndAllowWhileIdle(AlarmManager.RTC_WAKEUP, at, pending(c, card.id, card))
-        ids = soon.map { it.first.id }
+        // Kept on the device, so the next run of the app can cancel what this one set, for todos it may not see then.
+        prefs(c).edit().putStringSet("ids", soon.map { it.first.id }.toSet()).apply()
+    }
+
+    private fun scheduledIds(c: Context): Set<String> = prefs(c).getStringSet("ids", null) ?: emptySet()
+
+    /** Cancels every reminder this device set, as an account signs out. */
+    fun cancelAll(c: Context) {
+        val alarms = c.getSystemService(AlarmManager::class.java)
+        for (id in scheduledIds(c)) alarms.cancel(pending(c, id))
+        prefs(c).edit().remove("ids").apply()
+        scheduled = ""
     }
 
     fun channel(c: Context) {

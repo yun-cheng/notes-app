@@ -440,9 +440,11 @@ fun PhotosPage(openDrawer: (() -> Unit)?) {
     viewing?.let { start -> MediaViewer(all.map { it.first }, start, all.firstOrNull { it.first.id == start }?.second?.vaultId ?: "") { viewing = null } }
 }
 
-fun shareFiles(context: android.content.Context, files: List<java.io.File>) {
-    val uris = ArrayList(files.map { androidx.core.content.FileProvider.getUriForFile(context, "dev.notesapp.notes.files", it) })
-    val send = android.content.Intent(android.content.Intent.ACTION_SEND_MULTIPLE).setType("*/*").putParcelableArrayListExtra(android.content.Intent.EXTRA_STREAM, uris).addFlags(android.content.Intent.FLAG_GRANT_READ_URI_PERMISSION)
+fun shareFiles(context: android.content.Context, files: List<java.io.File>, mime: String = "*/*") {
+    val uris = ArrayList(files.map { Attachments.uriFor(context, it) })
+    val send = (if (uris.size == 1) android.content.Intent(android.content.Intent.ACTION_SEND).putExtra(android.content.Intent.EXTRA_STREAM, uris[0])
+        else android.content.Intent(android.content.Intent.ACTION_SEND_MULTIPLE).putParcelableArrayListExtra(android.content.Intent.EXTRA_STREAM, uris))
+        .setType(mime).addFlags(android.content.Intent.FLAG_GRANT_READ_URI_PERMISSION)
     context.startActivity(android.content.Intent.createChooser(send, null).addFlags(android.content.Intent.FLAG_ACTIVITY_NEW_TASK))
 }
 

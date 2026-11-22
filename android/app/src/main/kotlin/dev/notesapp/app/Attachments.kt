@@ -128,7 +128,7 @@ object Attachments {
 
     /** Opens a file in the app that reads it. */
     fun open(context: Context, file: File, mime: String?) {
-        val uri = FileProvider.getUriForFile(context, "dev.notesapp.notes.files", file)
+        val uri = uriFor(context, file)
         val intent = Intent(Intent.ACTION_VIEW).setDataAndType(uri, mime ?: "*/*").addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION or Intent.FLAG_ACTIVITY_NEW_TASK)
         runCatching { context.startActivity(Intent.createChooser(intent, file.name).addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)) }
     }
@@ -148,18 +148,26 @@ object Attachments {
         val w = bounds.outWidth.toDouble()
         val h = bounds.outHeight.toDouble()
         if (mime in setOf("image/png", "image/gif", "image/webp") && raw.size < 2_000_000 && maxOf(w, h) <= 2048) return Prepared(raw, mime, w, h)
-        // ImageDecoder turns a photo the way its camera says it was held.
-        val bitmap = runCatching {
-            ImageDecoder.decodeBitmap(ImageDecoder.createSource(java.nio.ByteBuffer.wrap(raw))) { decoder, info, _ ->
-                val big = maxOf(info.size.width, info.size.height)
-                if (big > 2048) decoder.setTargetSize(info.size.width * 2048 / big, info.size.height * 2048 / big)
-                decoder.allocator = ImageDecoder.ALLOCATOR_SOFTWARE
-            }
-        }.getOrNull() ?: return null
-        val out = ByteArrayOutputStream()
-        bitmap.compress(Bitmap.CompressFormat.JPEG, 85, out)
-        return Prepared(out.toByteArray(), "image/jpeg", bitmap.width.toDouble(), bitmap.height.toDouble())
+        val bitmap = decodeScaled(raw, 2048, software = true) ?: return null
+        return Prepared(bitmap.jpeg(85), "image/jpeg", bitmap.width.toDouble(), bitmap.height.toDouble())
     }
+
+    /**
+     * A picture decoded no bigger than `edge` pixels, turned the way its camera says it was held. `software` keeps it
+     * in memory the app can read, to encode it again.
+     */
+    fun decodeScaled(data: ByteArray, edge: Int, software: Boolean = false): Bitmap? = runCatching {
+        ImageDecoder.decodeBitmap(ImageDecoder.createSource(java.nio.ByteBuffer.wrap(data))) { decoder, info, _ ->
+            val big = maxOf(info.size.width, info.size.height)
+            if (big > edge) decoder.setTargetSize(maxOf(1, info.size.width * edge / big), maxOf(1, info.size.height * edge / big))
+            if (software) decoder.allocator = ImageDecoder.ALLOCATOR_SOFTWARE
+        }
+    }.getOrNull()
+
+    fun Bitmap.jpeg(quality: Int): ByteArray = ByteArrayOutputStream().also { compress(Bitmap.CompressFormat.JPEG, quality, it) }.toByteArray()
+
+    /** The address another app opens one of this app's files by. */
+    fun uriFor(context: Context, file: File): Uri = FileProvider.getUriForFile(context, "dev.notesapp.notes.files", file)
 
     private fun newId() = UUID.randomUUID().toString().lowercase()
 
@@ -192,7 +200,7 @@ object Attachments {
             val poster = frame?.let { b ->
                 val scale = minOf(1.0, 1280.0 / maxOf(b.width, b.height))
                 val s = if (scale < 1) Bitmap.createScaledBitmap(b, (b.width * scale).toInt(), (b.height * scale).toInt(), true) else b
-                ByteArrayOutputStream().also { s.compress(Bitmap.CompressFormat.JPEG, 82, it) }.toByteArray()
+                s.jpeg(82)
             }
             VideoFacts(poster, w, h, duration?.takeIf { it.isFinite() && it > 0 })
         } catch (_: Exception) {
@@ -293,14 +301,7 @@ object Attachments {
 
     private suspend fun decode(id: String, model: AppModel, edge: Int, key: String): Bitmap? {
         val data = data(id, model) ?: return null
-        val b = withContext(Dispatchers.Default) {
-            runCatching {
-                ImageDecoder.decodeBitmap(ImageDecoder.createSource(java.nio.ByteBuffer.wrap(data))) { decoder, info, _ ->
-                    val big = maxOf(info.size.width, info.size.height)
-                    if (big > edge) decoder.setTargetSize(maxOf(1, info.size.width * edge / big), maxOf(1, info.size.height * edge / big))
-                }
-            }.getOrNull()
-        } ?: return null
+        val b = withContext(Dispatchers.Default) { decodeScaled(data, edge) } ?: return null
         bitmaps.put(key, b)
         return b
     }

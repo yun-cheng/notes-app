@@ -138,11 +138,7 @@ fun PhotoMenu(id: String, card: Card, close: () -> Unit) {
     PublicLinkMenu(id, card.vaultId, close)
 }
 
-fun shareFile(context: android.content.Context, file: File, mime: String) {
-    val uri = androidx.core.content.FileProvider.getUriForFile(context, "dev.notesapp.notes.files", file)
-    val send = android.content.Intent(android.content.Intent.ACTION_SEND).setType(mime).putExtra(android.content.Intent.EXTRA_STREAM, uri).addFlags(android.content.Intent.FLAG_GRANT_READ_URI_PERMISSION)
-    context.startActivity(android.content.Intent.createChooser(send, null).addFlags(android.content.Intent.FLAG_ACTIVITY_NEW_TASK))
-}
+fun shareFile(context: android.content.Context, file: File, mime: String) = shareFiles(context, listOf(file), mime)
 
 /** An attached file as a chip: a sound plays where it is; anything else opens in the app that reads it. */
 @Composable

@@ -125,7 +125,11 @@ export function commentRoutes(app: Hono<AppEnv>, now: () => number) {
     const list = Array.isArray(body?.comments) ? (body.comments as { id?: unknown; body?: unknown }[]) : null;
     if (!list || list.length > 2000 || !list.every((k) => typeof k?.id === 'string' && typeof k.body === 'string' && fits(k.body, vault.encrypted)))
       return c.json({ error: vault.encrypted ? 'Comments in an encrypted vault come sealed' : 'Comments in this vault are written out' }, 400);
-    const update = c.env.DB.prepare(`UPDATE comments SET body = ? WHERE id = ? AND card_id IN (SELECT id FROM cards WHERE vault_id = ?)`);
+    // Only a comment stored the other way round is stored again: written out in an encrypted vault, sealed in one that
+    // isn't. One already as the vault keeps it can't be rewritten here, so this isn't a way to change others' words.
+    const update = c.env.DB.prepare(
+      `UPDATE comments SET body = ? WHERE id = ? AND card_id IN (SELECT id FROM cards WHERE vault_id = ?) AND (body LIKE 'e1:%') = ${vault.encrypted ? 0 : 1}`,
+    );
     if (list.length) await c.env.DB.batch(list.map((k) => update.bind(k.body as string, k.id as string, vaultId)));
     return c.json({ ok: true });
   });

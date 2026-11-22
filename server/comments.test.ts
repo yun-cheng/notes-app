@@ -68,10 +68,16 @@ describe('comments', () => {
     expect((await send(ann.cookie, 'PUT', `/api/vaults/${family.id}/comments`, { comments: [{ id: comments[0].id, body: 'e1:bm93' }] })).status).toBe(200);
     const sealed = await json<{ comments: { body: string }[] }>(send(ann.cookie, 'GET', `/api/vaults/${family.id}/comments`));
     expect(sealed.comments.every((k) => k.body.startsWith('e1:'))).toBe(true);
+    // One already sealed isn't sealed again: this route can't put other words in someone's comment.
+    await send(ann.cookie, 'PUT', `/api/vaults/${family.id}/comments`, { comments: [{ id: comments[0].id, body: 'e1:b3RoZXI=' }] });
+    expect((await json<{ comments: { body: string }[] }>(send(ann.cookie, 'GET', `/api/vaults/${family.id}/comments`))).comments.map((k) => k.body)).not.toContain('e1:b3RoZXI=');
 
     // Readable again, it takes them written out.
     await send(ann.cookie, 'PATCH', `/api/vaults/${family.id}`, { encryption: null });
     expect((await send(ann.cookie, 'PUT', `/api/vaults/${family.id}/comments`, { comments: [{ id: comments[0].id, body: 'Readable' }] })).status).toBe(200);
+    expect((await json<{ comments: Comment[] }>(send(ben.cookie, 'GET', '/api/cards/f1/comments'))).comments.map((k) => k.body)).toContain('Readable');
+    // Written out, it stays as its author wrote it: an editor can't rewrite it here.
+    await send(ben.cookie, 'PUT', `/api/vaults/${family.id}/comments`, { comments: [{ id: comments[0].id, body: 'Ben was here' }] });
     expect((await json<{ comments: Comment[] }>(send(ben.cookie, 'GET', '/api/cards/f1/comments'))).comments.map((k) => k.body)).toContain('Readable');
   });
 });

@@ -34,6 +34,8 @@ final class Attachments {
         var width: Double?
         var height: Double?
         var duration: Double?
+        /// The account it's for; others wait until that account is open again.
+        var account: String?
     }
 
     private var loading: [String: Task<Data?, Never>] = [:]
@@ -187,6 +189,7 @@ final class Attachments {
 
     private func keep(_ id: String, _ data: Data, vaultId: String, model: AppModel, pending item: Pending) throws {
         var item = item
+        item.account = model.accountId
         var stored = data
         if model.vault(vaultId)?.isEncrypted == true {
             guard let key = model.repo.keyring.key(vaultId) else { throw AddError.locked }
@@ -205,7 +208,7 @@ final class Attachments {
         guard !uploading else { return }
         uploading = true
         defer { uploading = false }
-        for item in pending {
+        for item in pending where item.account == nil || item.account == model.accountId {
             guard let data = try? Data(contentsOf: file(item.id)) else {
                 pending.removeAll { $0.id == item.id }
                 continue

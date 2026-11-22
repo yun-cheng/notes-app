@@ -45,7 +45,12 @@ final class AppModel {
     var viewOnly = false
     private(set) var today = DateKey.today()
 
-    let repo: Repository
+    /// The signed-in account's own database on this device; each account has one.
+    private(set) var repo: Repository
+    /// Every account signed in on this device, the newest sign-in first.
+    private(set) var accounts: [Account] = []
+    /// Shows the sign-in to add another account.
+    var addingAccount = false
     private let site: URL
     private var refreshQueued = false
 
@@ -61,25 +66,69 @@ final class AppModel {
         case "settings": page = .settings
         default: break
         }
-        let folder = URL.applicationSupportDirectory.appending(path: "Notes", directoryHint: .isDirectory)
-        try? FileManager.default.createDirectory(at: folder, withIntermediateDirectories: true)
-        repo = try! Repository(path: folder.appending(path: "notes.sqlite").path)
+        repo = try! Repository(path: ":memory:")
         Task { await start() }
     }
 
     private static let accountKey = "account"
+    private static let accountsKey = "accounts"
+    static let folder: URL = {
+        let f = URL.applicationSupportDirectory.appending(path: "Notes", directoryHint: .isDirectory)
+        try? FileManager.default.createDirectory(at: f, withIntermediateDirectories: true)
+        return f
+    }()
+
+    /// An account's own database on this device.
+    static func database(for id: String) -> String { folder.appending(path: "notes-\(id).sqlite").path }
+
+    private func saveAccounts() { UserDefaults.standard.set(try? JSONEncoder().encode(accounts), forKey: Self.accountsKey) }
 
     private func start() async {
-        await repo.onChange { [weak self] in
-            Task { @MainActor in self?.changed() }
+        accounts = (UserDefaults.standard.data(forKey: Self.accountsKey)).flatMap { try? JSONDecoder().decode([Account].self, from: $0) } ?? []
+        // From before several accounts could be signed in: the one account, its token and its database move over.
+        if accounts.isEmpty, let data = UserDefaults.standard.data(forKey: Self.accountKey), let saved = try? JSONDecoder().decode(Account.self, from: data) {
+            if let token = Keychain.token() {
+                Keychain.save(token, for: saved.id)
+                Keychain.clear(for: "session")
+            }
+            // SQLite keeps recent writes in a -wal file beside the database: all three move together.
+            let old = Self.folder.appending(path: "notes.sqlite").path
+            let new = Self.database(for: saved.id)
+            if FileManager.default.fileExists(atPath: old), !FileManager.default.fileExists(atPath: new) {
+                for suffix in ["", "-wal", "-shm"] where FileManager.default.fileExists(atPath: old + suffix) {
+                    try? FileManager.default.moveItem(atPath: old + suffix, toPath: new + suffix)
+                }
+            }
+            accounts = [saved]
+            saveAccounts()
+            UserDefaults.standard.removeObject(forKey: Self.accountKey)
         }
-        if let token = Keychain.token(), let data = UserDefaults.standard.data(forKey: Self.accountKey),
-            let saved = try? JSONDecoder().decode(Account.self, from: data)
-        {
-            await begin(account: saved, token: token)
+        let current = UserDefaults.standard.string(forKey: "currentAccount")
+        if let account = accounts.first(where: { $0.id == current }) ?? accounts.first, let token = Keychain.token(for: account.id) {
+            await open(account: account, token: token)
         } else {
             phase = .signedOut
         }
+    }
+
+    /// Opens an account's database and starts syncing it.
+    private func open(account: Account, token: String) async {
+        sync = nil
+        openVaults = []
+        repo.keyring.forgetAll()
+        repo = try! Repository(path: Self.database(for: account.id))
+        await repo.onChange { [weak self] in
+            Task { @MainActor in self?.changed() }
+        }
+        UserDefaults.standard.set(account.id, forKey: "currentAccount")
+        page = .journal(StreamFilter())
+        await begin(account: account, token: token)
+    }
+
+    /// Switches to another account signed in on this device.
+    func switchTo(_ account: Account) {
+        guard account.id != self.account?.id, let token = Keychain.token(for: account.id) else { return }
+        Task { await open(account: account, token: token) }
     }
 
     private func begin(account: Account, token: String) async {
@@ -96,20 +145,27 @@ final class AppModel {
         if engine.state == .signedOut { signOut() }
     }
 
+    /// Signed in, on its own or as another account: it goes first in the list, and is opened.
     func signedIn(_ info: SessionInfo, token: String) async {
-        Keychain.save(token)
-        UserDefaults.standard.set(try? JSONEncoder().encode(info.user), forKey: Self.accountKey)
-        // Another account's cards must not stay on this device.
-        if let previous = account, previous.id != info.user.id { try? await repo.clear() }
+        Keychain.save(token, for: info.user.id)
+        accounts = [info.user] + accounts.filter { $0.id != info.user.id }
+        saveAccounts()
+        addingAccount = false
+        repo = try! Repository(path: Self.database(for: info.user.id))
         _ = try? await repo.applyAccess(vaults: info.vaults, shared: [])
-        await begin(account: info.user, token: token)
+        await open(account: info.user, token: token)
     }
 
+    /// Signs this account out of this device: its database, token and drafts go. Another account signed in here is
+    /// opened instead, if there is one.
     func signOut() {
+        guard let leaving = account else { return }
         Drafts.shared.forget()
-        let token = Keychain.token()
-        Keychain.clear()
-        UserDefaults.standard.removeObject(forKey: Self.accountKey)
+        let token = Keychain.token(for: leaving.id)
+        Keychain.clear(for: leaving.id)
+        accounts.removeAll { $0.id == leaving.id }
+        saveAccounts()
+        let old = repo
         account = nil
         sync = nil
         cards = []
@@ -117,14 +173,15 @@ final class AppModel {
         vaults = []
         openVaults = []
         page = .journal(StreamFilter())
-        phase = .signedOut
         Task {
             if let token { await ServerAPI(site: site, token: token).signOut() }
-            try? await repo.clear()
+            try? await old.clear()
+            try? FileManager.default.removeItem(atPath: Self.database(for: leaving.id))
+            if let next = accounts.first, let t = Keychain.token(for: next.id) { await open(account: next, token: t) } else { phase = .signedOut }
         }
     }
 
-    var api: ServerAPI { ServerAPI(site: site, token: Keychain.token(), device: device) }
+    var api: ServerAPI { ServerAPI(site: site, token: account.flatMap { Keychain.token(for: $0.id) }, device: device) }
     @ObservationIgnored private var device: (id: String, name: String)?
 
     /// What this device calls itself in the history its account sees, as the web's "Safari on Mac".

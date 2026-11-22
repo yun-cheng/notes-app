@@ -59,7 +59,7 @@ public struct Vault: Codable, Sendable, Hashable, Identifiable {
     public func isDefault(of userId: String) -> Bool { id == "vault-\(userId)" }
 }
 
-public struct Account: Codable, Sendable, Hashable {
+public struct Account: Codable, Sendable, Hashable, Identifiable {
     public var id: String
     public var email: String
     public var name: String

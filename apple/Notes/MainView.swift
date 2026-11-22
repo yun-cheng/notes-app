@@ -23,6 +23,7 @@ struct MainView: View {
             EntrySheet(id: entry.id)
         }
         .sheet(isPresented: $model.showPalette) { CommandPalette() }
+        .sheet(isPresented: $model.addingAccount) { SignInView() }
         .sheet(item: $model.panel) { panel in EntryPanelView(panel: panel) }
         #if os(iOS)
         .quickLookPreview($model.preview)
@@ -237,6 +238,14 @@ struct AccountBadge: View {
     var body: some View {
         if let account = model.account {
             Menu {
+                // Every account signed in on this device, to switch to, and another to add.
+                ForEach(model.accounts) { other in
+                    Button { model.switchTo(other) } label: {
+                        Label("\(other.name) (\(other.email))", systemImage: other.id == account.id ? "checkmark.circle.fill" : "person.circle")
+                    }
+                }
+                Button("Add another account") { model.addingAccount = true }
+                Divider()
                 Button("Settings") {
                     model.page = .settings
                     onPick()

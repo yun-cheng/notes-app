@@ -73,6 +73,11 @@ object Reminders {
         c.getSystemService(NotificationManager::class.java).createNotificationChannel(NotificationChannel(CHANNEL, "Due todos", NotificationManager.IMPORTANCE_DEFAULT))
     }
 
+    /** Nothing to do itself: the app's start, which a broadcast brings, reschedules the reminders. */
+    class BootReceiver : BroadcastReceiver() {
+        override fun onReceive(c: Context, intent: Intent) {}
+    }
+
     class ReminderReceiver : BroadcastReceiver() {
         override fun onReceive(c: Context, intent: Intent) {
             val id = intent.getStringExtra("cardId") ?: return

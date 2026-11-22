@@ -41,6 +41,7 @@ struct BubbleView: View {
             if page == 0 {
                 BubbleAttachments(card: card)
                 BubbleLinks(card: card)
+                BubbleTranslation(card: card)
             }
             if Doc.previewLines(doc).count > 6 {
                 Button(unfolded ? "Less" : "More") { unfolded.toggle() }

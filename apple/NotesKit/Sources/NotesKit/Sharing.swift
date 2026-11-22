@@ -369,3 +369,19 @@ extension ServerAPI {
         }
     }
 }
+
+extension ServerAPI {
+    public enum Translated: Sendable { case done(from: String, to: String, pieces: [String]), same(from: String), limit, failed }
+
+    /// An entry's pieces translated by the server into `to`, or into `otherwise` when they're in `to` already.
+    public func translate(cardId: String, pieces: [String], to: String, otherwise: String?) async -> Translated {
+        struct Body: Encodable { let cardId: String; let pieces: [String]; let to: String; let otherwise: String? }
+        struct R: Decodable { let kind: String; let from: String?; let to: String?; let pieces: [String]? }
+        guard let (data, status) = try? await send("/translate", method: "POST", body: Body(cardId: cardId, pieces: pieces, to: to, otherwise: otherwise)) else { return .failed }
+        if status == 429 { return .limit }
+        guard (200..<300).contains(status), let r = try? JSONDecoder().decode(R.self, from: data) else { return .failed }
+        if r.kind == "same" { return .same(from: r.from ?? "") }
+        guard let pieces = r.pieces, let from = r.from else { return .failed }
+        return .done(from: from, to: r.to ?? to, pieces: pieces)
+    }
+}

@@ -73,6 +73,11 @@ struct EntryMenu: View {
     @ViewBuilder
     private var more: some View {
         Divider()
+        if case .done(let kept)? = Translations.shared.states[card.id] {
+            Button(kept.shown ? "Show original" : "Show in \(Locale.current.localizedString(forLanguageCode: kept.to) ?? kept.to)") { Translations.shared.show(card.id, !kept.shown) }
+        } else {
+            Button("Translate") { Translations.shared.translate(card, model: model) }
+        }
         if Doc.previewLines(card.content, hidden: .mark).joined().contains(Doc.hideOpen) {
             Button("Show hidden words", action: revealHidden)
         }

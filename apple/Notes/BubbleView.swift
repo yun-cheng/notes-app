@@ -55,14 +55,14 @@ struct BubbleView: View {
         .background(shape.fill(background))
         .overlay(shape.stroke(picked ? Theme.accent : card.color.map { Theme.tint($0).opacity(0.5) } ?? Theme.line, lineWidth: picked ? 2 : 1))
         .contentShape(shape)
+        #if os(macOS)
+        // A double-click opens it on a computer, as on the web; a click picks it while picking.
         .onTapGesture(count: 2) { model.openEntry = card.id }
-        .onTapGesture {
-            #if os(iOS)
-            if picking { onPick() } else { model.openEntry = card.id }
-            #else
-            if picking { onPick() }
-            #endif
-        }
+        .onTapGesture { if picking { onPick() } }
+        #else
+        // A tap opens it on a phone, with no wait for a second tap.
+        .onTapGesture { if picking { onPick() } else { model.openEntry = card.id } }
+        #endif
         .modifier(PickOnCommandClick(onPick: onPick))
         .contextMenu { EntryMenu(card: card, revealHidden: { revealed.toggle() }) }
         }

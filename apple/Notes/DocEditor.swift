@@ -27,6 +27,10 @@ struct DocEditor: View {
                     }
                     .toolbar {
                         ToolbarItemGroup(placement: .secondaryAction) {
+                            Button { toggleMarker("☐ ") } label: { Label("Checklist", systemImage: "checklist") }
+                            Button(action: tick) { Label("Tick", systemImage: "checkmark.square") }
+                            Button(action: hide) { Label("Hide", systemImage: "eye.slash") }
+                                .keyboardShortcut("h", modifiers: [.command, .shift])
                             Button { toggleMarker("• ") } label: { Label("Bulleted list", systemImage: "list.bullet") }
                             Button { toggleMarker("1. ") } label: { Label("Numbered list", systemImage: "list.number") }
                             Button { toggleMarker("## ") } label: { Label("Heading", systemImage: "textformat.size") }
@@ -97,6 +101,16 @@ struct DocEditor: View {
             start = new.characters.index(before: start)
         }
         let line = String(new.characters[start..<newline])
+        if let task = DocText.taskMarker(line) {
+            // A checklist goes on with a new box, or ends on an empty one.
+            if line.dropFirst(task.length).trimmingCharacters(in: .whitespaces).isEmpty {
+                doc.text.transform(updating: &selection) { text in text.removeSubrange(start..<text.characters.index(after: newline)) }
+            } else {
+                let next = String(repeating: "  ", count: task.indent) + "☐ "
+                doc.text.transform(updating: &selection) { text in text.insert(Self.marker(next), at: cursor) }
+            }
+            return
+        }
         guard let marker = DocText.listMarker(line) else { return }
         let rest = line.dropFirst(marker.length)
         if rest.trimmingCharacters(in: .whitespaces).isEmpty {
@@ -113,11 +127,34 @@ struct DocEditor: View {
         }
     }
 
+    /// Ticks the checklist item on the cursor's line, or unticks it.
+    private func tick() {
+        guard let start = lineStart(doc.text) else { return }
+        let rest = String(doc.text.characters[start...].prefix { $0 != "\n" })
+        guard let task = DocText.taskMarker(rest) else { return }
+        let at = doc.text.characters.index(start, offsetBy: task.indent * 2)
+        doc.text.transform(updating: &selection) { text in
+            let end = text.characters.index(at, offsetBy: 1)
+            text.replaceSubrange(at..<end, with: Self.marker(task.checked ? "☐" : "☑"))
+        }
+    }
+
+    /// Hides the selected words under dots in the bubble, as the web's Hide, or shows them again.
+    private func hide() {
+        guard case .ranges(let ranges) = selection.indices(in: doc.text) else { return }
+        doc.text.transform(updating: &selection) { text in
+            for range in ranges.ranges {
+                let hidden = text[range].runs.allSatisfy { $0.backgroundColor != nil }
+                text[range].backgroundColor = hidden ? nil : DocText.hiddenTint
+            }
+        }
+    }
+
     /// Adds a block marker to the cursor's line, or removes it if the line already has it.
     private func toggleMarker(_ marker: String) {
         guard let start = lineStart(doc.text) else { return }
         let rest = String(doc.text.characters[start...].prefix { $0 != "\n" })
-        let existing = DocText.listMarker(rest).map { rest.prefix($0.length) }
+        let existing = DocText.taskMarker(rest).map { rest.prefix($0.length) } ?? DocText.listMarker(rest).map { rest.prefix($0.length) }
             ?? ["## ", "# ", "### ", "> "].first { rest.hasPrefix($0) }.map { rest.prefix($0.count) }
         doc.text.transform(updating: &selection) { text in
             if let existing {

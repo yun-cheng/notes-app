@@ -87,8 +87,25 @@ import Testing
         #expect(DocText(text: AttributedString(""), stash: [:]).doc(in: context) == doc(para()))
         #expect(String(DocText(doc: Doc.empty).text.characters) == "")
     }
+
+    @Test func checklistsAndHiddenWords() {
+        func item(_ checked: Bool, _ content: JSONValue...) -> JSONValue { ["type": "taskItem", "attrs": ["checked": .bool(checked)], "content": .array(content)] }
+        let d = doc(
+            para(text("Pack")),
+            ["type": "taskList", "content": [item(false, para(text("passport"))), item(true, para(text("charger")), ["type": "taskList", "content": [item(false, para(text("cable")))]])]],
+            para(text("The code is "), text("1234", ["hidden"])),
+        )
+        #expect(roundTrip(d) == d)
+        #expect(String(DocText(doc: d).text.characters).contains("☑ charger\n  ☐ cable"))
+        // Typed in: boxes as [ ] and [x], hidden words between bars.
+        let typed = DocText(text: AttributedString("[ ] milk\n[x] eggs\nPIN ||4321|| ok"), stash: [:]).doc(in: context)
+        #expect(typed == doc(
+            ["type": "taskList", "content": [item(false, para(text("milk"))), item(true, para(text("eggs")))]],
+            para(text("PIN "), text("4321", ["hidden"]), text(" ok"))))
+    }
 }
 
 extension JSONValue {
     subscript(index: Int) -> JSONValue? { arrayValue.flatMap { index < $0.count ? $0[index] : nil } }
+
 }

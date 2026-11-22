@@ -34,6 +34,8 @@ public struct DocText: Sendable {
     // MARK: Fonts
 
     public static let bodyFont = Font.body
+    /// The tint hidden words have while editing.
+    public static let hiddenTint = Color.gray.opacity(0.35)
     static func headingFont(_ level: Int) -> Font {
         switch level {
         case 1: .title.bold()
@@ -111,6 +113,8 @@ public struct DocText: Sendable {
                 inline(node["content"]?.arrayValue ?? [], font: font)
             case "bulletList", "orderedList":
                 list(node, prefix: prefix, depth: 0)
+            case "taskList":
+                tasks(node, prefix: prefix, depth: 0)
             case "blockquote":
                 blocks(node["content"]?.arrayValue ?? [], prefix: prefix + "> ")
             case "codeBlock":
@@ -132,6 +136,40 @@ public struct DocText: Sendable {
                 newLine()
                 out += marker(prefix)
                 out += placeholder(node, block: true)
+            }
+        }
+
+        /// A checklist: each item a line starting with ☐ or ☑, nested ones indented two spaces a level.
+        mutating func tasks(_ node: JSONValue, prefix: String, depth: Int) {
+            let indent = String(repeating: "  ", count: depth)
+            for item in node["content"]?.arrayValue ?? [] {
+                let box = item["attrs"]?["checked"]?.boolValue == true ? "☑ " : "☐ "
+                var first = true
+                for child in item["content"]?.arrayValue ?? [] {
+                    switch child["type"]?.stringValue {
+                    case "taskList":
+                        if first {
+                            newLine()
+                            out += marker(prefix + indent + box)
+                            first = false
+                        }
+                        tasks(child, prefix: prefix, depth: depth + 1)
+                    case "paragraph":
+                        newLine()
+                        out += marker(prefix + indent + (first ? box : "  "))
+                        inline(child["content"]?.arrayValue ?? [], font: DocText.bodyFont)
+                        first = false
+                    default:
+                        newLine()
+                        out += marker(prefix + indent + (first ? box : "  "))
+                        out += placeholder(child, block: true)
+                        first = false
+                    }
+                }
+                if first {
+                    newLine()
+                    out += marker(prefix + indent + box)
+                }
             }
         }
 
@@ -200,6 +238,8 @@ public struct DocText: Sendable {
                 case "strike": a.strikethroughStyle = .single
                 case "underline": a.underlineStyle = .single
                 case "link": a.link = mark["attrs"]?["href"]?.stringValue.flatMap(URL.init(string:))
+                // Hidden words keep a tint of their own in the editor, and are read back by it.
+                case "hidden": a.backgroundColor = DocText.hiddenTint
                 default: break
                 }
             }
@@ -257,6 +297,23 @@ public struct DocText: Sendable {
         return nil
     }
 
+    public struct TaskMarker: Sendable {
+        public var indent: Int
+        public var checked: Bool
+        public var length: Int
+    }
+
+    /// A checklist item's box at the start of a line: "☐ ", "☑ ", or as typed, "[ ] " and "[x] ".
+    public static func taskMarker(_ s: String) -> TaskMarker? {
+        let spaces = s.prefix { $0 == " " }.count
+        let rest = s.dropFirst(spaces)
+        if rest.hasPrefix("☐ ") || rest.hasPrefix("☑ ") { return TaskMarker(indent: spaces / 2, checked: rest.hasPrefix("☑"), length: spaces + 2) }
+        for (box, checked) in [("[ ] ", false), ("[x] ", true), ("[X] ", true)] where rest.hasPrefix(box) {
+            return TaskMarker(indent: spaces / 2, checked: checked, length: spaces + box.count)
+        }
+        return nil
+    }
+
     struct Parser {
         let stash: [String: JSONValue]
         let context: Font.Context
@@ -304,6 +361,20 @@ public struct DocText: Sendable {
                     out.append(node)
                     continue
                 }
+                if DocText.taskMarker(s) != nil {
+                    var items: [Line] = []
+                    while i < lines.count {
+                        let l = lines[i].string
+                        if DocText.taskMarker(l) != nil || (l.hasPrefix("  ") && !l.trimmingCharacters(in: .whitespaces).isEmpty && DocText.listMarker(l) == nil) {
+                            items.append(lines[i])
+                            i += 1
+                        } else {
+                            break
+                        }
+                    }
+                    out.append(taskList(items, indent: DocText.taskMarker(s)!.indent))
+                    continue
+                }
                 if let marker = DocText.listMarker(s) {
                     var items: [Line] = []
                     while i < lines.count {
@@ -332,6 +403,34 @@ public struct DocText: Sendable {
                 }
             }
             return out
+        }
+
+        /// Checklist lines, starting at `indent`, as a task list; deeper ones nest in the item before them.
+        func taskList(_ lines: [Line], indent: Int) -> JSONValue {
+            var items: [JSONValue] = []
+            var i = 0
+            while i < lines.count {
+                let line = lines[i]
+                guard let marker = DocText.taskMarker(line.string), marker.indent <= indent else {
+                    i += 1
+                    continue
+                }
+                var content: [JSONValue] = [(["type": "paragraph", "content": .array(inline(line.dropping(marker.length), heading: false))] as JSONValue).pruned]
+                i += 1
+                var nested: [Line] = []
+                while i < lines.count {
+                    if let m = DocText.taskMarker(lines[i].string), m.indent <= indent { break }
+                    nested.append(lines[i])
+                    i += 1
+                }
+                if let first = nested.first, let m = DocText.taskMarker(first.string) {
+                    content.append(taskList(nested, indent: m.indent))
+                } else {
+                    for l in nested { content += blocks([l.dropping(l.string.prefix { $0 == " " }.count)]) }
+                }
+                items.append(["type": "taskItem", "attrs": ["checked": .bool(marker.checked)], "content": .array(content)])
+            }
+            return ["type": "taskList", "content": .array(items)]
         }
 
         func headingLevel(_ s: String) -> Int? {
@@ -423,23 +522,44 @@ public struct DocText: Sendable {
                     if resolved.isMonospaced { marks.append(["type": "code"]) }
                 }
                 if run.strikethroughStyle != nil { marks.append(["type": "strike"]) }
+                let hidden = run.backgroundColor != nil
                 if run.underlineStyle != nil { marks.append(["type": "underline"]) }
                 if let url = run.link { marks.append(["type": "link", "attrs": ["href": .string(url.absoluteString)]]) }
                 // A line break inside a paragraph.
                 for (k, part) in s.split(separator: "\u{2028}", omittingEmptySubsequences: false).enumerated() {
                     if k > 0 { out.append(["type": "hardBreak"]) }
                     if part.isEmpty { continue }
-                    var node: JSONValue = ["type": "text", "text": .string(String(part))]
-                    if !marks.isEmpty { node["marks"] = .array(marks) }
+                    // `||words||` typed in hides them, as in the web app's editor.
+                    for (piece, typedHidden) in DocText.hiddenRuns(String(part)) {
+                    var pieceMarks = marks
+                    if hidden || typedHidden { pieceMarks.append(["type": "hidden"]) }
+                    var node: JSONValue = ["type": "text", "text": .string(piece)]
+                    if !pieceMarks.isEmpty { node["marks"] = .array(pieceMarks) }
                     if let last = out.last, last["type"]?.stringValue == "text", last["marks"] == node["marks"] {
-                        out[out.count - 1]["text"] = .string((last["text"]?.stringValue ?? "") + String(part))
+                        out[out.count - 1]["text"] = .string((last["text"]?.stringValue ?? "") + piece)
                     } else {
                         out.append(node)
+                    }
                     }
                 }
             }
             return out
         }
+    }
+}
+
+extension DocText {
+    /// Text cut where `||words||` marks words to hide; the bars go.
+    static func hiddenRuns(_ s: String) -> [(String, Bool)] {
+        var out: [(String, Bool)] = []
+        var rest = Substring(s)
+        while let open = rest.range(of: "||"), let close = rest[open.upperBound...].range(of: "||"), close.lowerBound > open.upperBound {
+            if open.lowerBound > rest.startIndex { out.append((String(rest[..<open.lowerBound]), false)) }
+            out.append((String(rest[open.upperBound..<close.lowerBound]), true))
+            rest = rest[close.upperBound...]
+        }
+        if !rest.isEmpty || out.isEmpty { out.append((String(rest), false)) }
+        return out.filter { !$0.0.isEmpty }
     }
 }
 

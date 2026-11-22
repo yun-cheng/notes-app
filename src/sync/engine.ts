@@ -127,6 +127,12 @@ export class SyncEngine {
         break;
       case 'retry':
         break;
+      case 'forbidden':
+        // Refused for good, as when this account was made a viewer: the server's version is taken, so the card syncs
+        // again, and what was typed here is kept as a copy in the account's own vault.
+        if (result.server && (await this.repo.forceRemote(result.server, local.updated_at))) await this.repo.saveConflictCopy(local, result.server, { home: true });
+        else refused.add(local.id);
+        break;
       default:
         refused.add(local.id);
     }

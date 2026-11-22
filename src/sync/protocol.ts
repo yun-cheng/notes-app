@@ -39,8 +39,13 @@ export type PushResult =
   | { id: string; status: 'conflict_client_won'; seq: number; loser: CardRecord }
   /** Both sides changed. The server's version was newer and was kept. */
   | { id: string; status: 'conflict_server_won'; server: CardRecord }
+  /**
+   * This account may not make that change (no longer an editor, say). `server` is the card as the server has it, when
+   * the account can still read it, for the device to take instead.
+   */
+  | { id: string; status: 'forbidden'; server?: CardRecord }
   /** `bad_clock`: the device's clock is more than a day ahead of the server's. */
-  | { id: string; status: 'retry' | 'forbidden' | 'too_large' | 'bad_clock' };
+  | { id: string; status: 'retry' | 'too_large' | 'bad_clock' };
 
 export interface PushResponse {
   results: PushResult[];

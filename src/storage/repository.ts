@@ -718,11 +718,16 @@ export class CardRepository {
     return this.store.setMeta('cursor', seq);
   }
 
-  /** Keeps the losing side of a conflict as its own card, when it holds text the winner doesn't. */
-  saveConflictCopy(loserRecord: CardRecord, winnerRecord: CardRecord): Promise<void> {
+  /**
+   * Keeps the losing side of a conflict as its own card, when it holds text the winner doesn't. `home` puts it in this
+   * account's own vault, for an edit the server refused in a vault it can no longer change; never out of an encrypted
+   * vault, whose words would be stored readable there.
+   */
+  saveConflictCopy(loserRecord: CardRecord, winnerRecord: CardRecord, { home = false } = {}): Promise<void> {
     return this.enqueue(async () => {
       const [loser, winner] = await Promise.all([this.decode(loserRecord), this.decode(winnerRecord)]);
       if (loser.deleted || loser.type === 'tag' || isBlank(loser)) return;
+      if (home && this.codec.isEncrypted?.(loser.vaultId)) return;
       // Its other pages count too: an edit on page 2 is as much the losing side's words as one on page 1.
       const pages = storedPages(loser);
       if (loser.title === winner.title && JSON.stringify([loser.content, pages]) === JSON.stringify([winner.content, storedPages(winner)])) return;
@@ -731,7 +736,7 @@ export class CardRepository {
       const title = `${loser.title.trim() || 'Untitled'} (conflict copy)`;
       const common = {
         id: this.newId(),
-        vaultId: loser.vaultId,
+        vaultId: home ? (await this.defaultVault()).id : loser.vaultId,
         updatedAt: at,
         createdAt: loser.createdAt,
         deleted: false,

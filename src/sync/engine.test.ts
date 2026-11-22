@@ -56,10 +56,10 @@ function createServer() {
   return { signIn, transport, app, env, db };
 }
 
-async function createDevice(vaults: Vault[], transport: SyncTransport & { online?: boolean }) {
+async function createDevice(vaults: Vault[], transport: SyncTransport & { online?: boolean }, mainVault?: string) {
   const store = new MemoryStore();
   await store.putVaults(vaults);
-  const repo = new CardRepository(store, jsonCodec, () => clock++, () => `id-${++ids}`);
+  const repo = new CardRepository(store, jsonCodec, () => clock++, () => `id-${++ids}`, undefined, mainVault);
   await repo.init();
   const engine = new SyncEngine(repo, transport, 0, () => clock);
   const cards = async () => Promise.all((await store.listCards()).map((r) => repo.decode(r)));
@@ -187,6 +187,30 @@ describe('conflicts', () => {
       expect(cards.find((c) => c.id === card.id)?.pages).toEqual([doc('newer page edit')]);
       expect(cards.find((c) => c.title === 'Base (conflict copy)')?.pages).toEqual([doc('older page edit')]);
     }
+  });
+
+  it('takes the server\'s version of a card it may no longer change, keeping what was typed as a copy of its own', async () => {
+    const server = createServer();
+    const ann = await server.signIn('ann');
+    const bob = await server.signIn('bob');
+    const annVault = ann.info.vaults[0].id;
+    server.db.raw.prepare(`INSERT INTO vault_members (vault_id, user_id, role) VALUES (?, ?, 'editor')`).run(annVault, bob.info.user.id);
+    const annPhone = await createDevice(ann.info.vaults, server.transport(ann.cookie));
+    const card = await annPhone.repo.createNote({ title: 'Shared plan', vaultId: annVault });
+    await annPhone.engine.sync();
+    const bobTransport = server.transport(bob.cookie);
+    const bobPhone = await createDevice(await bobTransport.vaults(), bobTransport, bob.info.vaults[0].id);
+    await bobPhone.engine.sync();
+    await bobPhone.repo.update(card.id, { content: doc('bob was here') });
+    // Made a viewer before his edit went up.
+    server.db.raw.prepare(`UPDATE vault_members SET role = 'viewer' WHERE vault_id = ? AND user_id = ?`).run(annVault, bob.info.user.id);
+    await bobPhone.engine.sync();
+    const cards = await bobPhone.cards();
+    expect(cards.find((c) => c.id === card.id)?.content).not.toEqual(doc('bob was here'));
+    const copy = cards.find((c) => c.title === 'Shared plan (conflict copy)');
+    expect(copy?.content).toEqual(doc('bob was here'));
+    expect(copy?.vaultId).toBe(bob.info.vaults[0].id);
+    expect(bobPhone.engine.getStatus().pending).toBe(0);
   });
 
   it('reaches the same result when the newer side pushes first', async () => {

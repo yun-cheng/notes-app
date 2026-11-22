@@ -87,9 +87,12 @@ export async function pushRecords(
     } else if (record.updated_at > now + MAX_CLOCK_AHEAD) {
       // The newer edit wins a conflict, so a device whose clock is far ahead would win every one for years.
       results.set(id, { id, status: 'bad_clock' });
-    } else if (!mayWrite(record, current, writable, editable) || (encrypted.has(record.vault_id) && !record.payload.startsWith('e1:'))) {
+    } else if (encrypted.has(record.vault_id) && !record.payload.startsWith('e1:')) {
       // An encrypted vault only takes ciphertext, so a device that missed the change can't write plaintext into it.
       results.set(id, { id, status: 'forbidden' });
+    } else if (!mayWrite(record, current, writable, editable)) {
+      // Its version goes back with the refusal, when this account can still read it, so the device can take it.
+      results.set(id, { id, status: 'forbidden', ...(current ? { server: current } : {}) });
     } else if (!current) {
       writes.push({ record, expected: null, result: (seq) => ({ id, status: 'ok', seq }) });
     } else if (current.seq === record.seq) {
@@ -99,6 +102,21 @@ export async function pushRecords(
     } else {
       results.set(id, { id, status: 'conflict_server_won', server: current });
     }
+  }
+
+  // Only what this account can read goes back with a refusal.
+  const refusedWith = [...results.values()].filter((r) => r.status === 'forbidden' && r.server);
+  if (refusedWith.length) {
+    const ids = refusedWith.map((r) => r.id);
+    const { results: readable } = await db
+      .prepare(
+        `SELECT c.id FROM cards c WHERE c.id IN (${ids.map(() => '?').join(',')})
+           AND (c.vault_id IN (SELECT vault_id FROM vault_access WHERE user_id = ?) OR c.id IN (SELECT s.card_id FROM card_shares s WHERE ${SHARED_WITH}))`,
+      )
+      .bind(...ids, userId, userId, userId)
+      .all<{ id: string }>();
+    const can = new Set(readable.map((r) => r.id));
+    for (const r of refusedWith) if (!can.has(r.id)) results.set(r.id, { id: r.id, status: 'forbidden' });
   }
 
   if (writes.length) {

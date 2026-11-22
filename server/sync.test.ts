@@ -130,5 +130,7 @@ describe('separation between accounts', () => {
     expect((await pull(bob.cookie)).records.map((r) => r.id)).toEqual(['ann-secret']);
     const [result] = await push(bob.cookie, [rec(ann.vault, 'ann-secret', { seq: 1, updated_at: 999_999 })]);
     expect(result.status).toBe('forbidden');
+    // A card he can read comes back with the refusal, for his device to take instead.
+    expect(result).toMatchObject({ server: { id: 'ann-secret', payload: 'private' } });
   });
 });

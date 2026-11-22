@@ -88,14 +88,19 @@ final class CardStore {
     }
 
     /// Changes from the server. A card with unpushed local changes keeps them; push settles it.
-    func applyRemote(_ records: [CardRecord]) throws {
+    /// Returns how many it stored: none when each is waiting to be pushed or already here.
+    @discardableResult
+    func applyRemote(_ records: [CardRecord]) throws -> Int {
+        var stored = 0
         try db.transaction {
             for r in records {
                 if try !db.query("SELECT 1 FROM dirty WHERE id = ?", [.text(r.id)]).isEmpty { continue }
-                if let current = try getCard(r.id), current.seq == r.seq { continue }
+                if let seq = try db.query("SELECT seq FROM cards WHERE id = ?", [.text(r.id)]).first?[0] as? Int64, seq == r.seq { continue }
                 try put(r)
+                stored += 1
             }
         }
+        return stored
     }
 
     /// The server's version wins. Given `ifUpdatedAt`, an edit made since then stays instead, and this says false.

@@ -436,8 +436,8 @@ public actor Repository {
     }
 
     public func applyRemote(_ records: [CardRecord]) throws {
-        try store.applyRemote(records)
-        if !records.isEmpty { changeHandler?() }
+        // A pull that only echoes this device's own pushes changes nothing to show.
+        if try store.applyRemote(records) > 0 { changeHandler?() }
     }
 
     /// Takes the server's version of a card. Given `ifUpdatedAt`, an edit made since then stays instead, and this says false.

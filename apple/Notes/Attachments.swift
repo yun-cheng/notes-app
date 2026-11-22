@@ -136,12 +136,15 @@ final class Attachments {
             kCGImageSourceCreateThumbnailFromImageAlways: true, kCGImageSourceThumbnailMaxPixelSize: 2048,
             kCGImageSourceCreateThumbnailWithTransform: true,
         ]
-        guard let image = CGImageSourceCreateThumbnailAtIndex(source, 0, options as CFDictionary) else { return nil }
+        guard let image = CGImageSourceCreateThumbnailAtIndex(source, 0, options as CFDictionary), let jpeg = jpeg(image, quality: 0.85) else { return nil }
+        return (jpeg, "image/jpeg", Double(image.width), Double(image.height))
+    }
+
+    nonisolated static func jpeg(_ image: CGImage, quality: Double) -> Data? {
         let out = NSMutableData()
         guard let dest = CGImageDestinationCreateWithData(out, UTType.jpeg.identifier as CFString, 1, nil) else { return nil }
-        CGImageDestinationAddImage(dest, image, [kCGImageDestinationLossyCompressionQuality: 0.85] as CFDictionary)
-        guard CGImageDestinationFinalize(dest) else { return nil }
-        return (out as Data, "image/jpeg", Double(image.width), Double(image.height))
+        CGImageDestinationAddImage(dest, image, [kCGImageDestinationLossyCompressionQuality: quality] as CFDictionary)
+        return CGImageDestinationFinalize(dest) ? out as Data : nil
     }
 
     /// The largest file the server takes, and the largest video.
@@ -165,7 +168,7 @@ final class Attachments {
         guard let photo = await Task.detached(operation: { Self.prepare(raw) }).value else { throw AddError.notAPicture }
         let id = given ?? UUID().uuidString.lowercased()
         try await keep(id, photo.data, vaultId: vaultId, model: model, seal: seal, pending: Pending(id: id, vaultId: vaultId, mime: photo.mime, sealed: false, width: photo.width, height: photo.height))
-        return ["type": "photo", "attrs": ["id": .string(id)]]
+        return Doc.photoNode(id)
     }
 
     /// Keeps a file (a video, a sound, a PDF, anything) and queues its upload. Returns the file node.
@@ -181,14 +184,8 @@ final class Attachments {
         let generator = AVAssetImageGenerator(asset: asset)
         generator.appliesPreferredTrackTransform = true
         generator.maximumSize = CGSize(width: 1280, height: 1280)
-        var poster: Data?
-        if let image = try? await generator.image(at: CMTime(seconds: min(0.5, (duration ?? 0) / 2), preferredTimescale: 600)).image {
-            let out = NSMutableData()
-            if let dest = CGImageDestinationCreateWithData(out, UTType.jpeg.identifier as CFString, 1, nil) {
-                CGImageDestinationAddImage(dest, image, [kCGImageDestinationLossyCompressionQuality: 0.82] as CFDictionary)
-                if CGImageDestinationFinalize(dest) { poster = out as Data }
-            }
-        }
+        let still = try? await generator.image(at: CMTime(seconds: min(0.5, (duration ?? 0) / 2), preferredTimescale: 600)).image
+        let poster = still.flatMap { jpeg($0, quality: 0.82) }
         return (poster, size.map { Double(abs($0.width)) }, size.map { Double(abs($0.height)) }, duration.flatMap { $0.isFinite && $0 > 0 ? $0 : nil })
     }
 
@@ -213,10 +210,7 @@ final class Attachments {
         }
         let id = given ?? UUID().uuidString.lowercased()
         try await keep(id, data, vaultId: vaultId, model: model, seal: seal, pending: Pending(id: id, vaultId: vaultId, mime: mime, sealed: false, fileName: name, duration: duration))
-        var attrs: [String: JSONValue] = ["id": .string(id), "name": .string(name), "mime": .string(mime), "size": .int(Int64(data.count))]
-        if let duration { attrs["duration"] = .double(duration) }
-        attrs.merge(extra) { _, new in new }
-        return ["type": "file", "attrs": .object(attrs)]
+        return Doc.fileNode(id: id, name: name, mime: mime, size: Int64(data.count), duration: duration, extra: extra)
     }
 
     /// Seals it if it's to be sealed and writes it here, both off the main thread (a video can be a gigabyte).
@@ -524,20 +518,9 @@ final class AttachmentKeeper {
     func putBack(_ a: StoredAttachment, model: AppModel) {
         let stillId = Doc.posterId(a.id)
         let still = a.mime.hasPrefix("video/") && trash.contains { $0.id == stillId } ? stillId : nil
-        var attrs: [String: JSONValue] = ["id": .string(a.id)]
-        let node: JSONValue
-        if a.isFile {
-            attrs["name"] = .string(a.name ?? "Untitled")
-            attrs["mime"] = .string(a.mime)
-            attrs["size"] = .int(a.size)
-            if let still { attrs["poster"] = .string(still) }
-            if let w = a.width { attrs["width"] = .double(w) }
-            if let h = a.height { attrs["height"] = .double(h) }
-            if let d = a.duration { attrs["duration"] = .double(d) }
-            node = ["type": "file", "attrs": .object(attrs)]
-        } else {
-            node = ["type": "photo", "attrs": .object(attrs)]
-        }
+        let node = a.isFile
+            ? Doc.fileNode(id: a.id, name: a.name ?? "Untitled", mime: a.mime, size: a.size, poster: still, width: a.width, height: a.height, duration: a.duration)
+            : Doc.photoNode(a.id)
         let from = a.trashed_from.flatMap { model.card($0) }
         model.perform { repo in
             if let from, from.isEntry, !from.deleted, await model.canEdit(from) {

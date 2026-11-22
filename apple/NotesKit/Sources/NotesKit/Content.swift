@@ -247,6 +247,24 @@ extension Doc {
         public var symbol: String { Doc.fileSymbol(mime: mime) }
     }
 
+    /// A photo as an entry holds it.
+    public static func photoNode(_ id: String) -> JSONValue { ["type": "photo", "attrs": ["id": .string(id)]] }
+
+    /// A file as an entry holds it, with what else is known: a video's still and shape, a sound's length, and any
+    /// `extra` attributes.
+    public static func fileNode(
+        id: String, name: String, mime: String, size: Int64, poster: String? = nil, width: Double? = nil, height: Double? = nil,
+        duration: Double? = nil, extra: [String: JSONValue] = [:]
+    ) -> JSONValue {
+        var attrs: [String: JSONValue] = ["id": .string(id), "name": .string(name), "mime": .string(mime), "size": .int(size)]
+        if let poster { attrs["poster"] = .string(poster) }
+        if let width { attrs["width"] = .double(width) }
+        if let height { attrs["height"] = .double(height) }
+        if let duration { attrs["duration"] = .double(duration) }
+        attrs.merge(extra) { _, new in new }
+        return ["type": "file", "attrs": .object(attrs)]
+    }
+
     /// The SF Symbol a file is shown with, the same everywhere it shows.
     public static func fileSymbol(mime: String?) -> String {
         let m = mime ?? ""

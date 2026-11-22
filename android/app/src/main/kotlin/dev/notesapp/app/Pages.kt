@@ -411,7 +411,7 @@ fun PhotosPage(openDrawer: (() -> Unit)?) {
             }
         }
         Row(Modifier.padding(horizontal = 16.dp, vertical = 6.dp)) {
-            TypeSwitchOf(listOf("All", "Photos", "Videos"), kind) { kind = it }
+            Segmented(listOf("All", "Photos", "Videos").map { it to it }, kind) { kind = it }
         }
         LazyVerticalGrid(GridCells.Adaptive(110.dp), Modifier.fillMaxSize(), contentPadding = PaddingValues(16.dp), horizontalArrangement = Arrangement.spacedBy(4.dp), verticalArrangement = Arrangement.spacedBy(4.dp)) {
             for ((day, dayItems) in days) {
@@ -448,13 +448,16 @@ fun shareFiles(context: android.content.Context, files: List<java.io.File>, mime
     context.startActivity(android.content.Intent.createChooser(send, null).addFlags(android.content.Intent.FLAG_ACTIVITY_NEW_TASK))
 }
 
-/** A row of choices, one picked, as the journal's All · Notes · Todos switch. */
+/** A row of choices, one picked, as the journal's All · Notes · Todos switch: each a label and the value it picks. */
 @Composable
-fun TypeSwitchOf(options: List<String>, value: String, set: (String) -> Unit) {
+fun <T> Segmented(options: List<Pair<String, T>>, value: T, set: (T) -> Unit) {
     Row(Modifier.clip(RoundedCornerShape(50)).background(Theme.sunken).padding(2.dp), horizontalArrangement = Arrangement.spacedBy(2.dp)) {
-        for (o in options) {
-            val on = o == value
-            Text(o, Modifier.clip(RoundedCornerShape(50)).background(if (on) Theme.raised else Color.Transparent).clickable { set(o) }.padding(horizontal = 12.dp, vertical = 4.dp), fontSize = 14.sp, fontWeight = if (on) FontWeight.SemiBold else FontWeight.Normal, color = if (on) Theme.text else Theme.muted)
+        for ((label, v) in options) {
+            val on = v == value
+            Text(
+                label, Modifier.clip(RoundedCornerShape(50)).background(if (on) Theme.raised else Color.Transparent).clickable { set(v) }.padding(horizontal = 12.dp, vertical = 4.dp),
+                fontSize = 14.sp, fontWeight = if (on) FontWeight.SemiBold else FontWeight.Normal, color = if (on) Theme.text else Theme.muted,
+            )
         }
     }
 }

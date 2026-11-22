@@ -249,7 +249,7 @@ fun GroupBlock(group: TagGroup) {
     FormSection(group.title) {
         FormField(name, { name = it }, "Group name", onDone = { val t = name.trim(); if (t.isEmpty() || t == group.title) name = group.title else set("title", j(t)) })
         Row(Modifier.padding(horizontal = 16.dp, vertical = 6.dp)) {
-            TypeSwitchOf(listOf("One per entry", "Any number"), if (group.choosesOne) "One per entry" else "Any number") { set("choice", j(if (it == "One per entry") "one" else "many")) }
+            Segmented(listOf("One per entry" to "one", "Any number" to "many"), if (group.choosesOne) "one" else "many") { set("choice", j(it)) }
         }
         SwitchRow("Ordered, to sort the journal by it", group.ordered) { set("ordered", j(it)) }
         group.members.forEachIndexed { i, tag -> FormDivider(); TagRow(tag, group, if (group.ordered) i + 1 else null) }

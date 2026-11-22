@@ -163,14 +163,7 @@ fun EntrySheet(id: String, dismiss: () -> Unit) {
                 TitleField(title, if (card.isStack) "Stack" else "Title", edit) { title = it }
             }
             if (pages.size > 1 || page > 0) {
-                Row(Modifier.clip(RoundedCornerShape(10.dp)).background(Theme.sunken).padding(2.dp)) {
-                    pages.indices.forEach { i ->
-                        Text(
-                            "Page ${i + 1}", Modifier.clip(RoundedCornerShape(8.dp)).background(if (page == i) Theme.raised else Color.Transparent).clickable { page = i }.padding(horizontal = 12.dp, vertical = 5.dp),
-                            fontSize = 14.sp, color = Theme.text, fontWeight = if (page == i) FontWeight.SemiBold else FontWeight.Normal,
-                        )
-                    }
-                }
+                Segmented(pages.indices.map { "Page ${it + 1}" to it }, page) { page = it }
             }
             androidx.compose.runtime.key("$id:$page") {
                 DocEditor(pages[page], edit, { doc -> savePage(model, id, page, doc) }, onTools = { tools = it })
@@ -440,7 +433,6 @@ fun DuePicker(id: String) {
     val context = LocalContext.current
     val card = model.card(id) ?: return
     var picking by remember { mutableStateOf<String?>(null) }
-    var repeating by remember { mutableStateOf(false) }
     fun set(change: (Card) -> Card) = model.update(id, change = change)
     Column(Modifier.fillMaxSize().verticalScroll(rememberScrollState())) {
         SwitchRow("Due date", card.due != null) { on ->
@@ -466,16 +458,10 @@ fun DuePicker(id: String) {
                     Text(TimeKey.format(time), color = Theme.accent, fontWeight = FontWeight.SemiBold)
                 }
             }
-            Box {
-                Row(Modifier.fillMaxWidth().clickable { repeating = true }.padding(horizontal = 20.dp, vertical = 13.dp)) {
-                    Text("Repeat", Modifier.weight(1f), color = Theme.text)
-                    Text(card.repeat?.label ?: "Never", color = Theme.accent, fontWeight = FontWeight.SemiBold)
-                }
-                DropdownMenu(repeating, { repeating = false }) {
-                    MenuCheck("Never", card.repeat == null) { repeating = false; set { it.withRepeat(null).with("repeat", null) } }
-                    val choices = repeatChoices + listOfNotNull(card.repeat?.takeIf { it !in repeatChoices })
-                    for (r in choices) MenuCheck(r.label, card.repeat == r) { repeating = false; set { it.withRepeat(r) } }
-                }
+            ChoiceRow("Repeat", card.repeat?.label ?: "Never", inset = 20.dp) { close ->
+                MenuCheck("Never", card.repeat == null) { close(); set { it.withRepeat(null).with("repeat", null) } }
+                val choices = repeatChoices + listOfNotNull(card.repeat?.takeIf { it !in repeatChoices })
+                for (r in choices) MenuCheck(r.label, card.repeat == r) { close(); set { it.withRepeat(r) } }
             }
             SwitchRow("Starts on a day", card.start != null) { on -> set { it.withStart(if (on) minOf(due, model.today) else null) } }
             card.start?.let { start ->

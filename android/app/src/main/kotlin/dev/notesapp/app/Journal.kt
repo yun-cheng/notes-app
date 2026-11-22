@@ -160,7 +160,7 @@ fun JournalView(initial: StreamFilter, openDrawer: (() -> Unit)?, fixed: Boolean
                 LaunchedEffect(filter, rows > 0) { if (chat && rows > 0) { list.scrollToItem(rows - 1); list.scrollBy(100_000f) } }
                 // Opening the keyboard to write keeps the newest entries in view, as a chat does.
                 val typing = androidx.compose.foundation.layout.WindowInsets.isImeVisible
-                LaunchedEffect(typing) { if (typing && chat && rows > 0 && true) { list.scrollToItem(rows - 1); list.scrollBy(100_000f) } }
+                LaunchedEffect(typing) { if (typing && chat && rows > 0) { list.scrollToItem(rows - 1); list.scrollBy(100_000f) } }
                 LaunchedEffect(model.lastSaved) { model.lastSaved?.let { id -> rowOf[id]?.let { list.animateScrollToItem(it) } } }
                 BoxWithConstraints(Modifier.weight(1f).fillMaxWidth()) {
                     val bubbleWidth = minOf(560.dp, (minOf(maxWidth, 720.dp) - 32.dp) * 0.85f)
@@ -245,7 +245,7 @@ fun FilterRow(filter: StreamFilter, set: (StreamFilter) -> Unit, pickDates: () -
     val model = LocalModel.current
     Column {
         Row(Modifier.horizontalScroll(rememberScrollState()).padding(horizontal = 16.dp, vertical = 8.dp), horizontalArrangement = Arrangement.spacedBy(6.dp), verticalAlignment = Alignment.CenterVertically) {
-            TypeSwitch(filter.effectiveType) { t -> set(filter.copy(type = t, status = if (t != StreamFilter.EntryType.todo) null else filter.status)) }
+            Segmented(listOf("All" to null, "Notes" to StreamFilter.EntryType.note, "Todos" to StreamFilter.EntryType.todo, "Stacks" to StreamFilter.EntryType.stack), filter.effectiveType) { t -> set(filter.copy(type = t, status = if (t != StreamFilter.EntryType.todo) null else filter.status)) }
             FilterChip(filter.status?.let { StreamLabels.status[it] } ?: "Todos", filter.status != null, { set(filter.copy(status = null)) }) { close ->
                 for (s in StreamFilter.TodoStatus.entries) DropdownMenuItem(text = { Text(StreamLabels.status[s]!!) }, onClick = { set(filter.copy(status = s)); close() })
             }
@@ -265,20 +265,6 @@ fun FilterRow(filter: StreamFilter, set: (StreamFilter) -> Unit, pickDates: () -
             if (filter.archived) SetChip("Archived", Icons.Outlined.Archive) { set(filter.copy(archived = false)) }
         }
         HorizontalDivider(color = Theme.line)
-    }
-}
-
-/** All, Notes, Todos, Stacks. */
-@Composable
-fun TypeSwitch(type: StreamFilter.EntryType?, set: (StreamFilter.EntryType?) -> Unit) {
-    Row(Modifier.clip(RoundedCornerShape(50)).background(Theme.sunken).padding(2.dp), horizontalArrangement = Arrangement.spacedBy(2.dp)) {
-        for ((label, value) in listOf("All" to null, "Notes" to StreamFilter.EntryType.note, "Todos" to StreamFilter.EntryType.todo, "Stacks" to StreamFilter.EntryType.stack)) {
-            val on = type == value
-            Text(
-                label, Modifier.clip(RoundedCornerShape(50)).background(if (on) Theme.raised else Color.Transparent).clickable { set(value) }.padding(horizontal = 10.dp, vertical = 3.dp),
-                fontSize = 14.sp, fontWeight = if (on) FontWeight.SemiBold else FontWeight.Normal, color = if (on) Theme.text else Theme.muted,
-            )
-        }
     }
 }
 

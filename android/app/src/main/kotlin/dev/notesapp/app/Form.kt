@@ -83,10 +83,10 @@ fun FormButton(label: String, enabled: Boolean = true, color: Color? = null, onC
 
 /** A row naming a choice, which opens a menu of the others. */
 @Composable
-fun ChoiceRow(label: String, value: String, items: @Composable (close: () -> Unit) -> Unit) {
+fun ChoiceRow(label: String, value: String, inset: androidx.compose.ui.unit.Dp = 16.dp, items: @Composable (close: () -> Unit) -> Unit) {
     var open by remember { mutableStateOf(false) }
     Box {
-        Row(Modifier.fillMaxWidth().clickable { open = true }.padding(horizontal = 16.dp, vertical = 13.dp), verticalAlignment = Alignment.CenterVertically) {
+        Row(Modifier.fillMaxWidth().clickable { open = true }.padding(horizontal = inset, vertical = 13.dp), verticalAlignment = Alignment.CenterVertically) {
             Text(label, Modifier.weight(1f), color = Theme.text)
             Text(value, color = Theme.accent, fontWeight = FontWeight.SemiBold)
         }

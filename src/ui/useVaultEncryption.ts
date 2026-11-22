@@ -56,10 +56,15 @@ export function useVaultEncryption() {
    * The vault must be open.
    */
   const decrypt = async (vault: Vault, { keepPin = false } = {}) => {
+    // Its cards can only be stored readable again with its key open here; without it they'd stay sealed for good.
+    if (!keyring.key(vault.id)) throw new NeedsPin('Lock the vault and open it with its PIN first.');
     await engine.sync();
     // Its photos and files are opened first, while the key is here: once it's gone, a sealed one can't be.
-    const { failed } = await reseal([{ vaultId: vault.id, seal: false }]);
+    const { failed, unknown } = await reseal([{ vaultId: vault.id, seal: false }]);
     if (failed) throw new SealedOutOfReach(`${failed === 1 ? 'A photo or file' : `${failed} photos or files`} in it can’t be fetched now. Try again when you’re online.`);
+    // One another device added and hasn't sent yet would arrive sealed after the key is gone, and never open again.
+    if (unknown)
+      throw new SealedOutOfReach(`${unknown === 1 ? 'A photo or file' : `${unknown} photos or files`} in it hasn’t reached the server from another device yet. Try again once it has.`);
     const key = keyring.key(vault.id);
     await save(vault, keepPin ? { encryption: null } : { pin: null, encryption: null });
     await repo.recodeVault(vault.id);

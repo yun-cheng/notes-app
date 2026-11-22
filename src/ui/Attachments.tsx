@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState, type ReactNode } from 'react';
+import { useEffect, useMemo, useRef, useState, type ReactNode } from 'react';
 import { createPortal } from 'react-dom';
 import { fileAttachments, isAudio, isVideo, linkUrls, mediaItems, siteName, type FileInfo, type Media } from '../domain/content';
 import type { Card } from '../domain/types';
@@ -44,11 +44,12 @@ export function Attachments({ card }: { card: Card }) {
   // Links in an encrypted vault, or in a card from a vault this account can't see, aren't sent anywhere to preview.
   const vault = vaults.find((v) => v.id === card.vaultId);
   const previews = !!vault && !vault.encryption;
-  const photos = mediaItems(card.content);
-  const all = fileAttachments(card.content);
-  const voices = all.filter(isAudio);
-  const files = all.filter((f) => !isVideo(f) && !isAudio(f));
-  const links = prefs.links === 'off' ? [] : linkUrls(card.content);
+  // Worked out again only when its text changes, not on every redraw (a pick, the index after another card's edit).
+  const { photos, voices, files, found } = useMemo(() => {
+    const all = fileAttachments(card.content);
+    return { photos: mediaItems(card.content), voices: all.filter(isAudio), files: all.filter((f) => !isVideo(f) && !isAudio(f)), found: linkUrls(card.content) };
+  }, [card.content]);
+  const links = prefs.links === 'off' ? [] : found;
   const [viewing, setViewing] = useState<number | null>(null);
   // A photo right-clicked: a menu to copy it, or a video's to download it. (The entry's own menu is the bubble's, beside these.)
   const [photoMenu, setPhotoMenu] = useState<{ id: string; video?: FileInfo; at: Point } | null>(null);

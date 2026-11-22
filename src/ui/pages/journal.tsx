@@ -2,7 +2,7 @@ import { Fragment, useEffect, useLayoutEffect, useMemo, useRef, useState, type K
 import { Link, Navigate, Outlet, useLocation, useNavigate, useParams } from 'react-router';
 import { diaryVault } from '../../domain/access';
 import { linkTitle, resolveTags } from '../../domain/cardIndex';
-import { cardPages, checklistProgress, CODE_CLOSE, CODE_OPEN, displayTitle, HIDE_CLOSE, HIDE_OPEN, leadLine, previewParts, splitLinks, storedPages, translationPage, pagesHaveTranslation, withNewPage, withoutLeadLine, withoutPage, withPage, type PreviewPart } from '../../domain/content';
+import { cardPages, checklistProgress, linkedCardIds, CODE_CLOSE, CODE_OPEN, displayTitle, HIDE_CLOSE, HIDE_OPEN, leadLine, previewParts, splitLinks, storedPages, translationPage, pagesHaveTranslation, withNewPage, withoutLeadLine, withoutPage, withPage, type PreviewPart } from '../../domain/content';
 import { isDateKey, relativeDay, relativeDayInSentence, toDateKey } from '../../domain/dates';
 import { STATE_BOARD } from '../../domain/board';
 import { isFiltered, parseFilter, sortGroup, streamItems, type StreamFilter, type StreamItem, type StreamSort } from '../../domain/stream';
@@ -953,16 +953,24 @@ function useBubble(card: NoteCard | TodoCard, title: string, titleFromText = fal
   const pager = usePager(card);
   const doc = pager.at ? pager.pages[pager.at - 1] : card.content;
   const titleOf = (id: string, label: string) => linkTitle(index, id, label);
+  // The document's previews are worked out again only when it changes or a card it links to is renamed, not on
+  // every redraw: what its links show is the one thing the index changes.
+  const linked = useMemo(() => linkedCardIds(doc), [doc]);
+  const linkTitles = linked.map((id) => titleOf(id, '')).join('\u0000');
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  const masked = useMemo(() => previewParts(doc, titleOf, { hidden: 'mask' }), [doc, linkTitles]);
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  const marked = useMemo(() => previewParts(doc, titleOf, { markCode: true, hidden: 'mark' }), [doc, linkTitles]);
   // What a translation covers: hidden words go as •••, and code isn't sent.
   // Only the first page's text gives the name.
   const named = (parts: PreviewPart[]) => (titleFromText && !pager.at ? withoutLeadLine(parts) : parts);
-  const plain = named(previewParts(doc, titleOf, { hidden: 'mask' }));
+  const plain = named(masked);
   const pieces = [title, ...plain.flatMap((p) => (p.kind === 'text' ? [p.lines.join('\n')] : []))];
   const translation = useTranslation(card.id);
   // Kept while the app is open, for these words: shown, or put aside with Show original until shown again.
   const kept = translation && translation !== 'working' && translation.source === pieces.join('\n') ? translation : null;
   const done = kept?.shown ? kept : null;
-  const text = useFold(card.id, done ? translatedParts(plain, done.pieces) : named(previewParts(doc, titleOf, { markCode: true, hidden: 'mark' })));
+  const text = useFold(card.id, done ? translatedParts(plain, done.pieces) : named(marked));
   const open = useOpen(card);
   const withGoogle = () => openOutside(googleTranslateUrl(pieces.filter((p) => p.trim()).join('\n\n')));
   // The server may translate it, and this device keep the translation, unless it's in an encrypted vault, whose

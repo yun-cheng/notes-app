@@ -1,4 +1,5 @@
 import { Fragment, useEffect, useLayoutEffect, useMemo, useRef, useState, type KeyboardEvent as ReactKeyboardEvent, type ReactNode } from 'react';
+import { count as plural } from '../../domain/plural';
 import { Link, Navigate, Outlet, useLocation, useNavigate, useParams } from 'react-router';
 import { diaryVault } from '../../domain/access';
 import { linkTitle, resolveTags } from '../../domain/cardIndex';
@@ -1077,7 +1078,7 @@ function StackEntry({ stack, at }: { stack: NoteCard; at: number }) {
     else openStacks.add(stack.id);
     setExpanded(!expanded);
   };
-  const count = `${members.length} ${members.length === 1 ? 'card' : 'cards'}`;
+  const count = `${plural(members.length, 'card')}`;
   return (
     <>
       <div className={`bubble bubble--stack${colorClass(stack)}${pagerClass(pager)}${selected ? ' is-selected' : ''}`} role="article" aria-current={selected || undefined} {...handlers}>

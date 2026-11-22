@@ -1,4 +1,5 @@
 import { useEffect, useRef, useState, type FormEvent } from 'react';
+import { count } from '../domain/plural';
 import { displayTitle } from '../domain/content';
 import type { Card } from '../domain/types';
 import { useCards } from '../state/CardsContext';
@@ -14,7 +15,7 @@ const EXPIRY = [
   { label: 'Expires in 30 days', days: 30 },
 ];
 
-const people = (n: number) => `${n} ${n === 1 ? 'person' : 'people'}`;
+const people = (n: number) => count(n, 'person', 'people');
 
 function RoleSelect({ value, onChange, label }: { value: ShareRole; onChange: (role: ShareRole) => void; label: string }) {
   return (

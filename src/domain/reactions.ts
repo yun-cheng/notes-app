@@ -1,3 +1,5 @@
+import { count as plural } from './plural';
+
 /**
  * Emoji reactions on an entry, like a chat message's: each emoji with who put it there, by account ID, in the order
  * they reacted. Kept in the entry itself, so they work offline and sync with it; an emoji nobody's left on goes.
@@ -61,5 +63,5 @@ export function reactionCounts(reactions: Reactions | null | undefined, me: stri
 export function reactedBy({ count, mine }: Pick<ReactionCount, 'count' | 'mine'>): string {
   if (!mine) return count === 1 ? '1 person' : `${count} people`;
   const others = count - 1;
-  return others === 0 ? 'You' : `You and ${others} ${others === 1 ? 'other' : 'others'}`;
+  return others === 0 ? 'You' : `You and ${plural(others, 'other')}`;
 }

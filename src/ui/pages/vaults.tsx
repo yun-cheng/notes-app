@@ -1,4 +1,5 @@
 import { useEffect, useState, type FormEvent } from 'react';
+import { count as plural } from '../../domain/plural';
 import { Link, useParams } from 'react-router';
 import { biometricAvailable, biometricKey, enrollBiometric } from '../../auth/biometric';
 import { isDefaultVault } from '../../domain/locks';
@@ -128,7 +129,7 @@ export function VaultsPage() {
           const count = index.live.filter((c) => c.vaultId === v.id).length;
           const waitingIn = v.encryption && isMemberCopy(v.encryption) && v.encryption.member;
           const state = [
-            v.withheld ? (waitingIn ? 'Waiting to be let in' : 'Needs your PIN') : locked.has(v.id) ? 'Locked' : `${count} ${count === 1 ? 'card' : 'cards'}`,
+            v.withheld ? (waitingIn ? 'Waiting to be let in' : 'Needs your PIN') : locked.has(v.id) ? 'Locked' : `${plural(count, 'card')}`,
             v.encryption && 'Encrypted',
             v.waiting && `${v.waiting} waiting to be let in`,
           ];

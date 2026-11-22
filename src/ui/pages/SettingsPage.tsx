@@ -1,4 +1,5 @@
 import { useEffect, useRef, useState, type ChangeEvent } from 'react';
+import { count } from '../../domain/plural';
 import { formatClock } from '../../domain/dates';
 import { makeBackup, markdownFiles, parseBackup, zipMarkdown } from '../../domain/backup';
 import { filesFromZip, IMPORT_LIMIT, IMPORTABLE, readImport, type TextFile } from '../../domain/importNotes';
@@ -45,13 +46,13 @@ export function SettingsPage() {
   const exportMarkdown = () => {
     const files = markdownFiles(index);
     download(zipMarkdown(files) as BlobPart, `notes-markdown-${today}.zip`, 'application/zip');
-    toast(`Exported ${files.length} ${files.length === 1 ? 'card' : 'cards'} as Markdown`);
+    toast(`Exported ${count(files.length, 'card')} as Markdown`);
   };
 
   const exportBackup = async () => {
     const { vaults, cards } = await repo.exportAll(locked);
     download(JSON.stringify(makeBackup(vaults, cards), null, 1), `notes-backup-${today}.json`, 'application/json');
-    toast(`Backed up ${cards.length} ${cards.length === 1 ? 'card' : 'cards'}${locked.size ? '. Locked vaults were left out' : ''}`);
+    toast(`Backed up ${count(cards.length, 'card')}${locked.size ? '. Locked vaults were left out' : ''}`);
   };
 
   const restore = async (e: ChangeEvent<HTMLInputElement>) => {
@@ -83,7 +84,7 @@ export function SettingsPage() {
       if (!plan.entries.length) return toast(`Nothing new to import${left ? ` (${left})` : ''}`);
       const { saved, action } = await saveEntries(plan.entries);
       if (!saved) return;
-      toast(`Imported ${saved} ${saved === 1 ? 'entry' : 'entries'}${left ? `; ${left}` : ''}`, action ? { action: undoButton(action) } : undefined);
+      toast(`Imported ${count(saved, 'entry', 'entries')}${left ? `; ${left}` : ''}`, action ? { action: undoButton(action) } : undefined);
     } catch (err) {
       console.error('Import failed', err);
       toast('Those files could not be imported.');

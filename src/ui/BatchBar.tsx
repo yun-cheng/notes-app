@@ -1,4 +1,5 @@
 import { useState } from 'react';
+import { count } from '../domain/plural';
 import { canWriteIn } from '../domain/access';
 import { planBatch, tagCounts, type BatchEdit } from '../domain/batch';
 import { addDays } from '../domain/dates';
@@ -82,7 +83,7 @@ export function BatchBar({ selection }: { selection: Selection }) {
   return (
     <div className="batch" role="toolbar" aria-label="Change selected entries">
       {panel === 'tags' && !none && <BatchTags cards={editable} onEdit={apply} />}
-      {panel === 'due' && todos.length > 0 && <BatchDue onPick={(due) => void apply({ kind: 'due', due }, (n) => `Changed the due date of ${n} ${n === 1 ? 'todo' : 'todos'}`)} />}
+      {panel === 'due' && todos.length > 0 && <BatchDue onPick={(due) => void apply({ kind: 'due', due }, (n) => `Changed the due date of ${count(n, 'todo')}`)} />}
       <div className="batch__bar">
         <span className="batch__count">{none ? 'Pick entries' : `${cards.length} selected`}</span>
         <button type="button" className={`icon-btn${panel === 'tags' ? ' is-active' : ''}`} disabled={none} aria-label="Tags" title="Add or remove tags" onClick={() => toggle('tags')}>

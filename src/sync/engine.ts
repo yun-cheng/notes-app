@@ -1,4 +1,5 @@
 import type { CardRecord, Vault } from '../domain/types';
+import { count } from '../domain/plural';
 import type { CardRepository } from '../storage/repository';
 import { PUSH_LIMIT, type PullResponse, type PushResult, type SharedResponse } from './protocol';
 
@@ -182,7 +183,7 @@ export type SyncLook = 'synced' | 'sending' | 'offline' | 'trouble';
  * from other devices still says Synced, so the badge doesn't flicker once a minute.
  */
 export function syncSummary({ state }: SyncStatus, waiting: number): { look: SyncLook; label: string; detail: string } {
-  const changes = `${waiting} ${waiting === 1 ? 'change' : 'changes'}`;
+  const changes = `${count(waiting, 'change')}`;
   switch (state) {
     case 'offline':
       return {
@@ -212,7 +213,7 @@ export function syncSummary({ state }: SyncStatus, waiting: number): { look: Syn
 }
 
 export function describeSync({ state, pending }: SyncStatus): string {
-  const waiting = pending ? `${pending} ${pending === 1 ? 'change' : 'changes'} waiting` : '';
+  const waiting = pending ? `${count(pending, 'change')} waiting` : '';
   switch (state) {
     case 'syncing':
       return 'Syncing…';

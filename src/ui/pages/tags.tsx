@@ -1,4 +1,5 @@
 import { useRef, useState, type FormEvent } from 'react';
+import { count as plural } from '../../domain/plural';
 import { Link } from 'react-router';
 import { displayTitle } from '../../domain/content';
 import { isGroupName, type TagGroup } from '../../domain/tagGroups';
@@ -304,7 +305,7 @@ function TrashTag({ tag }: { tag: TagCard }) {
     const count = tagCount(index, tag.id);
     const action = repo.action();
     void repo.setDeleted(tag.id, true);
-    said(`Moved ${tag.title} to Trash${count ? `, off ${count} ${count === 1 ? 'entry' : 'entries'}` : ''}`, action);
+    said(`Moved ${tag.title} to Trash${count ? `, off ${plural(count, 'entry', 'entries')}` : ''}`, action);
   };
   return (
     <button type="button" className="icon-btn" aria-label={`Move ${tag.title} to Trash`} title="Move to Trash" onClick={trash}>

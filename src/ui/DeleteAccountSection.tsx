@@ -1,4 +1,5 @@
 import { useEffect, useRef, useState } from 'react';
+import { count } from '../domain/plural';
 import { useAccount } from '../auth/AuthContext';
 import { SyncOffline } from '../sync/engine';
 import { fetchAccountSummary } from '../sync/http';
@@ -8,7 +9,6 @@ import { useToast } from './Toast';
 import { useBackdropClose } from './useBackdrop';
 import { composing } from './composing';
 
-const count = (n: number, one: string, many = `${one}s`) => `${n} ${n === 1 ? one : many}`;
 
 /** Settings, last: deleting the account for good, behind a dialog that says what goes and asks for its email. */
 export function DeleteAccountSection({ onExport }: { onExport: () => void }) {

@@ -1,4 +1,5 @@
 import { useMemo, useState, type CSSProperties, type DragEvent } from 'react';
+import { count } from '../../domain/plural';
 import { Link, useLocation, useNavigate, useSearchParams } from 'react-router';
 import { diaryVault } from '../../domain/access';
 import { lanes, shiftDates, spanOn, spans, type Span } from '../../domain/calendar';
@@ -207,7 +208,7 @@ export function CalendarPage() {
               {week.map((d, i) => {
                 const items = rows.flatMap((lane) => spanOn(lane, d) ?? []);
                 const more = items.length - shown.filter((lane) => spanOn(lane, d)).length;
-                const label = `${parseDateKey(d).toLocaleDateString(undefined, { weekday: 'long', month: 'long', day: 'numeric' })}${items.length ? `, ${items.length} ${items.length === 1 ? 'todo' : 'todos'}` : ''}`;
+                const label = `${parseDateKey(d).toLocaleDateString(undefined, { weekday: 'long', month: 'long', day: 'numeric' })}${items.length ? `, ${count(items.length, 'todo')}` : ''}`;
                 const cls = ['month__day', monthKey(d) !== month && 'is-outside', d === today && 'is-today', d === day && 'is-picked', d === over && 'is-over'].filter(Boolean).join(' ');
                 return (
                   <div

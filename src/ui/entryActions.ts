@@ -1,4 +1,5 @@
 import { linkTitle } from '../domain/cardIndex';
+import { count } from '../domain/plural';
 import { displayTitle } from '../domain/content';
 import { encodeEntries, entriesClipboard, ENTRIES_TYPE, toEntries } from '../domain/clipboard';
 import type { Entry } from '../domain/entry';
@@ -12,7 +13,7 @@ import { useToast } from './Toast';
 import { useUndo } from './useUndo';
 import { useSaveEntries, type SaveOptions } from './useSaveEntry';
 
-export const entries = (n: number) => `${n} ${n === 1 ? 'entry' : 'entries'}`;
+export const entries = (n: number) => count(n, 'entry', 'entries');
 
 /** What the clipboard should get on the next copy, set just before asking the browser to copy. */
 let pending: { text: string; json?: string; html?: string } | null = null;

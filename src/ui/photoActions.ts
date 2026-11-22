@@ -1,10 +1,11 @@
 import { displayTitle } from '../domain/content';
+import { count as plural } from '../domain/plural';
 import { photoFileNames, type PhotoItem } from '../domain/photos';
 import { zip } from '../domain/zip';
 import { useCards, useToday } from '../state/CardsContext';
 import { useToast } from './Toast';
 
-const count = (n: number) => (n === 1 ? '1 photo' : `${n} photos`);
+const count = (n: number) => plural(n, 'photo');
 
 /** Whether this browser can hand photos to another app, as a phone's share sheet does. */
 export const canSharePhotos = () => typeof navigator.canShare === 'function' && typeof navigator.share === 'function';

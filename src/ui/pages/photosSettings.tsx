@@ -1,4 +1,5 @@
 import { useEffect, useState } from 'react';
+import { count } from '../../domain/plural';
 import { useLocation, useNavigate } from 'react-router';
 import { usePhotoState } from '../../state/CardsContext';
 import type { PhotoProblem } from '../../photos/service';
@@ -61,7 +62,7 @@ export function PhotosSection() {
     }
   };
 
-  const waiting = pending ? `${pending} ${pending === 1 ? 'photo or file is' : 'photos and files are'} waiting to upload` : '';
+  const waiting = pending ? `${count(pending, 'photo or file is', 'photos and files are')} waiting to upload` : '';
   const why = problem ? WHY[problem] : '.';
 
   return (

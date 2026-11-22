@@ -71,9 +71,23 @@ export class Drafts {
     private api: DraftApi,
     private store: DraftStorage = localStorage,
     private now: () => number = Date.now,
-  ) {}
+  ) {
+    // Another tab of this account writes the same storage: what's kept here is read again after it does.
+    if (typeof window !== 'undefined')
+      window.addEventListener('storage', (e) => {
+        if (e.key === draftsKey(this.accountId)) this.cached = null;
+      });
+  }
+
+  /** The drafts as last read or written, so a keystroke doesn't parse them all again. */
+  private cached: Kept | null = null;
 
   private read(): Kept {
+    this.cached ??= this.load();
+    return this.cached;
+  }
+
+  private load(): Kept {
     try {
       const raw = JSON.parse(this.store.getItem(draftsKey(this.accountId)) ?? 'null') as Partial<Kept> | null;
       const entries: Record<string, Entry> = {};
@@ -88,6 +102,7 @@ export class Drafts {
   }
 
   private write(kept: Kept) {
+    this.cached = kept;
     try {
       if (Object.keys(kept.entries).length || kept.fetched) this.store.setItem(draftsKey(this.accountId), JSON.stringify(kept));
       else this.store.removeItem(draftsKey(this.accountId));
@@ -106,8 +121,10 @@ export class Drafts {
   get(kind: DraftKind, key: string): unknown {
     const k = id(kind, key);
     if (this.memory.has(k)) return this.memory.get(k);
-    const value = this.read().entries[k]?.value;
-    return value ?? undefined;
+    const entry = this.read().entries[k];
+    // Kept in memory past 30 days, one sent is forgotten as it would be on reading storage again.
+    if (!entry || (!entry.dirty && this.now() - entry.at >= KEEP_MS)) return undefined;
+    return entry.value ?? undefined;
   }
 
   /**

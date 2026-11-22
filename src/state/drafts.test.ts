@@ -138,13 +138,14 @@ describe('drafts', () => {
     let now = 0;
     const d = new Drafts('me', s.api, store, () => now);
     d.set('comment', 'old', 'stale');
-    // Sent, so only age keeps it.
+    // Sent, so only age keeps it: as stored, which a Drafts opened later reads.
     const kept = JSON.parse(store.data.get(draftsKey('me'))!);
     delete kept.entries['comment:old'].dirty;
     store.setItem(draftsKey('me'), JSON.stringify(kept));
     now = 30 * DAY;
-    expect(d.get('comment', 'old')).toBeUndefined();
-    d.set('comment', 'new', 'fresh');
+    const later = new Drafts('me', s.api, store, () => now);
+    expect(later.get('comment', 'old')).toBeUndefined();
+    later.set('comment', 'new', 'fresh');
     forgetDrafts('me', store);
     expect(store.data.size).toBe(0);
   });

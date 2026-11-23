@@ -332,6 +332,11 @@ fun BubbleMeta(card: Card, page: Int, pages: Int, long: Boolean, unfolded: Boole
         FlowRow(Modifier.fillMaxWidth().padding(top = 1.dp), horizontalArrangement = Arrangement.spacedBy(6.dp), verticalArrangement = Arrangement.Center, itemVerticalAlignment = Alignment.CenterVertically) {
             if (card.viewOnly) Icon(Icons.Outlined.Visibility, "View only", Modifier.size(13.dp), tint = Theme.accent)
             Reactions(card)
+            // Beside the smiley, as the web's: on an entry others can comment on that has no open comments yet.
+            if (!card.deleted && model.canComment(card) && (model.commentCounts[card.id] ?: 0) == 0) Icon(
+                Icons.AutoMirrored.Outlined.Comment, "Comment",
+                Modifier.size(22.dp).clip(CircleShape).clickable { model.openEntry = card.id }.padding(4.dp), tint = Theme.muted,
+            )
             Spacer(Modifier.weight(1f))
             if (card.template) {
                 if (model.viewOnly || card.deleted) IconText(Icons.Outlined.FileCopy, "Template", Theme.accent)

@@ -440,6 +440,15 @@ struct BubbleMeta: View {
         FlowLayout(spacing: 6) {
             if card.viewOnly { Image(systemName: "eye").foregroundStyle(Theme.accent).help("View only").accessibilityLabel("View only") }
             Reactions(card: card)
+            // Beside the smiley, as the web's: on an entry others can comment on that has no open comments yet (one
+            // that has some shows their count instead).
+            if !card.deleted, model.canComment(card), (model.commentCounts[card.id] ?? 0) == 0 {
+                Button { model.openEntry = card.id } label: { Image(systemName: "bubble.left").font(.system(size: 12)) }
+                    .buttonStyle(.plain)
+                    .foregroundStyle(Theme.muted)
+                    .help("Comment")
+                    .accessibilityLabel("Comment")
+            }
             Spacer(minLength: 8).layoutPriority(-1)
             if card.template { UseTemplateButton(card: card) }
             if let progress = BubbleMemo.value(model, card, "checklist", { Doc.checklistProgress(card.content) }) {

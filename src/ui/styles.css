@@ -265,6 +265,8 @@ body:has(.composer:focus-within) .tabbar { display: none; }
 .row__icon { color: var(--muted); padding-top: 2px; flex: none; }
 .row__body { display: flex; flex-direction: column; gap: 2px; flex: 1; min-width: 0; }
 .row__title { font-weight: 500; overflow-wrap: anywhere; }
+/* A tag's row on a phone: its name keeps room for a word, and its buttons go under it, rather than squeezing it to a letter a line. */
+@media (max-width: 599px) { .row:has(> .tag-color) { flex-wrap: wrap; row-gap: 4px; } .row:has(> .tag-color) > .row__body { min-width: 8em; } }
 .row__preview { color: var(--muted); font-size: 14px; display: -webkit-box; -webkit-box-orient: vertical; -webkit-line-clamp: 2; overflow: hidden; }
 .is-alert { color: var(--alert); }
 .row.is-done .row__title { color: var(--muted); }

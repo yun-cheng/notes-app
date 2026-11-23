@@ -7,7 +7,8 @@ import AppKit
 
 @main
 struct NotesApp: App {
-    /// `-server http://localhost:8788` at launch points the app at a local server, for testing.
+    /// `-server http://localhost:5191` at launch points the app at the local dev server, for testing (through Vite,
+    /// which serves the demo's photos and files as well as passing `/api` on).
     @State private var model = AppModel(site: UserDefaults.standard.string(forKey: "server").flatMap(URL.init(string:)) ?? ServerAPI.production)
     @Environment(\.scenePhase) private var scenePhase
 

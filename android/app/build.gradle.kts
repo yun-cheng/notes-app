@@ -17,7 +17,8 @@ android {
         targetSdk = 36
         versionCode = 1
         versionName = "1.0"
-        // The local server, from the emulator: `./gradlew installDebug -Pserver=http://10.0.2.2:8788`.
+        // The local dev server, from the emulator: `adb reverse tcp:5191 tcp:5191`, then
+        // `./gradlew installDebug -Pserver=http://localhost:5191` (Vite serves the demo's photos and files; the API alone can't).
         buildConfigField("String", "SERVER", "\"${project.findProperty("server") ?: "https://notes-app.yuncheng-dev.workers.dev"}\"")
     }
 

@@ -226,10 +226,35 @@ object Doc {
     /** A body made from typed text: one paragraph per line, with web addresses as links. */
     fun fromText(text: String): JsonElement {
         val t = text.replace("\r\n", "\n").replace("\r", "\n").trim('\n')
-        val paragraphs = t.split("\n").map { line ->
-            if (line.isEmpty()) jobj("type" to j("paragraph")) else jobj("type" to j("paragraph"), "content" to jarr(inlineWithLinks(line)))
+        // As the web's box reads what's typed: "- " or "• " starts a bulleted list, "1. " a numbered one, "> " a quote
+        // and "# " or "## " a heading; anything else is a paragraph.
+        fun paragraph(line: String) = if (line.isEmpty()) jobj("type" to j("paragraph")) else jobj("type" to j("paragraph"), "content" to jarr(inlineWithLinks(line)))
+        fun item(line: String) = jobj("type" to j("listItem"), "content" to jarr(listOf(paragraph(line))))
+        val blocks = mutableListOf<JsonElement>()
+        val bullets = mutableListOf<JsonElement>()
+        val numbers = mutableListOf<JsonElement>()
+        val quoted = mutableListOf<JsonElement>()
+        var start = 1
+        fun flush() {
+            if (bullets.isNotEmpty()) { blocks.add(jobj("type" to j("bulletList"), "content" to jarr(bullets.toList()))); bullets.clear() }
+            if (numbers.isNotEmpty()) { blocks.add(jobj("type" to j("orderedList"), "attrs" to jobj("start" to j(start)), "content" to jarr(numbers.toList()))); numbers.clear() }
+            if (quoted.isNotEmpty()) { blocks.add(jobj("type" to j("blockquote"), "content" to jarr(quoted.toList()))); quoted.clear() }
         }
-        return jobj("type" to j("doc"), "content" to jarr(paragraphs))
+        for (line in t.split("\n")) {
+            val bullet = Regex("[-•*] (.*)").matchEntire(line)
+            val number = Regex("(\\d{1,4})\\. (.*)").matchEntire(line)
+            val quote = Regex("> ?(.*)").matchEntire(line)
+            val heading = Regex("(#{1,3}) (.+)").matchEntire(line)
+            when {
+                bullet != null -> { if (bullets.isEmpty()) flush(); bullets.add(item(bullet.groupValues[1])) }
+                number != null -> { if (numbers.isEmpty()) { flush(); start = number.groupValues[1].toInt() }; numbers.add(item(number.groupValues[2])) }
+                quote != null -> { if (quoted.isEmpty()) flush(); quoted.add(paragraph(quote.groupValues[1])) }
+                heading != null -> { flush(); blocks.add(jobj("type" to j("heading"), "attrs" to jobj("level" to j(heading.groupValues[1].length)), "content" to jarr(inlineWithLinks(heading.groupValues[2])))) }
+                else -> { flush(); blocks.add(paragraph(line)) }
+            }
+        }
+        flush()
+        return jobj("type" to j("doc"), "content" to jarr(blocks))
     }
 
     /** Web addresses in the body, from links and from addresses typed as plain text, each once and in order. */

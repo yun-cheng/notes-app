@@ -100,6 +100,16 @@ class EntryTest {
     }
 }
 
+class TypedMarkersTest {
+    @Test fun typedListsQuotesAndHeadings() {
+        val types = Doc.fromText("# Plan\n- milk\n- eggs\n2. first\n3. second\n> said so\nplain")["content"].arr!!.map { it["type"].str }
+        assertEquals(listOf("heading", "bulletList", "orderedList", "blockquote", "paragraph"), types)
+        assertEquals(2, Doc.fromText("- milk\n- eggs")["content"].arr!!.first()["content"].arr!!.size)
+        assertEquals(2L, Doc.fromText("2. first")["content"].arr!!.first()["attrs"]["start"].long)
+        assertEquals("paragraph", Doc.fromText("-not a list")["content"].arr!!.first()["type"].str)
+    }
+}
+
 class RepeatTest {
     private val today = "2026-11-12"
     private val weekly = Repeat(Repeat.Unit.week, 1)

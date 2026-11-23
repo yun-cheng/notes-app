@@ -241,6 +241,18 @@ enum Clipboard {
         model.say("Copied")
     }
 
+    /// Several entries at once, oldest first, as the device's copy style says.
+    @MainActor
+    static func copyEntries(_ cards: [Card], model: AppModel) {
+        let style = UserDefaults.standard.string(forKey: "copyStyle") ?? "rich"
+        let markdown = Markdown.entries(cards, index: model.index)
+        switch style {
+        case "plain": copy(cards.map { Markdown.words($0, index: model.index) }.joined(separator: "\n\n"))
+        case "markdown": copy(markdown)
+        default: copyRich(markdown)
+        }
+    }
+
     /// Markdown as formatted text, with the Markdown itself as the plain text beside it.
     static func copyRich(_ markdown: String) {
         let options = AttributedString.MarkdownParsingOptions(interpretedSyntax: .inlineOnlyPreservingWhitespace)

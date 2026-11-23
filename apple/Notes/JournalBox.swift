@@ -270,59 +270,205 @@ struct JournalBox: View {
     }
 }
 
-/// What can be done to entries picked together, as the web app's `BatchBar`: tag them, finish them, date them,
-/// archive or trash them.
+/// What can be done to entries picked together, as the web app's `BatchBar`: how many are picked, then icons to tag
+/// them (a panel of their tags, each × to take it off all, and a field to add one to all), mark todos done or not,
+/// waiting or dated (a panel of Today, Tomorrow, In a week and No date), make them todos or notes, move them to a vault,
+/// stack, copy, archive or trash them, and × to stop.
 struct BatchBar: View {
     @Environment(AppModel.self) private var model
     @Binding var picked: Set<String>
     let all: [String]
+    enum Panel { case tags, due }
+    @State private var panel: Panel?
+    @State private var query = ""
 
     var body: some View {
-        let cards = picked.compactMap { model.card($0) }
-        HStack(spacing: 12) {
-            Text("\(picked.count) picked").fontWeight(.semibold)
-            Button("All") { picked = Set(all) }
-            Spacer()
-            Menu("Tag") {
-                ForEach(tagsForAll(model.index.tags, vaultIds: Array(Set(cards.map(\.vaultId))), model.sharedInto)) { tag in
-                    Button(tag.displayTitle) { tagAll(tag.id) }
+        let cards = picked.compactMap { model.card($0) }.sorted { $0.createdAt < $1.createdAt }
+        let editable = cards.filter { model.canEdit($0) }
+        let manageable = cards.filter { model.canManage($0) }
+        let todos = editable.filter { $0.type == .todo }
+        let open = todos.filter { !$0.isDone }
+        let waiting = !open.isEmpty && open.allSatisfy(\.waiting)
+        let archiving = manageable.contains { !$0.archived }
+        let targets = model.vaults.filter { !model.lockedVaults.contains($0.id) && !$0.isWithheld && $0.role != .viewer }
+        let none = cards.isEmpty
+        VStack(spacing: 0) {
+            if panel == .tags, !none { tagsPanel(editable) }
+            if panel == .due, !todos.isEmpty { duePanel(todos) }
+            ScrollView(.horizontal, showsIndicators: false) {
+                HStack(spacing: 4) {
+                    Text(none ? "Pick entries" : "\(cards.count) selected").fontWeight(.semibold).padding(.trailing, 6).fixedSize()
+                    tool("tag", "Tags", "Add or remove tags", active: panel == .tags) { panel = panel == .tags ? nil : .tags }.disabled(none)
+                    if !todos.isEmpty {
+                        Button("Done") { setStatus(todos, done: true) }.buttonStyle(.bordered)
+                        Button("Not done") { setStatus(todos, done: false) }.buttonStyle(.borderless)
+                        if !open.isEmpty {
+                            tool("hourglass", "Waiting", waiting ? "No longer waiting" : "Waiting on someone or something", active: waiting) {
+                                let on = !waiting
+                                model.performEach(open.map(\.id), say: on ? "Marked \(open.count) waiting" : "\(open.count) no longer waiting") { repo, id, group in
+                                    try await repo.update(id, group: group) { $0.waiting = on }
+                                }
+                            }
+                        }
+                        tool("calendar", "Due date", "Set a due date", active: panel == .due) { panel = panel == .due ? nil : .due }
+                    }
+                    if editable.contains(where: { $0.type == .note }) {
+                        tool("checkmark.circle", "Make them todos", "Make the notes todos") { retype(editable.filter { $0.type == .note }, to: .todo) }
+                    }
+                    if !todos.isEmpty {
+                        tool("doc.text", "Make them notes", "Make the todos notes") { retype(todos, to: .note) }
+                    }
+                    if targets.count > 1, !manageable.isEmpty {
+                        Menu("Move to…") {
+                            ForEach(targets) { v in
+                                Button(v.name) {
+                                    let ids = manageable.map(\.id)
+                                    model.performEach(ids, say: "Moved \(ids.count) to \(v.name)") { repo, id, group in try await repo.move(id, toVault: v.id, group: group) }
+                                }
+                            }
+                        }
+                        .fixedSize()
+                    }
+                    if editable.count > 1 {
+                        tool("square.stack", "Stack", cards.contains(where: \.isStack) ? "Put them in the stack picked with them" : "Stack them: one entry holding them, in an order of their own") { stack(cards) }
+                    }
+                    tool("doc.on.doc", "Copy", "Copy") {
+                        Clipboard.copyEntries(cards, model: model)
+                        model.say("Copied \(cards.count)")
+                    }
+                    .disabled(none)
+                    tool("archivebox", archiving ? "Archive" : "Unarchive", archiving ? "Archive: out of the journal, still in search" : "Unarchive: back to the journal") {
+                        model.archive(manageable.map(\.id), archiving)
+                        picked = []
+                    }
+                    .disabled(manageable.isEmpty)
+                    tool("trash", "Move to Trash", "Move to Trash (Delete)") {
+                        model.trash(manageable.map(\.id))
+                        picked = []
+                    }
+                    .disabled(manageable.isEmpty)
+                    Spacer(minLength: 8)
+                    tool("xmark", "Stop selecting", "Stop selecting (Esc)") { picked = [] }
                 }
+                .padding(.horizontal, 12)
+                .padding(.vertical, 8)
             }
-            if cards.contains(where: { $0.type == .todo && !$0.isDone }) {
-                Button("Done") {
-                    let today = model.today
-                    let ids = cards.filter { $0.type == .todo && !$0.isDone }.map(\.id)
-                    model.performEach(ids, say: "Done") { repo, id, group in try await repo.setDone(id, true, today: today, group: group) }
-                }
-            }
-            Button("Stack") { stack(cards) }.disabled(cards.count < 2)
-            Button("Copy") {
-                Clipboard.copy(Markdown.entries(cards.sorted { $0.createdAt < $1.createdAt }, index: model.index))
-                model.say("Copied \(cards.count)")
-            }
-            Button("Archive") {
-                model.archive(Array(picked), true)
-                picked = []
-            }
-            Button("Trash", role: .destructive) {
-                model.trash(Array(picked))
-                picked = []
-            }
-            Button { picked = [] } label: { Image(systemName: "xmark") }.accessibilityLabel("Stop picking")
         }
         .buttonStyle(.borderless)
-        .padding(.horizontal, 16)
-        .padding(.vertical, 10)
         .background(Theme.surface)
         .overlay(alignment: .top) { Theme.line.frame(height: 1) }
+        .onChange(of: picked.isEmpty) { _, empty in if empty { panel = nil } }
     }
 
-    private func tagAll(_ tagId: String) {
+    private func tool(_ icon: String, _ label: String, _ help: String, active: Bool = false, action: @escaping () -> Void) -> some View {
+        Button(action: action) {
+            Image(systemName: icon).font(.system(size: 16)).frame(width: 34, height: 32)
+                .background(RoundedRectangle(cornerRadius: 8).fill(active ? Theme.accentSoft : .clear))
+        }
+        .foregroundStyle(active ? Theme.accent : Theme.text)
+        .help(help)
+        .accessibilityLabel(label)
+    }
+
+    /// Their tags, each × to take it off all of them, and a field to add one to all, making it if it's new.
+    private func tagsPanel(_ cards: [Card]) -> some View {
+        let counts = Dictionary(cards.flatMap(\.tags).map { ($0, 1) }, uniquingKeysWith: +)
+        let present = model.index.resolveTags(model.index.tagGroups.order(Array(counts.keys)))
+        let vaultIds = Array(Set(cards.map(\.vaultId)))
+        let offered = tagsForAll(model.index.tags, vaultIds: vaultIds, model.sharedInto)
+        let q = query.trimmingCharacters(in: .whitespaces).lowercased()
+        let options = q.isEmpty ? [] : Array(offered.filter { $0.title.lowercased().contains(q) }.prefix(6))
+        let exact = offered.first { $0.title.lowercased() == q }
+        return VStack(alignment: .leading, spacing: 8) {
+            if !present.isEmpty {
+                FlowLayout(spacing: 6) {
+                    ForEach(present) { tag in
+                        HStack(spacing: 4) {
+                            Text("#" + tag.displayTitle)
+                            if let n = counts[tag.id], n < cards.count { Text("\(n)").foregroundStyle(Theme.muted) }
+                            Button { removeTag(tag, from: cards) } label: { Image(systemName: "xmark").font(.system(size: 10, weight: .semibold)) }
+                                .buttonStyle(.plain)
+                                .accessibilityLabel("Remove #\(tag.displayTitle) from the selected entries")
+                        }
+                        .font(.system(size: 13))
+                        .padding(.horizontal, 10).padding(.vertical, 4)
+                        .background(Capsule().fill(tag.color.map { Theme.tint($0).opacity(0.24) } ?? Theme.sunken))
+                    }
+                }
+            }
+            TextField("Add a tag to all", text: $query)
+                .textFieldStyle(.roundedBorder)
+                .onSubmit { create(exact: exact, vaultIds: vaultIds, cards: cards) }
+            if !q.isEmpty {
+                FlowLayout(spacing: 6) {
+                    ForEach(options) { t in Button(t.displayTitle) { addTag(t.id, t.displayTitle, to: cards) }.buttonStyle(.bordered) }
+                    if exact == nil { Button("Create “\(query.trimmingCharacters(in: .whitespaces))”") { create(exact: nil, vaultIds: vaultIds, cards: cards) }.buttonStyle(.bordered) }
+                }
+            }
+        }
+        .padding(12)
+        .frame(maxWidth: .infinity, alignment: .leading)
+    }
+
+    private func duePanel(_ todos: [Card]) -> some View {
+        let today = model.today
+        return ScrollView(.horizontal, showsIndicators: false) {
+            HStack(spacing: 8) {
+                Button("Today") { setDue(todos, today) }
+                Button("Tomorrow") { setDue(todos, DateKey.adding(1, to: today)) }
+                Button("In a week") { setDue(todos, DateKey.adding(7, to: today)) }
+                Button("No date") { setDue(todos, nil) }.buttonStyle(.borderless)
+            }
+            .buttonStyle(.bordered)
+            .padding(12)
+        }
+    }
+
+    private func setDue(_ todos: [Card], _ due: String?) {
+        model.performEach(todos.map(\.id), say: "Changed the due date of \(todos.count == 1 ? "1 todo" : "\(todos.count) todos")") { repo, id, group in
+            try await repo.update(id, group: group) { $0.due = due }
+        }
+        panel = nil
+    }
+
+    private func setStatus(_ todos: [Card], done: Bool) {
+        let today = model.today
+        let ids = todos.filter { $0.isDone != done }.map(\.id)
+        model.performEach(ids, say: done ? "Marked \(ids.count) done" : "Reopened \(ids.count)") { repo, id, group in
+            _ = try await repo.setDone(id, done, today: today, group: group)
+        }
+    }
+
+    private func retype(_ cards: [Card], to type: CardType) {
+        let n = cards.count
+        model.performEach(cards.map(\.id), say: type == .todo ? "Made \(n) into \(n == 1 ? "a todo" : "todos")" : "Made \(n) into \(n == 1 ? "a note" : "notes")") { repo, id, group in
+            try await repo.retype(id, to: type, group: group)
+        }
+    }
+
+    private func addTag(_ tagId: String, _ name: String, to cards: [Card]) {
+        query = ""
         let groups = model.index.tagGroups
-        let ids = Array(picked)
-        model.performEach(ids, say: "Tagged \(ids.count)") { repo, id, group in
+        model.performEach(cards.map(\.id), say: "Tagged \(cards.count == 1 ? "1 entry" : "\(cards.count) entries") #\(name)") { repo, id, group in
             try await repo.update(id, group: group) { $0.tags = groups.with($0.tags, tagId) }
         }
+    }
+
+    private func removeTag(_ tag: Card, from cards: [Card]) {
+        let ids = cards.filter { $0.tags.contains(tag.id) }.map(\.id)
+        model.performEach(ids, say: "Removed #\(tag.displayTitle) from \(ids.count == 1 ? "1 entry" : "\(ids.count) entries")") { repo, id, group in
+            try await repo.update(id, group: group) { $0.tags = $0.tags.filter { $0 != tag.id } }
+        }
+    }
+
+    private func create(exact: Card?, vaultIds: [String], cards: [Card]) {
+        let name = query.trimmingCharacters(in: .whitespaces).replacingOccurrences(of: "^#", with: "", options: .regularExpression)
+        guard !name.isEmpty else { return }
+        if let exact { return addTag(exact.id, exact.displayTitle, to: cards) }
+        let id = UUID().uuidString.lowercased()
+        let vault = vaultIds.count == 1 ? vaultIds[0] : nil
+        model.perform { repo in _ = try await repo.createTag(id: id, title: name, vaultId: vault) }
+        addTag(id, name, to: cards)
     }
 
     /// A new stack of the picked entries, or, with a stack among them, into that one.

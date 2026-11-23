@@ -124,14 +124,16 @@ struct JournalView: View {
                 }
                 if !picked.isEmpty {
                     BatchBar(picked: $picked, all: all.map(\.card.id))
-                } else if !model.viewOnly {
+                } else if model.viewOnly {
+                    ViewOnlyBar()
+                } else {
                     JournalBox(filter: filter)
                 }
             }
         }
         .pageBackground()
         .navigationTitle(title)
-        .toolbar { toolbar(count: all.count) }
+        .toolbar { toolbar(all: all.map(\.card.id)) }
         .sheet(isPresented: $pickDates) { DatesDialog(filter: $filter) }
         .sheet(id: $datesFrom) { day in DatesDialog(filter: $filter, startDay: day) }
         .sheet(isPresented: $showShortcuts) { ShortcutsSheet() }
@@ -199,7 +201,14 @@ struct JournalView: View {
     }
 
     @ToolbarContentBuilder
-    private func toolbar(count: Int) -> some ToolbarContent {
+    private func toolbar(all: [String]) -> some ToolbarContent {
+        if !picked.isEmpty {
+            // Picking, as the web's: Select all and Done in place of the page's buttons.
+            ToolbarItemGroup(placement: .primaryAction) {
+                Button("Select all") { picked = Set(all) }.help("Select all (⌘A)")
+                Button("Done") { picked = [] }.buttonStyle(.bordered)
+            }
+        } else {
         ToolbarItemGroup(placement: .primaryAction) {
             SyncBadge()
             Button { model.viewOnly.toggle() } label: {
@@ -227,6 +236,7 @@ struct JournalView: View {
             } label: {
                 Label("Board", systemImage: filter.board == nil ? "rectangle.split.3x1" : "rectangle.split.3x1.fill")
             }
+        }
         }
     }
 
@@ -363,3 +373,22 @@ struct JournalRail: View {
     }
 }
 
+/// In the writing box's place while view only is on, as the web's: says so, with a way back to writing.
+struct ViewOnlyBar: View {
+    @Environment(AppModel.self) private var model
+
+    var body: some View {
+        HStack(spacing: 10) {
+            Image(systemName: "eye").font(.system(size: 17)).foregroundStyle(Theme.muted)
+            Text("View only. Entries can be read and copied, not changed.").foregroundStyle(Theme.muted)
+            Spacer(minLength: 8)
+            Button("Turn off") { model.viewOnly = false }.buttonStyle(.borderless)
+        }
+        .font(Theme.bodyFont)
+        .padding(.horizontal, 14).padding(.vertical, 10)
+        .background(RoundedRectangle(cornerRadius: 20).fill(Theme.surface))
+        .overlay(RoundedRectangle(cornerRadius: 20).stroke(Theme.line))
+        .frame(maxWidth: 720)
+        .padding(.horizontal, 12).padding(.bottom, 8)
+    }
+}

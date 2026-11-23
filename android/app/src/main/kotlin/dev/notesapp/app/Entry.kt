@@ -518,6 +518,18 @@ fun copyEntry(context: android.content.Context, model: AppModel, card: Card) {
     model.say("Copied")
 }
 
+/** Several entries at once, oldest first, as the device's copy style says. */
+fun copyEntries(context: android.content.Context, model: AppModel, cards: List<Card>) {
+    val markdown = Markdown.entries(cards, model.index)
+    val clip = when (Settings.copyStyle) {
+        "plain" -> android.content.ClipData.newPlainText("Entries", cards.joinToString("\n\n") { Markdown.words(it, model.index) })
+        "markdown" -> android.content.ClipData.newPlainText("Entries", markdown)
+        else -> android.content.ClipData.newHtmlText("Entries", markdown, markdownHtml(markdown))
+    }
+    (context.getSystemService(android.content.Context.CLIPBOARD_SERVICE) as android.content.ClipboardManager).setPrimaryClip(clip)
+    model.say("Copied ${cards.size}")
+}
+
 /** Markdown as simple HTML, for apps that paste formatted text: bold, italics, links and lines. */
 fun markdownHtml(md: String): String {
     fun esc(s: String) = s.replace("&", "&amp;").replace("<", "&lt;").replace(">", "&gt;")

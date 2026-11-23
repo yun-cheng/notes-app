@@ -131,7 +131,13 @@ fun JournalView(initial: StreamFilter, openDrawer: (() -> Unit)?, fixed: Boolean
 
     Column(Modifier.fillMaxSize().background(Theme.bg)) {
         // The count sits beside the title on a wide screen, as on the web; a phone's bar has no room for it.
-        TopBar(title, openDrawer, subtitle = if (openDrawer == null) "${all.size}" else null) {
+        TopBar(title, openDrawer, subtitle = if (openDrawer == null) (if (picked.isEmpty()) "${all.size}" else "of ${all.size}") else null) {
+            // Picking, as the web's: Select all and Done in place of the page's buttons.
+            if (picked.isNotEmpty()) {
+                TextButton(onClick = { picked = all.map { it.card.id }.toSet() }) { Text("Select all") }
+                androidx.compose.material3.OutlinedButton(onClick = { picked = emptySet() }) { Text("Done") }
+                return@TopBar
+            }
             SyncBadge()
             IconButton(onClick = { model.viewOnly = !model.viewOnly }) {
                 Icon(Icons.Outlined.Visibility, if (model.viewOnly) "Turn off view only" else "View only", tint = if (model.viewOnly) Theme.accent else Theme.muted)
@@ -186,7 +192,8 @@ fun JournalView(initial: StreamFilter, openDrawer: (() -> Unit)?, fixed: Boolean
                     JournalRail(visible, Modifier.align(Alignment.CenterEnd)) { id -> rowOf[id]?.let { scope.launch { list.scrollToItem(it) } } }
                 }
                 if (picked.isNotEmpty()) BatchBar(picked, all.map { it.card.id }) { picked = it }
-                else if (!model.viewOnly) JournalBox(filter)
+                else if (model.viewOnly) ViewOnlyBar()
+                else JournalBox(filter)
             }
         }
     }
@@ -464,5 +471,20 @@ fun MonthGrid(month: String, marked: Set<String>, selected: ClosedRange<String>?
                 }
             }
         }
+    }
+}
+
+/** In the writing box's place while view only is on, as the web's: says so, with a way back to writing. */
+@Composable
+fun ViewOnlyBar() {
+    val model = LocalModel.current
+    Row(
+        Modifier.fillMaxWidth().padding(horizontal = 12.dp, vertical = 8.dp).clip(RoundedCornerShape(20.dp)).background(Theme.surface)
+            .border(1.dp, Theme.line, RoundedCornerShape(20.dp)).padding(horizontal = 14.dp, vertical = 6.dp),
+        verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(10.dp),
+    ) {
+        Icon(Icons.Outlined.Visibility, null, Modifier.size(20.dp), tint = Theme.muted)
+        Text("View only. Entries can be read and copied, not changed.", Modifier.weight(1f), color = Theme.muted, fontSize = 15.sp)
+        TextButton(onClick = { model.viewOnly = false }) { Text("Turn off") }
     }
 }

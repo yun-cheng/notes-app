@@ -37,15 +37,20 @@ struct TrashPage: View {
                 ToolbarItemGroup {
                     Button("Select all") { picked = Set(items.map(\.id)) }
                     Button("Done") { picked = [] }
+                    PhoneTail()
                 }
-            } else if restorable.count > 1 {
-                ToolbarItem {
-                    Button { restore(restorable.map(\.id)) } label: { Label("Restore all", systemImage: "arrow.uturn.backward") }
-                        .labelStyle(.titleAndIcon)
-                        .help("Restore everything shown here")
+            } else {
+                ToolbarItemGroup {
+                    if restorable.count > 1 {
+                        Button { restore(restorable.map(\.id)) } label: { Label("Restore all", systemImage: "arrow.uturn.backward") }
+                            .labelStyle(.titleAndIcon)
+                            .help("Restore everything shown here")
+                    }
+                    PhoneTail()
                 }
             }
         }
+        .placesPhoneTail()
     }
 
     private func list(_ items: [Card], _ tags: [Card]) -> some View {

@@ -239,14 +239,16 @@ struct PhotosPage: View {
         .pageBackground()
         .navigationTitle("Photos")
         .toolbar {
-            if !picked.isEmpty {
-                ToolbarItemGroup {
+            ToolbarItemGroup {
+                if !picked.isEmpty {
                     Text("\(picked.count) picked")
                     Button("Share…") { Task { await prepareShare(all) } }
                     Button("Done") { picked = [] }
                 }
+                PhoneTail()
             }
         }
+        .placesPhoneTail()
         .onChange(of: viewing) { _, start in
             guard let start else { return }
             var entries: [String: (card: String, day: String)] = [:]

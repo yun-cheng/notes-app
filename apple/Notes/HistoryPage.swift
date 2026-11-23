@@ -61,8 +61,10 @@ struct HistoryPage: View {
             ToolbarItemGroup(placement: .primaryAction) {
                 Button { model.undo() } label: { Label("Undo", systemImage: "arrow.uturn.backward") }.help("Undo the last change made on this device")
                 Button { model.redo() } label: { Label("Redo", systemImage: "arrow.uturn.forward") }.help("Redo what was undone last")
+                PhoneTail()
             }
         }
+        .placesPhoneTail()
         .task(id: model.cardsVersion) { await load() }
     }
 

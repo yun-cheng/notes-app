@@ -147,6 +147,7 @@ struct JournalView: View {
         .toolbar { toolbar(all: all.map(\.card.id)) }
         #if os(iOS)
         .preference(key: PlacesPhoneHeader.self, value: phoneHeader != nil)
+        .preference(key: PlacesPageStatus.self, value: phoneHeader != nil)
         #endif
         .sheet(isPresented: $pickDates) { DatesDialog(filter: $filter) }
         .sheet(id: $datesFrom) { day in DatesDialog(filter: $filter, startDay: day) }

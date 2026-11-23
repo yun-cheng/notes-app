@@ -77,6 +77,33 @@ struct PlacesPhoneHeader: PreferenceKey {
     static func reduce(value: inout Bool, nextValue: () -> Bool) { value = value || nextValue() }
 }
 
+/// A page that shows the sync state and the eye itself, as the journal does, sets this.
+struct PlacesPageStatus: PreferenceKey {
+    static let defaultValue = false
+    static func reduce(value: inout Bool, nextValue: () -> Bool) { value = value || nextValue() }
+}
+
+/// A phone's Tags and vaults and account buttons at the end of a page's own buttons, as the web orders them: a page
+/// with buttons of its own puts this last among them, and marks itself with `.placesPhoneTail()`.
+struct PhoneTail: View {
+    @Environment(\.phoneHeader) private var header
+
+    var body: some View {
+        #if os(iOS)
+        if let header { PhoneHeaderButtons(header: header) }
+        #endif
+    }
+}
+
+extension View {
+    func placesPhoneTail() -> some View { modifier(PlacesPhoneTail()) }
+}
+
+struct PlacesPhoneTail: ViewModifier {
+    @Environment(\.phoneHeader) private var header
+    func body(content: Content) -> some View { content.preference(key: PlacesPhoneHeader.self, value: header != nil) }
+}
+
 /// What a page needs to show the phone's header buttons itself.
 struct PhoneHeader {
     var filters: Bool
@@ -167,15 +194,18 @@ struct PhoneSidebarButton: ViewModifier {
     var eye = true
     @State private var open = false
     @State private var placed = false
+    @State private var statusPlaced = false
     func body(content: Content) -> some View {
         let header = PhoneHeader(filters: filters, openFilters: { open = true }, eye: eye)
         content
             .environment(\.phoneHeader, header)
             .onPreferenceChange(PlacesPhoneHeader.self) { placed = $0 }
+            .onPreferenceChange(PlacesPageStatus.self) { statusPlaced = $0 }
             .toolbar {
-                if !placed {
-                    ToolbarItemGroup(placement: .topBarTrailing) { PhoneHeaderButtons(header: header, status: true) }
-                }
+                // The sync state and eye first, a page's own buttons next, then Tags and vaults and the account, as the
+                // web's title bar on a phone.
+                if !statusPlaced { ToolbarItemGroup(placement: .topBarTrailing) { PageStatus(eye: eye) } }
+                if !placed { ToolbarItemGroup(placement: .topBarTrailing) { PhoneHeaderButtons(header: header) } }
             }
             .sheet(isPresented: $open) {
                 NavigationStack { Sidebar(onPick: { open = false }, phone: true) }

@@ -1,5 +1,10 @@
 package dev.notesapp.app
 
+import dev.notesapp.core.label
+import dev.notesapp.core.word
+import androidx.compose.material.icons.outlined.Repeat
+import androidx.compose.material.icons.outlined.Schedule
+import androidx.compose.material.icons.outlined.Add
 import androidx.compose.foundation.layout.ExperimentalLayoutApi
 import androidx.compose.foundation.layout.FlowRow
 import androidx.compose.foundation.layout.PaddingValues
@@ -162,6 +167,13 @@ fun JournalBox(filter: StreamFilter) {
         unlock?.let { UnlockView(it, Modifier.heightIn(max = 300.dp)) }
         // What's typed after a / that starts the last line, while the menu of things to add is open.
         val slash = text.substringAfterLast('\n').takeIf { it.startsWith("/") && ' ' !in it }?.drop(1)
+        // The `#` or `@` word being typed at the end, as the web's box suggests tags and due dates for it.
+        val word = text.substringAfterLast(' ').substringAfterLast('\n').takeIf { slash == null && (it.startsWith("#") || it.startsWith("@")) }
+        val suggestions = word?.let { typeahead(model, it.first(), it.drop(1), targetVault) }.orEmpty()
+        if (word != null && suggestions.isNotEmpty()) TypeaheadMenu(if (word.startsWith("#")) "Tags" else "Due date", suggestions) { item ->
+            text = text.dropLast(word.length) + item.insert
+            Drafts.set("journal", draftKey, Drafts.doc(text), onlyHere = encrypted)
+        }
         if (slash != null) SlashMenu(slash) { item ->
             text = text.substringBeforeLast('\n', "").let { if (text.contains('\n')) "$it\n" else "" } + (item.marker ?: "")
             Drafts.set("journal", draftKey, Drafts.doc(text), onlyHere = encrypted)
@@ -365,6 +377,50 @@ fun stack(model: AppModel, cards: List<Card>) {
         for ((stackId, list) in stackPlan(ids, target, stacks + target)) repo.update(stackId, group) { it.withStack(list) }
     }
     model.say("Stacked ${ids.size}", undoable = true)
+}
+
+/** One choice in a menu that opens while a `#` or `@` word is typed: what it says, a hint, and what it puts in place of the word. */
+data class TypeaheadItem(val id: String, val label: String, val hint: String?, val icon: androidx.compose.ui.graphics.vector.ImageVector, val insert: String)
+
+/** What's offered for a `#` or `@` word, as the web's `tagItems` and `dateItems`: tags, or dates, times and repeats. */
+fun typeahead(model: AppModel, mark: Char, query: String, vaultId: String): List<TypeaheadItem> {
+    val q = query.trim().lowercase()
+    if (mark == '#') {
+        val tags = dev.notesapp.core.tagsFor(model.index.tags, vaultId, model.sharedInto)
+        val found = tags.filter { q.isEmpty() || it.title.lowercase().contains(q) }
+            .sortedWith(compareBy({ !it.title.lowercase().startsWith(q) }, { !it.pinned }))
+            .take(6)
+            .map { TypeaheadItem(it.id, "#" + it.title, model.index.tagGroups.groupOf[it.id]?.title, Icons.AutoMirrored.Outlined.Label, "#${it.title} ") }
+            .toMutableList()
+        val exact = tags.any { it.title.lowercase() == q } || q in listOf("todo", "diary") || model.index.tagGroups.isGroupName(q)
+        if (q.isNotEmpty() && !exact && q.all { it.isLetterOrDigit() || it == '_' || it == '-' }) found.add(TypeaheadItem("new", "#" + query.trim(), "new tag", Icons.Outlined.Add, "#${query.trim()} "))
+        return found
+    }
+    val today = model.today
+    val weekday = { d: String -> java.time.LocalDate.parse(d).dayOfWeek.getDisplayName(java.time.format.TextStyle.FULL, java.util.Locale.getDefault()).lowercase() }
+    val words = listOf("today", "tomorrow") + (2..7).map { weekday(DateKey.adding(it, today)) }
+    val typed = if (Regex("""\d{4}-\d{2}-\d{2}""").matches(q) && dev.notesapp.core.EntryParser.parseDue(q, today) != null) listOf(q) else emptyList()
+    val items = (words + typed).filter { it.startsWith(q) }.mapNotNull { w ->
+        dev.notesapp.core.EntryParser.parseDue(w, today)?.let { TypeaheadItem(w, "@$w", DateKey.relativeDay(it, today), Icons.Outlined.CalendarMonth, "@$w ") }
+    }.toMutableList()
+    dev.notesapp.core.TimeKey.parse(q)?.let { items.add(TypeaheadItem("time", "@$q", dev.notesapp.core.TimeKey.format(it), Icons.Outlined.Schedule, "@$q ")) }
+    if (q.isNotEmpty()) for (r in dev.notesapp.core.repeatChoices) {
+        val w = r.word
+        if (w.startsWith(q)) items.add(TypeaheadItem(w, "@$w", r.label, Icons.Outlined.Repeat, "@$w "))
+    }
+    return items
+}
+
+@Composable
+fun TypeaheadMenu(title: String, items: List<TypeaheadItem>, pick: (TypeaheadItem) -> Unit) {
+    Column(Modifier.widthIn(max = 320.dp).fillMaxWidth().clip(RoundedCornerShape(12.dp)).background(Theme.surface).border(1.dp, Theme.line, RoundedCornerShape(12.dp)).padding(bottom = 4.dp)) {
+        Text(title, Modifier.padding(start = 10.dp, top = 6.dp), fontSize = 12.sp, fontWeight = FontWeight.SemiBold, color = Theme.muted)
+        for (item in items) Row(Modifier.fillMaxWidth().clickable { pick(item) }.padding(horizontal = 10.dp, vertical = 8.dp), verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(10.dp)) {
+            Icon(item.icon, null, Modifier.size(18.dp), tint = Theme.muted)
+            Text(item.label, Modifier.weight(1f), color = Theme.text)
+            item.hint?.let { Text(it, fontSize = 12.sp, color = Theme.muted) }
+        }
+    }
 }
 
 /** The box's menu of things to add, as the web's / menu: a todo, lists, a quote, a heading, a photo, a file or a voice message, narrowed by what's typed after the /. */

@@ -43,6 +43,8 @@ struct JournalBox: View {
             }
             if let query = slashQuery {
                 SlashMenu(query: query) { pickSlash($0) }
+            } else if let (mark, query) = typedWord, !typeahead(mark, query).isEmpty {
+                TypeaheadMenu(title: mark == "#" ? "Tags" : "Due date", items: typeahead(mark, query)) { pickTypeahead($0) }
             }
             HStack(alignment: .bottom, spacing: 8) {
                 Button { todos.toggle() } label: {
@@ -149,6 +151,57 @@ struct JournalBox: View {
         let last = text.split(separator: "\n", omittingEmptySubsequences: false).last.map(String.init) ?? ""
         guard last.hasPrefix("/"), !last.contains(" ") else { return nil }
         return String(last.dropFirst())
+    }
+
+    /// The `#` or `@` word being typed at the end, as the web's box suggests tags and due dates for it.
+    private var typedWord: (String, String)? {
+        guard let last = text.split(separator: " ", omittingEmptySubsequences: false).last?.split(separator: "\n", omittingEmptySubsequences: false).last else { return nil }
+        guard let first = last.first, first == "#" || first == "@" else { return nil }
+        return (String(first), String(last.dropFirst()))
+    }
+
+    /// What's offered for a `#` or `@` word, as the web's `tagItems` and `dateItems`.
+    private func typeahead(_ mark: String, _ query: String) -> [TypeaheadMenu.Item] {
+        let q = query.trimmingCharacters(in: .whitespaces).lowercased()
+        if mark == "#" {
+            let tags = tagsFor(model.index.tags, vaultId: targetVault, model.sharedInto)
+            var found = tags.filter { q.isEmpty || $0.title.lowercased().contains(q) }
+                .sorted { a, b in
+                    let sa = a.title.lowercased().hasPrefix(q), sb = b.title.lowercased().hasPrefix(q)
+                    return sa != sb ? sa : (a.pinned && !b.pinned)
+                }
+                .prefix(6)
+                .map { TypeaheadMenu.Item(id: $0.id, label: "#" + $0.title, hint: model.index.tagGroups.groupOf[$0.id]?.title, icon: "tag", insert: "#\($0.title) ") }
+            let exact = tags.contains { $0.title.lowercased() == q } || ["todo", "diary"].contains(q) || model.index.tagGroups.isGroupName(q)
+            if !q.isEmpty, !exact, q.allSatisfy({ $0.isLetter || $0.isNumber || $0 == "_" || $0 == "-" }) {
+                found.append(TypeaheadMenu.Item(id: "new", label: "#" + query.trimmingCharacters(in: .whitespaces), hint: "new tag", icon: "plus", insert: "#\(query.trimmingCharacters(in: .whitespaces)) "))
+            }
+            return Array(found)
+        }
+        let today = model.today
+        let weekday = { (d: String) in DateKey.date(d).map { $0.formatted(.dateTime.weekday(.wide)).lowercased() } ?? "" }
+        let words = ["today", "tomorrow"] + (2...7).map { weekday(DateKey.adding($0, to: today)) }
+        let typed = q.wholeMatch(of: /\d{4}-\d{2}-\d{2}/) != nil && EntryParser.parseDue(q, today: today) != nil ? [q] : []
+        var items = (words + typed).filter { $0.hasPrefix(q) }.compactMap { w -> TypeaheadMenu.Item? in
+            guard let due = EntryParser.parseDue(w, today: today) else { return nil }
+            return TypeaheadMenu.Item(id: w, label: "@" + w, hint: DateKey.relativeDay(due, today: today), icon: "calendar", insert: "@\(w) ")
+        }
+        if let time = TimeKey.parse(q) {
+            items.append(TypeaheadMenu.Item(id: "time", label: "@" + q, hint: TimeKey.format(time), icon: "clock", insert: "@\(q) "))
+        }
+        if !q.isEmpty {
+            items += Repeat.choices.map(\.word).filter { $0.hasPrefix(q) }.compactMap { w in
+                Repeat.parse(w).map { TypeaheadMenu.Item(id: w, label: "@" + w, hint: $0.label, icon: "repeat", insert: "@\(w) ") }
+            }
+        }
+        return items
+    }
+
+    /// Puts the word picked in place of the one being typed.
+    private func pickTypeahead(_ item: TypeaheadMenu.Item) {
+        guard let (mark, query) = typedWord else { return }
+        text = String(text.dropLast(mark.count + query.count)) + item.insert
+        focused = true
     }
 
     /// Takes the /word off the last line, then starts that line as the item picked, or opens what it adds.
@@ -513,6 +566,44 @@ struct AttachedThumb: View {
                 .buttonStyle(.plain).padding(2)
                 .accessibilityLabel("Take it out")
         }
+    }
+}
+
+/// A menu that opens while a `#` or `@` word is typed in the box, as the web's: tags, or dates, times and repeats.
+struct TypeaheadMenu: View {
+    struct Item: Identifiable {
+        let id: String
+        let label: String
+        let hint: String?
+        let icon: String
+        let insert: String
+    }
+
+    let title: String
+    let items: [Item]
+    let pick: (Item) -> Void
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 0) {
+            Text(title).font(.caption.weight(.semibold)).foregroundStyle(Theme.muted).padding(.horizontal, 10).padding(.top, 6)
+            ForEach(items) { item in
+                Button { pick(item) } label: {
+                    HStack(spacing: 10) {
+                        Image(systemName: item.icon).frame(width: 20).foregroundStyle(Theme.muted)
+                        Text(item.label)
+                        Spacer()
+                        if let hint = item.hint { Text(hint).font(.caption).foregroundStyle(Theme.muted) }
+                    }
+                    .padding(.horizontal, 10).padding(.vertical, 6)
+                    .contentShape(Rectangle())
+                }
+                .buttonStyle(.plain)
+            }
+        }
+        .padding(.bottom, 4)
+        .frame(maxWidth: 320, alignment: .leading)
+        .background(RoundedRectangle(cornerRadius: 12).fill(Theme.surface))
+        .overlay(RoundedRectangle(cornerRadius: 12).stroke(Theme.line))
     }
 }
 

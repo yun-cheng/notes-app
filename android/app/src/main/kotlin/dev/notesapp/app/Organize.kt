@@ -52,6 +52,7 @@ import androidx.compose.ui.draw.alpha
 import androidx.compose.foundation.border
 import dev.notesapp.core.CardType
 import dev.notesapp.core.Doc
+import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import dev.notesapp.core.ApiError
@@ -137,23 +138,45 @@ fun TagsPage(openDrawer: (() -> Unit)?) {
     Column(Modifier.fillMaxSize().background(Theme.bg)) {
         TopBar("Tags", openDrawer)
         Column(Modifier.weight(1f).verticalScroll(rememberScrollState()).padding(bottom = 24.dp)) {
-            FormSection("New") {
+            FormSection("Groups", footer = null) {
+                FormText("A group gathers tags under a name. In a group of one choice, like Priority, an entry takes one of its tags, and adding another swaps it. An ordered group can sort the journal.")
+            }
+            for (group in groups.groups) GroupBlock(group)
+            FormSection {
+                if (groups.groups.none { it.title.equals("Priority", ignoreCase = true) }) FormButton("Add Priority: High, Medium, Low") {
+                    model.perform { repo ->
+                        val ids = listOf("High", "Medium", "Low").map { repo.createTag(title = it).id }
+                        repo.createTag(title = "Priority", members = ids, choosesOne = true, ordered = true)
+                    }
+                }
                 FormField(newGroup, { newGroup = it }, "New group, like Topics or Area", onDone = ::makeGroup)
                 FormButton("Add group", enabled = newGroup.isNotBlank(), onClick = ::makeGroup)
-                FormDivider()
+            }
+            FormSection(if (groups.groups.isEmpty()) "Tags" else "Other tags") {
+                FormText("A tag is kept to the vaults you pick: it's offered only on entries there, and everyone in them has it. One for all vaults is offered everywhere, and only you see it.")
                 FormField(newTag, { newTag = it }, "New tag", onDone = ::makeTag)
-                ChoiceRow("Kept to", model.vault(newTagVault)?.name ?: "All vaults") { close ->
+                ChoiceRow("Where the new tag can go", model.vault(newTagVault)?.name ?: "All vaults") { close ->
                     for (v in tagHomes(model)) MenuCheck(v.name, newTagVault == v.id) { pickedVault = v.id; close() }
                     MenuCheck("All vaults", newTagVault.isEmpty()) { pickedVault = ""; close() }
                 }
                 FormButton("Add tag", enabled = newTag.isNotBlank(), onClick = ::makeTag)
-            }
-            for (group in groups.groups) GroupBlock(group)
-            FormSection("Tags") {
+                FormDivider()
                 groups.loose.forEachIndexed { i, t -> if (i > 0) FormDivider(); TagRow(t) }
-                if (groups.loose.isEmpty()) FormText("No tags outside the groups.")
+                if (groups.loose.isEmpty()) FormText(if (model.index.tags.isEmpty()) "No tags yet. Pin a tag and it appears as a folder." else "Every tag is in a group.")
             }
         }
+    }
+}
+
+/** A tag's color, shown on its chips: a dot that opens the colors. */
+@Composable
+fun TagColorDot(tag: Card) {
+    val model = LocalModel.current
+    var open by remember { mutableStateOf(false) }
+    Box {
+        val tint = tag.color?.let { Theme.tint(it) }
+        Box(Modifier.size(18.dp).clip(CircleShape).background(tint ?: androidx.compose.ui.graphics.Color.Transparent).border(1.5.dp, tint ?: Theme.muted, CircleShape).clickable { open = true })
+        androidx.compose.material3.DropdownMenu(open, { open = false }) { Swatches(tag.color) { c -> open = false; model.update(tag.id) { it.withColor(c) } } }
     }
 }
 
@@ -189,10 +212,11 @@ fun TagRow(tag: Card, group: TagGroup? = null, rank: Int? = null) {
     Box {
         Row(Modifier.fillMaxWidth().clickable { model.page = Page.Journal(StreamFilter(tagId = tag.id)) }.padding(start = 16.dp, end = 4.dp, top = 4.dp, bottom = 4.dp), verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp)) {
             rank?.let { Text("$it", fontSize = 12.sp, color = Theme.muted) }
-            Icon(if (tag.pinned) Icons.Outlined.PushPin else Icons.Outlined.Label, null, Modifier.size(18.dp), tint = Theme.muted)
+            TagColorDot(tag)
+            if (tag.pinned) Icon(Icons.Outlined.PushPin, "Pinned to the sidebar", Modifier.size(16.dp), tint = Theme.muted)
             Column(Modifier.weight(1f)) {
-                Text(tag.displayTitle, color = Theme.text)
-                Text("$count · " + (vaults?.mapNotNull { model.vault(it)?.name }?.joinToString(", ") ?: "All vaults"), fontSize = 12.sp, color = Theme.muted)
+                Text(tag.displayTitle, color = Theme.text, fontWeight = FontWeight.SemiBold)
+                Text((if (count == 1) "1 entry" else "$count entries") + " · " + (vaults?.mapNotNull { model.vault(it)?.name }?.joinToString(", ") ?: "All vaults"), fontSize = 12.sp, color = Theme.muted)
             }
             if (group != null) {
                 Icon(Icons.Outlined.KeyboardArrowUp, "Move up", Modifier.size(28.dp).clickable(enabled = group.members.first().id != tag.id) { members(moveMember(group.members.map { it.id }, tag.id, -1)) }, tint = Theme.muted)

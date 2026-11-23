@@ -4,8 +4,8 @@ import SwiftUI
 /// One entry in the journal, as the web app's bubble: a note's title and text or a todo's checkbox and title, its tags
 /// with a todo's dates on their right, and a bottom row of its reactions on the left and its badges, page, More or
 /// Less, vault and time on the right. Its pages turn with the arrows along its sides. A double-click (a tap on a phone)
-/// opens it; a right-click (a long press) opens its menu. Its photos, files and links show under it
-/// (`EntryAttachments`).
+/// opens it; a right-click opens its menu. Its photos, files and links show under it
+/// (`EntryAttachments`). On a phone a long press picks it, as the web's.
 struct BubbleView: View {
     @Environment(AppModel.self) private var model
     let card: Card
@@ -74,7 +74,9 @@ struct BubbleView: View {
         .onTapGesture { if picking { onPick() } else { model.openEntry = card.id } }
         #endif
         .modifier(PickOnCommandClick(onPick: onPick))
+        #if os(macOS)
         .contextMenu { EntryMenu(card: card, revealHidden: { revealed.toggle() }) }
+        #endif
         }
         .frame(maxWidth: .infinity, alignment: .leading)
         .accessibilityElement(children: .combine)
@@ -177,7 +179,8 @@ enum BubbleMemo {
     }
 }
 
-/// Cmd-click picks an entry, as in the web app's journal.
+/// Cmd-click picks an entry, as in the web app's journal; on a phone a long press does, as on the web there (what the
+/// menu offers is in the open entry's bar and the picking bar).
 struct PickOnCommandClick: ViewModifier {
     let onPick: () -> Void
     func body(content: Content) -> some View {

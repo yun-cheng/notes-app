@@ -54,6 +54,8 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.input.pointer.isSecondaryPressed
+import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.platform.LocalClipboardManager
 import androidx.compose.ui.platform.LocalUriHandler
 import androidx.compose.ui.text.AnnotatedString
@@ -115,7 +117,17 @@ fun BubbleView(card: Card, maxWidth: Dp, picked: Boolean = false, picking: Boole
                 .clip(bubbleShape)
                 .background(background)
                 .border(if (picked) 2.dp else 1.dp, if (picked) Theme.accent else tint?.copy(alpha = 0.5f) ?: Theme.line, bubbleShape)
-                .combinedClickable(onClick = { if (picking) onPick() else model.openEntry = card.id }, onLongClick = { if (picking) onPick() else menu = true })
+                // A mouse's right button opens the menu, as on the web on a computer.
+                .pointerInput(card.id) {
+                    awaitPointerEventScope {
+                        while (true) {
+                            val e = awaitPointerEvent()
+                            if (e.type == androidx.compose.ui.input.pointer.PointerEventType.Press && e.buttons.isSecondaryPressed) menu = true
+                        }
+                    }
+                }
+                // A long press picks, as on the web on a phone; the menu's actions are in the open entry and the picking bar.
+                .combinedClickable(onClick = { if (picking) onPick() else model.openEntry = card.id }, onLongClick = onPick)
                 .padding(start = if (paged) (if (card.type == CardType.todo) 22.dp else 24.dp) else 12.dp, end = if (paged) 24.dp else 12.dp, top = 7.dp, bottom = 5.dp),
             verticalArrangement = Arrangement.spacedBy(2.dp),
         ) {

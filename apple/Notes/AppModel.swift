@@ -53,6 +53,8 @@ final class AppModel {
     var panel: EntryPanel?
     /// A file opened to look at, on a phone.
     var preview: URL?
+    /// The photo viewer, over the whole window.
+    var viewer: ViewerRequest?
     /// The entry the journal box saved last, to scroll to.
     var lastSaved: String?
     /// Set by the Mac's New Note command and the sidebar's button: the journal box takes focus.

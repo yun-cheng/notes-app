@@ -30,7 +30,9 @@ struct MainView: View {
         .id(model.accountId)
         #if os(macOS)
         .overlay { if let id = model.openEntry { EntryOverlay(id: id) } }
+        .overlay { if let request = model.viewer { MediaViewer(request: request) { model.viewer = nil } } }
         #else
+        .fullScreenCover(item: $model.viewer) { request in MediaViewer(request: request) { model.viewer = nil }.presentationBackground(.clear) }
         .sheet(id: $model.openEntry) { id in EntrySheet(id: id) }
         #endif
         .sheet(isPresented: $model.showPalette) { CommandPalette() }

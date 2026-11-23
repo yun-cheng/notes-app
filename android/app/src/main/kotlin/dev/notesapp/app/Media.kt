@@ -1,5 +1,14 @@
 package dev.notesapp.app
 
+import androidx.compose.runtime.rememberCoroutineScope
+import androidx.compose.runtime.LaunchedEffect
+import dev.notesapp.core.DateKey
+import androidx.compose.material.icons.automirrored.outlined.KeyboardArrowRight
+import androidx.compose.material.icons.automirrored.outlined.KeyboardArrowLeft
+import androidx.compose.material.icons.outlined.Close
+import androidx.compose.foundation.shape.CircleShape
+import androidx.compose.foundation.layout.navigationBarsPadding
+import androidx.compose.foundation.layout.PaddingValues
 import android.widget.MediaController
 import android.widget.VideoView
 import androidx.compose.foundation.ExperimentalFoundationApi
@@ -283,18 +292,50 @@ fun fileSize(bytes: Long): String = when {
 /** A file's extension in capitals, "PDF", or "File". */
 fun extensionLabel(name: String): String = Regex("\\.([A-Za-z0-9]{1,5})$").find(name)?.groupValues?.get(1)?.uppercase() ?: "File"
 
-/** Photos and videos full screen, paged through, a photo zoomed with a pinch or a double tap. */
+/**
+ * Photos and videos over the whole screen, as the web's viewer: paged through with a swipe or ‹ and ›, a photo zoomed
+ * with a pinch or a double tap; how far along it is and a row of all of them along the foot; from the Photos page, its
+ * entry and day at the top, pressed to open it (`entries`, by photo); and a close.
+ */
 @Composable
-fun MediaViewer(media: List<Doc.Media>, start: String, vaultId: String, dismiss: () -> Unit) {
+fun MediaViewer(media: List<Doc.Media>, start: String, vaultId: String, entries: Map<String, Card> = emptyMap(), dismiss: () -> Unit) {
+    val model = LocalModel.current
     val pager = rememberPagerState(maxOf(0, media.indexOfFirst { it.id == start })) { media.size }
+    val scope = rememberCoroutineScope()
     androidx.compose.ui.window.Dialog(dismiss, androidx.compose.ui.window.DialogProperties(usePlatformDefaultWidth = false, decorFitsSystemWindows = false)) {
-        Box(Modifier.fillMaxSize().background(Color.Black)) {
-            HorizontalPager(pager, Modifier.fillMaxSize()) { i -> MediaPage(media[i], vaultId) }
-            Text(
-                "Done", Modifier.align(Alignment.TopEnd).padding(top = statusBarTop() + 8.dp, end = 16.dp).clickable(onClick = dismiss).padding(8.dp),
-                color = Color.White, fontWeight = FontWeight.SemiBold, fontSize = 17.sp,
-            )
-            if (media.size > 1) Text("${pager.currentPage + 1} / ${media.size}", Modifier.align(Alignment.BottomCenter).padding(bottom = 32.dp), color = Color.White.copy(alpha = 0.8f))
+        Box(Modifier.fillMaxSize().background(Color.Black.copy(alpha = 0.92f))) {
+            HorizontalPager(pager, Modifier.fillMaxSize().padding(top = statusBarTop() + 56.dp, bottom = if (media.size > 1) 112.dp else 24.dp)) { i -> MediaPage(media[i], vaultId) }
+            Row(Modifier.fillMaxWidth().padding(top = statusBarTop() + 8.dp, start = 12.dp, end = 12.dp), verticalAlignment = Alignment.CenterVertically) {
+                val card = media.getOrNull(pager.currentPage)?.let { entries[it.id] }
+                if (card != null) Row(
+                    Modifier.clip(RoundedCornerShape(50)).background(Color.Black.copy(alpha = 0.55f)).clickable { dismiss(); model.openEntry = card.id }.padding(horizontal = 12.dp, vertical = 6.dp),
+                    verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(6.dp),
+                ) {
+                    Text(card.displayTitle.ifBlank { "Untitled" }, color = Color.White, fontWeight = FontWeight.SemiBold, fontSize = 14.sp, maxLines = 1)
+                    Text(DateKey.relativeDay(dev.notesapp.core.Stream.entryDay(card), model.today), color = Color.White.copy(alpha = 0.7f), fontSize = 14.sp)
+                    Icon(Icons.AutoMirrored.Outlined.KeyboardArrowRight, null, Modifier.size(16.dp), tint = Color.White)
+                }
+                Spacer(Modifier.weight(1f))
+                Icon(Icons.Outlined.Close, "Close", Modifier.size(40.dp).clip(CircleShape).background(Color.Black.copy(alpha = 0.55f)).clickable(onClick = dismiss).padding(9.dp), tint = Color.White)
+            }
+            if (media.size > 1) {
+                Icon(Icons.AutoMirrored.Outlined.KeyboardArrowLeft, "Previous", Modifier.align(Alignment.CenterStart).padding(8.dp).size(40.dp).clip(CircleShape).background(Color.Black.copy(alpha = 0.55f))
+                    .clickable { scope.launch { pager.animateScrollToPage((pager.currentPage - 1 + media.size) % media.size) } }.padding(8.dp), tint = Color.White)
+                Icon(Icons.AutoMirrored.Outlined.KeyboardArrowRight, "Next", Modifier.align(Alignment.CenterEnd).padding(8.dp).size(40.dp).clip(CircleShape).background(Color.Black.copy(alpha = 0.55f))
+                    .clickable { scope.launch { pager.animateScrollToPage((pager.currentPage + 1) % media.size) } }.padding(8.dp), tint = Color.White)
+                Column(Modifier.align(Alignment.BottomCenter).fillMaxWidth().navigationBarsPadding().padding(bottom = 12.dp), horizontalAlignment = Alignment.CenterHorizontally, verticalArrangement = Arrangement.spacedBy(6.dp)) {
+                    Text("${pager.currentPage + 1} / ${media.size}", color = Color.White.copy(alpha = 0.8f), fontSize = 12.sp)
+                    val strip = androidx.compose.foundation.lazy.rememberLazyListState()
+                    LaunchedEffect(pager.currentPage) { strip.animateScrollToItem(maxOf(0, pager.currentPage - 3)) }
+                    androidx.compose.foundation.lazy.LazyRow(state = strip, horizontalArrangement = Arrangement.spacedBy(6.dp), contentPadding = PaddingValues(horizontal = 12.dp)) {
+                        items(media.size) { i ->
+                            val on = i == pager.currentPage
+                            PhotoThumb(media[i], vaultId, 48.dp, Modifier.clip(RoundedCornerShape(6.dp)).border(if (on) 2.dp else 0.dp, Color.White, RoundedCornerShape(6.dp))
+                                .graphicsLayer(alpha = if (on) 1f else 0.6f).clickable { scope.launch { pager.scrollToPage(i) } })
+                        }
+                    }
+                }
+            }
         }
     }
 }

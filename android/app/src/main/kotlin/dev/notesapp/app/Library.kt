@@ -357,7 +357,7 @@ fun PhotosPage(openDrawer: (() -> Unit)?) {
             }
         }
     }
-    viewing?.let { start -> MediaViewer(all.map { it.first }, start, all.firstOrNull { it.first.id == start }?.second?.vaultId ?: "") { viewing = null } }
+    viewing?.let { start -> MediaViewer(all.map { it.first }, start, all.firstOrNull { it.first.id == start }?.second?.vaultId ?: "", all.associate { it.first.id to it.second }) { viewing = null } }
 }
 
 /** A photo or a video's still filling its tile, cut to its shape; its shape kept once it's seen. */

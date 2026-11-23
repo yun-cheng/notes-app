@@ -349,7 +349,11 @@ struct EntryAttachments: View {
             }
             .frame(maxWidth: 560, alignment: .leading)
             .padding(.top, 2)
-            .sheet(id: $viewing) { start in MediaViewer(media: media, start: start, vaultId: card.vaultId) }
+            .onChange(of: viewing) { _, start in
+                guard let start else { return }
+                model.viewer = ViewerRequest(media: media, start: start, vaultId: card.vaultId)
+                viewing = nil
+            }
         }
     }
 
@@ -580,48 +584,151 @@ struct FileChip: View {
     }
 }
 
-/// Photos and videos full screen, paged through, a photo zoomed with a pinch or the wheel.
-struct MediaViewer: View {
-    @Environment(\.dismiss) private var dismiss
-    let media: [Doc.Media]
-    let start: String
-    let vaultId: String
-    @State private var current: String = ""
-
-    var body: some View {
-        NavigationStack {
-            TabView(selection: $current) {
-                ForEach(media) { m in
-                    MediaPage(media: m, vaultId: vaultId).tag(m.id)
-                }
-            }
-            #if os(iOS)
-            .tabViewStyle(.page)
-            #endif
-            .background(.black)
-            .toolbar { ToolbarItem(placement: .confirmationAction) { Button("Done") { dismiss() } } }
-            .focusable()
-            .focusEffectDisabled()
-            .onKeyPress(.leftArrow) { step(-1) }
-            .onKeyPress(.rightArrow) { step(1) }
-            .onKeyPress(.escape) {
-                dismiss()
-                return .handled
-            }
-        }
-        .onAppear { current = start }
-        #if os(macOS)
-        .frame(minWidth: 700, minHeight: 520)
-        #endif
-    }
+/// What the photo viewer shows, as the web's `PhotoViewer` is opened: the photos and videos to page through, which to
+/// start at, and, from the Photos page, each one's entry for its caption.
+struct ViewerRequest: Identifiable {
+    let id = UUID()
+    var media: [Doc.Media]
+    var start: String
+    var vaultId: String
+    /// By photo, the entry it's in and its day, named over the photo to open it.
+    var entries: [String: (card: String, day: String)] = [:]
 }
 
-extension MediaViewer {
+/// Photos and videos over the whole window, as the web's viewer: the one shown in the middle, zoomed with a pinch, the
+/// wheel or + and −; the previous and next at its sides; how far along it is; a row of all of them along the foot;
+/// from the Photos page, its entry and day at the top, pressed to open it; and a close. Arrows page, Esc closes.
+struct MediaViewer: View {
+    @Environment(AppModel.self) private var model
+    let request: ViewerRequest
+    let close: () -> Void
+    @State private var current: String = ""
+    @State private var scale: CGFloat = 1
+    @FocusState private var focused: Bool
+
+    var body: some View {
+        let media = request.media
+        let at = media.firstIndex { $0.id == current } ?? 0
+        ZStack {
+            Color.black.opacity(0.9).ignoresSafeArea()
+                .contentShape(Rectangle())
+                .onTapGesture(perform: close)
+            if media.indices.contains(at) {
+                MediaPage(media: media[at], vaultId: request.vaultId, scale: $scale)
+                    .id(media[at].id)
+                    .padding(.horizontal, media.count > 1 ? 56 : 16)
+                    .padding(.top, 48)
+                    .padding(.bottom, media.count > 1 ? 104 : 24)
+                    .contextMenu {
+                        if case .photo(let id) = media[at], let entry = request.entries[id].flatMap({ model.card($0.card) }) ?? model.index.live.first(where: { Doc.media($0.content).contains { $0.id == id } }) {
+                            PhotoMenu(id: id, card: entry)
+                        }
+                    }
+            }
+            VStack {
+                HStack(alignment: .top) {
+                    if let entry = request.entries[current], let card = model.card(entry.card) {
+                        Button {
+                            close()
+                            model.openEntry = card.id
+                        } label: {
+                            HStack(spacing: 6) {
+                                Text(card.displayTitle.isEmpty ? "Untitled" : card.displayTitle).fontWeight(.semibold).lineLimit(1)
+                                Text(DateKey.relativeDay(entry.day, today: model.today)).foregroundStyle(.white.opacity(0.7))
+                                Image(systemName: "chevron.right").font(.system(size: 11, weight: .semibold))
+                            }
+                            .font(.system(size: 13))
+                            .padding(.horizontal, 12).padding(.vertical, 6)
+                            .background(Capsule().fill(.black.opacity(0.55)))
+                        }
+                        .buttonStyle(.plain)
+                        .foregroundStyle(.white)
+                        .accessibilityLabel("Open the entry: \(card.displayTitle)")
+                    }
+                    Spacer()
+                    if scale > 1 {
+                        Button("\(Int(scale * 100))% · Fit") { withAnimation { scale = 1 } }
+                            .buttonStyle(.plain).foregroundStyle(.white).font(.system(size: 13))
+                            .padding(.horizontal, 10).padding(.vertical, 6).background(Capsule().fill(.black.opacity(0.55)))
+                            .help("Fit the photo to the screen (0)")
+                    }
+                    Button(action: close) {
+                        Image(systemName: "xmark").font(.system(size: 15, weight: .semibold)).frame(width: 36, height: 36)
+                            .background(Circle().fill(.black.opacity(0.55)))
+                    }
+                    .buttonStyle(.plain).foregroundStyle(.white)
+                    .accessibilityLabel("Close")
+                }
+                .padding(12)
+                Spacer()
+                if media.count > 1 {
+                    Text("\(at + 1) / \(media.count)").font(.system(size: 12).monospacedDigit()).foregroundStyle(.white.opacity(0.8))
+                    ScrollViewReader { proxy in
+                        ScrollView(.horizontal, showsIndicators: false) {
+                            LazyHStack(spacing: 6) {
+                                ForEach(media) { m in
+                                    Button { current = m.id; scale = 1 } label: {
+                                        PhotoThumb(media: m, vaultId: request.vaultId, size: 48)
+                                            .frame(width: 48, height: 48)
+                                            .clipShape(RoundedRectangle(cornerRadius: 6))
+                                            .overlay(RoundedRectangle(cornerRadius: 6).stroke(.white, lineWidth: m.id == current ? 2 : 0))
+                                            .opacity(m.id == current ? 1 : 0.6)
+                                    }
+                                    .buttonStyle(.plain)
+                                    .id(m.id)
+                                }
+                            }
+                            .padding(.horizontal, 12)
+                        }
+                        .frame(height: 56)
+                        .onChange(of: current) { _, id in withAnimation { proxy.scrollTo(id, anchor: .center) } }
+                        .onAppear { proxy.scrollTo(request.start, anchor: .center) }
+                    }
+                    .padding(.bottom, 12)
+                    .accessibilityLabel("All of them")
+                }
+            }
+            if media.count > 1 {
+                HStack {
+                    side("chevron.left", "Previous") { step(-1) }
+                    Spacer()
+                    side("chevron.right", "Next") { step(1) }
+                }
+                .padding(.horizontal, 10)
+            }
+        }
+        .focusable()
+        .focused($focused)
+        .focusEffectDisabled()
+        .onKeyPress(.leftArrow) { step(-1); return .handled }
+        .onKeyPress(.rightArrow) { step(1); return .handled }
+        .onKeyPress(.escape) { close(); return .handled }
+        .onKeyPress(characters: CharacterSet(charactersIn: "+=-0")) { press in
+            switch press.characters {
+            case "+", "=": withAnimation { scale = min(6, scale * 1.5) }
+            case "-": withAnimation { scale = max(1, scale / 1.5) }
+            default: withAnimation { scale = 1 }
+            }
+            return .handled
+        }
+        .onAppear { current = request.start; focused = true }
+    }
+
+    private func side(_ icon: String, _ label: String, _ go: @escaping () -> Void) -> some View {
+        Button(action: go) {
+            Image(systemName: icon).font(.system(size: 17, weight: .semibold)).frame(width: 40, height: 40)
+                .background(Circle().fill(.black.opacity(0.55)))
+        }
+        .buttonStyle(.plain).foregroundStyle(.white)
+        .accessibilityLabel(label)
+    }
+
     /// The previous or next photo, round from the last to the first.
-    func step(_ by: Int) -> KeyPress.Result {
-        guard let at = media.firstIndex(where: { $0.id == current }), !media.isEmpty else { return .ignored }
+    private func step(_ by: Int) {
+        let media = request.media
+        guard let at = media.firstIndex(where: { $0.id == current }), !media.isEmpty else { return }
         current = media[(at + by + media.count) % media.count].id
-        return .handled
+        scale = 1
     }
 }
 
@@ -629,9 +736,9 @@ struct MediaPage: View {
     @Environment(AppModel.self) private var model
     let media: Doc.Media
     let vaultId: String
+    @Binding var scale: CGFloat
     @State private var image: PlatformImage?
     @State private var player: AVPlayer?
-    @State private var scale: CGFloat = 1
 
     var body: some View {
         Group {
@@ -655,7 +762,11 @@ struct MediaPage: View {
             case .photo(let id):
                 if let data = await Attachments.shared.data(id, model: model) { image = PlatformImage(data: data) }
             case .video(let file):
-                if let url = await Attachments.shared.fileURL(file.id, name: file.name, model: model) { player = AVPlayer(url: url) }
+                if let url = await Attachments.shared.fileURL(file.id, name: file.name, model: model) {
+                    player = AVPlayer(url: url)
+                    // As the web's viewer, a video plays as it's opened.
+                    player?.play()
+                }
             }
         }
         .onDisappear { player?.pause() }

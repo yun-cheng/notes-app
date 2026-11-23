@@ -247,8 +247,12 @@ struct PhotosPage: View {
                 }
             }
         }
-        .sheet(id: $viewing) { start in
-            MediaViewer(media: all.map(\.media), start: start, vaultId: all.first { $0.id == start }?.card.vaultId ?? "")
+        .onChange(of: viewing) { _, start in
+            guard let start else { return }
+            var entries: [String: (card: String, day: String)] = [:]
+            for item in all { entries[item.id] = (item.card.id, Stream.entryDay(item.card)) }
+            model.viewer = ViewerRequest(media: all.map(\.media), start: start, vaultId: all.first { $0.id == start }?.card.vaultId ?? "", entries: entries)
+            viewing = nil
         }
         .sheet(isPresented: Binding(get: { !sharing.isEmpty }, set: { if !$0 { sharing = [] } })) {
             VStack(spacing: 16) {

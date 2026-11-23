@@ -34,13 +34,13 @@ struct TrashPage: View {
         .task { await AttachmentKeeper.shared.sweep(model: model, now: true) }
         .toolbar {
             if !picked.isEmpty {
-                ToolbarItemGroup {
+                ToolbarItemGroup(placement: .primaryAction) {
                     Button("Select all") { picked = Set(items.map(\.id)) }
                     Button("Done") { picked = [] }
                     PhoneTail()
                 }
             } else {
-                ToolbarItemGroup {
+                ToolbarItemGroup(placement: .primaryAction) {
                     if restorable.count > 1 {
                         Button { restore(restorable.map(\.id)) } label: { Label("Restore all", systemImage: "arrow.uturn.backward") }
                             .labelStyle(.titleAndIcon)

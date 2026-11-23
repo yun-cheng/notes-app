@@ -881,6 +881,8 @@ struct TrashedAttachments: View {
 
     private func item(_ a: StoredAttachment, still: String?) -> some View {
         VStack(alignment: .leading, spacing: 3) {
+            // The column's width, the picture cropped into it: a photo's own width mustn't push the column wider.
+            Color.clear.frame(height: 130).frame(maxWidth: .infinity).overlay {
             Group {
                 if a.mime.hasPrefix("video/") {
                     ShapedFill(media: .photo(still ?? a.id), vaultId: a.vault_id)
@@ -900,8 +902,7 @@ struct TrashedAttachments: View {
                     ShapedFill(media: .photo(a.id), vaultId: a.vault_id)
                 }
             }
-            .frame(height: 130)
-            .frame(maxWidth: .infinity)
+            }
             .clipShape(RoundedRectangle(cornerRadius: 8))
             .padding(.bottom, 3)
             Text(a.trashed_from.flatMap { model.card($0) }.map { "From “\($0.displayTitle)”" } ?? "From an entry").font(.footnote.weight(.semibold)).lineLimit(1)

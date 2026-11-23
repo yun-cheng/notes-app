@@ -239,7 +239,7 @@ struct PhotosPage: View {
         .pageBackground()
         .navigationTitle("Photos")
         .toolbar {
-            ToolbarItemGroup {
+            ToolbarItemGroup(placement: .primaryAction) {
                 if !picked.isEmpty {
                     Text("\(picked.count) picked")
                     Button("Share…") { Task { await prepareShare(all) } }

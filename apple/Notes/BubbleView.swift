@@ -572,8 +572,7 @@ struct Reactions: View {
         }
         if canReact {
             Button { picking = true } label: {
-                Image(systemName: "face.smiling")
-                    .font(.system(size: large ? 15 : 12))
+                SmileyIcon(size: large ? 16 : 13)
                     .frame(width: large ? 28 : 20, height: large ? 28 : 20)
                     .contentShape(Circle())
                     .opacity(picking ? 1 : 0.55)
@@ -597,6 +596,29 @@ struct Reactions: View {
     private func toggle(_ emoji: String) {
         let me = model.accountId
         model.update(card.id) { $0.toggleReaction(emoji, me: me) }
+    }
+}
+
+/// An outline smiley, as the web's icon: drawn here, since the system's symbol fills in on a dark background.
+struct SmileyIcon: View {
+    let size: CGFloat
+
+    var body: some View {
+        Canvas { ctx, sz in
+            let r = min(sz.width, sz.height) / 2 - 0.75
+            let c = CGPoint(x: sz.width / 2, y: sz.height / 2)
+            let line = max(1, size / 11)
+            ctx.stroke(Path(ellipseIn: CGRect(x: c.x - r, y: c.y - r, width: r * 2, height: r * 2)), with: .foreground, lineWidth: line)
+            let eye = r * 0.13
+            for dx in [-0.33, 0.33] {
+                ctx.fill(Path(ellipseIn: CGRect(x: c.x + r * dx - eye, y: c.y - r * 0.28 - eye, width: eye * 2, height: eye * 2)), with: .foreground)
+            }
+            var mouth = Path()
+            mouth.addArc(center: CGPoint(x: c.x, y: c.y + r * 0.05), radius: r * 0.5, startAngle: .degrees(25), endAngle: .degrees(155), clockwise: false)
+            ctx.stroke(mouth, with: .foreground, style: StrokeStyle(lineWidth: line, lineCap: .round))
+        }
+        .frame(width: size, height: size)
+        .accessibilityHidden(true)
     }
 }
 

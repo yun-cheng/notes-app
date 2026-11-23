@@ -113,6 +113,21 @@ fun RecoveryKeySheet(key: String, dismiss: () -> Unit) {
     }
 }
 
+/** What the list says of a vault, as the web's: how many cards, or that it's locked or needs a PIN, whether it's encrypted, and who's waiting to be let in. */
+fun vaultState(model: AppModel, v: Vault): String {
+    val count = model.index.live.count { it.vaultId == v.id }
+    val first = when {
+        v.isWithheld -> if (v.isEncrypted && v.isMemberCopy) "Waiting to be let in" else "Needs your PIN"
+        v.id in model.lockedVaults -> "Locked"
+        count == 1 -> "1 card"
+        else -> "$count cards"
+    }
+    val parts = mutableListOf(first)
+    if (v.isEncrypted) parts.add("Encrypted")
+    v.waiting?.takeIf { it > 0 }?.let { parts.add("$it waiting to be let in") }
+    return parts.joinToString(" · ")
+}
+
 fun describe(vault: Vault): String {
     val parts = mutableListOf(if (vault.isOwner) "Yours" else "Shared with you as ${if (vault.role == "viewer") "a viewer" else "an editor"}")
     vault.members?.takeIf { it > 1 }?.let { parts.add("$it people") }
@@ -180,20 +195,21 @@ fun VaultsPage(openDrawer: (() -> Unit)?) {
         TopBar("Vaults", openDrawer)
         Column(Modifier.weight(1f).verticalScroll(rememberScrollState()).padding(bottom = 24.dp)) {
             FormSection("Vaults") {
-                model.vaults.filter { !it.hidden || it.id in model.openVaults }.forEachIndexed { i, v ->
-                    if (i > 0) FormDivider()
-                    FormRow(v.name, describe(v), Modifier.clickable { detail = v.id }) { Icon(Icons.Outlined.ChevronRight, null, tint = Theme.muted) }
+                FormText("A vault decides who can see a note. Use tags for topics.")
+                model.vaults.filter { !it.hidden || it.id in model.openVaults }.forEach { v ->
+                    FormDivider()
+                    FormRow(v.name, vaultState(model, v), Modifier.clickable { detail = v.id }) { Icon(Icons.Outlined.ChevronRight, null, tint = Theme.muted) }
                 }
             }
             FormSection("New vault") {
                 FormField(name, { name = it }, "Vault name")
                 PinField(pin, { pin = it }, "PIN (optional, makes it private)")
                 if (pin.isNotEmpty()) SwitchRow("Encrypt end to end", encrypt) { encrypt = it }
-                FormButton(if (working) "Making…" else "Make vault", enabled = name.isNotBlank() && !working, onClick = ::create)
+                FormButton(if (working) "Making…" else "Create vault", enabled = name.isNotBlank() && !working, onClick = ::create)
             }
             FormSection("Hidden vaults", "A hidden vault stays out of the app until its PIN is entered here.") {
                 PinField(hiddenPin, { hiddenPin = it }, onDone = ::openHidden)
-                FormButton("Open", enabled = hiddenPin.isNotEmpty(), onClick = ::openHidden)
+                FormButton("Unlock", enabled = hiddenPin.isNotEmpty(), onClick = ::openHidden)
             }
             message?.let { Text(it, Modifier.padding(horizontal = 20.dp), color = Theme.alert) }
         }

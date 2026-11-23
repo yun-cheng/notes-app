@@ -219,16 +219,29 @@ struct BubbleText: View {
     var revealed = false
     /// The card and page it shows, to keep its parts between redraws.
     var memo: (card: Card, page: Int)? = nil
+    /// Hidden stretches pressed to show, by their place in the text, as the web's: each is shown or hidden on its own.
+    @State private var shown: Set<Int> = []
 
     var body: some View {
         let make = { Doc.previewParts(doc, titleOf: model.index.titleOf, markCode: true, hidden: .mark) }
         let parts = memo.map { m in BubbleMemo.value(model, m.card, "parts\(m.page)", make) } ?? make()
         let limited = folded ? Self.fold(parts, lines: 6) : parts
+        // Each text part numbers its hidden stretches on from the ones before it.
+        let starts = limited.reduce(into: [Int]()) { acc, part in
+            let before = acc.last.map { last in last + Self.hiddenCount(limited[acc.count - 1]) } ?? 0
+            acc.append(before)
+            _ = part
+        }
         VStack(alignment: .leading, spacing: 4) {
-            ForEach(Array(limited.enumerated()), id: \.offset) { _, part in
+            ForEach(Array(limited.enumerated()), id: \.offset) { i, part in
                 switch part {
                 case .text(let lines):
-                    Text(Self.attributed(lines.joined(separator: "\n"), revealed: revealed))
+                    Text(Self.attributed(lines.joined(separator: "\n"), revealed: revealed, shown: shown, from: starts[i]))
+                        .environment(\.openURL, OpenURLAction { url in
+                            guard url.scheme == "notes-hidden", let n = Int(url.absoluteString.dropFirst("notes-hidden:".count)) else { return .systemAction }
+                            if shown.contains(n) { shown.remove(n) } else { shown.insert(n) }
+                            return .handled
+                        })
                         .fixedSize(horizontal: false, vertical: true)
                         #if os(iOS)
                         .textSelection(.enabled)
@@ -258,19 +271,34 @@ struct BubbleText: View {
         return out
     }
 
-    /// Text with inline code in a code font, hidden words as dots, and web addresses as links.
-    static func attributed(_ text: String, revealed: Bool) -> AttributedString {
+    /// How many hidden stretches a part holds.
+    static func hiddenCount(_ part: Doc.PreviewPart) -> Int {
+        guard case .text(let lines) = part else { return 0 }
+        return lines.joined().filter { String($0) == Doc.hideOpen }.count
+    }
+
+    /// Text with inline code in a code font, hidden words as dots (each pressed to show it, and again to hide it), and
+    /// web addresses as links. `from` numbers its first hidden stretch.
+    static func attributed(_ text: String, revealed: Bool, shown: Set<Int> = [], from: Int = 0) -> AttributedString {
         var out = AttributedString()
         var rest = Substring(text)
         var inCode = false
         var inHidden = false
+        var hiddenAt = from - 1
         var run = ""
         func flush() {
             guard !run.isEmpty else { return }
-            if inHidden && !revealed {
+            let open = revealed || shown.contains(hiddenAt)
+            if inHidden && !open {
                 var a = AttributedString(String(repeating: "•", count: min(12, max(3, run.count / 2))))
                 a.foregroundColor = Theme.muted
                 a.backgroundColor = Theme.sunken
+                a.link = URL(string: "notes-hidden:\(hiddenAt)")
+                out += a
+            } else if inHidden {
+                var a = AttributedString(run)
+                a.backgroundColor = Theme.sunken
+                a.link = URL(string: "notes-hidden:\(hiddenAt)")
                 out += a
             } else if inCode {
                 var a = AttributedString(run)
@@ -296,7 +324,7 @@ struct BubbleText: View {
             switch String(ch) {
             case Doc.codeOpen: flush(); inCode = true
             case Doc.codeClose: flush(); inCode = false
-            case Doc.hideOpen: flush(); inHidden = true
+            case Doc.hideOpen: flush(); inHidden = true; hiddenAt += 1
             case Doc.hideClose: flush(); inHidden = false
             default: run.append(ch)
             }

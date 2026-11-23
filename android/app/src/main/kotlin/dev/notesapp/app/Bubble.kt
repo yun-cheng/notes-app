@@ -191,11 +191,19 @@ fun BubbleText(doc: JsonElement, folded: Boolean = true, revealed: Boolean = fal
     val sunken = Theme.sunken
     val muted = Theme.muted
     val accent = Theme.accent
+    // Hidden stretches pressed to show, by their place in the text, as the web's: each shown or hidden on its own.
+    var shown by remember(memo ?: doc) { mutableStateOf(setOf<Int>()) }
+    var start = 0
     Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
         for (part in limited) {
             when (part) {
-                is Doc.PreviewPart.Text -> SelectionContainer {
-                    Text(attributed(part.lines.joinToString("\n"), revealed, sunken, muted, accent), color = Theme.text, fontSize = 16.sp, lineHeight = 22.sp)
+                is Doc.PreviewPart.Text -> {
+                    val text = part.lines.joinToString("\n")
+                    val from = start
+                    start += text.count { it.toString() == Doc.HIDE_OPEN }
+                    SelectionContainer {
+                        Text(attributed(text, revealed, sunken, muted, accent, shown, from) { n -> shown = if (n in shown) shown - n else shown + n }, color = Theme.text, fontSize = 16.sp, lineHeight = 22.sp)
+                    }
                 }
                 is Doc.PreviewPart.Code -> CodeSnippet(part.text, part.language)
             }
@@ -221,15 +229,29 @@ fun fold(parts: List<Doc.PreviewPart>, lines: Int): List<Doc.PreviewPart> {
     return out
 }
 
-/** Text with inline code in a code font, hidden words as dots, and web addresses as links. */
-fun attributed(text: String, revealed: Boolean, sunken: androidx.compose.ui.graphics.Color, muted: androidx.compose.ui.graphics.Color, accent: androidx.compose.ui.graphics.Color): AnnotatedString = buildAnnotatedString {
+/**
+ * Text with inline code in a code font, hidden words as dots (each pressed to show it, and again to hide it, by
+ * `toggle`), and web addresses as links. `from` numbers its first hidden stretch.
+ */
+fun attributed(
+    text: String, revealed: Boolean, sunken: androidx.compose.ui.graphics.Color, muted: androidx.compose.ui.graphics.Color, accent: androidx.compose.ui.graphics.Color,
+    shown: Set<Int> = emptySet(), from: Int = 0, toggle: ((Int) -> Unit)? = null,
+): AnnotatedString = buildAnnotatedString {
     var inCode = false
     var inHidden = false
+    var hiddenAt = from - 1
     val run = StringBuilder()
     fun flush() {
         if (run.isEmpty()) return
         val s = run.toString()
-        if (inHidden && !revealed) {
+        val open = revealed || hiddenAt in shown
+        if (inHidden && toggle != null) {
+            val n = hiddenAt
+            withLink(LinkAnnotation.Clickable("hidden$n", linkInteractionListener = { toggle(n) })) {
+                if (open) withStyle(SpanStyle(background = sunken)) { append(s) }
+                else withStyle(SpanStyle(color = muted, background = sunken)) { append("•".repeat(minOf(12, maxOf(3, s.length / 2)))) }
+            }
+        } else if (inHidden && !open) {
             withStyle(SpanStyle(color = muted, background = sunken)) { append("•".repeat(minOf(12, maxOf(3, s.length / 2)))) }
         } else if (inCode) {
             withStyle(SpanStyle(fontFamily = Theme.mono, background = sunken, fontSize = 14.sp)) { append(s) }
@@ -247,7 +269,7 @@ fun attributed(text: String, revealed: Boolean, sunken: androidx.compose.ui.grap
         when (ch.toString()) {
             Doc.CODE_OPEN -> { flush(); inCode = true }
             Doc.CODE_CLOSE -> { flush(); inCode = false }
-            Doc.HIDE_OPEN -> { flush(); inHidden = true }
+            Doc.HIDE_OPEN -> { flush(); inHidden = true; hiddenAt++ }
             Doc.HIDE_CLOSE -> { flush(); inHidden = false }
             else -> run.append(ch)
         }

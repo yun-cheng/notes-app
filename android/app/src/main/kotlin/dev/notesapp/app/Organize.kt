@@ -41,6 +41,17 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.material.icons.automirrored.outlined.Undo
+import androidx.compose.material.icons.automirrored.outlined.Redo
+import androidx.compose.material.icons.outlined.CheckBox
+import androidx.compose.material.icons.outlined.Description
+import androidx.compose.material.icons.outlined.Lock
+import androidx.compose.foundation.layout.FlowRow
+import androidx.compose.foundation.layout.ExperimentalLayoutApi
+import androidx.compose.ui.draw.alpha
+import androidx.compose.foundation.border
+import dev.notesapp.core.CardType
+import dev.notesapp.core.Doc
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import dev.notesapp.core.ApiError
@@ -321,40 +332,131 @@ fun HistoryPage(openDrawer: (() -> Unit)?) {
         }
         (mine + theirs).sortedByDescending { it.at }
     }
+    val days = rows.groupBy { DateKey.of(java.time.Instant.ofEpochMilli(it.at)) }.toSortedMap(reverseOrder())
     Column(Modifier.fillMaxSize().background(Theme.bg)) {
-        TopBar("History", openDrawer)
+        TopBar("History", openDrawer) {
+            androidx.compose.material3.IconButton(onClick = { model.undo() }) { Icon(Icons.AutoMirrored.Outlined.Undo, "Undo", tint = Theme.text) }
+            androidx.compose.material3.IconButton(onClick = { model.redo() }) { Icon(Icons.AutoMirrored.Outlined.Redo, "Redo", tint = Theme.text) }
+        }
         FilterRow(filter, { filter = it }, {})
         // Lazy, as the history can be long: only the rows on screen are laid out.
-        androidx.compose.foundation.lazy.LazyColumn(Modifier.weight(1f), contentPadding = androidx.compose.foundation.layout.PaddingValues(bottom = 24.dp)) {
-            if (offline) item { FormText("Connect to the internet to see changes made elsewhere.") }
-            for (row in rows) {
-                item {
-                    SectionTitle(formatMillis(row.at) + (row.by?.let { " · $it" } ?: ""))
+        androidx.compose.foundation.lazy.LazyColumn(Modifier.weight(1f), contentPadding = androidx.compose.foundation.layout.PaddingValues(start = 16.dp, end = 16.dp, bottom = 24.dp)) {
+            item { Text("What was changed, newest first: on this device, on your other devices, by AI apps and by people you share with.", Modifier.padding(vertical = 8.dp), color = Theme.muted) }
+            if (offline) item { Text("Connect to the internet to see changes made elsewhere.", color = Theme.muted) }
+            if (rows.isEmpty()) item { Text(if (filter.isFiltered) "No changes here match. Take a filter off above, or pick another." else "Nothing has been changed yet.", Modifier.padding(vertical = 24.dp), color = Theme.muted) }
+            for ((day, dayRows) in days) {
+                item(key = "day:$day") { Text(DateKey.relativeDay(day, model.today), Modifier.padding(top = 14.dp, bottom = 4.dp), fontSize = 13.sp, fontWeight = FontWeight.SemiBold, color = Theme.muted) }
+                for (row in dayRows) item(key = "g:${row.group}") {
+                    Column {
+                        if (row.changes.size > 1) {
+                            val undo = row.changes.filter { it.n >= 0 && it.undoneAt == null && Changes.canUndo(it, current[it.cardId] ?: model.card(it.cardId)) }
+                            val redo = row.changes.filter { it.n >= 0 && it.undoneAt != null && Changes.canRedo(it, current[it.cardId] ?: model.card(it.cardId)) }
+                            Row(Modifier.padding(top = 6.dp), verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(10.dp)) {
+                                Text("${row.changes.size} changes at once", fontSize = 13.sp, color = Theme.muted)
+                                if (undo.size > 1) TextButton(onClick = { model.perform { it.revert(undo.map { c -> c.n }, true) } }) { Text("Undo all") }
+                                if (redo.size > 1) TextButton(onClick = { model.perform { it.revert(redo.map { c -> c.n }, false) } }) { Text("Redo all") }
+                            }
+                        }
+                        for (change in row.changes) ChangeRow(change, current[change.cardId])
+                        androidx.compose.material3.HorizontalDivider(color = Theme.line)
+                    }
                 }
-                items(row.changes.size) { i -> val change = row.changes[i]; ChangeRow(change, current[change.cardId] ?: model.card(change.cardId)) }
             }
-            if (next != null) item { TextButton(onClick = { loadMore++ }, Modifier.padding(horizontal = 12.dp)) { Text("Show older changes") } }
-            if (rows.isEmpty()) item { FormText("No changes yet") }
+            if (next != null) item { TextButton(onClick = { loadMore++ }) { Text("Show older changes") } }
+            else if (rows.isNotEmpty()) item { Text("Undo and redo reach back through the newest 500 changes made on this device. Every version of an entry, with restore, is in its own version history.", Modifier.padding(top = 16.dp), fontSize = 13.sp, color = Theme.muted) }
         }
     }
 }
 
+/**
+ * One change, as the web's row: what it did and the entry's name, opening it; when, who or what made it, whether it was
+ * undone or the entry changed since; the words it changed, shown on request; its entry's version history; and Undo or
+ * Redo.
+ */
+@OptIn(ExperimentalLayoutApi::class)
 @Composable
-private fun ChangeRow(change: Change, card: Card?) {
+private fun ChangeRow(change: Change, current: Card?) {
     val model = LocalModel.current
-    Row(Modifier.fillMaxWidth().clickable(enabled = !change.sealed) { model.openEntry = change.cardId }.padding(horizontal = 20.dp, vertical = 8.dp), verticalAlignment = Alignment.CenterVertically) {
-        Column(Modifier.weight(1f)) {
-            Text(if (change.sealed) "Locked entry" else (card ?: change.after).displayTitle, color = Theme.text, maxLines = 1)
-            Text(Changes.describe(change) + if (change.undoneAt != null) " · undone" else "", fontSize = 12.sp, color = Theme.muted)
+    var open by remember { mutableStateOf(false) }
+    val card = model.card(change.cardId)
+    val now = current ?: card
+    val undone = change.undoneAt != null
+    val undoable = if (change.n < 0) now != null && Changes.canUndo(change, now) && model.canEdit(now) else !undone && Changes.canUndo(change, now)
+    val redoable = change.n >= 0 && undone && Changes.canRedo(change, now)
+    val passed = !change.sealed && now != null && !(if (undone) Changes.canRedo(change, now) else Changes.canUndo(change, now))
+    val compared = !change.sealed && (change.before == null || change.fields.any { it in setOf("title", "content", "pages", "back", "tags") })
+    val type = (card ?: change.after).type
+    Row(Modifier.fillMaxWidth().padding(vertical = 10.dp).then(if (undone) Modifier.alpha(0.6f) else Modifier), horizontalArrangement = Arrangement.spacedBy(10.dp)) {
+        Icon(if (change.sealed) Icons.Outlined.Lock else if (type == CardType.tag) Icons.Outlined.Label else if (type == CardType.todo) Icons.Outlined.CheckBox else Icons.Outlined.Description, null, Modifier.size(20.dp), tint = Theme.muted)
+        Column(Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(3.dp)) {
+            Row(horizontalArrangement = Arrangement.spacedBy(4.dp)) {
+                Text(Changes.describe(change), color = Theme.muted)
+                Text(
+                    if (change.sealed) "Locked entry" else (card ?: change.after).displayTitle,
+                    if (card != null && !card.deleted && !change.sealed) Modifier.clickable { model.openEntry = card.id } else Modifier,
+                    fontWeight = FontWeight.SemiBold, color = Theme.text, maxLines = 1,
+                )
+            }
+            FlowRow(horizontalArrangement = Arrangement.spacedBy(8.dp), itemVerticalAlignment = Alignment.CenterVertically) {
+                Text(formatMillis(change.until, date = null), fontSize = 13.sp, color = Theme.muted)
+                change.by?.let { Text(it, Modifier.clip(RoundedCornerShape(50)).background(Theme.sunken).padding(horizontal = 7.dp, vertical = 1.dp), fontSize = 13.sp, color = Theme.muted) }
+                if (undone) Text("Undone", fontSize = 13.sp, color = Theme.muted)
+                if (passed) Text("Changed since", fontSize = 13.sp, color = Theme.muted)
+                if (compared) Text(if (open) "Hide changes" else "Show changes", Modifier.clickable { open = !open }, fontSize = 13.sp, color = Theme.muted, textDecoration = androidx.compose.ui.text.style.TextDecoration.Underline)
+                if (change.by != null && card != null && !change.sealed) Text("Version history", Modifier.clickable { model.panel = EntryPanel.History(card.id) }, fontSize = 13.sp, color = Theme.muted, textDecoration = androidx.compose.ui.text.style.TextDecoration.Underline)
+            }
+            if (open && compared) ChangeComparison(change)
         }
-        if (change.n < 0) {
-            if (Changes.canUndo(change, card) && card != null && model.canEdit(card)) TextButton(onClick = { model.perform { it.takeBack(change) }; model.say("Undone", undoable = true) }) { Text("Undo") }
-        } else if (change.undoneAt == null && Changes.canUndo(change, card)) {
-            TextButton(onClick = { model.perform { it.revert(listOf(change.n), true) } }) { Text("Undo") }
-        } else if (change.undoneAt != null && Changes.canRedo(change, card)) {
-            TextButton(onClick = { model.perform { it.revert(listOf(change.n), false) } }) { Text("Redo") }
+        if (undoable) androidx.compose.material3.OutlinedButton(onClick = {
+            if (change.n < 0) { model.perform { it.takeBack(change) }; model.say("Undone", undoable = true) } else model.perform { it.revert(listOf(change.n), true) }
+        }) { Text("Undo") }
+        if (redoable) androidx.compose.material3.OutlinedButton(onClick = { model.perform { it.revert(listOf(change.n), false) } }) { Text("Redo") }
+    }
+}
+
+/** What a change did to the words, as the web's comparison: the lines it took out and put in, with a line of what's around each. */
+@Composable
+private fun ChangeComparison(change: Change) {
+    val lines = remember(change.n) { diffLines(changeText(change.before), changeText(change.after)) }
+    val added = Theme.p.added
+    val removed = Theme.p.removed
+    Column(Modifier.fillMaxWidth().clip(RoundedCornerShape(10.dp)).background(Theme.surface).border(1.dp, Theme.line, RoundedCornerShape(10.dp)).padding(8.dp), verticalArrangement = Arrangement.spacedBy(1.dp)) {
+        if (lines.none { it.first != ' ' }) Text("Only the formatting changed.", color = Theme.muted, fontSize = 14.sp)
+        for ((kind, text) in lines) when (kind) {
+            '…' -> Text("…", color = Theme.muted)
+            '+' -> Text(text, Modifier.fillMaxWidth().background(added).padding(horizontal = 4.dp), color = Theme.text, fontSize = 14.sp)
+            '-' -> Text(text, Modifier.fillMaxWidth().background(removed).padding(horizontal = 4.dp), color = Theme.text, fontSize = 14.sp, textDecoration = androidx.compose.ui.text.style.TextDecoration.LineThrough)
+            else -> Text(text, color = Theme.muted, fontSize = 14.sp)
         }
     }
+}
+
+private fun changeText(card: Card?): List<String> {
+    card ?: return emptyList()
+    return (if (card.title.isEmpty()) emptyList() else listOf(card.title)) + (listOf(card.content) + card.morePages).flatMap { Doc.previewLines(it, hidden = Doc.Hidden.mask) }
+}
+
+/** The lines that differ, by the longest run they share, with one line of context around each change: ' ', '+', '-' or '…' for a gap. */
+fun diffLines(a: List<String>, b: List<String>): List<Pair<Char, String>> {
+    val n = a.size
+    val m = b.size
+    val lcs = Array(n + 1) { IntArray(m + 1) }
+    for (i in n - 1 downTo 0) for (j in m - 1 downTo 0) lcs[i][j] = if (a[i] == b[j]) lcs[i + 1][j + 1] + 1 else maxOf(lcs[i + 1][j], lcs[i][j + 1])
+    val all = mutableListOf<Pair<Char, String>>()
+    var i = 0
+    var j = 0
+    while (i < n || j < m) {
+        if (i < n && j < m && a[i] == b[j]) { all.add(' ' to a[i]); i++; j++ }
+        else if (j < m && (i == n || lcs[i][j + 1] >= lcs[i + 1][j])) { all.add('+' to b[j]); j++ }
+        else { all.add('-' to a[i]); i++ }
+    }
+    val out = mutableListOf<Pair<Char, String>>()
+    all.forEachIndexed { k, line ->
+        val near = (maxOf(0, k - 1)..minOf(all.size - 1, k + 1)).any { all[it].first != ' ' }
+        if (line.first != ' ' || near) out.add(line) else if (out.isNotEmpty() && out.last().first != '…') out.add('…' to "")
+    }
+    if (out.lastOrNull()?.first == '…') out.removeAt(out.size - 1)
+    return out
 }
 
 /**

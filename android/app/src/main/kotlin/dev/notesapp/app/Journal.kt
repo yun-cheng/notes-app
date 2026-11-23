@@ -1,5 +1,6 @@
 package dev.notesapp.app
 
+import androidx.compose.material.icons.automirrored.outlined.List
 import androidx.compose.foundation.ExperimentalFoundationApi
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
@@ -144,7 +145,7 @@ fun JournalView(initial: StreamFilter, openDrawer: (() -> Unit)?, fixed: Boolean
             }
             IconButton(onClick = { searching = !searching; if (!searching) query = "" }) { Icon(Icons.Outlined.Search, "Search", tint = Theme.text) }
             SortMenu(filter, setFilter)
-            BoardMenu(filter, setFilter)
+            if (openDrawer == null) BoardMenu(filter, setFilter)
         }
         FilterRow(filter, setFilter, { pickDates = "" })
         VoiceBar()
@@ -213,29 +214,40 @@ private fun dayGroups(items: List<StreamItem>): List<Pair<String, List<StreamIte
 private fun SortMenu(filter: StreamFilter, set: (StreamFilter) -> Unit) {
     val model = LocalModel.current
     var open by remember { mutableStateOf(false) }
+    val groups = model.index.tagGroups.groups
     Box {
-        IconButton(onClick = { open = true }) { Icon(Icons.Outlined.SwapVert, StreamLabels.sort(filter.sort, model.index.tagGroups.groups), tint = Theme.text) }
-        DropdownMenu(open, { open = false }) {
-            for ((sort, label) in StreamLabels.sorts) MenuCheck(label, filter.sort == sort) { set(filter.copy(sort = sort)); open = false }
-            for (g in model.index.tagGroups.groups.filter { it.ordered }) {
-                val s = StreamFilter.Sort.Group(g.id)
-                MenuCheck("By ${g.title.lowercase()}", filter.sort == s) { set(filter.copy(sort = s)); open = false }
+        if (filter.board == null) {
+            IconButton(onClick = { open = true }) { Icon(Icons.Outlined.SwapVert, StreamLabels.sort(filter.sort, groups), tint = Theme.text) }
+            DropdownMenu(open, { open = false }) {
+                for ((sort, label) in StreamLabels.sorts) MenuCheck(label, filter.sort == sort) { set(filter.copy(sort = sort)); open = false }
+                for (g in groups.filter { it.ordered }) {
+                    val s = StreamFilter.Sort.Group(g.id)
+                    MenuCheck("By ${g.title.lowercase()}", filter.sort == s) { set(filter.copy(sort = s)); open = false }
+                }
+                // The board is picked here too, as on the web, where a phone has no room for its own button.
+                HorizontalDivider(color = Theme.line)
+                Text("Board", Modifier.padding(horizontal = 16.dp, vertical = 6.dp), fontSize = 12.sp, fontWeight = FontWeight.SemiBold, color = Theme.muted)
+                MenuCheck("Board by todo state", false) { set(filter.copy(board = "state")); open = false }
+                for (g in groups.filter { it.members.isNotEmpty() }) MenuCheck("Board by ${g.title.lowercase()}", false) { set(filter.copy(board = g.id)); open = false }
+            }
+        } else {
+            // On the board, in the sort's place: what the columns are, as the web's.
+            IconButton(onClick = { open = true }) { Icon(Icons.Outlined.ViewKanban, "Columns", tint = Theme.accent) }
+            DropdownMenu(open, { open = false }) {
+                Text("Columns", Modifier.padding(horizontal = 16.dp, vertical = 6.dp), fontSize = 12.sp, fontWeight = FontWeight.SemiBold, color = Theme.muted)
+                MenuCheck("List", false) { set(filter.copy(board = null)); open = false }
+                MenuCheck("Todo state", filter.board == "state") { set(filter.copy(board = "state")); open = false }
+                for (g in groups.filter { it.members.isNotEmpty() }) MenuCheck(g.title, filter.board == g.id) { set(filter.copy(board = g.id)); open = false }
             }
         }
     }
 }
 
+/** List or board, opening a board by todo state, as the web's switch on a computer; a phone has no room for it. */
 @Composable
 private fun BoardMenu(filter: StreamFilter, set: (StreamFilter) -> Unit) {
-    val model = LocalModel.current
-    var open by remember { mutableStateOf(false) }
-    Box {
-        IconButton(onClick = { open = true }) { Icon(Icons.Outlined.ViewKanban, "Board", tint = if (filter.board != null) Theme.accent else Theme.text) }
-        DropdownMenu(open, { open = false }) {
-            MenuCheck("List", filter.board == null) { set(filter.copy(board = null)); open = false }
-            MenuCheck("Board by state", filter.board == "state") { set(filter.copy(board = "state")); open = false }
-            for (g in model.index.tagGroups.groups) MenuCheck("Board by ${g.title.lowercase()}", filter.board == g.id) { set(filter.copy(board = g.id)); open = false }
-        }
+    IconButton(onClick = { set(filter.copy(board = if (filter.board == null) "state" else null)) }) {
+        Icon(if (filter.board == null) Icons.Outlined.ViewKanban else Icons.AutoMirrored.Outlined.List, if (filter.board == null) "Show as a board" else "Show as a list", tint = Theme.text)
     }
 }
 

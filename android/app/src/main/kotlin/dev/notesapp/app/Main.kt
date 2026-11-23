@@ -1,5 +1,8 @@
 package dev.notesapp.app
 
+import androidx.compose.material.icons.outlined.Add
+import androidx.compose.material.icons.automirrored.outlined.Logout
+import androidx.compose.material.icons.outlined.FilterList
 import androidx.activity.compose.BackHandler
 import androidx.compose.animation.AnimatedVisibility
 import androidx.compose.animation.fadeIn
@@ -115,30 +118,25 @@ fun Root() {
     }
 }
 
-/** The phone's frame, as the web app's: tabs (Journal, Today, Calendar, Search), with the sidebar in a drawer. */
-@OptIn(androidx.compose.foundation.layout.ExperimentalLayoutApi::class)
+/** The phone's frame, as the web app's: tabs (Journal, Today, Calendar, Search), with Tags and vaults in a sheet. */
+@OptIn(androidx.compose.foundation.layout.ExperimentalLayoutApi::class, androidx.compose.material3.ExperimentalMaterial3Api::class)
 @Composable
 fun PhoneFrame() {
     val model = LocalModel.current
-    val drawer = rememberDrawerState(DrawerValue.Closed)
-    val scope = rememberCoroutineScope()
+    var filtersOpen by remember { mutableStateOf(false) }
     var tab by remember { mutableStateOf(0) }
-    val openDrawer: (() -> Unit)? = { scope.launch { drawer.open() } }
+    // As the web's on a phone: no sidebar, but Tags and vaults in the title bar, opening its pages, groups, tags and
+    // vaults in a sheet.
+    val openDrawer: (() -> Unit)? = { filtersOpen = true }
     // A page picked from another tab (a day on the calendar, a tag in a result) shows in the Journal tab, as the web's
     // tabs follow the address; the calendar picked from the sidebar lights its own tab.
     var shownPage by remember { mutableStateOf(model.page) }
     if (model.page != shownPage) { shownPage = model.page; tab = if (model.page == Page.Calendar) 2 else 0 }
-    BackHandler(drawer.isOpen) { scope.launch { drawer.close() } }
-    BackHandler(!drawer.isOpen && tab == 0 && model.page != Page.Journal()) { model.page = Page.Journal() }
-
-    ModalNavigationDrawer(
-        drawerState = drawer,
-        drawerContent = {
-            ModalDrawerSheet(drawerContainerColor = Theme.bg, modifier = Modifier.widthIn(max = 320.dp)) {
-                Sidebar(onPick = { tab = if (model.page == Page.Calendar) 2 else 0; scope.launch { drawer.close() } })
-            }
-        },
-    ) {
+    BackHandler(tab == 0 && model.page != Page.Journal()) { model.page = Page.Journal() }
+    if (filtersOpen) androidx.compose.material3.ModalBottomSheet({ filtersOpen = false }, containerColor = Theme.bg, sheetState = androidx.compose.material3.rememberModalBottomSheetState(skipPartiallyExpanded = true)) {
+        Sidebar(onPick = { tab = if (model.page == Page.Calendar) 2 else 0; filtersOpen = false }, phone = true)
+    }
+    run {
         Column(Modifier.fillMaxSize().background(Theme.bg)) {
             Box(Modifier.weight(1f)) {
                 when (tab) {
@@ -231,7 +229,7 @@ fun destination(key: String) = destinations.first { it.key == key }
  * at the foot.
  */
 @Composable
-fun Sidebar(onPick: () -> Unit) {
+fun Sidebar(onPick: () -> Unit, phone: Boolean = false) {
     val model = LocalModel.current
     val index = model.index
     fun go(p: Page) { model.page = p; onPick() }
@@ -239,7 +237,9 @@ fun Sidebar(onPick: () -> Unit) {
     val archived = index.live.count { it.isEntry && it.archived }
     Column(Modifier.fillMaxSize()) {
         LazyColumn(Modifier.weight(1f).padding(horizontal = 10.dp), contentPadding = androidx.compose.foundation.layout.PaddingValues(vertical = 12.dp)) {
-            item {
+            // On a phone, as the web's Tags and vaults sheet: only the pages, groups, tags and vaults (New note, the settings
+            // and the account are in the tabs and the account button there).
+            if (!phone) item {
                 Text("Notes", Modifier.padding(start = 10.dp, bottom = 10.dp), fontFamily = Theme.titleFont, fontWeight = FontWeight.SemiBold, fontSize = 24.sp, color = Theme.text)
                 Button(onClick = { go(Page.Journal()); model.focusBox++ }, Modifier.fillMaxWidth().padding(bottom = 8.dp)) { Text("New note") }
             }
@@ -270,10 +270,50 @@ fun Sidebar(onPick: () -> Unit) {
             }
             item { destination("vaults").let { d -> SideRow(d.title, null, model.page == d.page, quiet = true) { go(d.page) } } }
         }
-        HorizontalDivider(color = Theme.line)
-        destination("settings").let { d -> Box(Modifier.padding(horizontal = 10.dp, vertical = 4.dp)) { SideRow(d.title, d.icon, model.page == d.page) { go(d.page) } } }
-        HorizontalDivider(color = Theme.line)
-        AccountBadge(onPick)
+        if (phone) {
+            HorizontalDivider(color = Theme.line)
+            Row(Modifier.fillMaxWidth().padding(horizontal = 12.dp, vertical = 6.dp).navigationBarsPadding()) {
+                Spacer(Modifier.weight(1f))
+                androidx.compose.material3.OutlinedButton(onClick = onPick) { Text("Done") }
+            }
+        } else {
+            HorizontalDivider(color = Theme.line)
+            destination("settings").let { d -> Box(Modifier.padding(horizontal = 10.dp, vertical = 4.dp)) { SideRow(d.title, d.icon, model.page == d.page) { go(d.page) } } }
+            HorizontalDivider(color = Theme.line)
+            AccountBadge(onPick)
+        }
+    }
+}
+
+/** The account's picture in a phone's title bar, as the web's: its menu has the account, the others to switch to, Add another account, Backup & settings and Sign out. */
+@Composable
+fun AccountButton() {
+    val model = LocalModel.current
+    val account = model.account ?: return
+    var open by remember { mutableStateOf(false) }
+    Box {
+        Box(Modifier.size(40.dp).clip(androidx.compose.foundation.shape.CircleShape).clickable { open = true }, contentAlignment = Alignment.Center) { Avatar(account, 30.dp) }
+        DropdownMenu(open, { open = false }, containerColor = Theme.raised) {
+            Row(Modifier.padding(horizontal = 14.dp, vertical = 8.dp), verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(10.dp)) {
+                Avatar(account, 32.dp)
+                Column {
+                    Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(6.dp)) {
+                        Text(account.name, fontWeight = FontWeight.SemiBold, fontSize = 14.sp, color = Theme.text)
+                        if (account.email.lowercase().endsWith(".test")) Text("DEMO", Modifier.clip(RoundedCornerShape(50)).background(Theme.alert.copy(alpha = 0.18f)).padding(horizontal = 6.dp, vertical = 1.dp), fontSize = 10.sp, fontWeight = FontWeight.Bold, color = Theme.alert)
+                    }
+                    Text(account.email, fontSize = 12.sp, color = Theme.muted)
+                }
+            }
+            HorizontalDivider(color = Theme.line)
+            val others = model.accounts.filter { it.id != account.id }
+            if (others.isNotEmpty()) {
+                Text("Switch to", Modifier.padding(horizontal = 14.dp, vertical = 4.dp), fontSize = 12.sp, color = Theme.muted)
+                for (other in others) DropdownMenuItem(text = { Text("${other.name} (${other.email})") }, onClick = { open = false; model.switchTo(other) }, leadingIcon = { Avatar(other, 22.dp) })
+            }
+            DropdownMenuItem(text = { Text("Add another account") }, onClick = { open = false; model.addingAccount = true }, leadingIcon = { Icon(Icons.Outlined.Add, null) })
+            DropdownMenuItem(text = { Text("Backup & settings") }, onClick = { open = false; model.page = Page.Settings }, leadingIcon = { Icon(Icons.Outlined.Tune, null) })
+            DropdownMenuItem(text = { Text("Sign out") }, onClick = { open = false; model.signOut() }, leadingIcon = { Icon(Icons.AutoMirrored.Outlined.Logout, null) })
+        }
     }
 }
 
@@ -426,19 +466,28 @@ fun SyncBadge() {
 
 /** A page's top bar: the drawer's button, its title, and what it offers on the right. */
 @Composable
-fun TopBar(title: String, openDrawer: (() -> Unit)?, subtitle: String? = null, actions: @Composable () -> Unit = {}) {
+fun TopBar(title: String, openDrawer: (() -> Unit)?, subtitle: String? = null, filters: Boolean = true, actions: @Composable () -> Unit = {}) {
+    val model = LocalModel.current
     Row(
         Modifier.fillMaxWidth().background(Theme.bg).padding(top = statusBarTop()).padding(start = 4.dp, end = 8.dp).height(52.dp),
         verticalAlignment = Alignment.CenterVertically,
     ) {
-        if (openDrawer != null) {
-            androidx.compose.material3.IconButton(onClick = openDrawer) { Icon(Icons.Outlined.Menu, "Pages, tags and vaults", tint = Theme.text) }
-        } else Spacer(Modifier.width(12.dp))
+        Spacer(Modifier.width(12.dp))
         Row(Modifier.weight(1f), verticalAlignment = Alignment.Bottom) {
             PageTitle(title, Modifier.weight(1f, fill = false))
             if (subtitle != null) Text(subtitle, Modifier.padding(start = 10.dp, bottom = 3.dp), fontSize = 15.sp, fontWeight = androidx.compose.ui.text.font.FontWeight.Medium, color = Theme.muted, maxLines = 1)
         }
-        Row(horizontalArrangement = Arrangement.spacedBy(2.dp), verticalAlignment = Alignment.CenterVertically) { actions() }
+        Row(horizontalArrangement = Arrangement.spacedBy(2.dp), verticalAlignment = Alignment.CenterVertically) {
+            actions()
+            // A phone's, as the web's there: Tags and vaults on the pages that have it, and the account's picture.
+            if (openDrawer != null) {
+                if (filters) {
+                    val narrowed = (model.page as? Page.Journal)?.filter?.let { it.tagId != null || it.vaultId != null } == true
+                    androidx.compose.material3.IconButton(onClick = openDrawer) { Icon(Icons.Outlined.FilterList, "Tags and vaults", tint = if (narrowed) Theme.accent else Theme.text) }
+                }
+                AccountButton()
+            }
+        }
     }
 }
 

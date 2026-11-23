@@ -121,7 +121,7 @@ fun SettingsPage(openDrawer: (() -> Unit)?) {
     }
 
     Column(Modifier.fillMaxSize().background(Theme.bg)) {
-        TopBar("Backup & settings", openDrawer)
+        TopBar("Backup & settings", openDrawer, filters = false)
         Column(Modifier.weight(1f).verticalScroll(rememberScrollState()).padding(bottom = 32.dp)) {
             FormSection("Account") {
                 model.account?.let { account ->

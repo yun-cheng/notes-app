@@ -184,7 +184,7 @@ fun SearchPage(openDrawer: (() -> Unit)?) {
     var query by remember { mutableStateOf("") }
     val hits = remember(query, model.index) { model.search.search(query) }
     Column(Modifier.fillMaxSize().background(Theme.bg)) {
-        TopBar("Search", openDrawer)
+        TopBar("Search", openDrawer, filters = false)
         PageSearchField(query, { query = it }, placeholder = "Search notes, todos and tags") { query = "" }
         LazyColumn(Modifier.fillMaxSize()) {
             items(hits, key = { it.card.id }) { hit ->

@@ -136,7 +136,7 @@ fun TagsPage(openDrawer: (() -> Unit)?) {
         model.perform { it.createTag(title = title, vaultId = vault) }
     }
     Column(Modifier.fillMaxSize().background(Theme.bg)) {
-        TopBar("Tags", openDrawer)
+        TopBar("Tags", openDrawer, filters = false)
         Column(Modifier.weight(1f).verticalScroll(rememberScrollState()).padding(bottom = 24.dp)) {
             FormSection("Groups", footer = null) {
                 FormText("A group gathers tags under a name. In a group of one choice, like Priority, an entry takes one of its tags, and adding another swaps it. An ordered group can sort the journal.")

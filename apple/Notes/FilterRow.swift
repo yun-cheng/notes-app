@@ -8,6 +8,8 @@ struct FilterRow: View {
     @Environment(AppModel.self) private var model
     @Binding var filter: StreamFilter
     @Binding var pickDates: Bool
+    /// The Templates chip; the Trash has none.
+    var templates = true
 
     var body: some View {
         ScrollView(.horizontal, showsIndicators: false) {
@@ -31,7 +33,7 @@ struct FilterRow: View {
                 FilterChip(label: filter.has.flatMap { StreamLabels.contains[$0] } ?? "Contains", set: filter.has != nil, clear: { filter.has = nil }) {
                     ForEach(StreamFilter.Contains.allCases, id: \.self) { c in Button(StreamLabels.contains[c]!) { filter.has = c } }
                 }
-                ToggleChip(label: "Templates", on: filter.template) { filter.template.toggle() }
+                if templates { ToggleChip(label: "Templates", on: filter.template) { filter.template.toggle() } }
                 if let tag = filter.tagId {
                     SetChip(label: model.card(tag)?.displayTitle ?? "Tag", icon: "tag") { filter.tagId = nil }
                 }

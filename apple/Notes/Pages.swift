@@ -1,47 +1,128 @@
 import NotesKit
 import SwiftUI
 
-/// The Trash: entries put there, to read, copy and restore, one by one or all at once.
+/// What's been moved to the Trash, as the web app's: its photos and files first, then entries as the journal shows
+/// them, under the day each was trashed, newest first, narrowed by the journal's filters. They can be read and copied
+/// but not changed: a press picks one, and the bar for those picked restores them; Restore is in each one's menu too,
+/// and Restore all, in the title bar, restores everything shown. Trashed tags are listed after the entries.
 struct TrashPage: View {
     @Environment(AppModel.self) private var model
+    @State private var filter = StreamFilter()
+    @State private var picked: Set<String> = []
+
+    private var items: [Card] {
+        let match = Stream.matcher(filter, today: model.today, sharedInto: model.sharedInto)
+        return model.index.trash.filter { $0.isEntry && match($0, nil) }.sorted { $0.updatedAt > $1.updatedAt }
+    }
+
+    private var tags: [Card] { filter.isFiltered ? [] : model.index.trash.filter { $0.type == .tag } }
 
     var body: some View {
-        let trash = model.index.trash
-        ScrollView {
-            LazyVStack(alignment: .leading, spacing: 8) {
-                TrashedAttachments()
-                ForEach(trash) { card in
-                    VStack(alignment: .leading, spacing: 4) {
-                        BubbleView(card: card)
-                        EntryAttachments(card: card)
-                        if model.canWrite(card) {
-                            Button("Restore") {
-                                let id = card.id
-                                model.perform { try await $0.setDeleted(id, false) }
-                                model.say("Restored", undoable: true)
-                            }
-                            .buttonStyle(.borderless)
-                            .font(.caption)
-                        }
-                    }
-                }
-                if trash.isEmpty && AttachmentKeeper.shared.trash.isEmpty { ContentUnavailableView("The Trash is empty", systemImage: "trash").padding(.top, 60) }
-            }
-            .padding(16)
-            .frame(maxWidth: 720)
-            .frame(maxWidth: .infinity)
+        let items = self.items
+        let tags = self.tags
+        let restorable: [Card] = (items + tags).filter { model.canWrite($0) }
+        VStack(spacing: 0) {
+            FilterRow(filter: $filter, pickDates: .constant(false), templates: false)
+            ScrollView { list(items, tags) }
+            if !picked.isEmpty { pickBar }
         }
         .pageBackground()
-        .navigationTitle("Trash")
+        .navigationTitle(picked.isEmpty ? "Trash" : "\(picked.count) selected")
+        #if os(macOS)
+        .navigationSubtitle(picked.isEmpty ? "\(items.count + tags.count)" : "of \(items.count)")
+        #endif
         .task { await AttachmentKeeper.shared.sweep(model: model, now: true) }
         .toolbar {
-            if !trash.isEmpty {
-                Button("Restore all") {
-                    let ids = trash.filter { model.canWrite($0) }.map(\.id)
-                    model.performEach(ids, say: "Restored \(ids.count)") { repo, id, group in try await repo.setDeleted(id, false, group: group) }
+            if !picked.isEmpty {
+                ToolbarItemGroup {
+                    Button("Select all") { picked = Set(items.map(\.id)) }
+                    Button("Done") { picked = [] }
+                }
+            } else if restorable.count > 1 {
+                ToolbarItem {
+                    Button { restore(restorable.map(\.id)) } label: { Label("Restore all", systemImage: "arrow.uturn.backward") }
+                        .labelStyle(.titleAndIcon)
+                        .help("Restore everything shown here")
                 }
             }
         }
+    }
+
+    private func list(_ items: [Card], _ tags: [Card]) -> some View {
+        let days: [(key: String, value: [Card])] = Dictionary(grouping: items) { DateKey.of(Date(ms: $0.updatedAt)) }.sorted { $0.key > $1.key }
+        let attachmentsShown = !filter.with { $0.vaultId = nil }.isFiltered
+        return LazyVStack(alignment: .leading, spacing: 8) {
+            if attachmentsShown { TrashedAttachments(vaultId: filter.vaultId) }
+            ForEach(days, id: \.key) { day in
+                DayBadge(day: day.key, sort: .edited) { _ in }
+                ForEach(day.value) { card in trashedEntry(card) }
+            }
+            if items.isEmpty {
+                Text(emptyText(tags))
+                    .foregroundStyle(Theme.muted).frame(maxWidth: .infinity).padding(.vertical, 40)
+            }
+            if !tags.isEmpty {
+                Text("Tags").font(.headline).padding(.top, 16)
+                ForEach(tags) { tag in trashedTag(tag) }
+            }
+        }
+        .padding(16)
+        .frame(maxWidth: 720)
+        .frame(maxWidth: .infinity)
+    }
+
+    private func emptyText(_ tags: [Card]) -> String {
+        if filter.isFiltered { return "Nothing in the Trash matches these filters." }
+        if !tags.isEmpty || !AttachmentKeeper.shared.trash.isEmpty { return "No entries in the Trash." }
+        return "The Trash is empty. Entries you move to the Trash wait here until you restore them."
+    }
+
+    private func trashedEntry(_ card: Card) -> some View {
+        VStack(alignment: .leading, spacing: 4) {
+            BubbleView(card: card, picked: picked.contains(card.id), onPick: { toggle(card.id) }, picking: true)
+            EntryAttachments(card: card)
+        }
+    }
+
+    private func trashedTag(_ tag: Card) -> some View {
+        HStack {
+            Label(tag.displayTitle, systemImage: "tag")
+            Spacer()
+            if model.canWrite(tag) { Button("Restore") { restore([tag.id]) }.buttonStyle(.bordered) }
+        }
+    }
+
+    private var pickBar: some View {
+        let canRestore = picked.contains { id in model.card(id).map { model.canWrite($0) } ?? false }
+        return HStack(spacing: 12) {
+            Text("\(picked.count) selected").fontWeight(.semibold)
+            Button { restore(Array(picked)); picked = [] } label: { Label("Restore", systemImage: "arrow.uturn.backward") }
+                .buttonStyle(.borderedProminent)
+                .disabled(!canRestore)
+            Button { copyPicked() } label: { Image(systemName: "square.on.square") }
+                .buttonStyle(.borderless).help("Copy").accessibilityLabel("Copy")
+            Spacer()
+            Button { picked = [] } label: { Image(systemName: "xmark") }.buttonStyle(.borderless).accessibilityLabel("Stop selecting")
+        }
+        .padding(.horizontal, 16).padding(.vertical, 10)
+        .background(Theme.surface)
+        .overlay(alignment: .top) { Rectangle().fill(Theme.line).frame(height: 1) }
+    }
+
+    private func copyPicked() {
+        let cards = picked.compactMap { model.card($0) }.sorted { $0.createdAt < $1.createdAt }
+        Clipboard.copy(Markdown.entries(cards, index: model.index))
+        model.say("Copied \(cards.count)")
+    }
+
+    private func toggle(_ id: String) {
+        if picked.contains(id) { picked.remove(id) } else { picked.insert(id) }
+    }
+
+    private func restore(_ ids: [String]) {
+        let ok = ids.filter { id in model.card(id).map { model.canWrite($0) } ?? false }
+        guard !ok.isEmpty else { return }
+        model.performEach(ok, say: ok.count == 1 ? "Restored" : "Restored \(ok.count)") { repo, id, group in try await repo.setDeleted(id, false, group: group) }
     }
 }
 

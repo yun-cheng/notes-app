@@ -17,6 +17,24 @@ struct EntryMenu: View {
     var revealHidden: () -> Void = {}
 
     var body: some View {
+        if card.deleted { trashed } else { menu }
+    }
+
+    /// In the Trash, an entry is only restored or copied.
+    @ViewBuilder
+    private var trashed: some View {
+        if model.canWrite(card) {
+            Button {
+                let id = card.id
+                model.perform { try await $0.setDeleted(id, false) }
+                model.say("Restored", undoable: true)
+            } label: { Label("Restore", systemImage: "arrow.uturn.backward") }
+        }
+        Button { Clipboard.copyEntry(card, model: model) } label: { Label("Copy", systemImage: "square.on.square") }
+    }
+
+    @ViewBuilder
+    private var menu: some View {
         let edit = model.canEdit(card)
         Section {
             Button { model.openEntry = card.id } label: { Label(edit ? "Edit" : "Open", systemImage: edit ? "pencil" : "arrow.up.forward.square") }

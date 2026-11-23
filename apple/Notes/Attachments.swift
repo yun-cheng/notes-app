@@ -721,7 +721,9 @@ final class AttachmentKeeper {
         Task {
             switch try? await model.api.deleteAttachment(a.id) {
             case .ok?, .gone?:
-                trash.removeAll { $0.id == a.id }
+                let still = Doc.posterId(a.id)
+                if trash.contains(where: { $0.id == still }) { _ = try? await model.api.deleteAttachment(still) }
+                trash.removeAll { $0.id == a.id || $0.id == still }
                 model.say("Deleted for good")
             case .needsDrive?: model.say("Connect Google Drive to delete it from there too.")
             case .inUse?: model.say("An entry holds it again, so it stays.")
@@ -731,40 +733,25 @@ final class AttachmentKeeper {
     }
 }
 
-/// Photos and files taken out of every entry, at the top of the Trash: each with the entry it was in and the days
-/// left, to put back or delete for good.
+/// Photos, videos and files taken out of every entry, at the top of the Trash, as the web's: each with the entry it
+/// was in and the days left before it's deleted, from Google Drive too, to put back or delete for good. A video's
+/// still goes where the video goes, so it isn't listed on its own. `vaultId` narrows it to one vault.
 struct TrashedAttachments: View {
     @Environment(AppModel.self) private var model
+    var vaultId: String? = nil
     @State private var confirming: StoredAttachment?
 
     var body: some View {
-        let items = AttachmentKeeper.shared.trash
-        if !items.isEmpty {
-            VStack(alignment: .leading, spacing: 8) {
+        let all = AttachmentKeeper.shared.trash
+        let items = all.filter { (vaultId == nil || $0.vault_id == vaultId) && !$0.id.hasSuffix("-poster") }
+        let shown = items.filter { !$0.isFile || $0.mime.hasPrefix("video/") } + items.filter { $0.isFile && !$0.mime.hasPrefix("video/") }
+        if !shown.isEmpty {
+            VStack(alignment: .leading, spacing: 6) {
                 Text("Photos and files").font(.headline)
-                ScrollView(.horizontal, showsIndicators: false) {
-                    HStack(alignment: .top, spacing: 10) {
-                        ForEach(items) { a in
-                            VStack(alignment: .leading, spacing: 4) {
-                                if a.isFile {
-                                    Label(a.name ?? "File", systemImage: Doc.fileSymbol(mime: a.mime))
-                                        .lineLimit(1).frame(width: 120, height: 80).background(RoundedRectangle(cornerRadius: 8).fill(Theme.sunken))
-                                } else {
-                                    PhotoThumb(media: .photo(a.id), vaultId: a.vault_id, size: 120)
-                                }
-                                Text(a.trashed_from.flatMap { model.card($0) }.map { "From “\($0.displayTitle)”" } ?? "From an entry").font(.caption).lineLimit(1).frame(width: 120, alignment: .leading)
-                                let left = a.daysLeft(now: Repository.milliseconds())
-                                Text(left == 0 ? "Deleted at the next check" : left == 1 ? "1 day left" : "\(left) days left").font(.caption2).foregroundStyle(Theme.muted)
-                                if model.vault(a.vault_id).map({ $0.role != .viewer }) ?? false {
-                                    HStack {
-                                        Button("Restore") { AttachmentKeeper.shared.putBack(a, model: model) }
-                                        Button(role: .destructive) { confirming = a } label: { Image(systemName: "trash") }.accessibilityLabel("Delete for good")
-                                    }
-                                    .buttonStyle(.borderless).font(.caption)
-                                }
-                            }
-                        }
-                    }
+                Text("Taken out of their entries. Each is deleted for good \(StoredAttachment.trashDays) days after, from Google Drive too.")
+                    .font(.footnote).foregroundStyle(Theme.muted).padding(.bottom, 4)
+                LazyVGrid(columns: [GridItem(.adaptive(minimum: 150), spacing: 12, alignment: .top)], alignment: .leading, spacing: 14) {
+                    ForEach(shown) { a in item(a, still: all.contains { $0.id == Doc.posterId(a.id) } ? Doc.posterId(a.id) : nil) }
                 }
             }
             .padding(.bottom, 12)
@@ -772,6 +759,47 @@ struct TrashedAttachments: View {
                 Button("Delete for good", role: .destructive) { AttachmentKeeper.shared.deleteForGood(a, model: model) }
             } message: { _ in
                 Text("It's deleted from Google Drive too, and can't be undone.")
+            }
+        }
+    }
+
+    private func item(_ a: StoredAttachment, still: String?) -> some View {
+        VStack(alignment: .leading, spacing: 3) {
+            Group {
+                if a.mime.hasPrefix("video/") {
+                    ShapedFill(media: .photo(still ?? a.id), vaultId: a.vault_id)
+                        .overlay(alignment: .topTrailing) { VideoMark(duration: a.duration) }
+                } else if a.isFile {
+                    VStack(alignment: .leading, spacing: 2) {
+                        Image(systemName: Doc.fileSymbol(mime: a.mime)).frame(width: 28, height: 28)
+                            .background(RoundedRectangle(cornerRadius: 8).fill(Theme.surface)).foregroundStyle(Theme.muted)
+                        Spacer(minLength: 0)
+                        Text(a.name ?? "File").font(.subheadline.weight(.semibold)).lineLimit(2)
+                        Text([FileChip.fileSize(a.size), FileChip.extensionLabel(a.name ?? "")].joined(separator: " · ")).font(.caption).foregroundStyle(Theme.muted)
+                    }
+                    .padding(.horizontal, 12).padding(.vertical, 10)
+                    .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .leading)
+                    .background(Theme.sunken)
+                } else {
+                    ShapedFill(media: .photo(a.id), vaultId: a.vault_id)
+                }
+            }
+            .frame(height: 130)
+            .frame(maxWidth: .infinity)
+            .clipShape(RoundedRectangle(cornerRadius: 8))
+            .padding(.bottom, 3)
+            Text(a.trashed_from.flatMap { model.card($0) }.map { "From “\($0.displayTitle)”" } ?? "From an entry").font(.footnote.weight(.semibold)).lineLimit(1)
+            let left = a.daysLeft(now: Repository.milliseconds())
+            Text(left == 0 ? "Deleted at the next check" : left == 1 ? "1 day left" : "\(left) days left").font(.caption).foregroundStyle(Theme.muted)
+            if model.vault(a.vault_id).map({ $0.role != .viewer }) ?? false {
+                HStack(spacing: 4) {
+                    Button { AttachmentKeeper.shared.putBack(a, model: model) } label: { Label("Restore", systemImage: "arrow.uturn.backward") }
+                        .buttonStyle(.bordered)
+                    Button(role: .destructive) { confirming = a } label: { Image(systemName: "trash") }
+                        .buttonStyle(.borderless).foregroundStyle(Theme.muted).accessibilityLabel("Delete for good")
+                }
+                .font(.footnote)
+                .padding(.top, 4)
             }
         }
     }

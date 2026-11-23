@@ -288,7 +288,8 @@ fun BubbleTags(card: Card, dates: Boolean = true) {
     val dated = dates && card.type == CardType.todo && (card.due != null || card.start != null)
     if (tags.isEmpty() && !dated) return
     FlowRow(Modifier.fillMaxWidth().padding(top = 4.dp, bottom = 2.dp), horizontalArrangement = Arrangement.spacedBy(6.dp), verticalArrangement = Arrangement.spacedBy(4.dp), itemVerticalAlignment = Alignment.CenterVertically) {
-        for (tag in tags) TagChip(tag, Modifier.clickable { model.page = Page.Journal(StreamFilter(tagId = tag.id)) })
+        // As on the web, a tag on a bubble is only a label: pressing it does what pressing the bubble does.
+        for (tag in tags) TagChip(tag)
         if (dated) {
             Spacer(Modifier.weight(1f))
             Row(horizontalArrangement = Arrangement.spacedBy(6.dp), verticalAlignment = Alignment.CenterVertically) {

@@ -368,10 +368,8 @@ struct BubbleTags: View {
         let dated = dates && card.type == .todo && (card.due != nil || card.start != nil)
         if !tags.isEmpty || dated {
             FlowLayout(spacing: 6) {
-                ForEach(tags) { tag in
-                    Button { model.page = .journal(StreamFilter(tagId: tag.id)) } label: { TagChip(tag: tag) }
-                        .buttonStyle(.plain)
-                }
+                // As on the web, a tag on a bubble is only a label: pressing it does what pressing the bubble does.
+                ForEach(tags) { tag in TagChip(tag: tag) }
                 if dated {
                     Spacer(minLength: 12).layoutPriority(-1)
                     if card.waiting && !card.isDone { WaitingMark() }

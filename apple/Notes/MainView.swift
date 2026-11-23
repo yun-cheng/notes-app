@@ -77,13 +77,13 @@ struct PhoneFrame: View {
                 NavigationStack { PageView(page: model.page).phoneSidebarButton() }
             }
             SwiftUI.Tab("Today", systemImage: "sun.max", value: .today) {
-                NavigationStack { JournalView(filter: StreamFilter(status: .today), isPage: false) }
+                NavigationStack { JournalView(filter: StreamFilter(status: .today), isPage: false).phoneSidebarButton() }
             }
             SwiftUI.Tab("Calendar", systemImage: "calendar", value: .calendar) {
-                NavigationStack { CalendarPage() }
+                NavigationStack { CalendarPage().phoneSidebarButton() }
             }
             SwiftUI.Tab("Search", systemImage: "magnifyingglass", value: .search) {
-                NavigationStack { SearchPage() }
+                NavigationStack { SearchPage().phoneSidebarButton() }
             }
         }
     }

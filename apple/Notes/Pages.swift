@@ -291,24 +291,38 @@ enum FileKind: String, CaseIterable, Hashable {
     }
 }
 
-/// Search over everything, as on the phone's Search tab.
+/// Search over everything, as on the phone's Search tab and the web's Search page: notes, todos and tags, each with
+/// its icon, its name and where the words are.
 struct SearchPage: View {
     @Environment(AppModel.self) private var model
     @State private var query = ""
 
     var body: some View {
         let q = query.trimmingCharacters(in: .whitespaces)
-        let hits = q.isEmpty ? [] : model.search.search(q).filter { $0.card.isEntry }
-        List(hits, id: \.card.id) { hit in
-            Button { model.openEntry = hit.card.id } label: {
-                VStack(alignment: .leading, spacing: 2) {
-                    Text(hit.card.displayTitle).fontWeight(.semibold).lineLimit(1)
-                    Text(hit.snippet).font(.caption).foregroundStyle(Theme.muted).lineLimit(2)
+        let hits = q.isEmpty ? [] : model.search.search(q)
+        List {
+            ForEach(hits, id: \.card.id) { hit in
+                Button {
+                    if hit.card.type == .tag { model.page = .journal(StreamFilter(tagId: hit.card.id)) } else { model.openEntry = hit.card.id }
+                } label: {
+                    HStack(alignment: .top, spacing: 10) {
+                        Image(systemName: hit.card.type == .tag ? "tag" : hit.card.type == .todo ? "checkmark.square" : "doc.text").foregroundStyle(Theme.muted).frame(width: 20)
+                        VStack(alignment: .leading, spacing: 2) {
+                            Text(hit.card.displayTitle).fontWeight(.semibold).lineLimit(1)
+                            Text(hit.snippet).font(.subheadline).foregroundStyle(Theme.muted).lineLimit(2)
+                        }
+                    }
                 }
+                .buttonStyle(.plain)
+                .listRowBackground(Theme.surface)
             }
-            .buttonStyle(.plain)
+            if !q.isEmpty && hits.isEmpty {
+                Text("No results for “\(q)”.").foregroundStyle(Theme.muted).listRowBackground(Color.clear)
+            }
         }
-        .searchable(text: $query, prompt: "Search everything")
+        .scrollContentBackground(.hidden)
+        .pageBackground()
+        .searchable(text: $query, prompt: "Search notes, todos and tags")
         .navigationTitle("Search")
     }
 }

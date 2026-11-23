@@ -124,21 +124,25 @@ fun SettingsPage(openDrawer: (() -> Unit)?) {
         TopBar("Backup & settings", openDrawer)
         Column(Modifier.weight(1f).verticalScroll(rememberScrollState()).padding(bottom = 32.dp)) {
             FormSection("Account") {
-                model.account?.let { FormRow("Signed in as", "${it.name} (${it.email})") }
-                model.sync?.let { sync ->
-                    val s = model.syncStatus
-                    FormRow("Sync", s.summary + (s.lastSyncedAt?.let { ", last at " + formatMillis(it, date = null) } ?: ""))
-                    FormButton("Sync now", enabled = s.state != SyncEngine.State.syncing) { model.scope.launch { sync.sync() } }
+                model.account?.let { account ->
+                    val synced = model.sync?.let { val s = model.syncStatus; " " + s.summary + (s.lastSyncedAt?.let { ", last synced at " + formatMillis(it, date = null) } ?: "") + "." } ?: ""
+                    FormText("Signed in as ${account.name} (${account.email}).$synced", muted = false)
+                    if (account.email.lowercase().endsWith(".test")) Text(
+                        "This is the demo account on your local server, for trying the app. Running npm run demo puts its sample notes back as they were and keeps anything you added, but keep notes that matter in your own account: sign out, then sign in with Google.",
+                        Modifier.padding(horizontal = 16.dp, vertical = 4.dp).background(Theme.accentSoft, androidx.compose.foundation.shape.RoundedCornerShape(10.dp)).padding(10.dp),
+                        fontSize = 14.sp, color = Theme.text,
+                    )
                 }
+                model.sync?.let { sync -> FormButton("Sync now", enabled = model.syncStatus.state != SyncEngine.State.syncing) { model.scope.launch { sync.sync() } } }
                 FormButton("Add another account") { model.addingAccount = true }
                 FormButton("Sign out", color = Theme.alert) { model.signOut() }
             }
             FormSection("Backup", "Your notes sync to your account. A backup is an extra copy you control. Unlock a private vault first to include it.") {
-                FormButton("Save a backup", onClick = ::exportBackup)
-                FormButton("Restore from a backup") { restore.launch(arrayOf("application/json", "*/*")) }
+                FormButton("Download backup", onClick = ::exportBackup)
+                FormButton("Restore from backup") { restore.launch(arrayOf("application/json", "*/*")) }
                 FormButton("Export as Markdown", onClick = ::exportMarkdown)
             }
-            FormSection("Import", "Bring in notes from Markdown or text files, like a folder from Obsidian or Bear, or this app's Markdown export. Each file becomes an entry, titled by its front matter, its first heading or its name.") {
+            FormSection("Import", "Bring in notes from Markdown or text files, or a zip of them, like a folder from Obsidian or Bear, or this app's Markdown export. Each file becomes an entry, titled by its front matter, its first heading or its name, with the front matter's tags, date and todo fields. Links between the files are kept.") {
                 FormButton("Import Markdown") { import.launch(arrayOf("text/*", "application/zip", "application/octet-stream")) }
             }
             FormSection("Reminders", "Open todos with a due date remind on this device, even with the app closed.") {
@@ -160,15 +164,20 @@ fun SettingsPage(openDrawer: (() -> Unit)?) {
                     }
                 }
             }
-            FormSection("Journal display") {
-                val links = mapOf("card" to "Card", "compact" to "One line", "off" to "Off")
-                ChoiceRow("Link previews", links[Settings.linkStyle] ?: "Card") { close -> for ((k, l) in links) MenuCheck(l, Settings.linkStyle == k) { Settings.linksAs(k); close() } }
-                val photos = mapOf("large" to "Large", "thumbs" to "Thumbnails", "off" to "Count")
+            FormSection("Journal display", "How web links and photos show under entries on this device. Links in the text can always be opened.") {
+                val links = mapOf("card" to "Cards", "compact" to "One line", "off" to "Off")
+                ChoiceRow("Link previews", links[Settings.linkStyle] ?: "Cards") { close -> for ((k, l) in links) MenuCheck(l, Settings.linkStyle == k) { Settings.linksAs(k); close() } }
+                val photos = mapOf("large" to "Large", "thumbs" to "Thumbnails", "off" to "Off")
                 ChoiceRow("Photos", photos[Settings.photoStyle] ?: "Large") { close -> for ((k, l) in photos) MenuCheck(l, Settings.photoStyle == k) { Settings.photosAs(k); close() } }
             }
-            FormSection("Copy & paste", "Markdown copies an entry the way the journal box reads it back, todos as [ ] lines with their dates and tags. Plain text copies just its words.") {
-                val styles = mapOf("markdown" to "Markdown", "plain" to "Plain text")
-                ChoiceRow("Copying an entry", styles[Settings.copyStyle] ?: "Markdown") { close -> for ((k, l) in styles) MenuCheck(l, Settings.copyStyle == k) { Settings.copyAs(k); close() } }
+            val copyNote = when (Settings.copyStyle) {
+                "markdown" -> "Copied text is Markdown, with **bold**, - lists and [links](…), and copied todos read [ ] Title @date #tag."
+                "plain" -> "Copied text is just the words: lists keep their markers, links show their addresses."
+                else -> "Copied text keeps its bold, lists and links in apps like Gmail, Keep and Docs, and is plain words where only text goes."
+            }
+            FormSection("Copy & paste", "$copyNote Entries pasted back into the journal come back whole either way.") {
+                val styles = mapOf("rich" to "Rich text", "markdown" to "Markdown", "plain" to "Plain text")
+                ChoiceRow("Copy as", styles[Settings.copyStyle] ?: "Rich text") { close -> for ((k, l) in styles) MenuCheck(l, Settings.copyStyle == k) { Settings.copyAs(k); close() } }
             }
             FormSection("Photos and files", "Photos and attached files (up to 25 MB each) are saved on this device first, then uploaded to a folder called “Notes app photos” in the Google Drive of the vault's owner.") {
                 if (offline) FormText("Connect to the internet to see whether Google Drive is connected.")
@@ -198,7 +207,7 @@ fun SettingsPage(openDrawer: (() -> Unit)?) {
                 }
                 if (apps?.isEmpty() == true) FormText("No AI app is connected.")
             }
-            FormSection("Delete account") { FormButton("Delete account…", color = Theme.alert) { deleting = true } }
+            FormSection("Delete account", "Deletes this account and everything in it from the server, for good. Other accounts signed in on this device stay as they are.") { FormButton("Delete account…", color = Theme.alert) { deleting = true } }
         }
     }
     if (deleting) DeleteAccountSheet({ deleting = false }, ::exportMarkdown)

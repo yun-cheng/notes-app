@@ -11,7 +11,7 @@ object Settings {
 
     fun init(context: Context) {
         prefs = context.getSharedPreferences("settings", Context.MODE_PRIVATE)
-        copyStyle = prefs?.getString("copyStyle", null) ?: "markdown"
+        copyStyle = prefs?.getString("copyStyle", null) ?: "rich"
         photoStyle = prefs?.getString("photoStyle", null) ?: "large"
         linkStyle = prefs?.getString("linkStyle", null) ?: "card"
     }
@@ -19,7 +19,7 @@ object Settings {
     private fun save(key: String, value: String) { prefs?.edit()?.putString(key, value)?.apply() }
 
     /** `markdown` pastes back whole; `plain` is just the words. */
-    var copyStyle by mutableStateOf("markdown")
+    var copyStyle by mutableStateOf("rich")
         private set
     /** `large`, `thumbs`, or `off` for a count. */
     var photoStyle by mutableStateOf("large")

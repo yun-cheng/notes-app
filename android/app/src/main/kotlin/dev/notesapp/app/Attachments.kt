@@ -420,7 +420,13 @@ object AttachmentKeeper {
     fun deleteForGood(a: StoredAttachment, model: AppModel) {
         model.scope.launch {
             when (runCatching { model.api.deleteAttachment(a.id) }.getOrNull()) {
-                ServerApi.DeleteResult.Ok, ServerApi.DeleteResult.Gone -> { trash.value = trash.value.filter { it.id != a.id }; model.say("Deleted for good") }
+                ServerApi.DeleteResult.Ok, ServerApi.DeleteResult.Gone -> {
+                    // A video's still goes with it.
+                    val still = Doc.posterId(a.id)
+                    if (trash.value.any { it.id == still }) runCatching { model.api.deleteAttachment(still) }
+                    trash.value = trash.value.filter { it.id != a.id && it.id != still }
+                    model.say("Deleted for good")
+                }
                 ServerApi.DeleteResult.NeedsDrive -> model.say("Connect Google Drive to delete it from there too.")
                 ServerApi.DeleteResult.InUse -> model.say("An entry holds it again, so it stays.")
                 else -> model.say("It couldn't be deleted now. Try again.")

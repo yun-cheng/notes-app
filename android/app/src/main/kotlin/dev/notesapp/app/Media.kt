@@ -69,6 +69,9 @@ import androidx.compose.material.icons.outlined.Videocam
 import androidx.compose.material.icons.outlined.PlayArrow
 import androidx.compose.foundation.layout.widthIn
 import androidx.compose.foundation.border
+import androidx.compose.foundation.layout.Spacer
+import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
@@ -344,29 +347,46 @@ fun AttachedThumb(node: JsonElement, vaultId: String, remove: () -> Unit) {
 }
 
 /**
- * Photos and files taken out of every entry, at the top of the Trash: each with the entry it was in and the days
- * left, to put back or delete for good.
+ * Photos, videos and files taken out of every entry, at the top of the Trash, as the web's: each with the entry it was
+ * in and the days left before it's deleted, from Google Drive too, to put back or delete for good. A video's still goes
+ * where the video goes, so it isn't listed on its own. `vaultId` narrows it to one vault.
  */
+@OptIn(ExperimentalLayoutApi::class)
 @Composable
-fun TrashedAttachments() {
+fun TrashedAttachments(vaultId: String? = null) {
     val model = LocalModel.current
-    val items = AttachmentKeeper.trash.value
+    val all = AttachmentKeeper.trash.value
     var confirming by remember { mutableStateOf<StoredAttachment?>(null) }
-    if (items.isEmpty()) return
-    Column(Modifier.padding(bottom = 12.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
-        Text("Photos and files", fontWeight = FontWeight.SemiBold, color = Theme.text)
-        Row(Modifier.horizontalScroll(rememberScrollState()), horizontalArrangement = Arrangement.spacedBy(10.dp)) {
-            for (a in items) Column(Modifier.width(120.dp), verticalArrangement = Arrangement.spacedBy(4.dp)) {
-                if (a.isFile) Row(Modifier.size(120.dp, 80.dp).clip(RoundedCornerShape(8.dp)).background(Theme.sunken).padding(6.dp), verticalAlignment = Alignment.CenterVertically) {
-                    Icon(fileIcon(a.mime), null, Modifier.size(16.dp), tint = Theme.text)
-                    Text(a.name ?: "File", maxLines = 1, fontSize = 13.sp, color = Theme.text)
-                } else PhotoThumb(Doc.Media.Photo(a.id), a.vault_id, 120.dp)
-                Text(a.trashed_from?.let { model.card(it) }?.let { "From “${it.displayTitle}”" } ?: "From an entry", fontSize = 12.sp, maxLines = 1, color = Theme.text)
+    val items = all.filter { (vaultId == null || it.vault_id == vaultId) && !it.id.endsWith("-poster") }
+    val shown = items.filter { !it.isFile || it.mime.startsWith("video/") } + items.filter { it.isFile && !it.mime.startsWith("video/") }
+    if (shown.isEmpty()) return
+    Column(Modifier.padding(bottom = 12.dp), verticalArrangement = Arrangement.spacedBy(6.dp)) {
+        Text("Photos and files", fontWeight = FontWeight.SemiBold, color = Theme.text, fontSize = 17.sp)
+        Text("Taken out of their entries. Each is deleted for good ${StoredAttachment.TRASH_DAYS} days after, from Google Drive too.", fontSize = 13.sp, color = Theme.muted)
+        FlowRow(horizontalArrangement = Arrangement.spacedBy(12.dp), verticalArrangement = Arrangement.spacedBy(14.dp)) {
+            for (a in shown) Column(Modifier.width(150.dp), verticalArrangement = Arrangement.spacedBy(3.dp)) {
+                Box(Modifier.fillMaxWidth().height(110.dp).clip(RoundedCornerShape(8.dp)).background(Theme.sunken)) {
+                    when {
+                        a.mime.startsWith("video/") -> {
+                            val still = Doc.posterId(a.id).takeIf { id -> all.any { it.id == id } } ?: a.id
+                            FillThumb(Doc.Media.Photo(still), a.vault_id, Modifier.fillMaxSize())
+                            VideoMark(a.duration, Modifier.align(Alignment.TopEnd))
+                        }
+                        a.isFile -> Column(Modifier.fillMaxSize().padding(horizontal = 12.dp, vertical = 10.dp)) {
+                            Box(Modifier.size(28.dp).clip(RoundedCornerShape(8.dp)).background(Theme.surface), contentAlignment = Alignment.Center) { Icon(fileIcon(a.mime), null, Modifier.size(16.dp), tint = Theme.muted) }
+                            Spacer(Modifier.weight(1f))
+                            Text(a.name ?: "File", maxLines = 2, fontSize = 14.sp, fontWeight = FontWeight.SemiBold, color = Theme.text)
+                            Text(fileDetail(a.size, a.name ?: ""), fontSize = 12.sp, color = Theme.muted)
+                        }
+                        else -> FillThumb(Doc.Media.Photo(a.id), a.vault_id, Modifier.fillMaxSize())
+                    }
+                }
+                Text(a.trashed_from?.let { model.card(it) }?.let { "From “${it.displayTitle}”" } ?: "From an entry", fontSize = 13.sp, fontWeight = FontWeight.SemiBold, maxLines = 1, color = Theme.text)
                 val left = a.daysLeft(System.currentTimeMillis())
-                Text(if (left == 0) "Deleted at the next check" else if (left == 1) "1 day left" else "$left days left", fontSize = 11.sp, color = Theme.muted)
+                Text(if (left == 0) "Deleted at the next check" else if (left == 1) "1 day left" else "$left days left", fontSize = 12.sp, color = Theme.muted)
                 if (model.vault(a.vault_id)?.let { it.role != "viewer" } == true) Row(verticalAlignment = Alignment.CenterVertically) {
-                    TextButton(onClick = { AttachmentKeeper.putBack(a, model) }) { Text("Restore", fontSize = 13.sp) }
-                    Icon(Icons.Outlined.Delete, "Delete for good", Modifier.size(18.dp).clickable { confirming = a }, tint = Theme.alert)
+                    androidx.compose.material3.OutlinedButton(onClick = { AttachmentKeeper.putBack(a, model) }) { Text("Restore", fontSize = 13.sp) }
+                    Icon(Icons.Outlined.Delete, "Delete for good", Modifier.padding(start = 4.dp).size(20.dp).clickable { confirming = a }, tint = Theme.muted)
                 }
             }
         }

@@ -140,7 +140,7 @@ fun JournalView(initial: StreamFilter, openDrawer: (() -> Unit)?, fixed: Boolean
             SortMenu(filter, setFilter)
             BoardMenu(filter, setFilter)
         }
-        FilterRow(filter, setFilter) { pickDates = "" }
+        FilterRow(filter, setFilter, { pickDates = "" })
         if (searching) PageSearchField(query, { query = it }) { searching = false; query = "" }
         when {
             locked != null -> UnlockView(locked, Modifier.weight(1f))
@@ -245,7 +245,7 @@ fun MenuCheck(label: String, checked: Boolean, onClick: () -> Unit) {
  * names its choice and has an × to take it off; the sidebar's tag and vault show as chips too.
  */
 @Composable
-fun FilterRow(filter: StreamFilter, set: (StreamFilter) -> Unit, pickDates: () -> Unit) {
+fun FilterRow(filter: StreamFilter, set: (StreamFilter) -> Unit, pickDates: () -> Unit, templates: Boolean = true) {
     val model = LocalModel.current
     Column {
         Row(Modifier.horizontalScroll(rememberScrollState()).padding(horizontal = 16.dp, vertical = 8.dp), horizontalArrangement = Arrangement.spacedBy(6.dp), verticalAlignment = Alignment.CenterVertically) {
@@ -263,7 +263,7 @@ fun FilterRow(filter: StreamFilter, set: (StreamFilter) -> Unit, pickDates: () -
             FilterChip(filter.has?.let { StreamLabels.contains[it] } ?: "Contains", filter.has != null, { set(filter.copy(has = null)) }) { close ->
                 for (c in StreamFilter.Contains.entries) DropdownMenuItem(text = { Text(StreamLabels.contains[c]!!) }, onClick = { set(filter.copy(has = c)); close() })
             }
-            ToggleChip("Templates", filter.template) { set(filter.copy(template = !filter.template)) }
+            if (templates) ToggleChip("Templates", filter.template) { set(filter.copy(template = !filter.template)) }
             filter.tagId?.let { SetChip(model.card(it)?.displayTitle ?: "Tag", Icons.Outlined.Label) { set(filter.copy(tagId = null)) } }
             filter.vaultId?.let { SetChip(model.vault(it)?.name ?: "Vault", Icons.Outlined.Inventory2) { set(filter.copy(vaultId = null)) } }
             if (filter.archived) SetChip("Archived", Icons.Outlined.Archive) { set(filter.copy(archived = false)) }
@@ -341,7 +341,7 @@ fun EmptyJournal(filter: StreamFilter, searching: Boolean) {
 
 /** A page's search field, a row under the title bar. */
 @Composable
-fun PageSearchField(query: String, set: (String) -> Unit, close: () -> Unit) {
+fun PageSearchField(query: String, set: (String) -> Unit, placeholder: String = "Search", close: () -> Unit) {
     val focus = remember { FocusRequester() }
     LaunchedEffect(Unit) { focus.requestFocus() }
     Row(
@@ -351,7 +351,7 @@ fun PageSearchField(query: String, set: (String) -> Unit, close: () -> Unit) {
         Icon(Icons.Outlined.Search, null, Modifier.size(18.dp), tint = Theme.muted)
         BasicTextField(
             query, set, Modifier.weight(1f).focusRequester(focus), singleLine = true, textStyle = TextStyle(color = Theme.text, fontSize = 16.sp), cursorBrush = SolidColor(Theme.accent),
-            decorationBox = { inner -> if (query.isEmpty()) Text("Search", color = Theme.muted, fontSize = 16.sp); inner() },
+            decorationBox = { inner -> if (query.isEmpty()) Text(placeholder, color = Theme.muted, fontSize = 16.sp); inner() },
         )
         Icon(Icons.Outlined.Close, "Close search", Modifier.size(18.dp).clickable(onClick = close), tint = Theme.muted)
     }

@@ -323,7 +323,7 @@ fun HistoryPage(openDrawer: (() -> Unit)?) {
     }
     Column(Modifier.fillMaxSize().background(Theme.bg)) {
         TopBar("History", openDrawer)
-        FilterRow(filter, { filter = it }) {}
+        FilterRow(filter, { filter = it }, {})
         // Lazy, as the history can be long: only the rows on screen are laid out.
         androidx.compose.foundation.lazy.LazyColumn(Modifier.weight(1f), contentPadding = androidx.compose.foundation.layout.PaddingValues(bottom = 24.dp)) {
             if (offline) item { FormText("Connect to the internet to see changes made elsewhere.") }

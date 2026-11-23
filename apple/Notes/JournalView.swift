@@ -5,6 +5,10 @@ import SwiftUI
 /// as the web app's `journal.tsx`. A filter row narrows it; the sidebar narrows it to a tag or a vault.
 struct JournalView: View {
     @Environment(AppModel.self) private var model
+    #if os(iOS)
+    @Environment(\.horizontalSizeClass) private var sizeClass
+    @Environment(\.phoneHeader) private var phoneHeader
+    #endif
     @State var filter: StreamFilter
     @State private var searching = false
     @State private var query = ""
@@ -135,6 +139,9 @@ struct JournalView: View {
         .pageBackground()
         .navigationTitle(title)
         .toolbar { toolbar(all: all.map(\.card.id)) }
+        #if os(iOS)
+        .preference(key: PlacesPhoneHeader.self, value: phoneHeader != nil)
+        #endif
         .sheet(isPresented: $pickDates) { DatesDialog(filter: $filter) }
         .sheet(id: $datesFrom) { day in DatesDialog(filter: $filter, startDay: day) }
         .sheet(isPresented: $showShortcuts) { ShortcutsSheet() }
@@ -197,6 +204,15 @@ struct JournalView: View {
         return .handled
     }
 
+    /// On a phone's narrow layout, where the web has no room for the board switch.
+    private var phone: Bool {
+        #if os(iOS)
+        sizeClass == .compact
+        #else
+        false
+        #endif
+    }
+
     private func togglePick(_ id: String) {
         if picked.contains(id) { picked.remove(id) } else { picked.insert(id) }
     }
@@ -218,24 +234,50 @@ struct JournalView: View {
             .help("View only: read without changing anything by mistake")
             Button { searching.toggle() } label: { Label("Search", systemImage: "magnifyingglass") }
                 .keyboardShortcut("/", modifiers: [])
-            Menu {
-                Picker("Order", selection: $filter.sort) {
-                    ForEach(StreamFilter.Sort.labels, id: \.1) { sort, label in Text(label).tag(sort) }
-                    ForEach(model.index.tagGroups.groups.filter(\.ordered)) { g in Text("By \(g.title.lowercased())").tag(StreamFilter.Sort.group(g.id)) }
+            if filter.board == nil {
+                Menu {
+                    Picker("Order", selection: $filter.sort) {
+                        ForEach(StreamFilter.Sort.labels, id: \.1) { sort, label in Text(label).tag(sort) }
+                        ForEach(model.index.tagGroups.groups.filter(\.ordered)) { g in Text("By \(g.title.lowercased())").tag(StreamFilter.Sort.group(g.id)) }
+                    }
+                    .pickerStyle(.inline)
+                    // The board is picked here too, as on the web, where a phone has no room for its own button.
+                    Section("Board") {
+                        Button("Board by todo state") { filter.board = "state" }
+                        ForEach(model.index.tagGroups.groups.filter { !$0.members.isEmpty }) { g in Button("Board by \(g.title.lowercased())") { filter.board = g.id } }
+                    }
+                } label: {
+                    Label(filter.sort.label(groups: model.index.tagGroups.groups), systemImage: "arrow.up.arrow.down")
+                        #if os(macOS)
+                        .labelStyle(.titleAndIcon)
+                        #endif
                 }
-                .pickerStyle(.inline)
-            } label: {
-                Label(filter.sort.label(groups: model.index.tagGroups.groups), systemImage: "arrow.up.arrow.down")
-                    #if os(macOS)
-                    .labelStyle(.titleAndIcon)
-                    #endif
+            } else {
+                // On the board, in the sort's place: what the columns are, as the web's.
+                Menu {
+                    Picker("Columns", selection: Binding(get: { filter.board ?? "state" }, set: { filter.board = $0 == "list" ? nil : $0 })) {
+                        Text("List").tag("list")
+                        Text("Todo state").tag("state")
+                        ForEach(model.index.tagGroups.groups.filter { !$0.members.isEmpty }) { g in Text(g.title).tag(g.id) }
+                    }
+                    .pickerStyle(.inline)
+                } label: {
+                    let name = filter.board == "state" ? "Todo state" : model.index.tagGroups.groups.first { $0.id == filter.board }?.title ?? "Columns"
+                    Label("Columns: \(name)", systemImage: "rectangle.split.3x1")
+                        #if os(macOS)
+                        .labelStyle(.titleAndIcon)
+                        #endif
+                }
             }
-            Menu {
-                Button("List") { filter.board = nil }
-                Button("Board by state") { filter.board = "state" }
-                ForEach(model.index.tagGroups.groups) { g in Button("Board by \(g.title.lowercased())") { filter.board = g.id } }
-            } label: {
-                Label("Board", systemImage: filter.board == nil ? "rectangle.split.3x1" : "rectangle.split.3x1.fill")
+            #if os(iOS)
+            if let phoneHeader { PhoneHeaderButtons(header: phoneHeader) }
+            #endif
+            if !phone {
+                // List or board, opening the last board, as the web's switch on a computer.
+                Button { filter.board = filter.board == nil ? "state" : nil } label: {
+                    Label(filter.board == nil ? "Show as a board" : "Show as a list", systemImage: filter.board == nil ? "rectangle.split.3x1" : "list.bullet")
+                }
+                .help(filter.board == nil ? "Show as a board" : "Show as a list")
             }
         }
         }

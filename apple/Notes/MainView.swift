@@ -86,7 +86,7 @@ struct PhoneFrame: View {
         })
         TabView(selection: selection) {
             SwiftUI.Tab("Journal", systemImage: "doc.text", value: .journal) {
-                NavigationStack { PageView(page: model.page).phoneSidebarButton() }
+                NavigationStack { PageView(page: model.page).phoneSidebarButton(filters: ![Page.tags, .vaults, .settings].contains(model.page)) }
             }
             SwiftUI.Tab("Today", systemImage: "sun.max", value: .today) {
                 NavigationStack { JournalView(filter: StreamFilter(status: .today), isPage: false).phoneSidebarButton() }
@@ -95,7 +95,7 @@ struct PhoneFrame: View {
                 NavigationStack { CalendarPage().phoneSidebarButton() }
             }
             SwiftUI.Tab("Search", systemImage: "magnifyingglass", value: .search) {
-                NavigationStack { SearchPage().phoneSidebarButton() }
+                NavigationStack { SearchPage().phoneSidebarButton(filters: false) }
             }
         }
         .onChange(of: model.page) { _, page in tab = page == .calendar ? .calendar : .journal }
@@ -103,23 +103,90 @@ struct PhoneFrame: View {
 }
 
 extension View {
-    /// On a phone the sidebar's pages, tags and vaults open from a button in the title bar.
-    func phoneSidebarButton() -> some View { modifier(PhoneSidebarButton()) }
+    /// A phone's title bar, as the web's there: Tags and vaults (the sidebar's pages, groups, tags and vaults in a
+    /// sheet) on the pages that have it, and the account button on every page.
+    func phoneSidebarButton(filters: Bool = true) -> some View { modifier(PhoneSidebarButton(filters: filters)) }
+}
+
+/// A page that puts the phone's Tags and vaults and account buttons at the end of its own, as the journal does, sets
+/// this, and finds them in `PhoneHeader`.
+struct PlacesPhoneHeader: PreferenceKey {
+    static let defaultValue = false
+    static func reduce(value: inout Bool, nextValue: () -> Bool) { value = value || nextValue() }
+}
+
+/// What a page needs to show the phone's header buttons itself.
+struct PhoneHeader {
+    var filters: Bool
+    var openFilters: () -> Void
+}
+
+extension EnvironmentValues {
+    @Entry var phoneHeader: PhoneHeader?
+}
+
+/// The phone's Tags and vaults and account buttons, for a page that places them itself.
+struct PhoneHeaderButtons: View {
+    @Environment(AppModel.self) private var model
+    let header: PhoneHeader
+
+    var body: some View {
+        let narrowed = model.page.filter.map { $0.tagId != nil || $0.vaultId != nil } ?? false
+        if header.filters {
+            Button(action: header.openFilters) { Label("Tags and vaults", systemImage: "line.3.horizontal.decrease") }
+                .tint(narrowed ? Theme.accent : nil)
+        }
+        AccountButton()
+    }
 }
 
 struct PhoneSidebarButton: ViewModifier {
+    @Environment(AppModel.self) private var model
+    var filters = true
     @State private var open = false
+    @State private var placed = false
     func body(content: Content) -> some View {
+        let header = PhoneHeader(filters: filters, openFilters: { open = true })
         content
+            .environment(\.phoneHeader, header)
+            .onPreferenceChange(PlacesPhoneHeader.self) { placed = $0 }
             .toolbar {
-                ToolbarItem(placement: .topBarLeading) {
-                    Button { open = true } label: { Label("Pages, tags and vaults", systemImage: "sidebar.left") }
+                if !placed {
+                    ToolbarItemGroup(placement: .topBarTrailing) { PhoneHeaderButtons(header: header) }
                 }
             }
             .sheet(isPresented: $open) {
-                NavigationStack { Sidebar(onPick: { open = false }) }
+                NavigationStack { Sidebar(onPick: { open = false }, phone: true) }
                     .presentationDetents([.large])
             }
+    }
+}
+
+/// The account's picture in a phone's title bar, as the web's: its menu has the account, the others to switch to,
+/// Add another account, Backup & settings and Sign out.
+struct AccountButton: View {
+    @Environment(AppModel.self) private var model
+
+    var body: some View {
+        if let account = model.account {
+            Menu {
+                Section {
+                    Label("\(account.name) (\(account.email))", systemImage: "person.crop.circle")
+                }
+                let others = model.accounts.filter { $0.id != account.id }
+                if !others.isEmpty {
+                    Section("Switch to") {
+                        ForEach(others) { other in Button("\(other.name) (\(other.email))") { model.switchTo(other) } }
+                    }
+                }
+                Button { model.addingAccount = true } label: { Label("Add another account", systemImage: "plus") }
+                Button { model.page = .settings } label: { Label("Backup & settings", systemImage: "slider.horizontal.3") }
+                Button(role: .destructive, action: model.signOut) { Label("Sign out", systemImage: "rectangle.portrait.and.arrow.right") }
+            } label: {
+                Avatar(account: account, size: 30).clipShape(Circle())
+            }
+            .accessibilityLabel("\(account.name) (\(account.email)): switch account or sign out")
+        }
     }
 }
 #endif
@@ -150,6 +217,9 @@ struct PageView: View {
 struct Sidebar: View {
     @Environment(AppModel.self) private var model
     var onPick: () -> Void = {}
+    /// On a phone, as the web's Tags and vaults sheet: only the pages, groups, tags and vaults (New note, Search, the
+    /// settings and the account are in the tabs and the account button there).
+    var phone = false
 
     private func go(_ page: Page) {
         model.page = page
@@ -184,6 +254,7 @@ struct Sidebar: View {
         let archived = index.live.filter { $0.isEntry && $0.archived }.count
         List {
             Section {
+                if !phone {
                 Button {
                     go(.journal(StreamFilter()))
                     model.focusBox += 1
@@ -205,6 +276,7 @@ struct Sidebar: View {
                     }
                 }
                 .buttonStyle(.plain)
+                }
                 ForEach(Page.destinations.filter(\.listed), id: \.key) { d in
                     row(d, count: d.page == .trash ? index.trash.count : d.key == "archive" ? archived : 0)
                 }
@@ -232,13 +304,21 @@ struct Sidebar: View {
             }
         }
         .listStyle(.sidebar)
-        .navigationTitle("Notes")
+        .navigationTitle(phone ? "Tags and vaults" : "Notes")
+        #if os(iOS)
+        .navigationBarTitleDisplayMode(phone ? .inline : .automatic)
+        #endif
+        .toolbar {
+            if phone { ToolbarItem(placement: .confirmationAction) { Button("Done", action: onPick) } }
+        }
         .safeAreaInset(edge: .bottom) {
-            VStack(spacing: 0) {
-                row(Page.destination("settings")).padding(.horizontal, 10).padding(.vertical, 6)
-                AccountBadge(onPick: onPick)
+            if !phone {
+                VStack(spacing: 0) {
+                    row(Page.destination("settings")).padding(.horizontal, 10).padding(.vertical, 6)
+                    AccountBadge(onPick: onPick)
+                }
+                .background(.bar)
             }
-            .background(.bar)
         }
     }
 

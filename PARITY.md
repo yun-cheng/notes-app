@@ -28,10 +28,11 @@ _Last checked 2026-11-23._
 | A long press picks the entry (touch); there's no menu on touch, its actions are in the open entry and the picking bar | ➖ | ✅ | ✅ | T |
 | Right-click opens the entry menu (mouse) | ✅ | ➖ | ✅ with a mouse | C |
 | A mouse click leaves the bubble's text to select; a right-click on selected words offers Copy, New note, Search Google, Translate | ❌ the Mac's bubble text isn't selectable, so a double-click opens it | ➖ | ➖ | C |
-| Cmd-click picks; Shift-click picks a range | ⚠️ Cmd-click only | ➖ | ➖ | C |
-| A click beside a bubble picks it; a drag from empty space picks with a box | ❌ | ➖ | ➖ | C |
+| Cmd-click picks; Shift-click picks a range | ✅ | ➖ | ➖ | T |
+| A click beside a bubble picks it | ✅ | ➖ | ➖ | T |
+| A drag from empty space picks with a box | ❌ | ➖ | ➖ | C |
 | Pointing at a bubble shows a copy button in its corner | ✅ | ➖ | ➖ | C |
-| Pointing at a bubble shows the pick circle on its left | ❌ | ➖ | ➖ | C |
+| Pointing at a bubble shows the pick circle on its left; while picking every circle shows | ✅ | ➖ | ➖ | T |
 | A smiley at the start of the bottom row adds a reaction, from six common ones, then + for search, Recent and every group | ✅ | ✅ | ✅ | T |
 | A comment button beside the smiley, on an entry others can comment on that has no open comments | ✅ | ✅ | ✅ | T |
 | Open comments show as a count that opens the entry | ✅ | ✅ | ✅ | C |
@@ -71,7 +72,8 @@ _Last checked 2026-11-23._
 
 | Web behavior | Mac | iPhone | Android | How |
 |---|---|---|---|---|
-| Title bar on a computer: count, Demo, sync state, eye, search, order, board switch | ⚠️ the count is a subtitle | ➖ | ✅ on a tablet | T |
+| Title bar on a computer: count, Demo, sync state, eye, search, order, board switch | ⚠️ the count is a subtitle; no Demo tag by the title | ➖ | ✅ on a tablet | T |
+| Every page shows the sync state, and the eye where something can be changed (not Settings, Vaults, Photos, Links, Files) | ✅ | ✅ | ✅ | T |
 | Title bar on a phone: sync, eye, search, order, Tags and vaults, the account's picture; no sidebar | ➖ | ✅ | ✅ | T |
 | Tags and vaults on a phone: the pages, groups, tags and vaults in a sheet, with Done | ➖ | ⚠️ groups don't fold | ⚠️ groups don't fold | T |
 | The account's picture on a phone: the account, others to switch to, Add another account, Backup & settings, Sign out | ➖ | ✅ | ✅ | T |
@@ -101,7 +103,9 @@ _Last checked 2026-11-23._
 
 | Web behavior | Mac | iPhone | Android | How |
 |---|---|---|---|---|
-| Over the dimmed page, as tall as what's in it; a click outside or Esc closes it | ✅ | ➖ a sheet | ➖ a sheet | T |
+| Over the dimmed page, as tall as what's in it; a click outside or Esc closes it | ✅ | ➖ | ➖ | T |
+| On a phone: a sheet from the foot as tall as what's in it, over the dimmed page; a tap above closes it; no Done | ➖ | ✅ | ✅ | T |
+| Photos, voice messages and files show in the open entry | ⚠️ under the text, not in it; the text names them ([Photo], [Voice message], [File: name]) | ⚠️ the same | ⚠️ the same | T |
 | Grouped tag opens its group to switch it; "+ Priority" for a group it has none of; other tags are labels | ✅ | ✅ | ✅ | T |
 | Bar: make it a todo/note (showing what it makes it), Aa, Tags, a page, title, color, view only, template, copy, share, archive, trash, vault; Edited, Undo, Redo, Discard | ✅ | ✅ | ✅ | T |
 | Comments only where someone else can read them | ✅ | ✅ | ✅ | T |
@@ -115,7 +119,30 @@ _Last checked 2026-11-23._
 | A swipe pages (touch) | ➖ | ✅ | ✅ | C |
 | Photos page: All/Photos/Videos, rows by day, count line | ✅ | ✅ | ✅ | T |
 
-## Still to check
+## Pages
 
-Board, calendar and timeline dragging; Links, Files, Archive, Trash, History, Tags, Vaults and Settings against the
-web on a phone; Search; Cmd+K and `?` on the Mac; sharing and public links; reminders; translating.
+| Web behavior | Mac | iPhone | Android | How |
+|---|---|---|---|---|
+| Board: drag cards between columns and within one; add a card in a column | ✅ | ✅ | ⚠️ moved from a menu (Move up, Move to…), not dragged | C |
+| Calendar: a month with bars for spans, a todo dragged to another day, the day's list below | ✅ | ✅ | ⚠️ no dragging | C |
+| Timeline: bars dragged or stretched | ✅ | ✅ | ✅ | C |
+| Calendar on a phone: counts per day, Today, the day's todos and Written this day | ➖ | ✅ | ✅ | T |
+| Search: words across notes, todos and tags | ✅ | ✅ | ✅ | T |
+| Backup & settings: account, backup, import, reminders, journal display, copy as, photos and files, AI apps, delete account | ✅ | ✅ | ✅ | T |
+| Backup & settings: Paste as (keep formatting, Markdown, plain) | ❌ | ❌ | ❌ | T |
+
+## Everywhere
+
+| Web behavior | Mac | iPhone | Android | How |
+|---|---|---|---|---|
+| Cmd+K: commands and search | ✅ | ➖ | ➖ | C |
+| `?` lists the shortcuts | ✅ | ➖ | ➖ | C |
+| Cmd+Z undoes the last change anywhere, Cmd+Shift+Z redoes | ✅ | ➖ | ➖ | C |
+| ↑ ↓ Home End move between entries, Space picks, Return opens, Delete trashes, Esc stops picking | ✅ | ➖ | ➖ | C |
+| ← → turn the focused entry's pages; Cmd+V pastes copied entries | ❌ | ➖ | ➖ | C |
+| Right-click with several picked: Copy, Cut, Stop selecting, Archive, Move to Trash | ❌ the single entry's menu | ➖ | ➖ | C |
+
+## Not checked yet
+
+Links, Files, Archive, Trash, History, Tags and Vaults against the web on a phone; sharing and public links;
+reminders; translating; Today.

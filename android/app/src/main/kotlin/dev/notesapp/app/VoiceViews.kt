@@ -221,7 +221,7 @@ fun Waveform(peaks: List<Double>, progress: Double, modifier: Modifier) {
  * loudness, and transcribed by the server once it's up (not in an encrypted vault, whose words never reach it).
  */
 @Composable
-fun VoiceRecordButton(vaultId: String, add: (JsonElement) -> Unit) {
+fun VoiceRecordButton(vaultId: String, start: Int = 0, add: (JsonElement) -> Unit) {
     val model = LocalModel.current
     val context = LocalContext.current
     var recorder by remember { mutableStateOf<Recorder?>(null) }
@@ -254,6 +254,12 @@ fun VoiceRecordButton(vaultId: String, add: (JsonElement) -> Unit) {
             } catch (e: Exception) {
                 model.say(e.message ?: "The recording couldn't be added.")
             }
+        }
+    }
+    // The box's /voice starts recording.
+    LaunchedEffect(start) {
+        if (start > 0 && recorder == null) {
+            if (ContextCompat.checkSelfPermission(context, Manifest.permission.RECORD_AUDIO) == PackageManager.PERMISSION_GRANTED) begin() else ask.launch(Manifest.permission.RECORD_AUDIO)
         }
     }
     val r = recorder

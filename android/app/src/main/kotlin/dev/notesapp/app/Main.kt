@@ -83,6 +83,7 @@ import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.Dp
+import androidx.compose.material.icons.outlined.Tune
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import dev.notesapp.core.Account
@@ -215,7 +216,8 @@ val destinations = listOf(
     Destination("archive", "Archive", Icons.Outlined.Archive, Page.Journal(StreamFilter(archived = true))),
     Destination("trash", "Trash", Icons.Outlined.Delete, Page.Trash),
     Destination("tags", "All tags", Icons.Outlined.Label, Page.Tags, listed = false),
-    Destination("vaults", "All vaults", Icons.Outlined.Layers, Page.Vaults, listed = false),
+    Destination("vaults", "Manage vaults", Icons.Outlined.Layers, Page.Vaults, listed = false),
+    Destination("settings", "Backup & settings", Icons.Outlined.Tune, Page.Settings, listed = false),
     Destination("search", "Search", Icons.Outlined.Search, Page.Search, listed = false),
 )
 
@@ -250,17 +252,23 @@ fun Sidebar(onPick: () -> Unit) {
                 item { SideHeader(group.title) }
                 items(group.members, key = { "g${group.id}:${it.id}" }) { tag -> TagRow(tag, filter?.tagId == tag.id) { go(Page.Journal(StreamFilter(tagId = tag.id))) } }
             }
+            // As the web's: pinned tags outside a group, and the one the journal is narrowed to.
             item { SideHeader("Tags") }
-            items(index.tagGroups.loose, key = { "t:${it.id}" }) { tag -> TagRow(tag, filter?.tagId == tag.id) { go(Page.Journal(StreamFilter(tagId = tag.id))) } }
-            item { destination("tags").let { d -> SideRow(d.title, d.icon, model.page == d.page) { go(d.page) } } }
+            val pinned = index.pinnedTags.filter { index.tagGroups.groupOf[it.id] == null }
+            val narrowedTo = filter?.tagId
+            val tagsShown = if (narrowedTo == null || pinned.any { it.id == narrowedTo } || index.tagGroups.groupOf[narrowedTo] != null) pinned else pinned + index.tags.filter { it.id == narrowedTo }
+            items(tagsShown, key = { "t:${it.id}" }) { tag -> TagRow(tag, filter?.tagId == tag.id) { go(Page.Journal(StreamFilter(tagId = tag.id))) } }
+            item { destination("tags").let { d -> SideRow(d.title, null, model.page == d.page, quiet = true) { go(d.page) } } }
             item { SideHeader("Vaults") }
-            // A hidden vault stays out of the app until its PIN is entered.
-            items(model.vaults.filter { !it.hidden || it.id in model.openVaults }, key = { "v:${it.id}" }) { vault ->
-                val icon = if (vault.isPrivate) (if (vault.id in model.lockedVaults) Icons.Outlined.Lock else Icons.Outlined.LockOpen) else if ((vault.members ?: 1) > 1) Icons.Outlined.Group else Icons.Outlined.Inbox
-                SideRow(vault.name, icon, filter?.vaultId == vault.id) { go(Page.Journal(StreamFilter(vaultId = vault.id))) }
+            // A hidden vault stays out of the app until its PIN is entered; a lone vault isn't listed.
+            val vaultsShown = model.vaults.filter { !it.hidden || it.id in model.openVaults }
+            if (vaultsShown.size > 1) items(vaultsShown, key = { "v:${it.id}" }) { vault ->
+                SideRow(vault.name, if (vault.id in model.lockedVaults) Icons.Outlined.Lock else null, filter?.vaultId == vault.id) { go(Page.Journal(StreamFilter(vaultId = vault.id))) }
             }
-            item { destination("vaults").let { d -> SideRow(d.title, d.icon, model.page == d.page) { go(d.page) } } }
+            item { destination("vaults").let { d -> SideRow(d.title, null, model.page == d.page, quiet = true) { go(d.page) } } }
         }
+        HorizontalDivider(color = Theme.line)
+        destination("settings").let { d -> Box(Modifier.padding(horizontal = 10.dp, vertical = 4.dp)) { SideRow(d.title, d.icon, model.page == d.page) { go(d.page) } } }
         HorizontalDivider(color = Theme.line)
         AccountBadge(onPick)
     }
@@ -269,8 +277,9 @@ fun Sidebar(onPick: () -> Unit) {
 @Composable
 private fun TagRow(tag: Card, selected: Boolean, onClick: () -> Unit) {
     val model = LocalModel.current
-    val count = model.index.backlinks[tag.id]?.count { it.kind == dev.notesapp.core.Backlink.Kind.tag && it.from.isEntry && !it.from.archived && !it.from.template } ?: 0
-    SideRow(tag.displayTitle, Icons.Outlined.Label, selected, count, onClick)
+    // Every entry it's on, archived and templates too, as the web counts.
+    val count = model.index.backlinks[tag.id]?.count { it.kind == dev.notesapp.core.Backlink.Kind.tag } ?: 0
+    SideRow(tag.displayTitle, Icons.Outlined.Label, selected, count, tint = tag.color?.let { Theme.tint(it) }, onClick = onClick)
 }
 
 @Composable
@@ -279,13 +288,14 @@ fun SideHeader(text: String) {
 }
 
 @Composable
-fun SideRow(title: String, icon: ImageVector, selected: Boolean, count: Int? = null, onClick: () -> Unit) {
+fun SideRow(title: String, icon: ImageVector?, selected: Boolean, count: Int? = null, quiet: Boolean = false, tint: Color? = null, onClick: () -> Unit) {
     Row(
         Modifier.fillMaxWidth().clip(RoundedCornerShape(8.dp)).background(if (selected) Theme.accentSoft else Color.Transparent).clickable(onClick = onClick).padding(horizontal = 10.dp, vertical = 9.dp),
         verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(12.dp),
     ) {
-        Icon(icon, null, Modifier.size(20.dp), tint = if (selected) Theme.accent else Theme.muted)
-        Text(title, Modifier.weight(1f), color = Theme.text, maxLines = 1, overflow = TextOverflow.Ellipsis)
+        // No icon lines the name up with those above it; a quiet link, All tags or Manage vaults, is fainter.
+        if (icon != null) Icon(icon, null, Modifier.size(20.dp), tint = tint ?: if (selected) Theme.accent else Theme.muted) else Spacer(Modifier.width(20.dp))
+        Text(title, Modifier.weight(1f), color = if (quiet) Theme.muted else Theme.text, maxLines = 1, overflow = TextOverflow.Ellipsis)
         if (count != null && count > 0) Text("$count", color = Theme.muted, fontSize = 13.sp)
     }
 }
@@ -300,7 +310,11 @@ fun AccountBadge(onPick: () -> Unit) {
         Row(Modifier.fillMaxWidth().clickable { open = true }.padding(14.dp), verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(10.dp)) {
             Avatar(account, 32.dp)
             Column(Modifier.weight(1f)) {
-                Text(account.name, fontWeight = FontWeight.SemiBold, fontSize = 14.sp, color = Theme.text, maxLines = 1)
+                Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(6.dp)) {
+                    Text(account.name, fontWeight = FontWeight.SemiBold, fontSize = 14.sp, color = Theme.text, maxLines = 1)
+                    // The demo account carries the web's DEMO tag.
+                    if (account.email.lowercase().endsWith(".test")) Text("DEMO", Modifier.clip(RoundedCornerShape(50)).background(Theme.alert.copy(alpha = 0.18f)).padding(horizontal = 6.dp, vertical = 1.dp), fontSize = 10.sp, fontWeight = FontWeight.Bold, color = Theme.alert)
+                }
                 Text(account.email, fontSize = 12.sp, color = Theme.muted, maxLines = 1)
             }
             SyncBadge()
@@ -314,7 +328,7 @@ fun AccountBadge(onPick: () -> Unit) {
             }
             DropdownMenuItem(text = { Text("Add another account") }, onClick = { open = false; model.addingAccount = true; onPick() })
             HorizontalDivider()
-            DropdownMenuItem(text = { Text("Settings") }, onClick = { open = false; model.page = Page.Settings; onPick() })
+            DropdownMenuItem(text = { Text("Backup & settings") }, onClick = { open = false; model.page = Page.Settings; onPick() })
             if (model.openVaults.isNotEmpty()) DropdownMenuItem(text = { Text("Lock private vaults") }, onClick = { open = false; model.lockAll() })
             HorizontalDivider()
             DropdownMenuItem(text = { Text("Sign out", color = Theme.alert) }, onClick = { open = false; model.signOut() })

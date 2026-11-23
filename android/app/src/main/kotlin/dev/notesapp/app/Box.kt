@@ -49,6 +49,12 @@ import androidx.compose.ui.platform.LocalClipboardManager
 import androidx.compose.ui.text.AnnotatedString
 import androidx.compose.ui.text.TextStyle
 import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.material.icons.outlined.CheckBox
+import androidx.compose.material.icons.automirrored.outlined.FormatListBulleted
+import androidx.compose.material.icons.outlined.FormatListNumbered
+import androidx.compose.material.icons.outlined.FormatQuote
+import androidx.compose.material.icons.outlined.Mic
+import androidx.compose.material.icons.outlined.Title
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import dev.notesapp.core.Card
@@ -92,6 +98,7 @@ fun JournalBox(filter: StreamFilter) {
     val attached = remember { mutableStateListOf<JsonElement>() }
     val focus = remember { FocusRequester() }
     val pickers = rememberAttachmentPickers(targetVault) { attached.add(it) }
+    var recordNow by remember { mutableStateOf(0) }
 
     LaunchedEffect(model.focusBox) { if (model.focusBox > 0) runCatching { focus.requestFocus() } }
     LaunchedEffect(model.sharedText) { model.sharedText?.let { text = if (text.isBlank()) it else text + "\n" + it; model.sharedText = null } }
@@ -139,6 +146,17 @@ fun JournalBox(filter: StreamFilter) {
     Box(Modifier.fillMaxWidth().background(Theme.bg).imePadding(), contentAlignment = Alignment.Center) {
     Column(Modifier.widthIn(max = 720.dp).fillMaxWidth().padding(horizontal = 16.dp, vertical = 8.dp), verticalArrangement = Arrangement.spacedBy(6.dp)) {
         unlock?.let { UnlockView(it, Modifier.heightIn(max = 300.dp)) }
+        // What's typed after a / that starts the last line, while the menu of things to add is open.
+        val slash = text.substringAfterLast('\n').takeIf { it.startsWith("/") && ' ' !in it }?.drop(1)
+        if (slash != null) SlashMenu(slash) { item ->
+            text = text.substringBeforeLast('\n', "").let { if (text.contains('\n')) "$it\n" else "" } + (item.marker ?: "")
+            Drafts.set("journal", draftKey, Drafts.doc(text), onlyHere = encrypted)
+            when (item.id) {
+                "photo" -> pickers.photos()
+                "file" -> pickers.files()
+                "voice" -> recordNow++
+            }
+        }
         if (attached.isNotEmpty()) {
             Row(Modifier.horizontalScroll(rememberScrollState()), horizontalArrangement = Arrangement.spacedBy(6.dp)) {
                 attached.forEachIndexed { i, node -> AttachedThumb(node, targetVault) { attached.removeAt(i) } }
@@ -162,13 +180,14 @@ fun JournalBox(filter: StreamFilter) {
                 Modifier.weight(1f).padding(vertical = 8.dp).focusRequester(focus).onFocusChanged { focused = it.isFocused },
                 textStyle = TextStyle(color = Theme.text, fontSize = 16.sp), cursorBrush = SolidColor(Theme.accent), maxLines = 8,
                 decorationBox = { inner ->
-                    if (text.isEmpty()) Text(if (todos) "Write a todo · @fri · #tag" else "Write a note · [] todo · #tag", color = Theme.muted, fontSize = 16.sp, maxLines = 1, overflow = androidx.compose.ui.text.style.TextOverflow.Ellipsis)
+                    val hint = if (todos) "Todo · @ for a due date, time or repeat" else if (model.diaryVault?.id == targetVault) "Write in the diary" else "Write a note · [] todo · #tag · / for more"
+                    if (text.isEmpty()) Text(hint, color = Theme.muted, fontSize = 16.sp, maxLines = 1, overflow = androidx.compose.ui.text.style.TextOverflow.Ellipsis)
                     inner()
                 },
             )
             Icon(Icons.Outlined.Photo, "Add photos", Modifier.padding(bottom = 8.dp).size(22.dp).clickable { pickers.photos() }, tint = Theme.muted)
             Icon(Icons.Outlined.AttachFile, "Attach a file", Modifier.padding(bottom = 8.dp).size(22.dp).clickable { pickers.files() }, tint = Theme.muted)
-            VoiceRecordButton(targetVault) { attached.add(it) }
+            VoiceRecordButton(targetVault, recordNow) { attached.add(it) }
             Box(
                 Modifier.size(34.dp).clip(CircleShape).background(if (empty) Theme.sunken else Theme.accent).clickable(enabled = !empty) { send() },
                 contentAlignment = Alignment.Center,
@@ -236,4 +255,33 @@ fun stack(model: AppModel, cards: List<Card>) {
         for ((stackId, list) in stackPlan(ids, target, stacks + target)) repo.update(stackId, group) { it.withStack(list) }
     }
     model.say("Stacked ${ids.size}", undoable = true)
+}
+
+/** The box's menu of things to add, as the web's / menu: a todo, lists, a quote, a heading, a photo, a file or a voice message, narrowed by what's typed after the /. */
+data class SlashItem(val id: String, val label: String, val icon: androidx.compose.ui.graphics.vector.ImageVector, val hint: String?, val words: String, val marker: String?)
+
+val slashItems = listOf(
+    SlashItem("todo", "Todo", Icons.Outlined.CheckBox, "[]", "todo task checkbox", "[] "),
+    SlashItem("bullets", "Bullet list", Icons.AutoMirrored.Outlined.FormatListBulleted, "-", "bullet list", "- "),
+    SlashItem("numbers", "Numbered list", Icons.Outlined.FormatListNumbered, "1.", "numbered ordered list", "1. "),
+    SlashItem("quote", "Quote", Icons.Outlined.FormatQuote, ">", "quote blockquote", "> "),
+    SlashItem("photo", "Photo", Icons.Outlined.Photo, null, "photo image picture", null),
+    SlashItem("file", "File", Icons.Outlined.AttachFile, null, "file attach attachment document pdf upload", null),
+    SlashItem("voice", "Voice message", Icons.Outlined.Mic, null, "voice message record audio sound microphone dictate transcript", null),
+    SlashItem("heading", "Heading", Icons.Outlined.Title, "#", "heading title", "# "),
+)
+
+@Composable
+fun SlashMenu(query: String, pick: (SlashItem) -> Unit) {
+    val q = query.lowercase()
+    val shown = slashItems.filter { q.isEmpty() || it.label.lowercase().startsWith(q) || it.words.split(" ").any { w -> w.startsWith(q) } }
+    if (shown.isEmpty()) return
+    Column(Modifier.widthIn(max = 320.dp).fillMaxWidth().clip(RoundedCornerShape(12.dp)).background(Theme.surface).border(1.dp, Theme.line, RoundedCornerShape(12.dp)).padding(bottom = 4.dp)) {
+        Text("Add", Modifier.padding(start = 10.dp, top = 6.dp), fontSize = 12.sp, fontWeight = androidx.compose.ui.text.font.FontWeight.SemiBold, color = Theme.muted)
+        for (item in shown) Row(Modifier.fillMaxWidth().clickable { pick(item) }.padding(horizontal = 10.dp, vertical = 8.dp), verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(10.dp)) {
+            Icon(item.icon, null, Modifier.size(20.dp), tint = Theme.muted)
+            Text(item.label, Modifier.weight(1f), color = Theme.text)
+            item.hint?.let { Text(it, fontSize = 12.sp, color = Theme.muted, fontFamily = Theme.mono) }
+        }
+    }
 }

@@ -9,7 +9,7 @@ struct SettingsPage: View {
     @Environment(\.openURL) private var openURL
     @AppStorage("linkStyle") private var linkStyle = LinkStyle.card.rawValue
     @AppStorage("photoStyle") private var photoStyle = "large"
-    @AppStorage("copyStyle") private var copyStyle = "markdown"
+    @AppStorage("copyStyle") private var copyStyle = "rich"
     @State private var exporting: ExportFile?
     @State private var restoring = false
     @State private var importing = false
@@ -22,52 +22,66 @@ struct SettingsPage: View {
         Form {
             Section("Account") {
                 if let account = model.account {
-                    LabeledContent("Signed in as", value: "\(account.name) (\(account.email))")
+                    let synced = model.sync.map { s in " " + s.summary + (s.lastSyncedAt.map { ", last synced at " + $0.formatted(date: .omitted, time: .shortened) } ?? "") + "." } ?? ""
+                    Text("Signed in as \(account.name) (\(account.email)).\(synced)")
+                    if account.email.lowercased().hasSuffix(".test") {
+                        Text("This is the demo account on your local server, for trying the app. Running npm run demo puts its sample notes back as they were and keeps anything you added, but keep notes that matter in your own account: sign out, then sign in with Google.")
+                            .font(.callout)
+                            .padding(10)
+                            .background(RoundedRectangle(cornerRadius: 10).fill(Theme.accentSoft))
+                    }
                 }
-                if let sync = model.sync {
-                    LabeledContent("Sync", value: sync.summary + (sync.lastSyncedAt.map { ", last at " + $0.formatted(date: .omitted, time: .shortened) } ?? ""))
-                    Button("Sync now") { Task { await sync.sync() } }.disabled(sync.state == .syncing)
+                HStack {
+                    if let sync = model.sync { Button("Sync now") { Task { await sync.sync() } }.disabled(sync.state == .syncing) }
+                    Button("Sign out", action: model.signOut)
                 }
-                Button("Sign out", action: model.signOut)
+                .buttonStyle(.bordered)
             }
             Section {
-                Button("Save a backup") { exportBackup() }
-                Button("Restore from a backup") { restoring = true }
-                Button("Export as Markdown") { exportMarkdown() }
+                HStack {
+                    Button("Download backup") { exportBackup() }.buttonStyle(.borderedProminent)
+                    Button("Restore from backup") { restoring = true }.buttonStyle(.bordered)
+                    Button("Export as Markdown") { exportMarkdown() }.buttonStyle(.bordered)
+                }
             } header: {
                 Text("Backup")
             } footer: {
                 Text("Your notes sync to your account. A backup is an extra copy you control. Unlock a private vault first to include it.")
             }
             Section {
-                Button("Import Markdown") { importing = true }
+                Button("Import Markdown") { importing = true }.buttonStyle(.bordered)
             } header: {
                 Text("Import")
             } footer: {
-                Text("Bring in notes from Markdown or text files, like a folder from Obsidian or Bear, or this app's Markdown export. Each file becomes an entry, titled by its front matter, its first heading or its name.")
+                Text("Bring in notes from Markdown or text files, or a zip of them, like a folder from Obsidian or Bear, or this app's Markdown export. Each file becomes an entry, titled by its front matter, its first heading or its name, with the front matter's tags, date and todo fields. Links between the files are kept.")
             }
             RemindersSettings()
-            Section("Journal display") {
+            Section {
                 Picker("Link previews", selection: $linkStyle) {
-                    Text("Card").tag("card")
+                    Text("Cards").tag("card")
                     Text("One line").tag("compact")
                     Text("Off").tag("off")
                 }
                 Picker("Photos", selection: $photoStyle) {
                     Text("Large").tag("large")
                     Text("Thumbnails").tag("thumbs")
-                    Text("Count").tag("off")
+                    Text("Off").tag("off")
                 }
+            } header: {
+                Text("Journal display")
+            } footer: {
+                Text("How web links and photos show under entries on this device. Links in the text can always be clicked.")
             }
             Section {
-                Picker("Copying an entry", selection: $copyStyle) {
+                Picker("Copy as", selection: $copyStyle) {
+                    Text("Rich text").tag("rich")
                     Text("Markdown").tag("markdown")
                     Text("Plain text").tag("plain")
                 }
             } header: {
                 Text("Copy & paste")
             } footer: {
-                Text("Markdown copies an entry the way the journal box reads it back, todos as [ ] lines with their dates and tags. Plain text copies just its words.")
+                Text((copyStyle == "markdown" ? "Copied text is Markdown, with **bold**, - lists and [links](…), and copied todos read [ ] Title @date #tag." : copyStyle == "plain" ? "Copied text is just the words: lists keep their markers, links show their addresses." : "Copied text keeps its bold, lists and links in apps like Mail, Notes and Docs, and is plain words where only text goes.") + " Entries pasted back into the journal come back whole either way.")
             }
             Section {
                 if offline { Text("Connect to the internet to see whether Google Drive is connected.").foregroundStyle(Theme.muted) }
@@ -113,8 +127,12 @@ struct SettingsPage: View {
             } footer: {
                 Text("Claude and other AI apps can read and edit vaults you open to them. In the app, add a custom connector with this address.")
             }
-            Section("Delete account") {
+            Section {
                 Button("Delete account…", role: .destructive) { deleting = true }
+            } header: {
+                Text("Delete account")
+            } footer: {
+                Text("Deletes this account and everything in it from the server, for good. Other accounts signed in on this device stay as they are.")
             }
         }
         .formStyle(.grouped)

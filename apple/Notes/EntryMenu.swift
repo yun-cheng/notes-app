@@ -227,12 +227,34 @@ enum Clipboard {
         #endif
     }
 
-    /// An entry as Markdown, a todo as a checkbox line, so it pastes back whole.
+    /// An entry as the device's copy style says, as on the web: rich text (formatted for apps like Mail, with the
+    /// Markdown beside it as its plain text, so it pastes back whole), Markdown, or just its words.
     @MainActor
     static func copyEntry(_ card: Card, model: AppModel) {
-        // Markdown pastes back whole; plain text is just its words. A setting on each device, as on the web.
-        let plain = UserDefaults.standard.string(forKey: "copyStyle") == "plain"
-        copy(plain ? Markdown.words(card, index: model.index) : Markdown.entry(card, index: model.index))
+        let style = UserDefaults.standard.string(forKey: "copyStyle") ?? "rich"
+        let markdown = Markdown.entry(card, index: model.index)
+        switch style {
+        case "plain": copy(Markdown.words(card, index: model.index))
+        case "markdown": copy(markdown)
+        default: copyRich(markdown)
+        }
         model.say("Copied")
+    }
+
+    /// Markdown as formatted text, with the Markdown itself as the plain text beside it.
+    static func copyRich(_ markdown: String) {
+        let options = AttributedString.MarkdownParsingOptions(interpretedSyntax: .inlineOnlyPreservingWhitespace)
+        guard let parsed = try? AttributedString(markdown: markdown, options: options) else { return copy(markdown) }
+        let attributed = NSAttributedString(parsed)
+        guard let rtf = try? attributed.data(from: NSRange(location: 0, length: attributed.length), documentAttributes: [.documentType: NSAttributedString.DocumentType.rtf]) else { return copy(markdown) }
+        #if os(macOS)
+        let board = NSPasteboard.general
+        board.clearContents()
+        board.declareTypes([.rtf, .string], owner: nil)
+        board.setData(rtf, forType: .rtf)
+        board.setString(markdown, forType: .string)
+        #else
+        UIPasteboard.general.items = [["public.rtf": rtf, "public.utf8-plain-text": markdown]]
+        #endif
     }
 }

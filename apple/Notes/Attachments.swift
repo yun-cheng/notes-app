@@ -619,6 +619,11 @@ struct MediaViewer: View {
                     .padding(.horizontal, media.count > 1 ? 56 : 16)
                     .padding(.top, 48)
                     .padding(.bottom, media.count > 1 ? 104 : 24)
+                    // A swipe pages, as on a phone's photo viewer, while the photo isn't zoomed.
+                    .simultaneousGesture(DragGesture(minimumDistance: 30).onEnded { v in
+                        guard scale <= 1, abs(v.translation.width) > abs(v.translation.height), abs(v.translation.width) > 60 else { return }
+                        step(v.translation.width < 0 ? 1 : -1)
+                    })
                     .contextMenu {
                         if case .photo(let id) = media[at], let entry = request.entries[id].flatMap({ model.card($0.card) }) ?? model.index.live.first(where: { Doc.media($0.content).contains { $0.id == id } }) {
                             PhotoMenu(id: id, card: entry)

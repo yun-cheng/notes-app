@@ -28,7 +28,11 @@ struct MainView: View {
         // Each account starts its pages afresh: a journal kept from another account would keep its scroll offset, past
         // the end of a shorter list or short of the newest entries in a longer one.
         .id(model.accountId)
+        #if os(macOS)
+        .overlay { if let id = model.openEntry { EntryOverlay(id: id) } }
+        #else
         .sheet(id: $model.openEntry) { id in EntrySheet(id: id) }
+        #endif
         .sheet(isPresented: $model.showPalette) { CommandPalette() }
         .sheet(isPresented: $model.addingAccount) { SignInView() }
         .sheet(item: $model.panel) { panel in EntryPanelView(panel: panel) }

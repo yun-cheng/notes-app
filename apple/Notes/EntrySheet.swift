@@ -1,6 +1,38 @@
 import NotesKit
 import SwiftUI
 
+#if os(macOS)
+/// An open entry on a Mac, as the web's dialog: the page dimmed behind it, the entry in the middle, at most 660 points
+/// wide and as tall as what's in it, closed by a click outside it or Esc.
+struct EntryOverlay: View {
+    @Environment(AppModel.self) private var model
+    let id: String
+
+    var body: some View {
+        GeometryReader { geo in
+            ZStack {
+                Rectangle()
+                    .fill(Color.black.opacity(0.35))
+                    .ignoresSafeArea()
+                    .contentShape(Rectangle())
+                    .onTapGesture { model.openEntry = nil }
+                    .accessibilityLabel("Close")
+                    .accessibilityAddTraits(.isButton)
+                EntrySheet(id: id)
+                    .id(id)
+                    .frame(width: min(660, geo.size.width - 32))
+                    .frame(maxHeight: geo.size.height * 0.88)
+                    .fixedSize(horizontal: false, vertical: true)
+                    .background(Theme.surface)
+                    .clipShape(RoundedRectangle(cornerRadius: 16))
+                    .shadow(color: .black.opacity(0.3), radius: 24, y: 8)
+            }
+            .frame(width: geo.size.width, height: geo.size.height)
+        }
+    }
+}
+#endif
+
 /// An entry opened to read or change, over the page it was opened from, as the web app's sheet at `/journal/:id`:
 /// a todo's title and checkbox, the text, its pages, tags, due date and vaults, and its links.
 struct EntrySheet: View {
@@ -21,17 +53,31 @@ struct EntrySheet: View {
     @State private var original: [String: JSONValue]?
 
     var body: some View {
-        NavigationStack {
-            if let card = model.card(id) {
-                content(card)
-            } else {
-                ContentUnavailableView("Not here", systemImage: "questionmark.square.dashed", description: Text("This entry isn't on this device, or its vault is locked."))
-                    .toolbar { ToolbarItem(placement: .confirmationAction) { Button("Done") { dismiss() } } }
-            }
-        }
         #if os(macOS)
-        .frame(minWidth: 560, idealWidth: 640)
+        // Over the page in an overlay of its own, as the web's dialog (`EntryOverlay`), so no navigation stack.
+        frame
+        #else
+        NavigationStack { frame }
         #endif
+    }
+
+    @ViewBuilder
+    private var frame: some View {
+        if let card = model.card(id) {
+            content(card)
+        } else {
+            ContentUnavailableView("Not here", systemImage: "questionmark.square.dashed", description: Text("This entry isn't on this device, or its vault is locked."))
+                #if os(macOS)
+                .frame(height: 240)
+                #endif
+                .toolbar { ToolbarItem(placement: .confirmationAction) { Button("Done") { close() } } }
+        }
+    }
+
+    /// Closes it, as a sheet on a phone or as the overlay on a Mac.
+    private func close() {
+        dismiss()
+        model.openEntry = nil
     }
 
     @ViewBuilder
@@ -86,7 +132,7 @@ struct EntrySheet: View {
             Divider()
             SheetBar(card: card, edit: edit, tools: $tools, titled: $titled, showTitle: showTitle, addPage: { page = stored.count }, behind: behind, original: original) {
                 saveTitle(card)
-                dismiss()
+                close()
             }
         }
         .pageBackground()
@@ -105,7 +151,7 @@ struct EntrySheet: View {
         }
         .onDisappear { saveTitle(card) }
         #if os(macOS)
-        .onExitCommand { dismiss() }
+        .onExitCommand { close() }
         #endif
     }
 

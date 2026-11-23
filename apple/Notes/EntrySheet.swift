@@ -42,6 +42,8 @@ struct EntrySheet: View {
     @State private var page = 0
     /// How tall its content is, so the sheet on a Mac fits it, as the web's does, up to most of the window.
     @State private var contentHeight: CGFloat = 240
+    /// How tall the bar is, so a phone's sheet fits the entry and its bar, as the web's does.
+    @State private var barHeight: CGFloat = 96
     @State private var title = ""
     /// The title as last taken from the card: the field differs from it only once something is typed there.
     @State private var opened = ""
@@ -129,11 +131,16 @@ struct EntrySheet: View {
             #if os(macOS)
             .frame(height: min(max(contentHeight, 140), 640))
             #endif
+            #if os(iOS)
+            // As tall as what's in it, as the web's sheet on a phone, up to most of the screen.
+            .presentationDetents([.height(min(max(contentHeight, 140) + barHeight + 12, 720))])
+            #endif
             Divider()
             SheetBar(card: card, edit: edit, tools: $tools, titled: $titled, showTitle: showTitle, addPage: { page = stored.count }, behind: behind, original: original) {
                 saveTitle(card)
                 close()
             }
+            .onGeometryChange(for: CGFloat.self) { $0.size.height } action: { barHeight = $0 }
         }
         .pageBackground()
         #if os(iOS)
@@ -368,12 +375,13 @@ struct SheetBar: View {
     let close: () -> Void
 
     var body: some View {
-        ViewThatFits(in: .horizontal) {
-            HStack(spacing: 2) { buttons; Spacer(minLength: 8); end }
-            VStack(alignment: .leading, spacing: 4) {
-                ScrollView(.horizontal, showsIndicators: false) { HStack(spacing: 2) { buttons } }
-                HStack { Spacer(minLength: 0); end }
+        // As the web's: the tools, wrapping, with when it was edited on the right; under them Undo and Redo, and Discard.
+        VStack(alignment: .leading, spacing: 4) {
+            ViewThatFits(in: .horizontal) {
+                HStack(spacing: 2) { buttons; Spacer(minLength: 8); edited }
+                FlowLayout(spacing: 2) { buttons; edited }
             }
+            HStack(spacing: 6) { history; Spacer(minLength: 0); discard }
         }
         .buttonStyle(.plain)
         .foregroundStyle(Theme.muted)
@@ -456,12 +464,19 @@ struct SheetBar: View {
         }
     }
 
+    private var edited: some View {
+        Button { model.panel = .history(card.id) } label: { Text(Self.edited(card)).font(.footnote).frame(height: 32) }.help("See every version")
+    }
+
     @ViewBuilder
-    private var end: some View {
+    private var history: some View {
+        icon("arrow.uturn.backward", "Undo") { model.undo() }
+        icon("arrow.uturn.forward", "Redo") { model.redo() }
+    }
+
+    @ViewBuilder
+    private var discard: some View {
         HStack(spacing: 6) {
-            Button { model.panel = .history(card.id) } label: { Text(Self.edited(card)).font(.footnote) }.help("See every version")
-            icon("arrow.uturn.backward", "Undo") { model.undo() }
-            icon("arrow.uturn.forward", "Redo") { model.redo() }
             if edit {
                 Button("Discard") {
                     if let original {
@@ -477,9 +492,6 @@ struct SheetBar: View {
                 .help("Put back how it was when opened, and close")
                 .padding(.horizontal, 6)
             }
-            #if os(iOS)
-            Button("Done", action: close).font(.footnote.weight(.semibold)).foregroundStyle(Theme.accent).padding(.leading, 4)
-            #endif
         }
     }
 

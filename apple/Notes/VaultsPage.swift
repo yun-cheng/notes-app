@@ -15,12 +15,16 @@ struct VaultsPage: View {
 
     var body: some View {
         Form {
-            Section("Vaults") {
+            Section {
+                Text("A vault decides who can see a note. Use tags for topics.").foregroundStyle(Theme.muted)
                 ForEach(model.shownVaults) { vault in
                     NavigationLink(value: vault.id) {
-                        VStack(alignment: .leading, spacing: 2) {
-                            Text(vault.name).fontWeight(.semibold)
-                            Text(Self.describe(vault)).font(.caption).foregroundStyle(Theme.muted)
+                        HStack(spacing: 10) {
+                            Image(systemName: vault.isPrivate ? "lock" : "doc.text").foregroundStyle(Theme.muted).frame(width: 20)
+                            VStack(alignment: .leading, spacing: 2) {
+                                Text(vault.name).fontWeight(.semibold)
+                                Text(state(vault)).font(.caption).foregroundStyle(Theme.muted)
+                            }
                         }
                     }
                 }
@@ -29,11 +33,11 @@ struct VaultsPage: View {
                 TextField("Vault name", text: $name)
                 PinField("PIN (optional, makes it private)", text: $pin)
                 if !pin.isEmpty { Toggle("Encrypt end to end", isOn: $encrypt) }
-                Button("Make vault", action: create).disabled(name.trimmingCharacters(in: .whitespaces).isEmpty || working)
+                Button("Create vault", action: create).disabled(name.trimmingCharacters(in: .whitespaces).isEmpty || working)
             }
             Section {
                 PinField("PIN", text: $hiddenPin, onSubmit: openHidden)
-                Button("Open", action: openHidden).disabled(hiddenPin.isEmpty)
+                Button("Unlock", action: openHidden).disabled(hiddenPin.isEmpty)
             } header: {
                 Text("Hidden vaults")
             } footer: {
@@ -45,6 +49,17 @@ struct VaultsPage: View {
         .navigationTitle("Vaults")
         .navigationDestination(for: String.self) { id in VaultDetail(id: id) }
         .sheet(id: $recoveryKey) { key in RecoveryKeySheet(key: key) }
+    }
+
+    /// What the list says of a vault, as the web's: how many cards, or that it's locked or needs a PIN, whether it's
+    /// encrypted, and who's waiting to be let in.
+    private func state(_ v: Vault) -> String {
+        let count = model.index.live.filter { $0.vaultId == v.id }.count
+        let first = v.isWithheld ? (v.isEncrypted && v.isMemberCopy ? "Waiting to be let in" : "Needs your PIN") : model.lockedVaults.contains(v.id) ? "Locked" : count == 1 ? "1 card" : "\(count) cards"
+        var parts = [first]
+        if v.isEncrypted { parts.append("Encrypted") }
+        if let w = v.waiting, w > 0 { parts.append("\(w) waiting to be let in") }
+        return parts.joined(separator: " · ")
     }
 
     static func describe(_ vault: Vault) -> String {

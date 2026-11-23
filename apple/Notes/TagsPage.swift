@@ -15,29 +15,54 @@ struct TagsPage: View {
     var body: some View {
         let groups = model.index.tagGroups
         Form {
-            Section("New") {
-                HStack {
-                    TextField("New group, like Topics or Area", text: $newGroup).onSubmit(makeGroup)
-                    Button("Add group", action: makeGroup).disabled(newGroup.trimmingCharacters(in: .whitespaces).isEmpty)
+            Section {
+                Text("A group gathers tags under a name. In a group of one choice, like Priority, an entry takes one of its tags, and adding another swaps it. An ordered group can sort the journal.")
+                    .foregroundStyle(Theme.muted)
+            } header: {
+                Text("Groups")
+            }
+            ForEach(groups.groups) { group in GroupBlock(group: group) }
+            Section {
+                if !groups.groups.contains(where: { $0.title.lowercased() == "priority" }) {
+                    Button("Add Priority: High, Medium, Low") { addPriority() }
                 }
                 HStack {
-                    TextField("New tag", text: $newTag).onSubmit(makeTag)
-                    Picker("Kept to", selection: Binding(get: { newTagVault }, set: { pickedVault = $0 })) {
+                    TextField("", text: $newGroup, prompt: Text("New group, like Topics or Area")).labelsHidden().onSubmit(makeGroup)
+                    Button(action: makeGroup) { Image(systemName: "plus") }.disabled(newGroup.trimmingCharacters(in: .whitespaces).isEmpty).accessibilityLabel("Add group")
+                }
+            }
+            Section {
+                Text("A tag is kept to the vaults you pick: it's offered only on entries there, and everyone in them has it. One for all vaults is offered everywhere, and only you see it.")
+                    .foregroundStyle(Theme.muted)
+                HStack {
+                    TextField("", text: $newTag, prompt: Text("New tag")).labelsHidden().onSubmit(makeTag)
+                    Picker("Where the new tag can go", selection: Binding(get: { newTagVault }, set: { pickedVault = $0 })) {
                         ForEach(TagEdits.homes(model)) { Text($0.name).tag($0.id) }
                         Text("All vaults").tag("")
                     }
                     .labelsHidden().fixedSize()
-                    Button("Add tag", action: makeTag).disabled(newTag.trimmingCharacters(in: .whitespaces).isEmpty)
+                    Button(action: makeTag) { Image(systemName: "plus") }.disabled(newTag.trimmingCharacters(in: .whitespaces).isEmpty).accessibilityLabel("Add tag")
                 }
-            }
-            ForEach(groups.groups) { group in GroupBlock(group: group) }
-            Section("Tags") {
                 ForEach(groups.loose) { TagRow(tag: $0) }
-                if groups.loose.isEmpty { Text("No tags outside the groups.").foregroundStyle(Theme.muted) }
+                if groups.loose.isEmpty {
+                    Text(model.index.tags.isEmpty ? "No tags yet. Pin a tag and it appears as a folder." : "Every tag is in a group.").foregroundStyle(Theme.muted)
+                }
+            } header: {
+                Text(groups.groups.isEmpty ? "Tags" : "Other tags")
             }
         }
         .formStyle(.grouped)
         .navigationTitle("Tags")
+    }
+
+    /// The usual Priority group, one per entry and ordered: High, Medium, Low.
+    private func addPriority() {
+        model.perform { repo in
+            let action = repo.action()
+            var ids: [String] = []
+            for name in ["High", "Medium", "Low"] { ids.append(try await repo.createTag(title: name, group: action).id) }
+            _ = try await repo.createTag(title: "Priority", members: ids, choosesOne: true, ordered: true)
+        }
     }
 
     private func makeGroup() {
@@ -117,10 +142,11 @@ struct TagRow: View {
                         return .handled
                     }
             } else {
+                TagColorDot(tag: tag)
                 Button { model.page = .journal(StreamFilter(tagId: tag.id)) } label: {
-                    HStack {
-                        Label(tag.displayTitle, systemImage: tag.pinned ? "pin" : "tag")
-                        Text("\(count)").foregroundStyle(Theme.muted).monospacedDigit()
+                    VStack(alignment: .leading, spacing: 0) {
+                        Text(tag.displayTitle).fontWeight(.semibold)
+                        Text(count == 1 ? "1 entry" : "\(count) entries").font(.caption).foregroundStyle(Theme.muted)
                     }
                 }
                 .buttonStyle(.plain)
@@ -204,6 +230,30 @@ struct TagRow: View {
     }
 }
 
+/// A tag's color, shown on its chips: a dot that opens the colors.
+struct TagColorDot: View {
+    @Environment(AppModel.self) private var model
+    let tag: Card
+
+    var body: some View {
+        Menu {
+            Picker("Color", selection: Binding(get: { tag.color.map { $0.rawValue } ?? "" }, set: { v in model.update(tag.id) { $0.color = CardColor(rawValue: v) } })) {
+                Image(platform: Swatch.image(nil)).tag("")
+                ForEach(CardColor.allCases, id: \.self) { c in Image(platform: Swatch.image(c)).tag(c.rawValue) }
+            }
+            .pickerStyle(.palette)
+        } label: {
+            Circle().fill(tag.color.map(Theme.tint) ?? .clear)
+                .overlay(Circle().stroke(tag.color.map(Theme.tint) ?? Theme.muted, lineWidth: 1.5))
+                .frame(width: 16, height: 16)
+        }
+        .menuIndicator(.hidden)
+        .fixedSize()
+        .help("Color")
+        .accessibilityLabel("Color of \(tag.title)")
+    }
+}
+
 /// A tag group: its name, its rule (one per entry or any number), whether it's ordered, its tags, and adding one.
 struct GroupBlock: View {
     @Environment(AppModel.self) private var model
@@ -214,7 +264,7 @@ struct GroupBlock: View {
     var body: some View {
         Section {
             HStack {
-                TextField("Group name", text: $name).font(.headline).onSubmit(rename)
+                TextField("", text: $name, prompt: Text("Group name")).labelsHidden().font(.headline).onSubmit(rename)
                 Button(role: .destructive) {
                     let id = group.id
                     model.perform { try await $0.setDeleted(id, true) }
@@ -227,12 +277,14 @@ struct GroupBlock: View {
                 Text("Any number").tag(false)
             }
             .pickerStyle(.segmented)
+            .labelsHidden()
+            .fixedSize()
             Toggle("Ordered, to sort the journal by it", isOn: Binding(get: { group.ordered }, set: { set("ordered", .bool($0)) }))
             ForEach(Array(group.members.enumerated()), id: \.element.id) { i, tag in
                 TagRow(tag: tag, group: group, rank: group.ordered ? i + 1 : nil)
             }
             HStack {
-                TextField("Add a tag to \(group.title)", text: $adding).onSubmit(add)
+                TextField("", text: $adding, prompt: Text("Add a tag to \(group.title)")).labelsHidden().onSubmit(add)
                 let q = adding.trimmingCharacters(in: .whitespaces).lowercased()
                 if !q.isEmpty {
                     Menu("Pick") {

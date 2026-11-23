@@ -507,11 +507,26 @@ struct BubbleMeta: View {
             }
             if card.type != .todo || (card.due == nil && card.start == nil), card.waiting && !card.isDone { WaitingMark() }
             VaultLabel(card: card)
+            if model.unsynced.contains(card.id) { SyncMark() }
             Text(Date(ms: card.createdAt), format: .dateTime.hour().minute()).padding(.leading, 4)
         }
         .font(.system(size: 11))
         .foregroundStyle(Theme.muted)
         .frame(minHeight: 20)
+    }
+}
+
+/// On an entry saved here but not on the server yet, as the web's: a clock, or a warning once syncing has failed.
+struct SyncMark: View {
+    @Environment(AppModel.self) private var model
+
+    var body: some View {
+        let stuck = model.sync.map { $0.state == .error || $0.state == .signedOut } ?? false
+        let words = stuck ? "Couldn't sync yet. Saved on this device." : "Saved on this device, not synced yet"
+        Image(systemName: stuck ? "exclamationmark.triangle" : "clock")
+            .foregroundStyle(stuck ? Theme.alert : Theme.muted)
+            .help(words)
+            .accessibilityLabel(words)
     }
 }
 

@@ -263,6 +263,9 @@ class Repository(
 
     suspend fun pendingCount() = pushable().size
 
+    /** The cards changed here that the server doesn't have yet, which their bubbles mark with a clock. */
+    suspend fun unsyncedIds(): Set<String> = locked { store.listDirty().map { it.id }.toSet() }
+
     private fun <T> meta(key: String, ser: kotlinx.serialization.KSerializer<T>): T? = store.getMeta(key)?.let { runCatching { json.decodeFromString(ser, it) }.getOrNull() }
     private fun <T> setMeta(key: String, ser: kotlinx.serialization.KSerializer<T>, value: T?) = store.setMeta(key, value?.let { json.encodeToString(ser, it) })
 

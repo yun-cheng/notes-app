@@ -384,6 +384,9 @@ public actor Repository {
 
     public func pendingCount() throws -> Int { try pushable().count }
 
+    /// The cards changed here that the server doesn't have yet, which their bubbles mark with a clock.
+    public func unsyncedIds() throws -> Set<String> { Set(try store.listDirty().map(\.id)) }
+
     /// Takes the server's word on what this account can see: its vaults, cards shared with it, and cards shared into
     /// its vaults, which show there too. Cards it can no longer see leave the device. Returns true if access grew, so
     /// everything should be pulled again.

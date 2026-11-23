@@ -102,6 +102,8 @@ class AppModel(private val context: Context, val site: String) {
     /** The vaults each card is shared into besides its own. */
     var sharedInto by mutableStateOf<SharedInto>(emptyMap()); private set
     var commentCounts by mutableStateOf<Map<String, Int>>(emptyMap()); private set
+    /** Entries changed here that the server doesn't have yet, as the web marks them. */
+    var unsynced by mutableStateOf<Set<String>>(emptySet()); private set
     /** Private vaults opened with their PIN on this device, until the app locks them again. */
     var openVaults by mutableStateOf<Set<String>>(emptySet()); private set
     var sync by mutableStateOf<SyncEngine?>(null); private set
@@ -297,12 +299,14 @@ class AppModel(private val context: Context, val site: String) {
         val into = mutableMapOf<String, MutableList<String>>()
         for (s in repo.vaultShares()) into.getOrPut(s.card_id) { mutableListOf() }.add(s.vault_id)
         val counts = repo.commentCounts()
+        val waiting = repo.unsyncedIds()
         if (run != refreshes) return
         today = DateKey.today()
         vaults = vs.sortedWith(compareBy({ it.created_at }, { it.id }))
         shared = sharedNow
         sharedInto = into
         commentCounts = counts
+        if (unsynced != waiting) unsynced = waiting
         val marks = all.map { CardMark(it.id, it.vaultId, it.updatedAt, it.seq, it.deleted, it.sealed) }
         val locked = lockedVaults
         if (marks == indexed?.first && locked == indexed?.second) return

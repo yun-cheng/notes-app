@@ -1,5 +1,7 @@
 package dev.notesapp.app
 
+import androidx.compose.material.icons.outlined.Schedule
+import androidx.compose.material.icons.outlined.WarningAmber
 import androidx.compose.foundation.ExperimentalFoundationApi
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
@@ -392,6 +394,15 @@ fun BubbleMeta(card: Card, page: Int, pages: Int, long: Boolean, unfolded: Boole
             }
             if ((card.type != CardType.todo || (card.due == null && card.start == null)) && card.waiting && !card.isDone) WaitingMark()
             VaultLabel(card)
+            if (card.id in model.unsynced) {
+                // Saved here but not on the server yet, as the web's: a clock, or a warning once syncing has failed.
+                val stuck = model.syncStatus.state == dev.notesapp.core.SyncEngine.State.error || model.syncStatus.state == dev.notesapp.core.SyncEngine.State.signedOut
+                Icon(
+                    if (stuck) Icons.Outlined.WarningAmber else Icons.Outlined.Schedule,
+                    if (stuck) "Couldn't sync yet. Saved on this device." else "Saved on this device, not synced yet",
+                    Modifier.size(12.dp), tint = if (stuck) Theme.alert else Theme.muted,
+                )
+            }
             Text(formatMillis(card.createdAt, date = null), Modifier.padding(start = 4.dp))
         }
     }

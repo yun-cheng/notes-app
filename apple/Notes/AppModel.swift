@@ -39,6 +39,8 @@ final class AppModel {
     private(set) var sharedInto: SharedInto = [:]
     /// Open comments on each card.
     private(set) var commentCounts: [String: Int] = [:]
+    /// Entries changed here that the server doesn't have yet, as the web marks them.
+    private(set) var unsynced: Set<String> = []
     /// Private vaults opened with their PIN on this device, until the app locks them again.
     private(set) var openVaults: Set<String> = []
     private(set) var sync: SyncEngine?
@@ -262,6 +264,7 @@ final class AppModel {
         var into: SharedInto = [:]
         for share in (try? await repo.vaultShares()) ?? [] { into[share.card_id, default: []].append(share.vault_id) }
         let counts = (try? await repo.commentCounts()) ?? [:]
+        let waiting = (try? await repo.unsyncedIds()) ?? []
         let sorted = vaults.sorted { ($0.created_at, $0.id) < ($1.created_at, $1.id) }
         // A newer refresh has begun: it sets everything.
         guard run == refreshes else { return }
@@ -270,6 +273,7 @@ final class AppModel {
         setIfChanged(\.shared, shared)
         setIfChanged(\.sharedInto, into)
         setIfChanged(\.commentCounts, counts)
+        setIfChanged(\.unsynced, waiting)
         let marks = all.map(CardMark.init)
         let locked = lockedVaults
         guard marks != indexed.marks || locked != indexed.locked else { return }

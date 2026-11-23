@@ -194,6 +194,8 @@ struct FlowText: View {
 struct VoiceRecordButton: View {
     @Environment(AppModel.self) private var model
     let vaultId: String
+    /// Raised to start recording from elsewhere, as the box's /voice does.
+    var start = 0
     let add: (JSONValue) -> Void
     @State private var recorder: AVAudioRecorder?
     @State private var started: Date?
@@ -212,6 +214,7 @@ struct VoiceRecordButton: View {
         .buttonStyle(.plain)
         .padding(.bottom, 8)
         .accessibilityLabel(started == nil ? "Record a voice message" : "Stop recording")
+        .onChange(of: start) { if recorder == nil { toggle() } }
     }
 
     private func toggle() {

@@ -17,6 +17,8 @@ struct JournalBox: View {
     @State private var attached: [JSONValue] = []
     @State private var picking: [PhotosPickerItem] = []
     @State private var importing = false
+    @State private var pickingPhotos = false
+    @State private var recordNow = 0
     @FocusState private var focused: Bool
 
     /// The web's name for this view's draft, so the box's draft follows the account to its other devices.
@@ -38,6 +40,9 @@ struct JournalBox: View {
                         }
                     }
                 }
+            }
+            if let query = slashQuery {
+                SlashMenu(query: query) { pickSlash($0) }
             }
             HStack(alignment: .bottom, spacing: 8) {
                 Button { todos.toggle() } label: {
@@ -75,7 +80,7 @@ struct JournalBox: View {
                     .buttonStyle(.plain)
                     .accessibilityLabel("Attach a file")
                     .padding(.bottom, 8)
-                VoiceRecordButton(vaultId: targetVault) { node in attached.append(node) }
+                VoiceRecordButton(vaultId: targetVault, start: recordNow) { node in attached.append(node) }
                 Button(action: send) {
                     Image(systemName: "arrow.up")
                         .font(.body.weight(.semibold))
@@ -120,6 +125,7 @@ struct JournalBox: View {
             urls.forEach(addFile)
             return !urls.isEmpty
         }
+        .photosPicker(isPresented: $pickingPhotos, selection: $picking, matching: .any(of: [.images, .videos]))
         .fileImporter(isPresented: $importing, allowedContentTypes: [.item], allowsMultipleSelection: true) { result in
             guard case .success(let urls) = result else { return }
             for url in urls { addFile(url) }
@@ -133,7 +139,30 @@ struct JournalBox: View {
     }
 
     private var placeholder: String {
-        todos ? "Write a todo · @fri · #tag" : "Write a note · [] todo · #tag"
+        if todos { return "Todo · @ for a due date, time or repeat" }
+        if model.diaryVault.map({ $0.id == targetVault }) == true { return "Write in the diary" }
+        return "Write a note · [] todo · #tag · / for more"
+    }
+
+    /// What's typed after a / that starts the last line, while the box's menu of things to add is open.
+    private var slashQuery: String? {
+        let last = text.split(separator: "\n", omittingEmptySubsequences: false).last.map(String.init) ?? ""
+        guard last.hasPrefix("/"), !last.contains(" ") else { return nil }
+        return String(last.dropFirst())
+    }
+
+    /// Takes the /word off the last line, then starts that line as the item picked, or opens what it adds.
+    private func pickSlash(_ item: SlashMenu.Item) {
+        var lines = text.split(separator: "\n", omittingEmptySubsequences: false).map(String.init)
+        lines[lines.count - 1] = item.marker ?? ""
+        text = lines.joined(separator: "\n")
+        switch item.id {
+        case "photo": pickingPhotos = true
+        case "file": importing = true
+        case "voice": recordNow += 1
+        default: break
+        }
+        focused = true
     }
 
     /// The vault what's added goes into: the journal's, or the account's own.
@@ -337,6 +366,61 @@ struct AttachedThumb: View {
             Button(action: remove) { Image(systemName: "xmark.circle.fill").foregroundStyle(.white, .black.opacity(0.6)) }
                 .buttonStyle(.plain).padding(2)
                 .accessibilityLabel("Take it out")
+        }
+    }
+}
+
+/// The box's menu of things to add, as the web's / menu: a todo, lists, a quote, a heading, a photo, a file or a voice
+/// message, narrowed by what's typed after the /.
+struct SlashMenu: View {
+    struct Item: Identifiable {
+        let id: String
+        let label: String
+        let icon: String
+        let hint: String?
+        let words: String
+        let marker: String?
+    }
+
+    static let items: [Item] = [
+        Item(id: "todo", label: "Todo", icon: "checkmark.square", hint: "[]", words: "todo task checkbox", marker: "[] "),
+        Item(id: "bullets", label: "Bullet list", icon: "list.bullet", hint: "-", words: "bullet list", marker: "- "),
+        Item(id: "numbers", label: "Numbered list", icon: "list.number", hint: "1.", words: "numbered ordered list", marker: "1. "),
+        Item(id: "quote", label: "Quote", icon: "text.quote", hint: ">", words: "quote blockquote", marker: "> "),
+        Item(id: "photo", label: "Photo", icon: "photo", hint: nil, words: "photo image picture", marker: nil),
+        Item(id: "file", label: "File", icon: "paperclip", hint: nil, words: "file attach attachment document pdf upload", marker: nil),
+        Item(id: "voice", label: "Voice message", icon: "mic", hint: nil, words: "voice message record audio sound microphone dictate transcript", marker: nil),
+        Item(id: "heading", label: "Heading", icon: "textformat.size", hint: "#", words: "heading title", marker: "# "),
+    ]
+
+    let query: String
+    let pick: (Item) -> Void
+
+    var body: some View {
+        let q = query.lowercased()
+        let shown = Self.items.filter { q.isEmpty || $0.label.lowercased().hasPrefix(q) || $0.words.split(separator: " ").contains { $0.hasPrefix(q) } }
+        if !shown.isEmpty {
+            VStack(alignment: .leading, spacing: 0) {
+                Text("Add").font(.caption.weight(.semibold)).foregroundStyle(Theme.muted).padding(.horizontal, 10).padding(.top, 6)
+                ForEach(shown) { item in
+                    Button { pick(item) } label: {
+                        HStack(spacing: 10) {
+                            Image(systemName: item.icon).frame(width: 20).foregroundStyle(Theme.muted)
+                            Text(item.label)
+                            Spacer()
+                            if let hint = item.hint { Text(hint).font(.caption.monospaced()).foregroundStyle(Theme.muted) }
+                        }
+                        .padding(.horizontal, 10).padding(.vertical, 6)
+                        .contentShape(Rectangle())
+                    }
+                    .buttonStyle(.plain)
+                }
+            }
+            .padding(.bottom, 4)
+            .frame(maxWidth: 320, alignment: .leading)
+            .background(RoundedRectangle(cornerRadius: 12).fill(Theme.surface).shadow(color: .black.opacity(0.12), radius: 8, y: 2))
+            .overlay(RoundedRectangle(cornerRadius: 12).stroke(Theme.line))
+            .frame(maxWidth: .infinity, alignment: .leading)
         }
     }
 }

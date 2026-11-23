@@ -216,6 +216,9 @@ struct JournalView: View {
                 .pickerStyle(.inline)
             } label: {
                 Label(filter.sort.label(groups: model.index.tagGroups.groups), systemImage: "arrow.up.arrow.down")
+                    #if os(macOS)
+                    .labelStyle(.titleAndIcon)
+                    #endif
             }
             Menu {
                 Button("List") { filter.board = nil }

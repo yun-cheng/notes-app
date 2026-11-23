@@ -263,7 +263,10 @@ struct AccountBadge: View {
                 HStack(spacing: 10) {
                     Avatar(account: account, size: 30)
                     VStack(alignment: .leading, spacing: 0) {
-                        Text(account.name).font(.subheadline.weight(.semibold)).lineLimit(1)
+                        HStack(spacing: 6) {
+                            Text(account.name).font(.subheadline.weight(.semibold)).lineLimit(1)
+                            if account.email.lowercased().hasSuffix(".test") { DemoTag() }
+                        }
                         Text(account.email).font(.caption).foregroundStyle(Theme.muted).lineLimit(1)
                     }
                     Spacer(minLength: 0)
@@ -275,6 +278,16 @@ struct AccountBadge: View {
             .buttonStyle(.plain)
             .background(.bar)
         }
+    }
+}
+
+/// Marks the demo account, as the web's DEMO tag.
+struct DemoTag: View {
+    var body: some View {
+        Text("DEMO").font(.system(size: 10, weight: .bold)).foregroundStyle(Theme.alert)
+            .padding(.horizontal, 6).padding(.vertical, 1)
+            .background(Capsule().fill(Theme.alert.opacity(0.18)))
+            .help("The demo account on your local server")
     }
 }
 
@@ -345,6 +358,10 @@ struct SyncBadge: View {
                     case .syncing, .idle: sync.pending > 0 ? ("Syncing…", "arrow.triangle.2.circlepath.icloud") : ("Synced", "checkmark.icloud")
                     }
                 Label(label, systemImage: icon).font(.caption).foregroundStyle(Theme.muted)
+                    #if os(macOS)
+                    // Named on a computer, as the web's title bar; an icon alone on a phone.
+                    .labelStyle(.titleAndIcon)
+                    #endif
             }
             .buttonStyle(.plain)
             .help(sync.summary)

@@ -357,6 +357,14 @@ class AppModel(private val context: Context, val site: String) {
         return shared.firstOrNull { it.card_id == card.id }?.role == "edit"
     }
 
+    /** Whether this account may comment on the card, as the web's `useCanComment`: once it's on the server, in a vault with other people in it, or shared with this account to comment or edit. */
+    fun canComment(card: Card): Boolean {
+        if (card.seq <= 0) return false
+        vault(card.vaultId)?.let { return (it.members ?: 1) > 1 }
+        val share = shared.firstOrNull { it.card_id == card.id } ?: return false
+        return share.role != "view"
+    }
+
     /** Trash it or move it to another vault: members of its vault only. */
     fun canManage(card: Card): Boolean {
         if (viewOnly || card.viewOnly) return false

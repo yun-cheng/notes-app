@@ -346,6 +346,15 @@ final class AppModel {
         return shared.first { $0.card_id == card.id }?.role == .edit
     }
 
+    /// Whether this account may comment on the card, as the web's `useCanComment`: once it's on the server, in a vault
+    /// with other people in it, or shared with this account to comment or edit.
+    func canComment(_ card: Card) -> Bool {
+        guard card.seq > 0 else { return false }
+        if let vault = vault(card.vaultId) { return (vault.members ?? 1) > 1 }
+        guard let share = shared.first(where: { $0.card_id == card.id }) else { return false }
+        return share.role != .view
+    }
+
     /// Trash it or move it to another vault: members of its vault only.
     func canManage(_ card: Card) -> Bool {
         guard !viewOnly, !card.viewOnly, let vault = vault(card.vaultId) else { return false }

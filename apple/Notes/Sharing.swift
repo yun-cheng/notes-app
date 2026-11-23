@@ -147,6 +147,10 @@ struct CommentsSection: View {
     var body: some View {
         let open = comments.filter { $0.resolved_at == nil }
         let resolved = comments.filter { $0.resolved_at != nil }
+        // As on the web: only where someone else can read them, or where some were written before.
+        let shown = card.seq > 0 && (model.canComment(card) || !comments.isEmpty)
+        Group {
+        if shown {
         VStack(alignment: .leading, spacing: 8) {
             HStack {
                 Text("Comments").font(.headline)
@@ -178,6 +182,8 @@ struct CommentsSection: View {
             if failed { Text("Comments need a connection.").font(.caption).foregroundStyle(Theme.alert) }
         }
         .padding(.top, 12)
+        }
+        }
         .task(id: card.id) {
             draft = Drafts.shared.get("comment", card.id)?.stringValue ?? ""
             run { try await $0.comments(card.id) }

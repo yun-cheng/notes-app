@@ -167,6 +167,8 @@ fun CommentsSection(card: Card) {
     }
     val open = comments.filter { it.resolved_at == null }
     val resolved = comments.filter { it.resolved_at != null }
+    // As on the web: only where someone else can read them, or where some were written before.
+    if (card.seq <= 0 || !(model.canComment(card) || comments.isNotEmpty())) return
     Column(Modifier.padding(top = 12.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
         Row(verticalAlignment = Alignment.CenterVertically) {
             Text("Comments", Modifier.weight(1f), fontWeight = FontWeight.SemiBold, color = Theme.text)

@@ -8,6 +8,8 @@ struct EntrySheet: View {
     @Environment(\.dismiss) private var dismiss
     let id: String
     @State private var page = 0
+    /// How tall its content is, so the sheet on a Mac fits it, as the web's does, up to most of the window.
+    @State private var contentHeight: CGFloat = 240
     @State private var title = ""
     /// The title as last taken from the card: the field differs from it only once something is typed there.
     @State private var opened = ""
@@ -28,7 +30,7 @@ struct EntrySheet: View {
             }
         }
         #if os(macOS)
-        .frame(minWidth: 560, idealWidth: 640, minHeight: 480, idealHeight: 620)
+        .frame(minWidth: 560, idealWidth: 640)
         #endif
     }
 
@@ -67,7 +69,7 @@ struct EntrySheet: View {
                     DocEditor(content: pages[page], editable: edit, titleOf: model.index.titleOf, tools: tools, placeholder: page > 0 ? "Page \(page + 1)" : isTodo ? "Details" : "Note") { doc in
                         savePage(card.id, page, doc)
                     }
-                    .frame(minHeight: 200)
+                    .frame(minHeight: 80)
                     .id("\(card.id):\(page)")
                     SheetTags(card: card, edit: edit)
                     FlowLayout(spacing: 6) { Reactions(card: card, large: true) }
@@ -76,7 +78,11 @@ struct EntrySheet: View {
                     Backlinks(card: card)
                 }
                 .padding(20)
+                .onGeometryChange(for: CGFloat.self) { $0.size.height } action: { contentHeight = $0 }
             }
+            #if os(macOS)
+            .frame(height: min(max(contentHeight, 140), 640))
+            #endif
             Divider()
             SheetBar(card: card, edit: edit, tools: $tools, titled: $titled, showTitle: showTitle, addPage: { page = stored.count }, behind: behind, original: original) {
                 saveTitle(card)
@@ -225,33 +231,78 @@ struct PageTabs: View {
     }
 }
 
-/// An entry's tags in its sheet, as the web's: each in its color, a group's empty choice dashed to pick one, all
-/// opening the tag picker.
+/// An entry's tags in its sheet, as the web's `TagChips` there: a grouped tag opens its group, to switch it in place
+/// (or, in a group of any number, add or take off one), each one-choice group the entry has none from offers itself as
+/// "+ Priority" to set one, and any other tag is only a label (tags are added and taken off from the bar's Tags).
 struct SheetTags: View {
     @Environment(AppModel.self) private var model
     let card: Card
     let edit: Bool
 
     var body: some View {
-        let tags = model.index.resolveTags(model.index.tagGroups.order(card.tags))
-        let unset = edit ? model.index.tagGroups.groups.filter { $0.choosesOne && !$0.members.isEmpty && !$0.members.contains { card.tags.contains($0.id) } } : []
+        let groups = model.index.tagGroups
+        let tags = model.index.resolveTags(groups.order(card.tags))
+        let unset = edit ? groups.groups.filter { $0.choosesOne && !$0.members.isEmpty && !$0.members.contains { card.tags.contains($0.id) } } : []
         if !tags.isEmpty || !unset.isEmpty {
             FlowLayout(spacing: 6) {
                 ForEach(tags) { tag in
-                    Button { if edit { model.panel = .tags(card.id) } else { model.page = .journal(StreamFilter(tagId: tag.id)) } } label: { TagChip(tag: tag, large: true) }
-                        .buttonStyle(.plain)
+                    if edit, let group = groups.groupOf[tag.id] {
+                        GroupChipMenu(card: card, group: group) { TagChip(tag: tag, large: true) }
+                            .help("\(group.title): \(tag.displayTitle). Click to change")
+                    } else {
+                        TagChip(tag: tag, large: true)
+                    }
                 }
                 ForEach(unset, id: \.id) { group in
-                    Button { model.panel = .tags(card.id) } label: {
-                        Text(group.title).font(.system(size: 13)).foregroundStyle(Theme.muted)
+                    GroupChipMenu(card: card, group: group) {
+                        Text("+ \(group.title)").font(.system(size: 13)).foregroundStyle(Theme.muted)
                             .padding(.horizontal, 10).frame(minHeight: 28)
                             .overlay(Capsule().strokeBorder(Theme.line, style: StrokeStyle(lineWidth: 1, dash: [3, 3])))
                     }
-                    .buttonStyle(.plain)
                     .help("No \(group.title.lowercased())")
                 }
             }
         }
+    }
+}
+
+/// A group's tags in a menu, as the web's `GroupChip`: in a group of one choice, picking one swaps it in, and "No
+/// priority" takes it off; in a group of any number, each is added or taken off.
+struct GroupChipMenu<ChipLabel: View>: View {
+    @Environment(AppModel.self) private var model
+    let card: Card
+    let group: TagGroup
+    @ViewBuilder let label: () -> ChipLabel
+
+    var body: some View {
+        Menu {
+            Section(group.title) {
+                ForEach(group.members) { m in
+                    Button { pick(m.id) } label: {
+                        if card.tags.contains(m.id) { Label(m.displayTitle, systemImage: "checkmark") } else { Text(m.displayTitle) }
+                    }
+                }
+                if group.choosesOne { Button("No \(group.title.lowercased())") { pick(nil) } }
+            }
+        } label: {
+            label()
+        }
+        .menuStyle(.button)
+        .buttonStyle(.plain)
+        .menuIndicator(.hidden)
+        .fixedSize()
+    }
+
+    private func pick(_ id: String?) {
+        let inGroup = Set(group.members.map(\.id))
+        let tags = card.tags
+        let next: [String]
+        if let id {
+            next = group.choosesOne ? tags.filter { !inGroup.contains($0) } + [id] : tags.contains(id) ? tags.filter { $0 != id } : tags + [id]
+        } else {
+            next = tags.filter { !inGroup.contains($0) }
+        }
+        if next != tags { model.update(card.id) { $0.tags = next } }
     }
 }
 
@@ -289,7 +340,7 @@ struct SheetBar: View {
     private var buttons: some View {
         let isStack = card.isStack
         if edit && !isStack {
-            icon(card.type == .todo ? "checkmark.square" : "doc.text", card.type == .todo ? "Make it a note" : "Make it a todo") {
+            icon(card.type == .todo ? "doc.text" : "checkmark.circle", card.type == .todo ? "Make it a note" : "Make it a todo") {
                 let id = card.id
                 let to: CardType = card.type == .todo ? .note : .todo
                 model.perform { try await $0.retype(id, to: to) }

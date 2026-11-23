@@ -66,6 +66,7 @@ import androidx.compose.material.icons.outlined.Add
 import androidx.compose.material.icons.outlined.Visibility
 import androidx.compose.material.icons.outlined.FileCopy
 import androidx.compose.material.icons.outlined.CheckBox
+import androidx.compose.material.icons.outlined.CheckCircle
 import androidx.compose.material.icons.outlined.Description
 import androidx.compose.material.icons.outlined.CalendarMonth
 import androidx.compose.material.icons.automirrored.outlined.Label
@@ -234,20 +235,58 @@ fun EntrySheet(id: String, dismiss: () -> Unit) {
     }
 }
 
-/** An entry's tags in its sheet, as the web's: each in its color, a group's empty choice dashed to pick one, all opening the tag picker. */
+/**
+ * An entry's tags in its sheet, as the web's `TagChips` there: a grouped tag opens its group, to switch it in place (or,
+ * in a group of any number, add or take off one), each one-choice group the entry has none from offers itself as
+ * "+ Priority" to set one, and any other tag is only a label (tags are added and taken off from the bar's Tags).
+ */
 @OptIn(ExperimentalLayoutApi::class)
 @Composable
 fun SheetTags(card: Card, edit: Boolean) {
     val model = LocalModel.current
-    val tags = model.index.resolveTags(model.index.tagGroups.order(card.tags))
-    val unset = if (edit) model.index.tagGroups.groups.filter { g -> g.choosesOne && g.members.isNotEmpty() && g.members.none { it.id in card.tags } } else emptyList()
+    val groups = model.index.tagGroups
+    val tags = model.index.resolveTags(groups.order(card.tags))
+    val unset = if (edit) groups.groups.filter { g -> g.choosesOne && g.members.isNotEmpty() && g.members.none { it.id in card.tags } } else emptyList()
     if (tags.isEmpty() && unset.isEmpty()) return
     FlowRow(horizontalArrangement = Arrangement.spacedBy(6.dp), verticalArrangement = Arrangement.spacedBy(6.dp)) {
-        for (tag in tags) TagChip(tag, Modifier.clickable { if (edit) model.panel = EntryPanel.Tags(card.id) else model.page = Page.Journal(dev.notesapp.core.StreamFilter(tagId = tag.id)) }, large = true)
-        for (g in unset) Text(
-            g.title, Modifier.clip(RoundedCornerShape(50)).border(1.dp, Theme.line, RoundedCornerShape(50)).clickable { model.panel = EntryPanel.Tags(card.id) }.padding(horizontal = 10.dp, vertical = 4.dp),
-            fontSize = 13.sp, color = Theme.muted,
-        )
+        for (tag in tags) {
+            val group = groups.groupOf[tag.id]
+            if (edit && group != null) GroupChipMenu(card, group) { open -> TagChip(tag, Modifier.clickable(onClick = open), large = true) }
+            else TagChip(tag, large = true)
+        }
+        for (g in unset) GroupChipMenu(card, g) { open ->
+            Text(
+                "+ ${g.title}", Modifier.clip(RoundedCornerShape(50)).border(1.dp, Theme.line, RoundedCornerShape(50)).clickable(onClick = open).padding(horizontal = 10.dp, vertical = 4.dp),
+                fontSize = 13.sp, color = Theme.muted,
+            )
+        }
+    }
+}
+
+/** A group's tags in a menu, as the web's `GroupChip`: in a group of one choice, picking one swaps it in, and "No priority" takes it off; in a group of any number, each is added or taken off. */
+@Composable
+fun GroupChipMenu(card: Card, group: dev.notesapp.core.TagGroup, chip: @Composable (open: () -> Unit) -> Unit) {
+    val model = LocalModel.current
+    var open by remember { mutableStateOf(false) }
+    fun pick(id: String?) {
+        val inGroup = group.members.map { it.id }.toSet()
+        val tags = card.tags
+        val next = when {
+            id == null -> tags.filter { it !in inGroup }
+            group.choosesOne -> tags.filter { it !in inGroup } + id
+            id in tags -> tags - id
+            else -> tags + id
+        }
+        if (next != tags) model.update(card.id) { c -> c.withTags(next) }
+        if (group.choosesOne) open = false
+    }
+    Box {
+        chip { open = true }
+        androidx.compose.material3.DropdownMenu(open, { open = false }, containerColor = Theme.raised) {
+            Text(group.title, Modifier.padding(horizontal = 16.dp, vertical = 6.dp), fontSize = 12.sp, fontWeight = FontWeight.SemiBold, color = Theme.muted)
+            for (m in group.members) MenuCheck(m.displayTitle, m.id in card.tags) { pick(m.id) }
+            if (group.choosesOne) MenuCheck("No ${group.title.lowercase()}", false) { pick(null) }
+        }
     }
 }
 
@@ -264,7 +303,7 @@ fun SheetBar(card: Card, edit: Boolean, tools: Boolean, toggleTools: () -> Unit,
     }
     Column(Modifier.fillMaxWidth().background(Theme.surface).padding(horizontal = 12.dp, vertical = 6.dp), verticalArrangement = Arrangement.spacedBy(2.dp)) {
         FlowRow(horizontalArrangement = Arrangement.spacedBy(2.dp), itemVerticalAlignment = Alignment.CenterVertically) {
-            if (edit && !card.isStack) tool(if (card.type == CardType.todo) Icons.Outlined.CheckBox else Icons.Outlined.Description, if (card.type == CardType.todo) "Make it a note" else "Make it a todo") {
+            if (edit && !card.isStack) tool(if (card.type == CardType.todo) Icons.Outlined.Description else Icons.Outlined.CheckCircle, if (card.type == CardType.todo) "Make it a note" else "Make it a todo") {
                 model.perform { it.retype(card.id, if (card.type == CardType.todo) CardType.note else CardType.todo) }
             }
             if (card.type == CardType.todo && edit) {

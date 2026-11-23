@@ -70,6 +70,41 @@ struct WideFrame: View {
     }
 }
 
+/// A page that puts the phone's Tags and vaults and account buttons at the end of its own, as the journal does, sets
+/// this, and finds them in `PhoneHeader`.
+struct PlacesPhoneHeader: PreferenceKey {
+    static let defaultValue = false
+    static func reduce(value: inout Bool, nextValue: () -> Bool) { value = value || nextValue() }
+}
+
+/// What a page needs to show the phone's header buttons itself.
+struct PhoneHeader {
+    var filters: Bool
+    var openFilters: () -> Void
+    /// Whether the page shows the eye, as the web's: not on Settings, Vaults, Photos, Links or Files.
+    var eye = true
+}
+
+extension EnvironmentValues {
+    @Entry var phoneHeader: PhoneHeader?
+}
+
+/// The sync state and the eye, as the web shows them by every page's title (the eye where something can be changed).
+struct PageStatus: View {
+    @Environment(AppModel.self) private var model
+    var eye = true
+
+    var body: some View {
+        SyncBadge()
+        if eye {
+            Button { model.viewOnly.toggle() } label: {
+                Label(model.viewOnly ? "Turn off view only" : "View only", systemImage: model.viewOnly ? "eye.fill" : "eye")
+            }
+            .help("View only: read without changing anything by mistake")
+        }
+    }
+}
+
 #if os(iOS)
 /// The phone's tabs, as the web app's tab bar.
 struct PhoneFrame: View {
@@ -86,7 +121,7 @@ struct PhoneFrame: View {
         })
         TabView(selection: selection) {
             SwiftUI.Tab("Journal", systemImage: "doc.text", value: .journal) {
-                NavigationStack { PageView(page: model.page).phoneSidebarButton(filters: ![Page.tags, .vaults, .settings].contains(model.page)) }
+                NavigationStack { PageView(page: model.page).phoneSidebarButton(filters: ![Page.tags, .vaults, .settings].contains(model.page), eye: PageView.hasEye(model.page)) }
             }
             SwiftUI.Tab("Today", systemImage: "sun.max", value: .today) {
                 NavigationStack { JournalView(filter: StreamFilter(status: .today), isPage: false).phoneSidebarButton() }
@@ -105,32 +140,18 @@ struct PhoneFrame: View {
 extension View {
     /// A phone's title bar, as the web's there: Tags and vaults (the sidebar's pages, groups, tags and vaults in a
     /// sheet) on the pages that have it, and the account button on every page.
-    func phoneSidebarButton(filters: Bool = true) -> some View { modifier(PhoneSidebarButton(filters: filters)) }
-}
-
-/// A page that puts the phone's Tags and vaults and account buttons at the end of its own, as the journal does, sets
-/// this, and finds them in `PhoneHeader`.
-struct PlacesPhoneHeader: PreferenceKey {
-    static let defaultValue = false
-    static func reduce(value: inout Bool, nextValue: () -> Bool) { value = value || nextValue() }
-}
-
-/// What a page needs to show the phone's header buttons itself.
-struct PhoneHeader {
-    var filters: Bool
-    var openFilters: () -> Void
-}
-
-extension EnvironmentValues {
-    @Entry var phoneHeader: PhoneHeader?
+    func phoneSidebarButton(filters: Bool = true, eye: Bool = true) -> some View { modifier(PhoneSidebarButton(filters: filters, eye: eye)) }
 }
 
 /// The phone's Tags and vaults and account buttons, for a page that places them itself.
 struct PhoneHeaderButtons: View {
     @Environment(AppModel.self) private var model
     let header: PhoneHeader
+    /// With the sync state and the eye first, for a page that has none of its own.
+    var status = false
 
     var body: some View {
+        if status { PageStatus(eye: header.eye) }
         let narrowed = model.page.filter.map { $0.tagId != nil || $0.vaultId != nil } ?? false
         if header.filters {
             Button(action: header.openFilters) { Label("Tags and vaults", systemImage: "line.3.horizontal.decrease") }
@@ -143,16 +164,17 @@ struct PhoneHeaderButtons: View {
 struct PhoneSidebarButton: ViewModifier {
     @Environment(AppModel.self) private var model
     var filters = true
+    var eye = true
     @State private var open = false
     @State private var placed = false
     func body(content: Content) -> some View {
-        let header = PhoneHeader(filters: filters, openFilters: { open = true })
+        let header = PhoneHeader(filters: filters, openFilters: { open = true }, eye: eye)
         content
             .environment(\.phoneHeader, header)
             .onPreferenceChange(PlacesPhoneHeader.self) { placed = $0 }
             .toolbar {
                 if !placed {
-                    ToolbarItemGroup(placement: .topBarTrailing) { PhoneHeaderButtons(header: header) }
+                    ToolbarItemGroup(placement: .topBarTrailing) { PhoneHeaderButtons(header: header, status: true) }
                 }
             }
             .sheet(isPresented: $open) {
@@ -193,9 +215,25 @@ struct AccountButton: View {
 
 /// The page the main column shows.
 struct PageView: View {
+    @Environment(\.phoneHeader) private var phoneHeader
     let page: Page
 
+    /// Whether a page shows the eye, as the web's: where something can be changed, so not Settings, Vaults, Photos,
+    /// Links or Files.
+    static func hasEye(_ page: Page) -> Bool { ![Page.settings, .vaults, .photos, .links, .files].contains(page) }
+
     var body: some View {
+        content
+            .toolbar {
+                // As the web's by every page's title; the journal places its own, and a phone's header does there.
+                if phoneHeader == nil, page.filter == nil {
+                    ToolbarItemGroup(placement: .primaryAction) { PageStatus(eye: Self.hasEye(page)) }
+                }
+            }
+    }
+
+    @ViewBuilder
+    private var content: some View {
         switch page {
         case .journal(let filter): JournalView(filter: filter).id(filter)
         case .trash: TrashPage()

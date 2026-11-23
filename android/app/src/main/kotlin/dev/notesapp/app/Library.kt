@@ -134,7 +134,7 @@ fun <T> HeldList(
     val shown = days.map { d -> d.copy(items = d.items.filter { hits == null || it.second.id in hits || text(it.first).contains(q, ignoreCase = true) }) }.filter { it.items.isNotEmpty() }
     val all = shown.flatMap { it.items }
     Column(Modifier.fillMaxSize().background(Theme.bg)) {
-        TopBar(title, openDrawer) {
+        TopBar(title, openDrawer, eye = false) {
             androidx.compose.material3.IconButton(onClick = { searching = !searching; if (!searching) query = "" }) { Icon(androidx.compose.material.icons.Icons.Outlined.Search, "Search ${noun.second}", tint = Theme.text) }
         }
         if (searching) PageSearchField(query, { query = it }) { searching = false; query = "" }
@@ -308,7 +308,7 @@ fun PhotosPage(openDrawer: (() -> Unit)?) {
     }
     val all = days.flatMap { it.items }
     Column(Modifier.fillMaxSize().background(Theme.bg)) {
-        TopBar(if (picked.isEmpty()) "Photos" else "${picked.size} picked", openDrawer) {
+        TopBar(if (picked.isEmpty()) "Photos" else "${picked.size} picked", openDrawer, eye = false) {
             if (picked.isNotEmpty()) {
                 TextButton(onClick = {
                     val chosen = all.filter { it.first.id in picked }

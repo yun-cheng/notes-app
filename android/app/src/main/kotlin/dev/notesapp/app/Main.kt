@@ -1,5 +1,6 @@
 package dev.notesapp.app
 
+import androidx.compose.material.icons.outlined.Visibility
 import androidx.compose.material.icons.outlined.Add
 import androidx.compose.material.icons.automirrored.outlined.Logout
 import androidx.compose.material.icons.outlined.FilterList
@@ -466,7 +467,7 @@ fun SyncBadge() {
 
 /** A page's top bar: the drawer's button, its title, and what it offers on the right. */
 @Composable
-fun TopBar(title: String, openDrawer: (() -> Unit)?, subtitle: String? = null, filters: Boolean = true, actions: @Composable () -> Unit = {}) {
+fun TopBar(title: String, openDrawer: (() -> Unit)?, subtitle: String? = null, filters: Boolean = true, eye: Boolean = true, status: Boolean = true, actions: @Composable () -> Unit = {}) {
     val model = LocalModel.current
     Row(
         Modifier.fillMaxWidth().background(Theme.bg).padding(top = statusBarTop()).padding(start = 4.dp, end = 8.dp).height(52.dp),
@@ -478,6 +479,14 @@ fun TopBar(title: String, openDrawer: (() -> Unit)?, subtitle: String? = null, f
             if (subtitle != null) Text(subtitle, Modifier.padding(start = 10.dp, bottom = 3.dp), fontSize = 15.sp, fontWeight = androidx.compose.ui.text.font.FontWeight.Medium, color = Theme.muted, maxLines = 1)
         }
         Row(horizontalArrangement = Arrangement.spacedBy(2.dp), verticalAlignment = Alignment.CenterVertically) {
+            // As the web's on every page: the sync state, and the eye where something can be changed. The journal
+            // places its own (`status = false`).
+            if (status) {
+                SyncBadge()
+                if (eye) androidx.compose.material3.IconButton(onClick = { model.viewOnly = !model.viewOnly }) {
+                    Icon(Icons.Outlined.Visibility, if (model.viewOnly) "Turn off view only" else "View only", tint = if (model.viewOnly) Theme.accent else Theme.muted)
+                }
+            }
             actions()
             // A phone's, as the web's there: Tags and vaults on the pages that have it, and the account's picture.
             if (openDrawer != null) {

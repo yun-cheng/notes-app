@@ -132,7 +132,7 @@ fun JournalView(initial: StreamFilter, openDrawer: (() -> Unit)?, fixed: Boolean
 
     Column(Modifier.fillMaxSize().background(Theme.bg)) {
         // The count sits beside the title on a wide screen, as on the web; a phone's bar has no room for it.
-        TopBar(title, openDrawer, subtitle = if (openDrawer == null) (if (picked.isEmpty()) "${all.size}" else "of ${all.size}") else null) {
+        TopBar(title, openDrawer, status = false, subtitle = if (openDrawer == null) (if (picked.isEmpty()) "${all.size}" else "of ${all.size}") else null) {
             // Picking, as the web's: Select all and Done in place of the page's buttons.
             if (picked.isNotEmpty()) {
                 TextButton(onClick = { picked = all.map { it.card.id }.toSet() }) { Text("Select all") }

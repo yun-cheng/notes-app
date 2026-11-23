@@ -192,7 +192,7 @@ fun VaultsPage(openDrawer: (() -> Unit)?) {
         }
     }
     Column(Modifier.fillMaxSize().background(Theme.bg)) {
-        TopBar("Vaults", openDrawer, filters = false)
+        TopBar("Vaults", openDrawer, filters = false, eye = false)
         Column(Modifier.weight(1f).verticalScroll(rememberScrollState()).padding(bottom = 24.dp)) {
             FormSection("Vaults") {
                 FormText("A vault decides who can see a note. Use tags for topics.")

@@ -56,6 +56,12 @@ import androidx.compose.ui.geometry.CornerRadius
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.geometry.Size
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.material.icons.outlined.ContentCopy
+import androidx.compose.material.icons.outlined.Repeat
+import androidx.compose.ui.text.withLink
+import androidx.compose.ui.text.withStyle
+import dev.notesapp.core.Card
+import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.core.content.ContextCompat
@@ -84,7 +90,7 @@ import java.time.LocalDateTime
  */
 @OptIn(ExperimentalLayoutApi::class)
 @Composable
-fun VoicePlayer(file: Doc.FileInfo, vaultId: String) {
+fun VoicePlayer(file: Doc.FileInfo, vaultId: String, card: Card? = null) {
     val model = LocalModel.current
     var player by remember { mutableStateOf<MediaPlayer?>(null) }
     var playing by remember { mutableStateOf(false) }
@@ -126,7 +132,19 @@ fun VoicePlayer(file: Doc.FileInfo, vaultId: String) {
     }
     val duration = file.duration ?: 0.0
     val current = if (playing || progress > 0) file.cues.indexOfLast { it.start <= progress * duration }.takeIf { it >= 0 } else null
-    Column(Modifier.padding(top = 4.dp).clip(RoundedCornerShape(12.dp)).background(Theme.sunken.copy(alpha = 0.5f)).padding(10.dp), verticalArrangement = Arrangement.spacedBy(6.dp)) {
+    val clipboard = androidx.compose.ui.platform.LocalClipboardManager.current
+    val canTranscribe = card != null && model.canEdit(card) && model.vault(vaultId)?.isEncrypted == false
+    val working = file.id in Transcriber.working
+    fun transcribe() {
+        model.scope.launch {
+            val f = Attachments.fileFor(file.id, file.name.ifEmpty { "voice.m4a" }, model)
+            val samples = f?.let { Transcriber.samples(it) }
+            if (samples == null || samples.isEmpty()) { model.say("That voice message can't be fetched now."); return@launch }
+            Transcriber.start(file.id, samples, vaultId, model)
+        }
+    }
+    val shape = RoundedCornerShape(14.dp)
+    Column(Modifier.widthIn(max = 420.dp).clip(shape).background(Theme.surface).border(1.dp, Theme.line, shape).padding(horizontal = 10.dp, vertical = 8.dp), verticalArrangement = Arrangement.spacedBy(6.dp)) {
         Row(horizontalArrangement = Arrangement.spacedBy(10.dp), verticalAlignment = Alignment.CenterVertically) {
             Box(Modifier.size(34.dp).clip(CircleShape).background(Theme.accent).clickable(onClick = ::toggle), contentAlignment = Alignment.Center) {
                 Icon(if (playing) Icons.Outlined.Pause else Icons.Outlined.PlayArrow, if (playing) "Pause" else "Play", tint = Theme.onAccent)
@@ -139,18 +157,45 @@ fun VoicePlayer(file: Doc.FileInfo, vaultId: String) {
                     rate = if (rate == 1f) 1.5f else if (rate == 1.5f) 2f else 1f
                     player?.let { if (playing) speed(it) }
                 }.padding(horizontal = 6.dp),
-                fontSize = 12.sp, color = Theme.text,
+                fontSize = 12.sp, color = Theme.muted,
             )
-            if (file.transcript != null) Icon(Icons.AutoMirrored.Outlined.Notes, if (showWords) "Hide words" else "Show words", Modifier.size(20.dp).clickable { showWords = !showWords }, tint = Theme.accent)
+            if (file.transcript != null) Icon(Icons.AutoMirrored.Outlined.Notes, if (showWords) "Hide words" else "Show words", Modifier.size(20.dp).clickable { showWords = !showWords }, tint = if (showWords) Theme.accent else Theme.muted)
         }
         val transcript = file.transcript
-        if (showWords && !transcript.isNullOrEmpty()) {
-            HorizontalDivider(color = Theme.line)
-            if (file.cues.isEmpty()) Text(transcript, color = Theme.text)
-            else FlowRow {
-                file.cues.forEachIndexed { i, cue ->
-                    Text(cue.text + " ", Modifier.background(if (i == current) Theme.accentSoft else androidx.compose.ui.graphics.Color.Transparent).clickable { seek(cue.start) }, color = Theme.text)
+        if (transcript != null) {
+            if (showWords) {
+                HorizontalDivider(color = Theme.line)
+                when {
+                    transcript.isEmpty() -> Text("No words were heard.", color = Theme.muted, fontStyle = androidx.compose.ui.text.font.FontStyle.Italic, fontSize = 14.sp)
+                    file.cues.isEmpty() -> Text(transcript, color = Theme.text, fontSize = 14.sp)
+                    else -> {
+                        // One paragraph, wrapping as the web's, each sentence pressed to play from there.
+                        val soft = Theme.accentSoft
+                        Text(androidx.compose.ui.text.buildAnnotatedString {
+                            file.cues.forEachIndexed { i, cue ->
+                                withLink(androidx.compose.ui.text.LinkAnnotation.Clickable("cue$i", linkInteractionListener = { seek(cue.start) })) {
+                                    if (i == current) withStyle(androidx.compose.ui.text.SpanStyle(background = soft)) { append(cue.text) } else append(cue.text)
+                                }
+                                if (i < file.cues.size - 1) append(" ")
+                            }
+                        }, color = Theme.text, fontSize = 14.sp)
+                    }
                 }
+                Row(horizontalArrangement = Arrangement.spacedBy(12.dp), verticalAlignment = Alignment.CenterVertically) {
+                    if (transcript.isNotEmpty()) Row(Modifier.clickable { clipboard.setText(androidx.compose.ui.text.AnnotatedString(transcript)); model.say("Copied the transcript.") }, horizontalArrangement = Arrangement.spacedBy(4.dp), verticalAlignment = Alignment.CenterVertically) {
+                        Icon(Icons.Outlined.ContentCopy, null, Modifier.size(14.dp), tint = Theme.muted); Text("Copy", color = Theme.muted, fontSize = 12.sp)
+                    }
+                    if (canTranscribe && !working) Row(Modifier.clickable(onClick = ::transcribe), horizontalArrangement = Arrangement.spacedBy(4.dp), verticalAlignment = Alignment.CenterVertically) {
+                        Icon(Icons.Outlined.Repeat, null, Modifier.size(14.dp), tint = Theme.muted); Text("Transcribe again", color = Theme.muted, fontSize = 12.sp)
+                    }
+                    if (working) Text("Transcribing…", color = Theme.muted, fontSize = 12.sp)
+                }
+            }
+        } else if (working) {
+            Text("Transcribing…", color = Theme.muted, fontSize = 12.sp)
+        } else if (canTranscribe) {
+            Row(Modifier.clickable(onClick = ::transcribe), horizontalArrangement = Arrangement.spacedBy(4.dp), verticalAlignment = Alignment.CenterVertically) {
+                Icon(Icons.AutoMirrored.Outlined.Notes, null, Modifier.size(14.dp), tint = Theme.accent); Text("Transcribe", color = Theme.accent, fontSize = 12.sp, fontWeight = FontWeight.SemiBold)
             }
         }
     }
@@ -313,10 +358,74 @@ class Recorder {
 object Transcriber {
     /** Finished, and not yet written into an entry, by file ID. */
     private val done = mutableMapOf<String, Voice.Transcript>()
+    /** Voice messages being transcribed now, by file ID. */
+    val working = androidx.compose.runtime.mutableStateListOf<String>()
+
+    /** A sound file as 16 kHz mono samples, as the model hears it: decoded, its channels mixed, its rate changed. */
+    suspend fun samples(file: java.io.File): FloatArray? = withContext(Dispatchers.Default) {
+        runCatching {
+            val extractor = android.media.MediaExtractor().apply { setDataSource(file.path) }
+            val track = (0 until extractor.trackCount).firstOrNull { extractor.getTrackFormat(it).getString(android.media.MediaFormat.KEY_MIME)?.startsWith("audio/") == true } ?: return@runCatching null
+            extractor.selectTrack(track)
+            val format = extractor.getTrackFormat(track)
+            val codec = android.media.MediaCodec.createDecoderByType(format.getString(android.media.MediaFormat.KEY_MIME)!!)
+            codec.configure(format, null, null, 0)
+            codec.start()
+            var rate = format.getInteger(android.media.MediaFormat.KEY_SAMPLE_RATE)
+            var channels = format.getInteger(android.media.MediaFormat.KEY_CHANNEL_COUNT)
+            val pcm = java.io.ByteArrayOutputStream()
+            val info = android.media.MediaCodec.BufferInfo()
+            var inputDone = false
+            while (true) {
+                if (!inputDone) {
+                    val i = codec.dequeueInputBuffer(10_000)
+                    if (i >= 0) {
+                        val n = extractor.readSampleData(codec.getInputBuffer(i)!!, 0)
+                        if (n < 0) { codec.queueInputBuffer(i, 0, 0, 0, android.media.MediaCodec.BUFFER_FLAG_END_OF_STREAM); inputDone = true }
+                        else { codec.queueInputBuffer(i, 0, n, extractor.sampleTime, 0); extractor.advance() }
+                    }
+                }
+                val o = codec.dequeueOutputBuffer(info, 10_000)
+                if (o == android.media.MediaCodec.INFO_OUTPUT_FORMAT_CHANGED) {
+                    rate = codec.outputFormat.getInteger(android.media.MediaFormat.KEY_SAMPLE_RATE)
+                    channels = codec.outputFormat.getInteger(android.media.MediaFormat.KEY_CHANNEL_COUNT)
+                } else if (o >= 0) {
+                    val buf = codec.getOutputBuffer(o)!!
+                    val bytes = ByteArray(info.size)
+                    buf.position(info.offset); buf.get(bytes)
+                    pcm.write(bytes)
+                    codec.releaseOutputBuffer(o, false)
+                    if (info.flags and android.media.MediaCodec.BUFFER_FLAG_END_OF_STREAM != 0) break
+                }
+            }
+            codec.stop(); codec.release(); extractor.release()
+            val raw = pcm.toByteArray()
+            val frames = raw.size / 2 / channels
+            val mono = FloatArray(frames) { f ->
+                var sum = 0f
+                for (c in 0 until channels) { val k = (f * channels + c) * 2; sum += ((raw[k].toInt() and 0xff) or (raw[k + 1].toInt() shl 8)).toShort() / 32768f }
+                sum / channels
+            }
+            if (rate == Voice.RATE) mono
+            else FloatArray((mono.size.toLong() * Voice.RATE / rate).toInt()) { i ->
+                val at = i.toDouble() * rate / Voice.RATE
+                val a = at.toInt().coerceAtMost(mono.size - 1)
+                val b = (a + 1).coerceAtMost(mono.size - 1)
+                (mono[a] + (mono[b] - mono[a]) * (at - a)).toFloat()
+            }
+        }.getOrNull()
+    }
 
     fun start(id: String, samples: FloatArray, vaultId: String, model: AppModel) {
         val api = model.api
+        if (id !in working) working.add(id)
         model.scope.launch {
+            try { run(id, samples, vaultId, model, api) } finally { working.remove(id) }
+        }
+    }
+
+    private suspend fun run(id: String, samples: FloatArray, vaultId: String, model: AppModel, api: ServerApi) {
+        run {
             val cuts = listOf(0) + Voice.cutPoints(samples) + samples.size
             val pieces = mutableListOf<Voice.Piece>()
             for (i in 0 until cuts.size - 1) {
@@ -331,7 +440,7 @@ object Transcriber {
                         is ServerApi.TranscribeError.Offline -> model.say("The voice message will be transcribed when you're online.")
                         else -> {}
                     }
-                    return@launch
+                    return
                 }
             }
             done[id] = Voice.join(pieces)

@@ -417,9 +417,9 @@ fun TopBar(title: String, openDrawer: (() -> Unit)?, subtitle: String? = null, a
         if (openDrawer != null) {
             androidx.compose.material3.IconButton(onClick = openDrawer) { Icon(Icons.Outlined.Menu, "Pages, tags and vaults", tint = Theme.text) }
         } else Spacer(Modifier.width(12.dp))
-        Column(Modifier.weight(1f)) {
-            PageTitle(title)
-            if (subtitle != null) Text(subtitle, fontSize = 12.sp, color = Theme.muted, maxLines = 1)
+        Row(Modifier.weight(1f), verticalAlignment = Alignment.Bottom) {
+            PageTitle(title, Modifier.weight(1f, fill = false))
+            if (subtitle != null) Text(subtitle, Modifier.padding(start = 10.dp, bottom = 3.dp), fontSize = 15.sp, fontWeight = androidx.compose.ui.text.font.FontWeight.Medium, color = Theme.muted, maxLines = 1)
         }
         Row(horizontalArrangement = Arrangement.spacedBy(2.dp), verticalAlignment = Alignment.CenterVertically) { actions() }
     }

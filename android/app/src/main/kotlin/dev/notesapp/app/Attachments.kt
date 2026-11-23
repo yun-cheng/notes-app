@@ -133,6 +133,20 @@ object Attachments {
         runCatching { context.startActivity(Intent.createChooser(intent, file.name).addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)) }
     }
 
+    /** A copy of a file in Downloads, under its name, as the web's download. */
+    suspend fun saveToDownloads(context: Context, file: File, name: String, mime: String?): Boolean = withContext(Dispatchers.IO) {
+        runCatching {
+            val values = android.content.ContentValues().apply {
+                put(android.provider.MediaStore.Downloads.DISPLAY_NAME, name.ifEmpty { file.name })
+                put(android.provider.MediaStore.Downloads.MIME_TYPE, mime ?: "application/octet-stream")
+            }
+            val resolver = context.contentResolver
+            val uri = resolver.insert(android.provider.MediaStore.Downloads.EXTERNAL_CONTENT_URI, values) ?: return@runCatching false
+            resolver.openOutputStream(uri)?.use { out -> file.inputStream().use { it.copyTo(out) } } ?: return@runCatching false
+            true
+        }.getOrDefault(false)
+    }
+
     // Adding
 
     data class Prepared(val data: ByteArray, val mime: String, val width: Double, val height: Double)

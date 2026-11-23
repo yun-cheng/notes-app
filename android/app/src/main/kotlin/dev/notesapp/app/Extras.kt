@@ -41,6 +41,8 @@ import androidx.compose.ui.platform.LocalClipboardManager
 import androidx.compose.ui.platform.LocalUriHandler
 import androidx.compose.ui.text.AnnotatedString
 import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.foundation.layout.PaddingValues
+import androidx.compose.foundation.ExperimentalFoundationApi
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.google.mlkit.nl.languageid.LanguageIdentification
@@ -96,38 +98,48 @@ object LinkPreviews {
     }
 }
 
-/** An entry's link previews under its text: cards, one line each, or none, as the entry or the device says. */
+/**
+ * A link as a card opening in the browser, as the web app's `LinkCard`: the page's own title, description and image
+ * when it can be previewed, or else its site and path. With `address`, its whole address shows under it, as the Links
+ * page has it.
+ */
+@OptIn(ExperimentalFoundationApi::class)
 @Composable
-fun BubbleLinks(card: Card) {
-    val model = LocalModel.current
-    val style = card.payload["preview"]["links"].str ?: Settings.linkStyle
-    if (style == "off" || model.vault(card.vaultId)?.isEncrypted == true) return
-    val urls = remember(card.id, card.updatedAt) { Doc.linkUrls(card.content).filter { !Doc.isImageUrl(it) }.take(3) }
-    for (url in urls) LinkCard(url, style == "compact")
-}
-
-@Composable
-fun LinkCard(url: String, compact: Boolean) {
+fun LinkCard(url: String, compact: Boolean, preview: Boolean = true, address: Boolean = false) {
     val model = LocalModel.current
     val uri = LocalUriHandler.current
     val clipboard = LocalClipboardManager.current
-    val preview by produceState<LinkPreview?>(null, url) { value = LinkPreviews.preview(url, model.api) }
+    val p by produceState<LinkPreview?>(null, url, preview) { value = if (preview) LinkPreviews.preview(url, model.api) else null }
     var menu by remember { mutableStateOf(false) }
-    val p = preview ?: return
-    Box(Modifier.padding(top = 4.dp)) {
+    val path = remember(url) { runCatching { java.net.URI(url).let { (it.path ?: "") + (it.query?.let { q -> "?$q" } ?: "") }.trimEnd('/') }.getOrDefault("") }
+    Box {
         val open = Modifier.combinedClickable(onClick = { runCatching { uri.openUri(url) } }, onLongClick = { menu = true })
-        if (compact) Row(open, horizontalArrangement = Arrangement.spacedBy(4.dp), verticalAlignment = Alignment.CenterVertically) {
-            Icon(Icons.Outlined.Link, null, Modifier.size(14.dp), tint = Theme.accent)
-            Text(p.title ?: Doc.siteName(url), maxLines = 1, fontSize = 15.sp, color = Theme.accent)
-        } else Column(Modifier.widthIn(max = 300.dp).clip(RoundedCornerShape(12.dp)).background(Theme.surface).border(1.dp, Theme.line, RoundedCornerShape(12.dp)).then(open)) {
-            p.image?.let { src ->
-                val image by produceState<ImageBitmap?>(null, src) { value = WebImages.load(src) }
-                image?.let { Image(it, null, Modifier.fillMaxWidth().height(140.dp), contentScale = ContentScale.Crop) }
-            }
-            Column(Modifier.padding(10.dp), verticalArrangement = Arrangement.spacedBy(2.dp)) {
-                Text(p.site ?: Doc.siteName(url), fontSize = 12.sp, color = Theme.muted)
-                p.title?.let { Text(it, fontWeight = FontWeight.SemiBold, fontSize = 15.sp, maxLines = 2, color = Theme.text) }
-                p.description?.let { Text(it, fontSize = 12.sp, color = Theme.muted, maxLines = 2) }
+        if (compact) Row(
+            Modifier.clip(RoundedCornerShape(50)).background(Theme.surface).border(1.dp, Theme.line, RoundedCornerShape(50)).then(open).padding(horizontal = 10.dp, vertical = 3.dp),
+            horizontalArrangement = Arrangement.spacedBy(6.dp), verticalAlignment = Alignment.CenterVertically,
+        ) {
+            Icon(Icons.Outlined.Link, null, Modifier.size(14.dp), tint = Theme.muted)
+            Text(p?.title ?: (Doc.siteName(url) + path), maxLines = 1, fontSize = 13.sp, fontWeight = FontWeight.Medium, color = Theme.text)
+            if (p?.title != null) Text(p?.site ?: Doc.siteName(url), maxLines = 1, fontSize = 12.sp, color = Theme.muted)
+        } else {
+            val rich = p?.title != null
+            Row(
+                Modifier.widthIn(max = 440.dp).clip(RoundedCornerShape(12.dp)).background(Theme.surface).border(1.dp, Theme.line, RoundedCornerShape(12.dp)).then(open)
+                    .padding(if (rich) PaddingValues(8.dp) else PaddingValues(start = 9.dp, end = 12.dp, top = 7.dp, bottom = 7.dp)),
+                horizontalArrangement = Arrangement.spacedBy(10.dp), verticalAlignment = if (rich) Alignment.Top else Alignment.CenterVertically,
+            ) {
+                val src = p?.image
+                val image by produceState<ImageBitmap?>(null, src) { value = src?.let { WebImages.load(it) } }
+                val img = image
+                if (img != null) Image(img, null, Modifier.size(64.dp).clip(RoundedCornerShape(8.dp)), contentScale = ContentScale.Crop)
+                else Box(Modifier.size(28.dp).clip(RoundedCornerShape(8.dp)).background(Theme.sunken), contentAlignment = Alignment.Center) { Icon(Icons.Outlined.Link, null, Modifier.size(16.dp), tint = Theme.muted) }
+                Column(verticalArrangement = Arrangement.spacedBy(1.dp)) {
+                    p?.title?.let { Text(it, fontWeight = FontWeight.SemiBold, fontSize = 14.sp, maxLines = 2, color = Theme.text) }
+                    p?.description?.let { Text(it, fontSize = 12.sp, color = Theme.muted, maxLines = 2) }
+                    if (!address || !rich) Text(p?.site ?: Doc.siteName(url), fontSize = if (rich) 11.sp else 13.sp, fontWeight = if (rich) FontWeight.Medium else FontWeight.SemiBold, color = if (rich) Theme.muted else Theme.text)
+                    if (address) Text(runCatching { java.net.URLDecoder.decode(url, "UTF-8") }.getOrDefault(url), fontSize = 12.sp, color = Theme.accent, maxLines = 2)
+                    else if (path.isNotEmpty() && !rich) Text(path, fontSize = 12.sp, color = Theme.muted, maxLines = 1)
+                }
             }
         }
         DropdownMenu(menu, { menu = false }) {

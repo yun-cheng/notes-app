@@ -423,7 +423,7 @@ private fun BoardColumnView(column: dev.notesapp.core.BoardColumn, columns: List
             column.items.forEachIndexed { i, item ->
                 var menu by remember { mutableStateOf(false) }
                 Box {
-                    Box(Modifier.clickable { menu = true }) { BubbleView(item.card, 280.dp) }
+                    Column(Modifier.clickable { menu = true }, verticalArrangement = Arrangement.spacedBy(4.dp)) { BubbleView(item.card, 280.dp); EntryAttachments(item.card) }
                     DropdownMenu(menu, { menu = false }) {
                         if (i > 0) DropdownMenuItem(text = { Text("Move up") }, onClick = { menu = false; drop(item.card, column, i - 1) })
                         if (i < column.items.size - 1) DropdownMenuItem(text = { Text("Move down") }, onClick = { menu = false; drop(item.card, column, i + 1) })

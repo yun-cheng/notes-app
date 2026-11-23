@@ -63,6 +63,12 @@ import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.material.icons.outlined.Share
+import androidx.compose.material.icons.outlined.Download
+import androidx.compose.material.icons.outlined.Videocam
+import androidx.compose.material.icons.outlined.PlayArrow
+import androidx.compose.foundation.layout.widthIn
+import androidx.compose.foundation.border
 import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
@@ -96,32 +102,106 @@ fun PhotoThumb(media: Doc.Media, vaultId: String, size: Dp, modifier: Modifier =
     }
 }
 
-/** An entry's photos and videos under its text, opening full screen; its other files as chips. */
+/**
+ * An entry's photos, videos, voice messages, files and web links, under its bubble, as the web app's `Attachments`:
+ * photos and videos whole at their own shapes (large, as thumbnails, or as a count, by the device's setting or the
+ * entry's own), four at most with the rest counted on the last; voice messages playing where they are; files as chips;
+ * links as cards.
+ */
 @OptIn(ExperimentalLayoutApi::class, ExperimentalFoundationApi::class)
 @Composable
-fun BubbleAttachments(card: Card) {
+fun EntryAttachments(card: Card) {
     val model = LocalModel.current
     val media = remember(card.id, card.updatedAt) { Doc.media(card.content) }
-    val files = remember(card.id, card.updatedAt) { Doc.files(card.content).filter { !it.isVideo } }
+    val all = remember(card.id, card.updatedAt) { Doc.files(card.content).filter { !it.isVideo } }
+    val voices = all.filter { it.isAudio }
+    val files = all.filter { !it.isAudio }
+    val links = remember(card.id, card.updatedAt) { Doc.linkUrls(card.content).filter { !Doc.isImageUrl(it) } }
+    val linkStyle = card.payload["preview"]["links"].str ?: Settings.linkStyle
     var viewing by remember(card.id) { mutableStateOf<String?>(null) }
     var menuFor by remember(card.id) { mutableStateOf<String?>(null) }
-    // How photos show: large, small thumbnails, or a count that opens them; each entry can say for itself.
     val style = card.payload["preview"]["photos"].str ?: Settings.photoStyle
-    if (media.isNotEmpty() && style == "off") {
-        Row(Modifier.padding(top = 4.dp).clickable { viewing = media[0].id }, horizontalArrangement = Arrangement.spacedBy(4.dp), verticalAlignment = Alignment.CenterVertically) {
-            Icon(Icons.Outlined.PhotoLibrary, null, Modifier.size(16.dp), tint = Theme.accent)
-            Text("${media.size} ${if (media.size == 1) "photo" else "photos"}", color = Theme.accent, fontSize = 15.sp)
-        }
-    } else if (media.isNotEmpty()) {
-        FlowRow(Modifier.padding(top = 4.dp), horizontalArrangement = Arrangement.spacedBy(4.dp), verticalArrangement = Arrangement.spacedBy(4.dp)) {
-            for (m in media) Box {
-                PhotoThumb(m, card.vaultId, if (style == "thumbs") 64.dp else if (media.size == 1) 200.dp else 110.dp, Modifier.combinedClickable(onClick = { viewing = m.id }, onLongClick = { menuFor = m.id }))
-                DropdownMenu(menuFor == m.id, { menuFor = null }) { PhotoMenu(m.id, card) { menuFor = null } }
+    if (media.isEmpty() && all.isEmpty() && (links.isEmpty() || linkStyle == "off")) return
+    Column(Modifier.widthIn(max = 560.dp).padding(top = 2.dp), verticalArrangement = Arrangement.spacedBy(4.dp)) {
+        if (media.isNotEmpty() && style == "off") {
+            Row(
+                Modifier.clip(RoundedCornerShape(50)).background(Theme.surface).border(1.dp, Theme.line, RoundedCornerShape(50)).clickable { viewing = media[0].id }.padding(horizontal = 10.dp, vertical = 4.dp),
+                horizontalArrangement = Arrangement.spacedBy(6.dp), verticalAlignment = Alignment.CenterVertically,
+            ) {
+                Icon(if (media.all { it is Doc.Media.Video }) Icons.Outlined.Videocam else Icons.Outlined.Photo, null, Modifier.size(16.dp), tint = Theme.muted)
+                Text(mediaCount(media), color = Theme.muted, fontSize = 13.sp)
+            }
+        } else if (media.isNotEmpty()) {
+            val height = if (style == "thumbs") 120.dp else 180.dp
+            FlowRow(horizontalArrangement = Arrangement.spacedBy(4.dp), verticalArrangement = Arrangement.spacedBy(4.dp)) {
+                media.take(MAX_PHOTOS).forEachIndexed { i, m ->
+                    Box {
+                        ShapedThumb(
+                            m, card.vaultId, height, alone = media.size == 1 && style != "thumbs", more = if (i == MAX_PHOTOS - 1) media.size - MAX_PHOTOS else 0,
+                            modifier = Modifier.combinedClickable(onClick = { viewing = m.id }, onLongClick = { menuFor = m.id }),
+                        )
+                        DropdownMenu(menuFor == m.id, { menuFor = null }) { PhotoMenu(m.id, card) { menuFor = null } }
+                    }
+                }
             }
         }
+        for (v in voices) VoicePlayer(v, card.vaultId, card)
+        for (f in files) FileChip(f, card.vaultId)
+        if (linkStyle != "off") {
+            val preview = model.vault(card.vaultId)?.isEncrypted == false
+            for (url in links.take(3)) LinkCard(url, linkStyle == "compact", preview)
+            if (links.size > 3) Text("and ${links.size - 3} more links", color = Theme.muted, fontSize = 12.sp, modifier = Modifier.padding(start = 4.dp))
+        }
     }
-    for (file in files) FileChip(file, card.vaultId)
     viewing?.let { MediaViewer(media, it, card.vaultId) { viewing = null } }
+}
+
+const val MAX_PHOTOS = 4
+
+/** "3 photos", "1 video", "2 photos and 1 video". */
+fun mediaCount(items: List<Doc.Media>): String {
+    val videos = items.count { it is Doc.Media.Video }
+    val photos = items.size - videos
+    fun say(n: Int, one: String) = if (n == 1) "1 $one" else "$n ${one}s"
+    return if (photos > 0 && videos > 0) "${say(photos, "photo")} and ${say(videos, "video")}" else if (videos > 0) say(videos, "video") else say(photos, "photo")
+}
+
+/**
+ * A photo, or a video's still, whole at its own shape, a row's height tall (a lone one larger), as the web's `.thumb`;
+ * a video marked with its length, and the last of a row with how many more there are.
+ */
+@Composable
+fun ShapedThumb(media: Doc.Media, vaultId: String, height: Dp, alone: Boolean = false, more: Int = 0, modifier: Modifier = Modifier) {
+    val model = LocalModel.current
+    val id = when (media) { is Doc.Media.Photo -> media.id; is Doc.Media.Video -> media.file.poster ?: Doc.posterId(media.file.id) }
+    val image by produceState<android.graphics.Bitmap?>(null, id) { value = Attachments.bitmap(id, model, 1200) }
+    val b = image
+    val aspect = when {
+        b != null && b.height > 0 -> b.width.toFloat() / b.height
+        media is Doc.Media.Video && (media.file.height ?: 0.0) > 0 -> (media.file.width ?: 1.0).toFloat() / media.file.height!!.toFloat()
+        else -> 1f
+    }
+    val tall = if (alone) minOf(360.dp, 320.dp / maxOf(aspect, 0.3f)) else height
+    val wide = (tall * aspect).coerceIn(96.dp, if (alone) 340.dp else 300.dp)
+    Box(modifier.size(wide, tall).clip(RoundedCornerShape(12.dp)).background(Theme.sunken).border(1.dp, Theme.line, RoundedCornerShape(12.dp)), contentAlignment = Alignment.Center) {
+        if (b != null) Image(b.asImageBitmap(), null, Modifier.fillMaxSize(), contentScale = ContentScale.Fit)
+        else Icon(if (model.vault(vaultId)?.isEncrypted == true) Icons.Outlined.Lock else Icons.Outlined.Photo, null, tint = Theme.muted)
+        if (more > 0) {
+            Box(Modifier.fillMaxSize().background(Color.Black.copy(alpha = 0.45f)), contentAlignment = Alignment.Center) { Text("+$more", color = Color.White, fontSize = 18.sp, fontWeight = FontWeight.Bold) }
+        } else if (media is Doc.Media.Video) VideoMark(media.file.duration, Modifier.align(Alignment.TopEnd))
+    }
+}
+
+/** A video's length with a play mark, in a dark pill in a corner of its still, as the web's `VideoMark`. */
+@Composable
+fun VideoMark(duration: Double?, modifier: Modifier = Modifier) {
+    Row(
+        modifier.padding(6.dp).clip(RoundedCornerShape(50)).background(Color.Black.copy(alpha = 0.55f)).padding(horizontal = 7.dp, vertical = 2.dp),
+        horizontalArrangement = Arrangement.spacedBy(3.dp), verticalAlignment = Alignment.CenterVertically,
+    ) {
+        duration?.let { Text(Doc.clipLength(it), color = Color.White, fontSize = 11.sp, fontWeight = FontWeight.SemiBold) }
+        Icon(Icons.Outlined.PlayArrow, null, Modifier.size(12.dp), tint = Color.White)
+    }
 }
 
 /** A photo's menu: copy it, open its entry, show it in the journal, share it by its Drive link. */
@@ -140,31 +220,65 @@ fun PhotoMenu(id: String, card: Card, close: () -> Unit) {
 
 fun shareFile(context: android.content.Context, file: File, mime: String) = shareFiles(context, listOf(file), mime)
 
-/** An attached file as a chip: a sound plays where it is; anything else opens in the app that reads it. */
+/**
+ * An attached file as a chip, as the web app's: its kind, name, and size with its extension; pressing it opens it in
+ * the app that reads it, the share button shares it by a public link (in a vault that can), and the arrow saves a copy
+ * to Downloads. A sound plays where it is instead.
+ */
 @Composable
 fun FileChip(file: Doc.FileInfo, vaultId: String) {
     val model = LocalModel.current
     val context = LocalContext.current
+    val clipboard = androidx.compose.ui.platform.LocalClipboardManager.current
     var opening by remember { mutableStateOf(false) }
     if (file.isAudio) { VoicePlayer(file, vaultId); return }
-    val icon = fileIcon(file.mime)
-    Row(
-        Modifier.padding(top = 4.dp).clip(RoundedCornerShape(10.dp)).background(Theme.sunken).clickable {
-            opening = true
-            model.scope.launch {
-                val f = Attachments.fileFor(file.id, file.name, model)
-                opening = false
-                if (f == null) model.say("That file can't be fetched now.") else Attachments.open(context, f, file.mime)
+    val shape = RoundedCornerShape(12.dp)
+    Row(Modifier.widthIn(max = 360.dp).clip(shape).background(Theme.surface).border(1.dp, Theme.line, shape), verticalAlignment = Alignment.CenterVertically) {
+        Row(
+            Modifier.weight(1f, fill = false).clickable {
+                opening = true
+                model.scope.launch {
+                    val f = Attachments.fileFor(file.id, file.name, model)
+                    opening = false
+                    if (f == null) model.say("That file can't be fetched now.") else Attachments.open(context, f, file.mime)
+                }
+            }.padding(start = 8.dp, end = 4.dp, top = 6.dp, bottom = 6.dp),
+            horizontalArrangement = Arrangement.spacedBy(10.dp), verticalAlignment = Alignment.CenterVertically,
+        ) {
+            Box(Modifier.size(28.dp).clip(RoundedCornerShape(8.dp)).background(Theme.sunken), contentAlignment = Alignment.Center) { Icon(fileIcon(file.mime), null, Modifier.size(16.dp), tint = Theme.muted) }
+            Column {
+                Text(file.name, maxLines = 1, overflow = androidx.compose.ui.text.style.TextOverflow.Ellipsis, color = Theme.text, fontSize = 14.sp, fontWeight = FontWeight.SemiBold)
+                Text(fileDetail(file.size, file.name), color = Theme.muted, fontSize = 12.sp)
             }
-        }.padding(horizontal = 10.dp, vertical = 6.dp),
-        horizontalArrangement = Arrangement.spacedBy(6.dp), verticalAlignment = Alignment.CenterVertically,
-    ) {
-        Icon(icon, null, Modifier.size(16.dp), tint = Theme.text)
-        Text(file.name, maxLines = 1, color = Theme.text, fontSize = 15.sp, modifier = Modifier.weight(1f, fill = false))
-        file.size?.let { Text(Attachments.size(it), color = Theme.muted, fontSize = 13.sp) }
-        if (opening) CircularProgressIndicator(Modifier.size(14.dp), strokeWidth = 2.dp)
+            if (opening) CircularProgressIndicator(Modifier.size(14.dp), strokeWidth = 2.dp)
+        }
+        if (model.vault(vaultId)?.let { it.role != "viewer" && !it.isEncrypted } == true) {
+            Icon(Icons.Outlined.Share, "Share ${file.name} via a public link", Modifier.size(36.dp, 40.dp).clickable {
+                model.scope.launch { model.api.shareDriveLink(file.id).fold({ clipboard.setText(androidx.compose.ui.text.AnnotatedString(it)); model.say("Public link copied") }, { model.say(it.message ?: "It couldn't be shared. Try again.") }) }
+            }.padding(10.dp), tint = Theme.muted)
+        }
+        Icon(Icons.Outlined.Download, "Download ${file.name}", Modifier.size(36.dp, 40.dp).clickable {
+            model.scope.launch {
+                val f = Attachments.fileFor(file.id, file.name, model) ?: run { model.say("That file can't be fetched now."); return@launch }
+                model.say(if (Attachments.saveToDownloads(context, f, file.name, file.mime)) "Saved to Downloads" else "It couldn't be saved.")
+            }
+        }.padding(10.dp), tint = Theme.muted)
     }
 }
+
+/** "150 B · TXT", as the web's chip. */
+fun fileDetail(size: Long?, name: String): String = listOfNotNull(size?.let(::fileSize), extensionLabel(name)).joinToString(" · ")
+
+/** A file's size as the web app writes it: "150 B", "12 KB", "3.4 MB", "1.2 GB". */
+fun fileSize(bytes: Long): String = when {
+    bytes < 1024 -> "$bytes B"
+    bytes < 1024 * 1024 -> "${Math.round(bytes / 1024.0)} KB"
+    bytes >= 1024L * 1024 * 1024 -> "${Math.round(bytes / 1073741824.0 * 10) / 10.0} GB".replace(".0 GB", " GB")
+    else -> (bytes / 1048576.0).let { if (it < 10) String.format(java.util.Locale.US, "%.1f MB", it) else "${Math.round(it)} MB" }
+}
+
+/** A file's extension in capitals, "PDF", or "File". */
+fun extensionLabel(name: String): String = Regex("\\.([A-Za-z0-9]{1,5})$").find(name)?.groupValues?.get(1)?.uppercase() ?: "File"
 
 /** Photos and videos full screen, paged through, a photo zoomed with a pinch or a double tap. */
 @Composable

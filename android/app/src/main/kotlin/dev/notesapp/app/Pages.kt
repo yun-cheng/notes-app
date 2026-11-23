@@ -90,7 +90,7 @@ fun BubbleColumn(cards: List<Card>, empty: String, header: @Composable () -> Uni
         val width = minOf(560.dp, (minOf(maxWidth, 720.dp) - 32.dp) * 0.85f)
         LazyColumn(Modifier.fillMaxSize(), contentPadding = PaddingValues(16.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
             item { header() }
-            items(cards, key = { it.id }) { card -> Column(verticalArrangement = Arrangement.spacedBy(2.dp)) { BubbleView(card, width); under(card) } }
+            items(cards, key = { it.id }) { card -> Column(verticalArrangement = Arrangement.spacedBy(4.dp)) { BubbleView(card, width); EntryAttachments(card); under(card) } }
             if (cards.isEmpty()) item { Text(empty, Modifier.fillMaxWidth().padding(top = 60.dp), color = Theme.muted, textAlign = TextAlign.Center) }
         }
     }

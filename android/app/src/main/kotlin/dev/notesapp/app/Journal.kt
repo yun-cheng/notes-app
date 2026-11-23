@@ -130,10 +130,11 @@ fun JournalView(initial: StreamFilter, openDrawer: (() -> Unit)?, fixed: Boolean
     val locked = filter.vaultId?.takeIf { it in model.lockedVaults }?.let { model.vault(it) }
 
     Column(Modifier.fillMaxSize().background(Theme.bg)) {
-        TopBar(title, openDrawer, subtitle = "${all.size}") {
+        // The count sits beside the title on a wide screen, as on the web; a phone's bar has no room for it.
+        TopBar(title, openDrawer, subtitle = if (openDrawer == null) "${all.size}" else null) {
             SyncBadge()
             IconButton(onClick = { model.viewOnly = !model.viewOnly }) {
-                Icon(if (model.viewOnly) Icons.Outlined.Visibility else Icons.Outlined.VisibilityOff, if (model.viewOnly) "Turn off view only" else "View only", tint = if (model.viewOnly) Theme.accent else Theme.muted)
+                Icon(Icons.Outlined.Visibility, if (model.viewOnly) "Turn off view only" else "View only", tint = if (model.viewOnly) Theme.accent else Theme.muted)
             }
             IconButton(onClick = { searching = !searching; if (!searching) query = "" }) { Icon(Icons.Outlined.Search, "Search", tint = Theme.text) }
             SortMenu(filter, setFilter)
@@ -171,8 +172,11 @@ fun JournalView(initial: StreamFilter, openDrawer: (() -> Unit)?, fixed: Boolean
                                 DayBadge(day, filter.sort) { if (DateKey.isKey(it)) pickDates = it }
                             }
                             items(items, key = { it.card.id }) { item ->
-                                BubbleView(item.card, bubbleWidth, item.card.id in picked, picked.isNotEmpty()) {
-                                    picked = if (item.card.id in picked) picked - item.card.id else picked + item.card.id
+                                Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
+                                    BubbleView(item.card, bubbleWidth, item.card.id in picked, picked.isNotEmpty()) {
+                                        picked = if (item.card.id in picked) picked - item.card.id else picked + item.card.id
+                                    }
+                                    EntryAttachments(item.card)
                                 }
                             }
                         }

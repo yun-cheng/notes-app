@@ -169,7 +169,7 @@ fun EntrySheet(id: String, dismiss: () -> Unit) {
                 DocEditor(pages[page], edit, { doc -> savePage(model, id, page, doc) }, onTools = { tools = it })
             }
             if (card.isStack) StackPreview(card)
-            BubbleAttachments(card)
+            EntryAttachments(card)
             BubbleTags(card)
             Backlinks(card)
             CommentsSection(card)

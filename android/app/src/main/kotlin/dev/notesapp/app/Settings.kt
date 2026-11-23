@@ -16,6 +16,18 @@ object Settings {
         linkStyle = prefs?.getString("linkStyle", null) ?: "card"
         voiceVolume = prefs?.getFloat("voiceVolume", 1f) ?: 1f
         voiceMuted = prefs?.getBoolean("voiceMuted", false) ?: false
+        folded = prefs?.getStringSet("sidebarFolded", null)?.toSet() ?: emptySet()
+    }
+
+    /** Sidebar sections folded on this device, by ID, as the web keeps them. */
+    var folded by mutableStateOf(setOf<String>())
+        private set
+
+    fun isFolded(id: String) = id in folded
+
+    fun toggleFolded(id: String) {
+        folded = if (id in folded) folded - id else folded + id
+        prefs?.edit()?.putStringSet("sidebarFolded", folded)?.apply()
     }
 
     private fun save(key: String, value: String) { prefs?.edit()?.putString(key, value)?.apply() }

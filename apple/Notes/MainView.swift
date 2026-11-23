@@ -294,6 +294,27 @@ struct Sidebar: View {
         onPick()
     }
 
+    /// Sections folded on this device, by ID, as the web keeps them.
+    @AppStorage("sidebarFolded") private var foldedIds = ""
+
+    private func folded(_ id: String) -> Bool { foldedIds.split(separator: ",").contains(Substring(id)) }
+
+    /// A section's name, pressed to fold it, as the web's: folded, it keeps only the choice in use in sight.
+    private func foldHeader(_ id: String, _ title: String) -> some View {
+        Button {
+            var ids = Set(foldedIds.split(separator: ",").map(String.init))
+            if ids.contains(id) { ids.remove(id) } else { ids.insert(id) }
+            foldedIds = ids.sorted().joined(separator: ",")
+        } label: {
+            HStack(spacing: 4) {
+                Text(title)
+                Image(systemName: folded(id) ? "chevron.right" : "chevron.down").font(.system(size: 9, weight: .semibold))
+            }
+        }
+        .buttonStyle(.plain)
+        .accessibilityLabel("\(title), \(folded(id) ? "folded" : "open")")
+    }
+
     /// One row: a name with its icon and a count, tinted while it's the page shown.
     private func row(_ title: String, _ icon: String, tint: Color? = nil, quiet: Bool = false, selected: Bool, count: Int = 0, go action: @escaping () -> Void) -> some View {
         Button(action: action) {
@@ -350,26 +371,27 @@ struct Sidebar: View {
                 }
             }
             ForEach(index.tagGroups.groups) { group in
-                Section(group.title) {
-                    ForEach(group.members) { tag in tagRow(tag) }
-                }
+                let id = "group:\(group.id)"
+                Section {
+                    ForEach(group.members.filter { !folded(id) || model.page.filter?.tagId == $0.id }) { tag in tagRow(tag) }
+                } header: { foldHeader(id, group.title) }
             }
             // As the web's: pinned tags outside a group, and the one the journal is narrowed to.
-            Section("Tags") {
+            Section {
                 let filtered = model.page.filter?.tagId
                 let pinned = index.pinnedTags.filter { index.tagGroups.groupOf[$0.id] == nil }
                 let shown = pinned.contains { $0.id == filtered } || filtered.map { index.tagGroups.groupOf[$0] != nil } == true ? pinned : pinned + index.tags.filter { $0.id == filtered }
-                ForEach(shown) { tag in tagRow(tag) }
-                row(Page.destination("tags"), quiet: true)
-            }
-            Section("Vaults") {
+                ForEach(shown.filter { !folded("tags") || $0.id == filtered }) { tag in tagRow(tag) }
+                if !folded("tags") || model.page == .tags { row(Page.destination("tags"), quiet: true) }
+            } header: { foldHeader("tags", "Tags") }
+            Section {
                 if model.shownVaults.count > 1 {
-                    ForEach(model.shownVaults) { vault in
+                    ForEach(model.shownVaults.filter { !folded("vaults") || model.page.filter?.vaultId == $0.id }) { vault in
                         row(vault.name, model.lockedVaults.contains(vault.id) ? "lock" : "", selected: model.page.filter?.vaultId == vault.id) { go(.journal(StreamFilter(vaultId: vault.id))) }
                     }
                 }
-                row(Page.destination("vaults"), quiet: true)
-            }
+                if !folded("vaults") || model.page == .vaults { row(Page.destination("vaults"), quiet: true) }
+            } header: { foldHeader("vaults", "Vaults") }
         }
         .listStyle(.sidebar)
         .navigationTitle(phone ? "Tags and vaults" : "Notes")

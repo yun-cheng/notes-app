@@ -1,5 +1,7 @@
 package dev.notesapp.app
 
+import androidx.compose.material.icons.outlined.KeyboardArrowDown
+import androidx.compose.material.icons.automirrored.outlined.KeyboardArrowRight
 import androidx.compose.material.icons.outlined.Visibility
 import androidx.compose.material.icons.outlined.Add
 import androidx.compose.material.icons.automirrored.outlined.Logout
@@ -253,23 +255,24 @@ fun Sidebar(onPick: () -> Unit, phone: Boolean = false) {
                 }
             }
             for (group in index.tagGroups.groups) {
-                item { SideHeader(group.title) }
-                items(group.members, key = { "g${group.id}:${it.id}" }) { tag -> TagRow(tag, filter?.tagId == tag.id) { go(Page.Journal(StreamFilter(tagId = tag.id))) } }
+                val id = "group:${group.id}"
+                item { SideHeader(group.title, id) }
+                items(group.members.filter { !Settings.isFolded(id) || filter?.tagId == it.id }, key = { "g${group.id}:${it.id}" }) { tag -> TagRow(tag, filter?.tagId == tag.id) { go(Page.Journal(StreamFilter(tagId = tag.id))) } }
             }
             // As the web's: pinned tags outside a group, and the one the journal is narrowed to.
-            item { SideHeader("Tags") }
+            item { SideHeader("Tags", "tags") }
             val pinned = index.pinnedTags.filter { index.tagGroups.groupOf[it.id] == null }
             val narrowedTo = filter?.tagId
             val tagsShown = if (narrowedTo == null || pinned.any { it.id == narrowedTo } || index.tagGroups.groupOf[narrowedTo] != null) pinned else pinned + index.tags.filter { it.id == narrowedTo }
-            items(tagsShown, key = { "t:${it.id}" }) { tag -> TagRow(tag, filter?.tagId == tag.id) { go(Page.Journal(StreamFilter(tagId = tag.id))) } }
-            item { destination("tags").let { d -> SideRow(d.title, null, model.page == d.page, quiet = true) { go(d.page) } } }
-            item { SideHeader("Vaults") }
+            items(tagsShown.filter { !Settings.isFolded("tags") || it.id == narrowedTo }, key = { "t:${it.id}" }) { tag -> TagRow(tag, filter?.tagId == tag.id) { go(Page.Journal(StreamFilter(tagId = tag.id))) } }
+            if (!Settings.isFolded("tags") || model.page == Page.Tags) item { destination("tags").let { d -> SideRow(d.title, null, model.page == d.page, quiet = true) { go(d.page) } } }
+            item { SideHeader("Vaults", "vaults") }
             // A hidden vault stays out of the app until its PIN is entered; a lone vault isn't listed.
             val vaultsShown = model.vaults.filter { !it.hidden || it.id in model.openVaults }
-            if (vaultsShown.size > 1) items(vaultsShown, key = { "v:${it.id}" }) { vault ->
+            if (vaultsShown.size > 1) items(vaultsShown.filter { !Settings.isFolded("vaults") || filter?.vaultId == it.id }, key = { "v:${it.id}" }) { vault ->
                 SideRow(vault.name, if (vault.id in model.lockedVaults) Icons.Outlined.Lock else null, filter?.vaultId == vault.id) { go(Page.Journal(StreamFilter(vaultId = vault.id))) }
             }
-            item { destination("vaults").let { d -> SideRow(d.title, null, model.page == d.page, quiet = true) { go(d.page) } } }
+            if (!Settings.isFolded("vaults") || model.page == Page.Vaults) item { destination("vaults").let { d -> SideRow(d.title, null, model.page == d.page, quiet = true) { go(d.page) } } }
         }
         if (phone) {
             HorizontalDivider(color = Theme.line)
@@ -326,9 +329,16 @@ private fun TagRow(tag: Card, selected: Boolean, onClick: () -> Unit) {
     SideRow(tag.displayTitle, Icons.Outlined.Label, selected, count, tint = tag.color?.let { Theme.tint(it) }, onClick = onClick)
 }
 
+/** A section's name; with `fold`, pressed to fold it, as the web's: folded, it keeps only the choice in use in sight. */
 @Composable
-fun SideHeader(text: String) {
-    Text(text, Modifier.padding(start = 10.dp, top = 16.dp, bottom = 4.dp), fontSize = 12.sp, fontWeight = FontWeight.SemiBold, color = Theme.muted)
+fun SideHeader(text: String, fold: String? = null) {
+    Row(
+        Modifier.padding(start = 10.dp, top = 16.dp, bottom = 4.dp).then(if (fold != null) Modifier.clickable { Settings.toggleFolded(fold) } else Modifier),
+        verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(4.dp),
+    ) {
+        Text(text, fontSize = 12.sp, fontWeight = FontWeight.SemiBold, color = Theme.muted)
+        if (fold != null) Icon(if (Settings.isFolded(fold)) Icons.AutoMirrored.Outlined.KeyboardArrowRight else Icons.Outlined.KeyboardArrowDown, null, Modifier.size(14.dp), tint = Theme.muted)
+    }
 }
 
 @Composable

@@ -75,7 +75,8 @@ _Last checked 2026-11-23._
 | Title bar on a computer: count, Demo, sync state, eye, search, order, board switch | ⚠️ the count is a subtitle; no Demo tag by the title | ➖ | ✅ on a tablet | T |
 | Every page shows the sync state, and the eye where something can be changed (not Settings, Vaults, Photos, Links, Files) | ✅ | ✅ | ✅ | T |
 | Title bar on a phone: sync, eye, search, order, Tags and vaults, the account's picture; no sidebar | ➖ | ✅ | ✅ | T |
-| Tags and vaults on a phone: the pages, groups, tags and vaults in a sheet, with Done | ➖ | ⚠️ groups don't fold | ⚠️ groups don't fold | T |
+| Tags and vaults on a phone: the pages, groups, tags and vaults in a sheet, with Done | ➖ | ✅ | ✅ | T |
+| A group, Tags and Vaults fold from their names, keeping the one in use in sight | ✅ | ✅ | ✅ | T |
 | The account's picture on a phone: the account, others to switch to, Add another account, Backup & settings, Sign out | ➖ | ✅ | ✅ | T |
 | Phone tabs are links: Journal goes to the whole journal; a page picked elsewhere shows | ➖ | ✅ | ✅ | T |
 | The order menu also picks a board; on a board it names the columns | ✅ | ✅ | ✅ | T |
@@ -123,7 +124,7 @@ _Last checked 2026-11-23._
 
 | Web behavior | Mac | iPhone | Android | How |
 |---|---|---|---|---|
-| Board: drag cards between columns and within one; add a card in a column | ✅ | ✅ | ⚠️ moved from a menu (Move up, Move to…), not dragged | C |
+| Board: drag cards between columns and within one (a finger by the card's grip), scrolling near the sides; add a card in a column | ✅ | ✅ | ✅ | T |
 | Calendar: a month with bars for spans, a todo dragged to another day, the day's list below | ✅ | ✅ | ⚠️ no dragging | C |
 | Timeline: bars dragged or stretched | ✅ | ✅ | ✅ | C |
 | Calendar on a phone: counts per day, Today, the day's todos and Written this day | ➖ | ✅ | ✅ | T |

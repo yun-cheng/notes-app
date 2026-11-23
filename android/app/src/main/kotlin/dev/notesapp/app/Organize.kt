@@ -1,5 +1,14 @@
 package dev.notesapp.app
 
+import androidx.compose.foundation.gestures.scrollBy
+import androidx.compose.foundation.layout.offset
+import androidx.compose.ui.graphics.graphicsLayer
+import androidx.compose.ui.input.pointer.pointerInput
+import androidx.compose.foundation.gestures.detectDragGestures
+import androidx.compose.ui.layout.boundsInRoot
+import androidx.compose.ui.layout.positionInRoot
+import androidx.compose.ui.layout.onGloballyPositioned
+import androidx.compose.material.icons.outlined.DragIndicator
 import kotlinx.coroutines.withContext
 import kotlinx.coroutines.Dispatchers
 import androidx.compose.foundation.background
@@ -495,38 +504,80 @@ fun BoardView(filter: StreamFilter, board: String) {
     val group = model.index.tagGroups.groups.firstOrNull { it.id == board }
     val columns = if (board == Board.STATE) Board.stateColumns(items) else group?.let { Board.columns(items, it) } ?: emptyList()
     if (columns.isEmpty()) { FormText("The tag group for this board is gone."); return }
-    Row(Modifier.fillMaxSize().horizontalScroll(rememberScrollState()).padding(16.dp), horizontalArrangement = Arrangement.spacedBy(12.dp)) {
-        for (column in columns) BoardColumnView(column, columns, group, filter)
+    // A card held by its grip, as the web's on a phone: a copy follows the finger, and it's dropped in the column and
+    // at the place under it.
+    val drag = remember { BoardDrag() }
+    val scroll = rememberScrollState()
+    var width by remember { mutableStateOf(0f) }
+    // Near the board's left or right side, it scrolls that way while a card is held there, as the web's.
+    LaunchedEffect(drag.card != null) {
+        while (drag.card != null) {
+            val x = drag.point.x - drag.origin.x
+            val edge = 64f
+            if (x < edge) scroll.scrollBy(-18f) else if (x > width - edge) scroll.scrollBy(18f)
+            kotlinx.coroutines.delay(16)
+        }
+    }
+    Box(Modifier.fillMaxSize().onGloballyPositioned { drag.origin = it.positionInRoot(); width = it.size.width.toFloat() }) {
+        Row(Modifier.fillMaxSize().horizontalScroll(scroll).padding(16.dp), horizontalArrangement = Arrangement.spacedBy(12.dp)) {
+            for (column in columns) BoardColumnView(column, columns, group, filter, drag)
+        }
+        drag.card?.let { held ->
+            val at = drag.point - drag.origin - drag.grab
+            Box(Modifier.offset { androidx.compose.ui.unit.IntOffset(at.x.toInt(), at.y.toInt()) }.graphicsLayer(alpha = 0.9f, shadowElevation = 12f)) {
+                BubbleView(held, 280.dp)
+            }
+        }
+    }
+}
+
+/** Where a board's cards and columns are, and the card being dragged, for dropping it where the finger lets go. */
+class BoardDrag {
+    var card by mutableStateOf<Card?>(null)
+    var point by mutableStateOf(androidx.compose.ui.geometry.Offset.Zero)
+    var grab = androidx.compose.ui.geometry.Offset.Zero
+    var origin = androidx.compose.ui.geometry.Offset.Zero
+    val columns = mutableMapOf<String, androidx.compose.ui.geometry.Rect>()
+    val cards = mutableMapOf<String, androidx.compose.ui.geometry.Rect>()
+    val grips = mutableMapOf<String, androidx.compose.ui.geometry.Offset>()
+
+    /** The column under the finger, and how many of its cards (other than the one held) are above it. */
+    fun target(all: List<dev.notesapp.core.BoardColumn>): Pair<dev.notesapp.core.BoardColumn, Int>? {
+        val column = all.firstOrNull { c -> columns[c.key]?.let { point.x in it.left..it.right } == true } ?: return null
+        val index = column.items.count { it.card.id != card?.id && (cards[it.card.id]?.center?.y ?: Float.MAX_VALUE) < point.y }
+        return column to index
+    }
+}
+
+/** A card dropped at `index` in `to`: its place saved, and moved there from another column, its tag or state changed. */
+fun boardDrop(model: AppModel, card: Card, to: dev.notesapp.core.BoardColumn, index: Int, group: TagGroup?) {
+    if (!model.canEdit(card)) return
+    val others = to.items.map { it.card }.filter { it.id != card.id }
+    val places = Board.place(card, index, others)
+    val today = model.today
+    val groups = model.index.tagGroups.groups
+    val action = model.repo.action()
+    model.perform { repo ->
+        val at = System.currentTimeMillis()
+        val updated = repo.update(card.id, action) { c ->
+            val moved = when {
+                group != null -> Board.groupMove(c, group, Board.columnOf(c, group), to.key, today, at)
+                else -> Board.TodoState.entries.firstOrNull { it.name == to.key }?.let { Board.stateMove(c, it, today, at, groups) } ?: c
+            }
+            // A repeating todo moved on to its next date stays where it was.
+            val movedOn = moved.repeat != null && moved.due != c.due
+            if (!movedOn) places[c.id]?.let { moved.withPosition(it) } ?: moved else moved
+        }
+        for ((other, p) in places) if (other != card.id) repo.update(other, action) { it.withPosition(p) }
+        if (updated?.repeat != null && updated.due != card.due) updated.due?.let { model.say("Next due ${DateKey.relativeDayInSentence(it, today)}", undoable = true) }
     }
 }
 
 @Composable
-private fun BoardColumnView(column: dev.notesapp.core.BoardColumn, columns: List<dev.notesapp.core.BoardColumn>, group: TagGroup?, filter: StreamFilter) {
+private fun BoardColumnView(column: dev.notesapp.core.BoardColumn, columns: List<dev.notesapp.core.BoardColumn>, group: TagGroup?, filter: StreamFilter, drag: BoardDrag) {
     val model = LocalModel.current
     var adding by remember { mutableStateOf("") }
-    /** A card dropped at `index` in `to`: its place saved, and moved there from another column, its tag or state changed. */
-    fun drop(card: Card, to: dev.notesapp.core.BoardColumn, index: Int) {
-        if (!model.canEdit(card)) return
-        val others = to.items.map { it.card }.filter { it.id != card.id }
-        val places = Board.place(card, index, others)
-        val today = model.today
-        val groups = model.index.tagGroups.groups
-        val action = model.repo.action()
-        model.perform { repo ->
-            val at = System.currentTimeMillis()
-            val updated = repo.update(card.id, action) { c ->
-                val moved = when {
-                    group != null -> Board.groupMove(c, group, Board.columnOf(c, group), to.key, today, at)
-                    else -> Board.TodoState.entries.firstOrNull { it.name == to.key }?.let { Board.stateMove(c, it, today, at, groups) } ?: c
-                }
-                // A repeating todo moved on to its next date stays where it was.
-                val movedOn = moved.repeat != null && moved.due != c.due
-                if (!movedOn) places[c.id]?.let { moved.withPosition(it) } ?: moved else moved
-            }
-            for ((other, p) in places) if (other != card.id) repo.update(other, action) { it.withPosition(p) }
-            if (updated?.repeat != null && updated.due != card.due) updated.due?.let { model.say("Next due ${DateKey.relativeDayInSentence(it, today)}", undoable = true) }
-        }
-    }
+    fun drop(card: Card, to: dev.notesapp.core.BoardColumn, index: Int) = boardDrop(model, card, to, index, group)
     /** A new card straight into this column: with its tag, or in its state. */
     fun add() {
         val text = adding.trim()
@@ -540,7 +591,7 @@ private fun BoardColumnView(column: dev.notesapp.core.BoardColumn, columns: List
         adding = ""
         model.scope.launch { model.save(entries, opts) }
     }
-    Column(Modifier.width(300.dp).fillMaxHeight().clip(RoundedCornerShape(12.dp)).background(Theme.sunken.copy(alpha = 0.5f)).padding(10.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
+    Column(Modifier.width(300.dp).fillMaxHeight().onGloballyPositioned { drag.columns[column.key] = it.boundsInRoot() }.clip(RoundedCornerShape(12.dp)).background(Theme.sunken.copy(alpha = 0.5f)).padding(10.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
         Row(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
             Text(column.title, fontWeight = FontWeight.SemiBold, color = Theme.text)
             Text("${column.items.size}", color = Theme.muted)
@@ -548,8 +599,34 @@ private fun BoardColumnView(column: dev.notesapp.core.BoardColumn, columns: List
         Column(Modifier.weight(1f).verticalScroll(rememberScrollState()), verticalArrangement = Arrangement.spacedBy(8.dp)) {
             column.items.forEachIndexed { i, item ->
                 var menu by remember { mutableStateOf(false) }
-                Box {
-                    Column(Modifier.clickable { menu = true }, verticalArrangement = Arrangement.spacedBy(4.dp)) { BubbleView(item.card, 280.dp); EntryAttachments(item.card) }
+                val held = drag.card?.id == item.card.id
+                Box(Modifier.onGloballyPositioned { drag.cards[item.card.id] = it.boundsInRoot() }.graphicsLayer(alpha = if (held) 0.35f else 1f)) {
+                    // Pressing a card opens it, as the web's; its grip moves it, dragged, or from its menu, tapped.
+                    Column(verticalArrangement = Arrangement.spacedBy(4.dp)) { BubbleView(item.card, 280.dp); EntryAttachments(item.card) }
+                    if (model.canEdit(item.card) && !model.viewOnly) Icon(
+                        Icons.Outlined.DragIndicator, "Drag to move, or tap for a menu",
+                        Modifier.align(Alignment.TopEnd).padding(4.dp).size(28.dp).clip(RoundedCornerShape(6.dp)).background(Theme.surface)
+                            .onGloballyPositioned { drag.grips[item.card.id] = it.positionInRoot() }
+                            .pointerInput(item.card.id) {
+                                detectDragGestures(
+                                    onDragStart = { o ->
+                                        val inRoot = (drag.grips[item.card.id] ?: androidx.compose.ui.geometry.Offset.Zero) + o
+                                        drag.grab = inRoot - (drag.cards[item.card.id]?.topLeft ?: inRoot)
+                                        drag.point = inRoot
+                                        drag.card = item.card
+                                    },
+                                    onDrag = { change, amount -> change.consume(); drag.point += amount },
+                                    onDragEnd = {
+                                        val card = drag.card
+                                        drag.target(columns)?.let { (to, at) -> if (card != null) drop(card, to, at) }
+                                        drag.card = null
+                                    },
+                                    onDragCancel = { drag.card = null },
+                                )
+                            }
+                            .clickable { menu = true }.padding(4.dp),
+                        tint = Theme.muted,
+                    )
                     DropdownMenu(menu, { menu = false }) {
                         if (i > 0) DropdownMenuItem(text = { Text("Move up") }, onClick = { menu = false; drop(item.card, column, i - 1) })
                         if (i < column.items.size - 1) DropdownMenuItem(text = { Text("Move down") }, onClick = { menu = false; drop(item.card, column, i + 1) })

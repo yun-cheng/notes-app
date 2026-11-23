@@ -76,7 +76,13 @@ struct PhoneFrame: View {
     @State private var tab: Tab = .journal
 
     var body: some View {
-        TabView(selection: $tab) {
+        // As the web's tabs, which are links: Journal goes to the whole journal, pressed again too; a page picked from
+        // the sidebar shows in the Journal tab, and the calendar in its own.
+        let selection = Binding<Tab>(get: { tab }, set: { next in
+            if next == .journal { model.page = .journal(StreamFilter()) }
+            tab = next
+        })
+        TabView(selection: selection) {
             SwiftUI.Tab("Journal", systemImage: "doc.text", value: .journal) {
                 NavigationStack { PageView(page: model.page).phoneSidebarButton() }
             }
@@ -90,6 +96,7 @@ struct PhoneFrame: View {
                 NavigationStack { SearchPage().phoneSidebarButton() }
             }
         }
+        .onChange(of: model.page) { _, page in tab = page == .calendar ? .calendar : .journal }
     }
 }
 

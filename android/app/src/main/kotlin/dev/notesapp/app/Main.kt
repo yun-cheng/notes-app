@@ -124,9 +124,10 @@ fun PhoneFrame() {
     val scope = rememberCoroutineScope()
     var tab by remember { mutableStateOf(0) }
     val openDrawer: (() -> Unit)? = { scope.launch { drawer.open() } }
-    // A page picked from another tab (a day on the calendar, a tag in a result) shows in the Journal tab.
+    // A page picked from another tab (a day on the calendar, a tag in a result) shows in the Journal tab, as the web's
+    // tabs follow the address; the calendar picked from the sidebar lights its own tab.
     var shownPage by remember { mutableStateOf(model.page) }
-    if (model.page != shownPage) { shownPage = model.page; tab = 0 }
+    if (model.page != shownPage) { shownPage = model.page; tab = if (model.page == Page.Calendar) 2 else 0 }
     BackHandler(drawer.isOpen) { scope.launch { drawer.close() } }
     BackHandler(!drawer.isOpen && tab == 0 && model.page != Page.Journal()) { model.page = Page.Journal() }
 
@@ -134,7 +135,7 @@ fun PhoneFrame() {
         drawerState = drawer,
         drawerContent = {
             ModalDrawerSheet(drawerContainerColor = Theme.bg, modifier = Modifier.widthIn(max = 320.dp)) {
-                Sidebar(onPick = { tab = 0; scope.launch { drawer.close() } })
+                Sidebar(onPick = { tab = if (model.page == Page.Calendar) 2 else 0; scope.launch { drawer.close() } })
             }
         },
     ) {
@@ -153,7 +154,9 @@ fun PhoneFrame() {
                 val items = listOf("journal", "today", "calendar", "search").map { destination(it).let { d -> d.title to d.icon } }
                 items.forEachIndexed { i, (label, icon) ->
                     NavigationBarItem(
-                        selected = tab == i, onClick = { if (tab == i && i == 0) model.page = Page.Journal(); tab = i },
+                        // As the web's tabs, which are links: Journal is lit on the journal (any filter) and goes to the
+                        // whole journal; on a page with no tab of its own (Photos, Tags), none is lit.
+                        selected = tab == i && (i != 0 || model.page is Page.Journal), onClick = { if (i == 0) model.page = Page.Journal(); tab = i },
                         icon = { Icon(icon, null) }, label = { Text(label) },
                         colors = NavigationBarItemDefaults.colors(selectedIconColor = Theme.accent, selectedTextColor = Theme.accent, indicatorColor = Theme.accentSoft, unselectedIconColor = Theme.muted, unselectedTextColor = Theme.muted),
                     )

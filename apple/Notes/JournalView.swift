@@ -77,9 +77,11 @@ struct JournalView: View {
                             ForEach(groups(visible), id: \.day) { group in
                                 Section {
                                     ForEach(group.items) { item in
-                                        VStack(alignment: .leading, spacing: 4) {
-                                            BubbleView(card: item.card, picked: picked.contains(item.card.id), onPick: { togglePick(item.card.id) }, picking: !picked.isEmpty)
-                                            EntryAttachments(card: item.card)
+                                        PickRow(picked: picked.contains(item.card.id), picking: !picked.isEmpty, pick: { shift in togglePick(item.card.id, range: shift ? visible.map(\.card.id) : nil) }) {
+                                            VStack(alignment: .leading, spacing: 4) {
+                                                BubbleView(card: item.card, picked: picked.contains(item.card.id), onPick: { togglePick(item.card.id) }, picking: !picked.isEmpty)
+                                                EntryAttachments(card: item.card)
+                                            }
                                         }
                                             .overlay(alignment: .leading) {
                                                 if focusedEntry == item.card.id {
@@ -101,6 +103,10 @@ struct JournalView: View {
                             if all.isEmpty { EmptyJournal(filter: filter, searching: searching) }
                         }
                         .padding(.horizontal, 16)
+                        #if os(macOS)
+                        // Room for each entry's pick circle, as on the web.
+                        .padding(.leading, 22)
+                        #endif
                         .padding(.bottom, 10)
                         .frame(maxWidth: 720)
                         .frame(maxWidth: .infinity)
@@ -213,8 +219,19 @@ struct JournalView: View {
         #endif
     }
 
-    private func togglePick(_ id: String) {
-        if picked.contains(id) { picked.remove(id) } else { picked.insert(id) }
+    @State private var pickedLast: String?
+
+    /// Picks or unpicks an entry; with `range` (the entries in order, for a Shift-click), every one from the last picked
+    /// to it, as the web's.
+    private func togglePick(_ id: String, range: [String]? = nil) {
+        if let range, let last = pickedLast, let a = range.firstIndex(of: last), let b = range.firstIndex(of: id) {
+            for i in min(a, b)...max(a, b) { picked.insert(range[i]) }
+        } else if picked.contains(id) {
+            picked.remove(id)
+        } else {
+            picked.insert(id)
+        }
+        pickedLast = id
     }
 
     @ToolbarContentBuilder
@@ -433,5 +450,42 @@ struct ViewOnlyBar: View {
         .overlay(RoundedRectangle(cornerRadius: 20).stroke(Theme.line))
         .frame(maxWidth: 720)
         .padding(.horizontal, 12).padding(.bottom, 8)
+    }
+}
+
+/// An entry's row in the journal: on a computer, as the web's, a circle on its left to pick it, shown while it's pointed
+/// at or while picking (Shift-click for a range), and a click beside the bubble picks it too.
+struct PickRow<Content: View>: View {
+    let picked: Bool
+    let picking: Bool
+    let pick: (_ shift: Bool) -> Void
+    @ViewBuilder let content: () -> Content
+    @State private var hovering = false
+
+    var body: some View {
+        #if os(macOS)
+        content()
+            .frame(maxWidth: .infinity, alignment: .leading)
+            .contentShape(Rectangle())
+            .onTapGesture { pick(NSEvent.modifierFlags.contains(.shift)) }
+            .overlay(alignment: .topLeading) {
+                Button { pick(NSEvent.modifierFlags.contains(.shift)) } label: {
+                    ZStack {
+                        Circle().fill(picked ? Theme.accent : Theme.bg)
+                        Circle().strokeBorder(picked ? Theme.accent : Theme.muted, lineWidth: 2)
+                        if picked { Image(systemName: "checkmark").font(.system(size: 10, weight: .bold)).foregroundStyle(Theme.onAccent) }
+                    }
+                    .frame(width: 20, height: 20)
+                }
+                .buttonStyle(.plain)
+                .offset(x: -28, y: 8)
+                .opacity(hovering || picking ? 1 : 0)
+                .help("Select (Shift-click for a range)")
+                .accessibilityLabel(picked ? "Unselect" : "Select")
+            }
+            .onHover { hovering = $0 }
+        #else
+        content()
+        #endif
     }
 }

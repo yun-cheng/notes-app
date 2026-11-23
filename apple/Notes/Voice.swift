@@ -2,25 +2,200 @@ import AVFoundation
 import NotesKit
 import SwiftUI
 
-/// A voice message (any sound) where it is, as the web app's player: play and pause, its loudness drawn along it, the
-/// time, a speed, and its transcript, each sentence pressed to play from there.
+/// The voice message playing, for every player and the bar along the top of the journal, as the web's: one plays at a
+/// time, one that ends runs on to the next while they come one after another (in the same entry, or the next one), and
+/// all play at one volume kept on this device, read as heard (half way is a quarter as loud), or muted.
+@MainActor
+@Observable
+final class VoicePlayback {
+    static let shared = VoicePlayback()
+
+    struct Item: Equatable {
+        var file: Doc.FileInfo
+        var cardId: String?
+        var vaultId: String
+    }
+
+    private(set) var item: Item?
+    private(set) var playing = false
+    private(set) var time: Double = 0
+    private(set) var total: Double = 0
+    private(set) var rate: Float = 1
+    private(set) var volume: Double = UserDefaults.standard.object(forKey: "voiceVolume") as? Double ?? 1
+    private(set) var muted = UserDefaults.standard.bool(forKey: "voiceMuted")
+    @ObservationIgnored private var player: AVPlayer?
+    @ObservationIgnored private var observer: Any?
+    @ObservationIgnored private var ended: NSObjectProtocol?
+    @ObservationIgnored private weak var model: AppModel?
+
+    private var heard: Float { muted ? 0 : Float(volume * volume) }
+
+    func isCurrent(_ id: String) -> Bool { item?.file.id == id }
+
+    /// Plays `file` from `at` seconds (or where it was), stopping any other.
+    func play(_ file: Doc.FileInfo, cardId: String?, vaultId: String, model: AppModel, at: Double? = nil) {
+        self.model = model
+        if item?.file.id == file.id, let player {
+            if let at { player.seek(to: CMTime(seconds: at, preferredTimescale: 600)); time = at }
+            player.playImmediately(atRate: rate)
+            player.volume = heard
+            playing = true
+            return
+        }
+        stopPlayer()
+        item = Item(file: file, cardId: cardId, vaultId: vaultId)
+        time = at ?? 0
+        total = file.duration ?? 0
+        playing = true
+        Task {
+            guard let url = await Attachments.shared.fileURL(file.id, name: file.name.isEmpty ? "voice.m4a" : file.name, model: model) else {
+                if item?.file.id == file.id { playing = false; item = nil }
+                model.say("That voice message can't be fetched now.")
+                return
+            }
+            guard item?.file.id == file.id else { return }
+            let p = AVPlayer(url: url)
+            p.volume = heard
+            observer = p.addPeriodicTimeObserver(forInterval: CMTime(seconds: 0.1, preferredTimescale: 600), queue: .main) { [weak self] t in
+                MainActor.assumeIsolated {
+                    guard let self else { return }
+                    self.time = t.seconds
+                    if let d = p.currentItem?.duration.seconds, d.isFinite, d > 0 { self.total = d }
+                }
+            }
+            ended = NotificationCenter.default.addObserver(forName: AVPlayerItem.didPlayToEndTimeNotification, object: p.currentItem, queue: .main) { [weak self] _ in
+                MainActor.assumeIsolated { self?.finished() }
+            }
+            player = p
+            if let at { await p.seek(to: CMTime(seconds: at, preferredTimescale: 600)) }
+            if playing { p.playImmediately(atRate: rate) }
+        }
+    }
+
+    func toggle() {
+        guard let player else { playing.toggle(); return }
+        if playing { player.pause() } else { player.playImmediately(atRate: rate) }
+        playing.toggle()
+    }
+
+    func pause() {
+        player?.pause()
+        playing = false
+    }
+
+    func seek(_ seconds: Double) {
+        time = seconds
+        player?.seek(to: CMTime(seconds: seconds, preferredTimescale: 600))
+    }
+
+    /// 1×, 1.5×, 2× and round.
+    func faster() {
+        rate = rate == 1 ? 1.5 : rate == 1.5 ? 2 : 1
+        if playing { player?.rate = rate }
+    }
+
+    /// Stops it and closes the bar.
+    func stop() {
+        stopPlayer()
+        item = nil
+        playing = false
+        time = 0
+    }
+
+    func setVolume(_ v: Double) {
+        volume = max(0, min(1, v))
+        muted = false
+        save()
+    }
+
+    /// Mutes them, or brings them back: at half volume, from none.
+    func toggleMute() {
+        if muted || volume == 0 {
+            if volume == 0 { volume = 0.5 }
+            muted = false
+        } else {
+            muted = true
+        }
+        save()
+    }
+
+    private func save() {
+        UserDefaults.standard.set(volume, forKey: "voiceVolume")
+        UserDefaults.standard.set(muted, forKey: "voiceMuted")
+        player?.volume = heard
+    }
+
+    private func stopPlayer() {
+        player?.pause()
+        if let observer, let player { player.removeTimeObserver(observer) }
+        if let ended { NotificationCenter.default.removeObserver(ended) }
+        observer = nil
+        ended = nil
+        player = nil
+    }
+
+    private func finished() {
+        playing = false
+        time = 0
+        player?.seek(to: .zero)
+        if !playAfter() { stop() }
+    }
+
+    /// The voice messages on show, in the journal's order (oldest first), each with its entry.
+    private func all() -> [Item] {
+        guard let model else { return [] }
+        return model.index.live.filter { $0.type != .tag && !$0.archived }.sorted { $0.createdAt < $1.createdAt }.flatMap { card in
+            Doc.files(card.content).filter(\.isAudio).map { Item(file: $0, cardId: card.id, vaultId: card.vaultId) }
+        }
+    }
+
+    /// The previous or next voice message, if any.
+    func beside(after: Bool) -> Item? {
+        guard let item else { return nil }
+        let list = all()
+        guard let i = list.firstIndex(where: { $0.file.id == item.file.id }) else { return nil }
+        let j = i + (after ? 1 : -1)
+        return list.indices.contains(j) ? list[j] : nil
+    }
+
+    func skip(after: Bool) {
+        guard let next = beside(after: after), let model else { return }
+        play(next.file, cardId: next.cardId, vaultId: next.vaultId, model: model, at: 0)
+    }
+
+    /// Plays the one straight after, in the same entry or the next one; whether it did.
+    private func playAfter() -> Bool {
+        guard let item, let next = beside(after: true), let model else { return false }
+        if next.cardId != item.cardId {
+            let order = model.index.live.filter { $0.type != .tag && !$0.archived }.sorted { $0.createdAt < $1.createdAt }.map(\.id)
+            guard let a = order.firstIndex(where: { $0 == item.cardId }), let b = order.firstIndex(where: { $0 == next.cardId }), b == a + 1 else { return false }
+        }
+        play(next.file, cardId: next.cardId, vaultId: next.vaultId, model: model, at: 0)
+        return true
+    }
+}
+
+/// A voice message (any sound) where it is, as the web app's player: play and pause, its loudness drawn along it to
+/// seek in, the time, a speed, the volume all voice messages play at, and its transcript, each sentence pressed to
+/// play from there and the one being said marked.
 struct VoicePlayer: View {
     @Environment(AppModel.self) private var model
     let file: Doc.FileInfo
     let vaultId: String
     /// The entry it's in, for Transcribe to write into; nil where it can't be changed.
     var card: Card? = nil
-    @State private var player: AVPlayer?
-    @State private var playing = false
-    @State private var progress: Double = 0
-    @State private var rate: Float = 1
-    @State private var showWords = true
-    @State private var observer: Any?
+    @AppStorage("hiddenTranscripts") private var hidden = ""
 
     var body: some View {
+        let playback = VoicePlayback.shared
+        let current = playback.isCurrent(file.id)
+        let playing = current && playback.playing
+        let total = current && playback.total > 0 ? playback.total : file.duration ?? 0
+        let time = current ? playback.time : 0
+        let showWords = !hidden.split(separator: ",").contains(Substring(file.id))
         VStack(alignment: .leading, spacing: 6) {
             HStack(spacing: 10) {
-                Button(action: toggle) {
+                Button { press(current: current) } label: {
                     Image(systemName: playing ? "pause.fill" : "play.fill")
                         .frame(width: 34, height: 34)
                         .background(Circle().fill(Theme.accent))
@@ -28,18 +203,20 @@ struct VoicePlayer: View {
                 }
                 .buttonStyle(.plain)
                 .accessibilityLabel(playing ? "Pause" : "Play")
-                Waveform(peaks: file.peaks, progress: progress)
-                    .frame(height: 26)
-                    .frame(minWidth: 120)
-                Text(Doc.clipLength((file.duration ?? 0) * (playing || progress > 0 ? progress : 1))).font(.caption.monospacedDigit()).foregroundStyle(Theme.muted)
-                Button("\(rate == 1 ? "1" : String(format: "%g", rate))×") {
-                    rate = rate == 1 ? 1.5 : rate == 1.5 ? 2 : 1
-                    if playing { player?.rate = rate }
+                Waveform(peaks: file.peaks, progress: total > 0 ? time / total : 0) { fraction in
+                    playback.play(file, cardId: card?.id, vaultId: vaultId, model: model, at: fraction * total)
                 }
-                .buttonStyle(.plain).font(.caption).padding(.horizontal, 6).background(Capsule().stroke(Theme.line))
+                .frame(height: 26)
+                .frame(minWidth: 120)
+                Text(Doc.clipLength(playing || time > 0 ? time : total)).font(.caption.monospacedDigit()).foregroundStyle(Theme.muted)
+                Button(rateLabel(playback.rate)) { playback.faster() }
+                    .buttonStyle(.plain).font(.caption).padding(.horizontal, 6).background(Capsule().stroke(Theme.line))
+                    .help("Playback speed")
+                VolumeButton()
                 if file.transcript != nil {
-                    Button { showWords.toggle() } label: { Image(systemName: "text.alignleft") }.buttonStyle(.plain).foregroundStyle(Theme.accent)
-                        .accessibilityLabel(showWords ? "Hide words" : "Show words")
+                    Button { toggleWords(showWords) } label: { Image(systemName: "text.alignleft") }.buttonStyle(.plain).foregroundStyle(showWords ? Theme.accent : Theme.muted)
+                        .help(showWords ? "Hide transcript" : "Show transcript")
+                        .accessibilityLabel(showWords ? "Hide transcript" : "Show transcript")
                 }
             }
             if let transcript = file.transcript {
@@ -50,7 +227,9 @@ struct VoicePlayer: View {
                         } else if file.cues.isEmpty {
                             Text(transcript).textSelection(.enabled)
                         } else {
-                            FlowText(cues: file.cues, current: currentCue) { seek(to: $0) }
+                            FlowText(cues: file.cues, current: current ? file.cues.lastIndex { $0.start <= time } : nil) { start in
+                                playback.play(file, cardId: card?.id, vaultId: vaultId, model: model, at: start)
+                            }
                         }
                         HStack(spacing: 12) {
                             if !transcript.isEmpty {
@@ -81,7 +260,18 @@ struct VoicePlayer: View {
         .frame(maxWidth: 420, alignment: .leading)
         .background(RoundedRectangle(cornerRadius: 14).fill(Theme.surface))
         .overlay(RoundedRectangle(cornerRadius: 14).stroke(Theme.line))
-        .onDisappear { player?.pause() }
+    }
+
+    private func press(current: Bool) {
+        let playback = VoicePlayback.shared
+        if current { playback.toggle() } else { playback.play(file, cardId: card?.id, vaultId: vaultId, model: model) }
+    }
+
+    /// Hidden or shown from the player, on this device, as the web's.
+    private func toggleWords(_ shown: Bool) {
+        var ids = Set(hidden.split(separator: ",").map(String.init))
+        if shown { ids.insert(file.id) } else { ids.remove(file.id) }
+        hidden = ids.sorted().joined(separator: ",")
     }
 
     /// Transcribing is for an entry this account can change, outside an encrypted vault, whose words never reach the server.
@@ -103,41 +293,99 @@ struct VoicePlayer: View {
             Transcriber.shared.start(id: file.id, samples: samples, vaultId: vaultId, model: model)
         }
     }
+}
 
-    private var currentCue: Int? {
-        guard playing || progress > 0, let d = file.duration else { return nil }
-        let t = progress * d
-        return file.cues.lastIndex { $0.start <= t }
-    }
+func rateLabel(_ rate: Float) -> String { "\(rate == 1 ? "1" : String(format: "%g", rate))×" }
 
-    private func toggle() {
-        if let player {
-            if playing { player.pause() } else { player.playImmediately(atRate: rate) }
-            playing.toggle()
-            return
+/// The volume all voice messages play at, as the web's: a click mutes or unmutes them on a computer, with the slider
+/// shown while pointed at; a press shows the slider on a phone.
+struct VolumeButton: View {
+    @State private var open = false
+
+    var body: some View {
+        let playback = VoicePlayback.shared
+        let silent = playback.muted || playback.volume == 0
+        Button {
+            #if os(macOS)
+            playback.toggleMute()
+            #else
+            open.toggle()
+            #endif
+        } label: {
+            Image(systemName: silent ? "speaker.slash" : playback.volume < 0.5 ? "speaker.wave.1" : "speaker.wave.2")
+                .font(.system(size: 13))
+                .frame(width: 22, height: 22)
         }
-        Task {
-            guard let url = await Attachments.shared.fileURL(file.id, name: file.name.isEmpty ? "voice.m4a" : file.name, model: model) else {
-                model.say("That voice message can't be fetched now.")
-                return
-            }
-            let p = AVPlayer(url: url)
-            observer = p.addPeriodicTimeObserver(forInterval: CMTime(seconds: 0.1, preferredTimescale: 600), queue: .main) { time in
-                MainActor.assumeIsolated {
-                    let total = p.currentItem?.duration.seconds ?? file.duration ?? 0
-                    if total > 0 { progress = min(1, time.seconds / total) }
-                    if progress >= 1 { playing = false; progress = 0; p.seek(to: .zero) }
+        .buttonStyle(.plain)
+        .foregroundStyle(Theme.muted)
+        .help(silent ? "Unmute" : "Mute")
+        .accessibilityLabel(silent ? "Unmute voice messages" : "Mute voice messages")
+        #if os(macOS)
+        .onHover { if $0 { open = true } }
+        #endif
+        .popover(isPresented: $open, arrowEdge: .bottom) {
+            Slider(value: Binding(get: { playback.muted ? 0 : playback.volume }, set: { playback.setVolume($0) }), in: 0...1)
+                .frame(width: 160)
+                .padding(12)
+                .accessibilityLabel("Voice message volume")
+                .presentationCompactAdaptation(.popover)
+        }
+    }
+}
+
+/// The voice message playing, in a bar along the top of the journal while it plays and while it's only paused, as the
+/// web's (and Telegram's over a chat): play and pause between the previous and next voice message, its entry's name
+/// and what's being said, the time, the speed and the volume, a close, and a line along its foot to seek in.
+struct VoiceBar: View {
+    @Environment(AppModel.self) private var model
+
+    var body: some View {
+        let playback = VoicePlayback.shared
+        if let item = playback.item {
+            let card = item.cardId.flatMap { model.card($0) }
+            let name = card.map { $0.title.isEmpty ? (Doc.previewLines($0.content).first ?? "Voice message") : $0.title } ?? item.file.name
+            let saying = item.file.cues.lastIndex { $0.start <= playback.time }.map { item.file.cues[$0].text }
+            VStack(spacing: 0) {
+                HStack(spacing: 8) {
+                    Button { playback.skip(after: false) } label: { Image(systemName: "backward.fill") }
+                        .disabled(playback.beside(after: false) == nil).help("Previous voice message").accessibilityLabel("Previous voice message")
+                    Button { playback.toggle() } label: { Image(systemName: playback.playing ? "pause.fill" : "play.fill").frame(width: 22) }
+                        .accessibilityLabel(playback.playing ? "Pause" : "Play")
+                    Button { playback.skip(after: true) } label: { Image(systemName: "forward.fill") }
+                        .disabled(playback.beside(after: true) == nil).help("Next voice message").accessibilityLabel("Next voice message")
+                    Button { if let id = item.cardId { model.lastSaved = id } } label: {
+                        VStack(alignment: .leading, spacing: 0) {
+                            Text(name).fontWeight(.semibold).lineLimit(1)
+                            if let saying { Text(saying).font(.caption).foregroundStyle(Theme.muted).lineLimit(1) }
+                        }
+                        .frame(maxWidth: .infinity, alignment: .leading)
+                        .contentShape(Rectangle())
+                    }
+                    .help("Show it")
+                    Text("\(Doc.clipLength(playback.time)) / \(Doc.clipLength(playback.total))").font(.caption.monospacedDigit()).foregroundStyle(Theme.muted)
+                    Button(rateLabel(playback.rate)) { playback.faster() }.font(.caption).help("Playback speed")
+                    VolumeButton()
+                    Button { playback.stop() } label: { Image(systemName: "xmark") }.help("Stop and close").accessibilityLabel("Stop and close")
                 }
+                .buttonStyle(.plain)
+                .font(.system(size: 13))
+                .foregroundStyle(Theme.text)
+                .padding(.horizontal, 12)
+                .padding(.vertical, 6)
+                GeometryReader { geo in
+                    ZStack(alignment: .leading) {
+                        Rectangle().fill(Theme.line)
+                        Rectangle().fill(Theme.accent).frame(width: geo.size.width * (playback.total > 0 ? min(1, playback.time / playback.total) : 0))
+                    }
+                    .contentShape(Rectangle())
+                    .onTapGesture { p in if playback.total > 0 { playback.seek(p.x / geo.size.width * playback.total) } }
+                }
+                .frame(height: 3)
             }
-            player = p
-            p.playImmediately(atRate: rate)
-            playing = true
+            .background(Theme.surface)
+            .accessibilityElement(children: .contain)
+            .accessibilityLabel("Voice message playing")
         }
-    }
-
-    private func seek(to seconds: Double) {
-        if player == nil { toggle() }
-        player?.seek(to: CMTime(seconds: seconds, preferredTimescale: 600))
     }
 }
 
@@ -145,6 +393,8 @@ struct VoicePlayer: View {
 struct Waveform: View {
     let peaks: [Double]
     let progress: Double
+    /// Pressed at a point, the fraction of the way along: to play from there, as the web's.
+    var seek: ((Double) -> Void)? = nil
 
     var body: some View {
         GeometryReader { geo in
@@ -159,7 +409,10 @@ struct Waveform: View {
                 }
             }
             .frame(maxHeight: .infinity)
+            .contentShape(Rectangle())
+            .onTapGesture { p in if let seek, geo.size.width > 0 { seek(max(0, min(1, p.x / geo.size.width))) } }
         }
+        .accessibilityLabel("Position")
     }
 }
 

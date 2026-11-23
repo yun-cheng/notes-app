@@ -1,5 +1,13 @@
 package dev.notesapp.app
 
+import androidx.compose.foundation.gestures.detectTapGestures
+import androidx.compose.ui.input.pointer.pointerInput
+import androidx.compose.material.icons.automirrored.outlined.VolumeDown
+import androidx.compose.material.icons.automirrored.outlined.VolumeOff
+import androidx.compose.material.icons.automirrored.outlined.VolumeUp
+import androidx.compose.material.icons.outlined.Close
+import androidx.compose.material.icons.outlined.SkipNext
+import androidx.compose.material.icons.outlined.SkipPrevious
 import android.Manifest
 import android.annotation.SuppressLint
 import android.content.pm.PackageManager
@@ -85,53 +93,162 @@ import java.io.File
 import java.time.LocalDateTime
 
 /**
- * A voice message (any sound) where it is, as the web app's player: play and pause, its loudness drawn along it, the
- * time, a speed, and its transcript, each sentence pressed to play from there.
+ * The voice message playing, for every player and the bar along the top of the journal, as the web's: one plays at a
+ * time, one that ends runs on to the next while they come one after another (in the same entry, or the next one), and
+ * all play at one volume kept on this device, read as heard (half way is a quarter as loud), or muted.
+ */
+object VoicePlayback {
+    data class Item(val file: Doc.FileInfo, val cardId: String?, val vaultId: String)
+
+    var item by mutableStateOf<Item?>(null); private set
+    var playing by mutableStateOf(false); private set
+    var time by mutableDoubleStateOf(0.0); private set
+    var total by mutableDoubleStateOf(0.0); private set
+    var rate by mutableFloatStateOf(1f); private set
+    private var player: MediaPlayer? = null
+    private var model: AppModel? = null
+    private var ticking: kotlinx.coroutines.Job? = null
+
+    private val heard get() = if (Settings.voiceMuted) 0f else Settings.voiceVolume * Settings.voiceVolume
+
+    fun isCurrent(id: String) = item?.file?.id == id
+
+    /** Plays `file` from `at` seconds (or where it was), stopping any other. */
+    fun play(file: Doc.FileInfo, cardId: String?, vaultId: String, model: AppModel, at: Double? = null) {
+        this.model = model
+        val p = player
+        if (item?.file?.id == file.id && p != null) {
+            at?.let { p.seekTo((it * 1000).toInt()); time = it }
+            p.start(); speed(p); p.setVolume(heard, heard)
+            playing = true
+            tick()
+            return
+        }
+        release()
+        item = Item(file, cardId, vaultId)
+        time = at ?: 0.0
+        total = file.duration ?: 0.0
+        playing = true
+        model.scope.launch {
+            val f = Attachments.fileFor(file.id, file.name.ifEmpty { "voice.m4a" }, model)
+            if (f == null) { if (isCurrent(file.id)) stop(); model.say("That voice message can't be fetched now."); return@launch }
+            if (!isCurrent(file.id)) return@launch
+            val mp = MediaPlayer()
+            runCatching {
+                mp.setDataSource(f.path)
+                mp.prepare()
+                mp.setOnCompletionListener { finished() }
+                if (mp.duration > 0) total = mp.duration / 1000.0
+                at?.let { mp.seekTo((it * 1000).toInt()) }
+                mp.setVolume(heard, heard)
+                player = mp
+                if (playing) { mp.start(); speed(mp); tick() }
+            }.onFailure { mp.release(); stop(); model.say("That sound can't be played here.") }
+        }
+    }
+
+    private fun speed(p: MediaPlayer) { runCatching { p.playbackParams = p.playbackParams.setSpeed(rate) } }
+
+    private fun tick() {
+        ticking?.cancel()
+        val m = model ?: return
+        ticking = m.scope.launch {
+            while (isActive && playing) {
+                player?.let { p -> runCatching { time = p.currentPosition / 1000.0 } }
+                delay(100)
+            }
+        }
+    }
+
+    fun toggle() {
+        val p = player ?: run { playing = !playing; return }
+        if (playing) p.pause() else { p.start(); speed(p) }
+        playing = !playing
+        if (playing) tick()
+    }
+
+    fun seek(seconds: Double) { time = seconds; player?.seekTo((seconds * 1000).toInt()) }
+
+    /** 1×, 1.5×, 2× and round. */
+    fun faster() {
+        rate = if (rate == 1f) 1.5f else if (rate == 1.5f) 2f else 1f
+        player?.let { if (playing) speed(it) }
+    }
+
+    /** Stops it and closes the bar. */
+    fun stop() { release(); item = null; playing = false; time = 0.0 }
+
+    fun setVolume(v: Float) { Settings.setVoice(v, false); player?.setVolume(heard, heard) }
+
+    /** Mutes them, or brings them back: at half volume, from none. */
+    fun toggleMute() {
+        if (Settings.voiceMuted || Settings.voiceVolume == 0f) Settings.setVoice(if (Settings.voiceVolume == 0f) 0.5f else Settings.voiceVolume, false)
+        else Settings.setVoice(Settings.voiceVolume, true)
+        player?.setVolume(heard, heard)
+    }
+
+    private fun release() { ticking?.cancel(); player?.release(); player = null }
+
+    private fun finished() {
+        playing = false
+        time = 0.0
+        player?.seekTo(0)
+        if (!playAfter()) stop()
+    }
+
+    private fun entries(): List<Card> = model?.index?.live.orEmpty().filter { it.type != dev.notesapp.core.CardType.tag && !it.archived }.sortedBy { it.createdAt }
+
+    /** The voice messages on show, in the journal's order (oldest first), each with its entry. */
+    private fun all(): List<Item> = entries().flatMap { c -> Doc.files(c.content).filter { it.isAudio }.map { Item(it, c.id, c.vaultId) } }
+
+    /** The previous or next voice message, if any. */
+    fun beside(after: Boolean): Item? {
+        val now = item ?: return null
+        val list = all()
+        val i = list.indexOfFirst { it.file.id == now.file.id }
+        if (i < 0) return null
+        return list.getOrNull(i + if (after) 1 else -1)
+    }
+
+    fun skip(after: Boolean) {
+        val next = beside(after) ?: return
+        val m = model ?: return
+        play(next.file, next.cardId, next.vaultId, m, 0.0)
+    }
+
+    /** Plays the one straight after, in the same entry or the next one; whether it did. */
+    private fun playAfter(): Boolean {
+        val now = item ?: return false
+        val next = beside(true) ?: return false
+        val m = model ?: return false
+        if (next.cardId != now.cardId) {
+            val order = entries().map { it.id }
+            val a = order.indexOf(now.cardId)
+            val b = order.indexOf(next.cardId)
+            if (a < 0 || b != a + 1) return false
+        }
+        play(next.file, next.cardId, next.vaultId, m, 0.0)
+        return true
+    }
+}
+
+/**
+ * A voice message (any sound) where it is, as the web app's player: play and pause, its loudness drawn along it to seek
+ * in, the time, a speed, the volume all voice messages play at, and its transcript, each sentence pressed to play from
+ * there and the one being said marked.
  */
 @OptIn(ExperimentalLayoutApi::class)
 @Composable
 fun VoicePlayer(file: Doc.FileInfo, vaultId: String, card: Card? = null) {
     val model = LocalModel.current
-    var player by remember { mutableStateOf<MediaPlayer?>(null) }
-    var playing by remember { mutableStateOf(false) }
-    var progress by remember { mutableDoubleStateOf(0.0) }
-    var rate by remember { mutableFloatStateOf(1f) }
-    var showWords by remember { mutableStateOf(true) }
-    DisposableEffect(file.id) { onDispose { player?.release(); player = null } }
-    LaunchedEffect(playing) {
-        while (playing && isActive) {
-            player?.let { p -> if (p.duration > 0) progress = p.currentPosition.toDouble() / p.duration }
-            delay(100)
-        }
-    }
-    fun speed(p: MediaPlayer) = runCatching { p.playbackParams = p.playbackParams.setSpeed(rate) }
-    fun toggle() {
-        val p = player
-        if (p != null) {
-            if (playing) p.pause() else { p.start(); speed(p) }
-            playing = !playing
-            return
-        }
-        model.scope.launch {
-            val f = Attachments.fileFor(file.id, file.name.ifEmpty { "voice.m4a" }, model) ?: run { model.say("That voice message can't be fetched now."); return@launch }
-            val mp = MediaPlayer()
-            runCatching {
-                mp.setDataSource(f.path)
-                mp.prepare()
-                mp.setOnCompletionListener { playing = false; progress = 0.0; it.seekTo(0) }
-                mp.start()
-                speed(mp)
-                player = mp
-                playing = true
-            }.onFailure { mp.release(); model.say("That sound can't be played here.") }
-        }
-    }
-    fun seek(seconds: Double) {
-        if (player == null) toggle()
-        player?.seekTo((seconds * 1000).toInt())
-    }
-    val duration = file.duration ?: 0.0
-    val current = if (playing || progress > 0) file.cues.indexOfLast { it.start <= progress * duration }.takeIf { it >= 0 } else null
+    val playback = VoicePlayback
+    val isCurrent = playback.isCurrent(file.id)
+    val playing = isCurrent && playback.playing
+    val duration = if (isCurrent && playback.total > 0) playback.total else file.duration ?: 0.0
+    val time = if (isCurrent) playback.time else 0.0
+    var showWords by remember(file.id) { mutableStateOf(file.id !in hiddenTranscripts) }
+    fun play(at: Double? = null) = playback.play(file, card?.id, vaultId, model, at)
+    val current = if (isCurrent) file.cues.indexOfLast { it.start <= time }.takeIf { it >= 0 } else null
     val clipboard = androidx.compose.ui.platform.LocalClipboardManager.current
     val canTranscribe = card != null && model.canEdit(card) && model.vault(vaultId)?.isEncrypted == false
     val working = file.id in Transcriber.working
@@ -146,20 +263,21 @@ fun VoicePlayer(file: Doc.FileInfo, vaultId: String, card: Card? = null) {
     val shape = RoundedCornerShape(14.dp)
     Column(Modifier.widthIn(max = 420.dp).clip(shape).background(Theme.surface).border(1.dp, Theme.line, shape).padding(horizontal = 10.dp, vertical = 8.dp), verticalArrangement = Arrangement.spacedBy(6.dp)) {
         Row(horizontalArrangement = Arrangement.spacedBy(10.dp), verticalAlignment = Alignment.CenterVertically) {
-            Box(Modifier.size(34.dp).clip(CircleShape).background(Theme.accent).clickable(onClick = ::toggle), contentAlignment = Alignment.Center) {
+            Box(Modifier.size(34.dp).clip(CircleShape).background(Theme.accent).clickable { if (isCurrent) playback.toggle() else play() }, contentAlignment = Alignment.Center) {
                 Icon(if (playing) Icons.Outlined.Pause else Icons.Outlined.PlayArrow, if (playing) "Pause" else "Play", tint = Theme.onAccent)
             }
-            Waveform(file.peaks, progress, Modifier.weight(1f).widthIn(min = 100.dp).height(26.dp))
-            Text(Doc.clipLength(duration * if (playing || progress > 0) progress else 1.0), fontSize = 12.sp, color = Theme.muted)
+            Waveform(file.peaks, if (duration > 0) time / duration else 0.0, Modifier.weight(1f).widthIn(min = 100.dp).height(26.dp)) { f -> play(f * duration) }
+            Text(Doc.clipLength(if (playing || time > 0) time else duration), fontSize = 12.sp, color = Theme.muted)
             Text(
-                "${if (rate == 1f) "1" else if (rate == 1.5f) "1.5" else "2"}×",
-                Modifier.clip(RoundedCornerShape(50)).border(1.dp, Theme.line, RoundedCornerShape(50)).clickable {
-                    rate = if (rate == 1f) 1.5f else if (rate == 1.5f) 2f else 1f
-                    player?.let { if (playing) speed(it) }
-                }.padding(horizontal = 6.dp),
+                rateLabel(playback.rate),
+                Modifier.clip(RoundedCornerShape(50)).border(1.dp, Theme.line, RoundedCornerShape(50)).clickable { playback.faster() }.padding(horizontal = 6.dp),
                 fontSize = 12.sp, color = Theme.muted,
             )
-            if (file.transcript != null) Icon(Icons.AutoMirrored.Outlined.Notes, if (showWords) "Hide words" else "Show words", Modifier.size(20.dp).clickable { showWords = !showWords }, tint = if (showWords) Theme.accent else Theme.muted)
+            VolumeButton()
+            if (file.transcript != null) Icon(Icons.AutoMirrored.Outlined.Notes, if (showWords) "Hide transcript" else "Show transcript", Modifier.size(20.dp).clickable {
+                showWords = !showWords
+                if (showWords) hiddenTranscripts.remove(file.id) else hiddenTranscripts.add(file.id)
+            }, tint = if (showWords) Theme.accent else Theme.muted)
         }
         val transcript = file.transcript
         if (transcript != null) {
@@ -173,7 +291,7 @@ fun VoicePlayer(file: Doc.FileInfo, vaultId: String, card: Card? = null) {
                         val soft = Theme.accentSoft
                         Text(androidx.compose.ui.text.buildAnnotatedString {
                             file.cues.forEachIndexed { i, cue ->
-                                withLink(androidx.compose.ui.text.LinkAnnotation.Clickable("cue$i", linkInteractionListener = { seek(cue.start) })) {
+                                withLink(androidx.compose.ui.text.LinkAnnotation.Clickable("cue$i", linkInteractionListener = { play(cue.start) })) {
                                     if (i == current) withStyle(androidx.compose.ui.text.SpanStyle(background = soft)) { append(cue.text) } else append(cue.text)
                                 }
                                 if (i < file.cues.size - 1) append(" ")
@@ -201,13 +319,83 @@ fun VoicePlayer(file: Doc.FileInfo, vaultId: String, card: Card? = null) {
     }
 }
 
-/** A sound's loudness as bars, the part played in the accent color. */
+/** Transcripts hidden from their players, on this device, as the web keeps them. */
+val hiddenTranscripts = androidx.compose.runtime.mutableStateListOf<String>()
+
+fun rateLabel(rate: Float) = "${if (rate == 1f) "1" else if (rate == 1.5f) "1.5" else "2"}×"
+
+/**
+ * The volume all voice messages play at, as the web's: a press shows the slider (a mouse's press mutes them, as a
+ * computer's click does there).
+ */
 @Composable
-fun Waveform(peaks: List<Double>, progress: Double, modifier: Modifier) {
+fun VolumeButton() {
+    var open by remember { mutableStateOf(false) }
+    val silent = Settings.voiceMuted || Settings.voiceVolume == 0f
+    Box {
+        Icon(
+            if (silent) Icons.AutoMirrored.Outlined.VolumeOff else if (Settings.voiceVolume < 0.5f) Icons.AutoMirrored.Outlined.VolumeDown else Icons.AutoMirrored.Outlined.VolumeUp,
+            if (silent) "Unmute voice messages" else "Mute voice messages",
+            Modifier.size(20.dp).clip(CircleShape).clickable { open = true }, tint = Theme.muted,
+        )
+        androidx.compose.material3.DropdownMenu(open, { open = false }, containerColor = Theme.raised) {
+            Row(Modifier.padding(horizontal = 12.dp).widthIn(min = 200.dp), verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                Icon(if (silent) Icons.AutoMirrored.Outlined.VolumeOff else Icons.AutoMirrored.Outlined.VolumeUp, if (silent) "Unmute" else "Mute", Modifier.size(22.dp).clickable { VoicePlayback.toggleMute() }, tint = Theme.text)
+                androidx.compose.material3.Slider(if (Settings.voiceMuted) 0f else Settings.voiceVolume, { VoicePlayback.setVolume(it) }, Modifier.widthIn(min = 160.dp))
+            }
+        }
+    }
+}
+
+/**
+ * The voice message playing, in a bar along the top of the journal while it plays and while it's only paused, as the
+ * web's (and Telegram's over a chat): play and pause between the previous and next voice message, its entry's name and
+ * what's being said, the time, the speed and the volume, a close, and a line along its foot to seek in.
+ */
+@Composable
+fun VoiceBar() {
+    val model = LocalModel.current
+    val playback = VoicePlayback
+    val item = playback.item ?: return
+    val card = item.cardId?.let { model.card(it) }
+    val name = card?.let { c -> c.title.ifBlank { Doc.previewLines(c.content).firstOrNull() ?: "Voice message" } } ?: item.file.name
+    val saying = item.file.cues.indexOfLast { it.start <= playback.time }.takeIf { it >= 0 }?.let { item.file.cues[it].text }
+    Column(Modifier.fillMaxWidth().background(Theme.surface)) {
+        Row(Modifier.fillMaxWidth().padding(horizontal = 8.dp, vertical = 4.dp), verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(6.dp)) {
+            val before = playback.beside(false) != null
+            val after = playback.beside(true) != null
+            Icon(Icons.Outlined.SkipPrevious, "Previous voice message", Modifier.size(28.dp).clip(CircleShape).clickable(enabled = before) { playback.skip(false) }.padding(3.dp), tint = if (before) Theme.text else Theme.muted.copy(alpha = 0.4f))
+            Icon(if (playback.playing) Icons.Outlined.Pause else Icons.Outlined.PlayArrow, if (playback.playing) "Pause" else "Play", Modifier.size(28.dp).clip(CircleShape).clickable { playback.toggle() }.padding(2.dp), tint = Theme.text)
+            Icon(Icons.Outlined.SkipNext, "Next voice message", Modifier.size(28.dp).clip(CircleShape).clickable(enabled = after) { playback.skip(true) }.padding(3.dp), tint = if (after) Theme.text else Theme.muted.copy(alpha = 0.4f))
+            Column(Modifier.weight(1f).clickable { item.cardId?.let { model.lastSaved = it } }) {
+                Text(name, fontWeight = FontWeight.SemiBold, fontSize = 13.sp, color = Theme.text, maxLines = 1)
+                saying?.let { Text(it, fontSize = 12.sp, color = Theme.muted, maxLines = 1) }
+            }
+            Text("${Doc.clipLength(playback.time)} / ${Doc.clipLength(playback.total)}", fontSize = 12.sp, color = Theme.muted)
+            Text(rateLabel(playback.rate), Modifier.clickable { playback.faster() }.padding(horizontal = 4.dp), fontSize = 12.sp, color = Theme.text)
+            VolumeButton()
+            Icon(Icons.Outlined.Close, "Stop and close", Modifier.size(28.dp).clip(CircleShape).clickable { playback.stop() }.padding(4.dp), tint = Theme.text)
+        }
+        Waveform(emptyList(), if (playback.total > 0) playback.time / playback.total else 0.0, Modifier.fillMaxWidth().height(3.dp), line = true) { f -> playback.seek(f * playback.total) }
+    }
+}
+
+/** A sound's loudness as bars, the part played in the accent color; pressed at a point, the fraction of the way along, to play from there. */
+@Composable
+fun Waveform(peaks: List<Double>, progress: Double, modifier: Modifier, line: Boolean = false, seek: ((Double) -> Unit)? = null) {
     val accent = Theme.accent
     val muted = Theme.muted.copy(alpha = 0.5f)
+    val lineColor = Theme.line
     val bars = peaks.ifEmpty { List(40) { 30.0 } }
-    Canvas(modifier) {
+    val pressed = if (seek != null) Modifier.pointerInput(seek) { detectTapGestures { o -> if (size.width > 0) seek((o.x / size.width).toDouble().coerceIn(0.0, 1.0)) } } else Modifier
+    if (line) {
+        Canvas(modifier.then(pressed)) {
+            drawRect(lineColor)
+            drawRect(accent, size = Size(size.width * progress.toFloat().coerceIn(0f, 1f), size.height))
+        }
+        return
+    }
+    Canvas(modifier.then(pressed)) {
         val w = size.width / bars.size
         bars.forEachIndexed { i, p ->
             val h = maxOf(2f, size.height * (p / 100).toFloat())

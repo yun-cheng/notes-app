@@ -147,6 +147,7 @@ fun JournalView(initial: StreamFilter, openDrawer: (() -> Unit)?, fixed: Boolean
             BoardMenu(filter, setFilter)
         }
         FilterRow(filter, setFilter, { pickDates = "" })
+        VoiceBar()
         if (searching) PageSearchField(query, { query = it }) { searching = false; query = "" }
         when {
             locked != null -> UnlockView(locked, Modifier.weight(1f))

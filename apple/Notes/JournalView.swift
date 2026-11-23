@@ -57,6 +57,7 @@ struct JournalView: View {
         let locked = lockedVault
         VStack(spacing: 0) {
             FilterRow(filter: $filter, pickDates: $pickDates)
+            VoiceBar()
             if searching { PageSearchField(query: $query, close: { searching = false; query = "" }) }
             if let locked {
                 UnlockView(vault: locked)

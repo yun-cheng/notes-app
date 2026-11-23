@@ -14,6 +14,8 @@ object Settings {
         copyStyle = prefs?.getString("copyStyle", null) ?: "rich"
         photoStyle = prefs?.getString("photoStyle", null) ?: "large"
         linkStyle = prefs?.getString("linkStyle", null) ?: "card"
+        voiceVolume = prefs?.getFloat("voiceVolume", 1f) ?: 1f
+        voiceMuted = prefs?.getBoolean("voiceMuted", false) ?: false
     }
 
     private fun save(key: String, value: String) { prefs?.edit()?.putString(key, value)?.apply() }
@@ -27,6 +29,18 @@ object Settings {
     /** `card`, `compact` or `off`. */
     var linkStyle by mutableStateOf("card")
         private set
+
+    /** The volume all voice messages play at, 0 to 1, and whether they're muted, as the web keeps them. */
+    var voiceVolume by mutableStateOf(1f)
+        private set
+    var voiceMuted by mutableStateOf(false)
+        private set
+
+    fun setVoice(volume: Float, muted: Boolean) {
+        voiceVolume = volume.coerceIn(0f, 1f)
+        voiceMuted = muted
+        prefs?.edit()?.putFloat("voiceVolume", voiceVolume)?.putBoolean("voiceMuted", muted)?.apply()
+    }
 
     fun copyAs(v: String) { copyStyle = v; save("copyStyle", v) }
     fun photosAs(v: String) { photoStyle = v; save("photoStyle", v) }

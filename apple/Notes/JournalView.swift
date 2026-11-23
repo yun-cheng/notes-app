@@ -79,7 +79,7 @@ struct JournalView: View {
                                     ForEach(group.items) { item in
                                         PickRow(picked: picked.contains(item.card.id), picking: !picked.isEmpty, pick: { shift in togglePick(item.card.id, range: shift ? visible.map(\.card.id) : nil) }) {
                                             VStack(alignment: .leading, spacing: 4) {
-                                                BubbleView(card: item.card, picked: picked.contains(item.card.id), onPick: { togglePick(item.card.id) }, picking: !picked.isEmpty)
+                                                BubbleView(card: item.card, picked: picked.contains(item.card.id), onPick: { togglePick(item.card.id) }, picking: !picked.isEmpty, selection: Array(picked), stopPicking: { picked = [] })
                                                 EntryAttachments(card: item.card)
                                             }
                                         }
@@ -198,7 +198,7 @@ struct JournalView: View {
                 picked = Set(all)
             } else if command && (press.characters == "c" || press.characters == "x"), !picked.isEmpty {
                 let cards = picked.compactMap { model.card($0) }.sorted { $0.createdAt < $1.createdAt }
-                Clipboard.copy(Markdown.entries(cards, index: model.index))
+                Clipboard.copyEntries(cards, model: model)
                 if press.characters == "x" { model.trash(cards.filter(model.canManage).map(\.id)) } else { model.say("Copied \(cards.count)") }
                 picked = []
             } else if press.characters == "?" {

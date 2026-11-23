@@ -140,7 +140,7 @@ _Last checked 2026-11-23._
 | Cmd+Z undoes the last change anywhere, Cmd+Shift+Z redoes | ✅ | ➖ | ➖ | C |
 | ↑ ↓ Home End move between entries, Space picks, Return opens, Delete trashes, Esc stops picking | ✅ | ➖ | ➖ | C |
 | ← → turn the focused entry's pages; Cmd+V pastes copied entries | ❌ | ➖ | ➖ | C |
-| Right-click with several picked: Copy, Cut, Stop selecting, Archive, Move to Trash | ❌ the single entry's menu | ➖ | ➖ | C |
+| Right-click with several picked: Copy, Cut, Stop selecting, Archive, Move to Trash | ✅ | ➖ | ➖ | C |
 
 ## Not checked yet
 

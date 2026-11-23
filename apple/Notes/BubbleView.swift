@@ -12,6 +12,9 @@ struct BubbleView: View {
     var picked = false
     var onPick: () -> Void = {}
     var picking = false
+    /// Every entry picked with it, for the menu of several, as the web's; and how to stop picking.
+    var selection: [String] = []
+    var stopPicking: () -> Void = {}
     @State private var page = 0
     @State private var unfolded = false
     @State private var revealed = false
@@ -75,7 +78,13 @@ struct BubbleView: View {
         #endif
         .modifier(PickOnCommandClick(onPick: onPick))
         #if os(macOS)
-        .contextMenu { EntryMenu(card: card, revealHidden: { revealed.toggle() }) }
+        .contextMenu {
+            if picked && selection.count > 1 {
+                SeveralMenu(ids: selection, stop: stopPicking)
+            } else {
+                EntryMenu(card: card, revealHidden: { revealed.toggle() })
+            }
+        }
         #endif
         }
         .frame(maxWidth: .infinity, alignment: .leading)
@@ -855,3 +864,36 @@ struct FlowLayout: Layout {
         return rows
     }
 }
+
+#if os(macOS)
+/// The menu of several picked entries, as the web's: Copy, Cut and Stop selecting; Archive (or Unarchive) and Move to
+/// Trash for those this account may change.
+struct SeveralMenu: View {
+    @Environment(AppModel.self) private var model
+    let ids: [String]
+    let stop: () -> Void
+
+    var body: some View {
+        let cards = ids.compactMap { model.card($0) }.sorted { $0.createdAt < $1.createdAt }
+        let manageable = cards.filter(model.canManage)
+        let archiving = manageable.contains { !$0.archived }
+        Section("\(cards.count) selected") {
+            Button { Clipboard.copyEntries(cards, model: model); model.say("Copied \(cards.count)") } label: { Label("Copy", systemImage: "doc.on.doc") }
+            if !manageable.isEmpty {
+                Button {
+                    Clipboard.copyEntries(cards, model: model)
+                    stop()
+                    model.trash(manageable.map(\.id))
+                } label: { Label("Cut", systemImage: "scissors") }
+            }
+            Button(action: stop) { Label("Stop selecting", systemImage: "checkmark") }
+        }
+        if !manageable.isEmpty {
+            Section {
+                Button { stop(); model.archive(manageable.map(\.id), archiving) } label: { Label(archiving ? "Archive" : "Unarchive", systemImage: "archivebox") }
+                Button(role: .destructive) { stop(); model.trash(manageable.map(\.id)) } label: { Label("Move to Trash", systemImage: "trash") }
+            }
+        }
+    }
+}
+#endif

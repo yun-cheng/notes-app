@@ -182,15 +182,21 @@ class AppModel(private val context: Context, val site: String) {
         if (engine.status.value.state == SyncEngine.State.signedOut) signOut()
     }
 
-    /** Signed in, on its own or as another account: it goes first in the list, and is opened. */
-    suspend fun signedIn(info: SessionInfo, token: String) {
+    /**
+     * Signed in, on its own or as another account: it goes first in the list, and is opened. The opening runs in the
+     * app's own scope: the sign-in screen that calls this goes as soon as it's done, and with it any work in its scope,
+     * which once left a newly added account open but never synced.
+     */
+    fun signedIn(info: SessionInfo, token: String) {
         tokens.save(token, info.user.id)
         tokenVersion++
         saveAccounts(listOf(info.user) + accounts.filter { it.id != info.user.id })
-        addingAccount = false
-        repo = openRepo(info.user.id)
-        repo.applyAccess(info.vaults, emptyList())
-        open(info.user, token)
+        scope.launch {
+            repo = openRepo(info.user.id)
+            repo.applyAccess(info.vaults, emptyList())
+            open(info.user, token)
+            addingAccount = false
+        }
     }
 
     /**

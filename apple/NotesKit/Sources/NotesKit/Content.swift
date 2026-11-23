@@ -176,10 +176,40 @@ extension Doc {
         var t = text.replacingOccurrences(of: "\r\n", with: "\n").replacingOccurrences(of: "\r", with: "\n")
         while t.hasPrefix("\n") { t.removeFirst() }
         while t.hasSuffix("\n") { t.removeLast() }
-        let paragraphs: [JSONValue] = t.components(separatedBy: "\n").map { line in
+        // As the web's box reads what's typed: "- " or "• " starts a bulleted list, "1. " a numbered one, "> " a quote
+        // and "# " or "## " a heading; anything else is a paragraph.
+        func paragraph(_ line: String) -> JSONValue {
             line.isEmpty ? ["type": "paragraph"] : ["type": "paragraph", "content": .array(inlineWithLinks(line))]
         }
-        return ["type": "doc", "content": .array(paragraphs)]
+        func item(_ line: String) -> JSONValue { ["type": "listItem", "content": [paragraph(line)]] }
+        var blocks: [JSONValue] = []
+        var bullets: [JSONValue] = [], numbers: [JSONValue] = [], quoted: [JSONValue] = []
+        var start = 1
+        func flush() {
+            if !bullets.isEmpty { blocks.append(["type": "bulletList", "content": .array(bullets)]); bullets = [] }
+            if !numbers.isEmpty { blocks.append(["type": "orderedList", "attrs": ["start": .int(Int64(start))], "content": .array(numbers)]); numbers = [] }
+            if !quoted.isEmpty { blocks.append(["type": "blockquote", "content": .array(quoted)]); quoted = [] }
+        }
+        for line in t.components(separatedBy: "\n") {
+            if let m = line.wholeMatch(of: /[-•*] (.*)/) {
+                if bullets.isEmpty { flush() }
+                bullets.append(item(String(m.1)))
+            } else if let m = line.wholeMatch(of: /(\d{1,4})\. (.*)/) {
+                if numbers.isEmpty { flush(); start = Int(m.1) ?? 1 }
+                numbers.append(item(String(m.2)))
+            } else if let m = line.wholeMatch(of: /> ?(.*)/) {
+                if quoted.isEmpty { flush() }
+                quoted.append(paragraph(String(m.1)))
+            } else if let m = line.wholeMatch(of: /(#{1,3}) (.+)/) {
+                flush()
+                blocks.append(["type": "heading", "attrs": ["level": .int(Int64(m.1.count))], "content": .array(inlineWithLinks(String(m.2)))])
+            } else {
+                flush()
+                blocks.append(paragraph(line))
+            }
+        }
+        flush()
+        return ["type": "doc", "content": .array(blocks)]
     }
 
     /// Web addresses in the body, from links and from addresses typed as plain text, each once and in order.

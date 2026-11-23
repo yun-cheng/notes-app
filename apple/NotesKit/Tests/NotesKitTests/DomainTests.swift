@@ -65,6 +65,15 @@ import Testing
         #expect(titles("milk\n\neggs\n[] bread", true) == ["todo:milk", "todo:eggs", "todo:bread"])
     }
 
+    @Test func typedListsQuotesAndHeadings() {
+        let types = (Doc.fromText("# Plan\n- milk\n- eggs\n2. first\n3. second\n> said so\nplain")["content"]?.arrayValue ?? []).compactMap { $0["type"]?.stringValue }
+        #expect(types == ["heading", "bulletList", "orderedList", "blockquote", "paragraph"])
+        let list = Doc.fromText("- milk\n- eggs")["content"]?.arrayValue?.first
+        #expect(list?["content"]?.arrayValue?.count == 2)
+        #expect(Doc.fromText("2. first")["content"]?.arrayValue?.first?["attrs"]?["start"]?.intValue == 2)
+        #expect(Doc.fromText("-not a list")["content"]?.arrayValue?.first?["type"]?.stringValue == "paragraph")
+    }
+
     @Test func fromTheBox() {
         let entries = EntryParser.entries(
             from: Self.doc(Self.para(Self.t("Party prep")), Self.para(Self.t("at Sam’s")), Self.tasks(Self.item(false, Self.para(Self.t("cake @fri"))), Self.item(true, Self.para(Self.t("balloons")))), Self.para(Self.t("#home"))),

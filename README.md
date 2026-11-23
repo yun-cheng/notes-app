@@ -61,6 +61,8 @@ The service worker only runs in the built app, so use `build` then `preview` to 
 
 ## Native apps
 
+How each native app compares with the web app, behavior by behavior, is in [PARITY.md](PARITY.md).
+
 The Mac, iPhone and iPad app is a native SwiftUI app in `apple/`, with the web app's design and behavior: the same journal of bubbles, box, filters, board, menus and pages, on a sidebar on the Mac and iPad and tabs on the iPhone. It needs macOS 26 or iOS 26, Xcode 26 and XcodeGen (`brew install xcodegen`). Builds sign with the Apple development team set as `DEVELOPMENT_TEAM` in `project.yml`; change it to build under another account. Reminders are scheduled by the device itself, with no push setup.
 
 | Command (in `apple/`) | What it does |

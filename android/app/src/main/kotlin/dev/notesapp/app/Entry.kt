@@ -55,6 +55,32 @@ import androidx.compose.ui.platform.LocalClipboardManager
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.AnnotatedString
 import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.foundation.layout.FlowRow
+import androidx.compose.foundation.layout.ExperimentalLayoutApi
+import androidx.compose.foundation.shape.CircleShape
+import androidx.compose.foundation.border
+import androidx.compose.foundation.layout.wrapContentHeight
+import androidx.compose.ui.text.style.TextAlign
+import androidx.compose.material.icons.automirrored.outlined.MenuBook
+import androidx.compose.material.icons.outlined.Add
+import androidx.compose.material.icons.outlined.Visibility
+import androidx.compose.material.icons.outlined.FileCopy
+import androidx.compose.material.icons.outlined.CheckBox
+import androidx.compose.material.icons.outlined.Description
+import androidx.compose.material.icons.outlined.CalendarMonth
+import androidx.compose.material.icons.automirrored.outlined.Label
+import androidx.compose.material.icons.outlined.Layers
+import androidx.compose.material.icons.outlined.ContentCopy
+import androidx.compose.material.icons.outlined.Share
+import androidx.compose.material.icons.outlined.Archive
+import androidx.compose.material.icons.outlined.Delete
+import androidx.compose.material.icons.outlined.UnfoldMore
+import androidx.compose.material.icons.automirrored.outlined.Undo
+import androidx.compose.material.icons.automirrored.outlined.Redo
+import androidx.compose.material.icons.outlined.KeyboardArrowUp
+import androidx.compose.material.icons.outlined.KeyboardArrowDown
+import androidx.compose.ui.graphics.vector.ImageVector
+import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.compose.ui.window.Dialog
@@ -64,6 +90,7 @@ import dev.notesapp.core.CardColor
 import dev.notesapp.core.CardType
 import dev.notesapp.core.DateKey
 import dev.notesapp.core.Doc
+import dev.notesapp.core.isOverdue
 import dev.notesapp.core.Markdown
 import dev.notesapp.core.Repeat
 import dev.notesapp.core.TimeKey
@@ -98,9 +125,12 @@ fun FullScreen(title: String, dismiss: () -> Unit, actions: @Composable () -> Un
 }
 
 /**
- * An entry opened to read or change, over the page it was opened from, as the web app's sheet at `/journal/:id`: a
- * todo's title and checkbox, the text, its pages, tags, due date and vaults, its links and comments.
+ * An entry opened to read or change, as the web app's sheet: a todo's checkbox and title, its pages as numbered tabs,
+ * the text, its tags and reactions, comments and what links to it; then a bar of the web's tools (note or todo, the
+ * due date, Aa for formatting, tags, a page, a title, color and previews, view only, template, copy, share, archive,
+ * trash, the vault), when it was edited, Undo, Redo and Discard, which puts it back as it was when opened.
  */
+@OptIn(ExperimentalLayoutApi::class)
 @Composable
 fun EntrySheet(id: String, dismiss: () -> Unit) {
     val model = LocalModel.current
@@ -123,11 +153,17 @@ fun EntrySheet(id: String, dismiss: () -> Unit) {
         if (title == opened) title = card.title
         opened = card.title
     }
-    var menu by remember { mutableStateOf(false) }
+    var showTools by remember { mutableStateOf(false) }
+    var titled by remember { mutableStateOf(false) }
     var tools by remember { mutableStateOf<(@Composable () -> Unit)?>(null) }
+    // As it was when opened, for Discard to put back.
+    val original = remember(id) { card.payload }
     // Its pages, and a blank one being added: kept only once something is written on it.
     val stored = listOf(card.content) + card.morePages
     val pages = stored + List(maxOf(0, page + 1 - stored.size)) { Doc.empty }
+    val behind = maxOf(stored.size - 1, page)
+    val isTodo = card.type == CardType.todo
+    val showTitle = isTodo || card.title.isNotBlank() || titled || card.isStack
     fun saveTitle() {
         val c = model.card(id) ?: return
         // Only what was typed here: a title it opened with mustn't undo a rename made elsewhere since.
@@ -136,55 +172,192 @@ fun EntrySheet(id: String, dismiss: () -> Unit) {
         model.update(id, typed = true) { x -> x.withTitle(t) }
     }
     DisposableEffect(id) { onDispose { saveTitle() } }
+    val close = { saveTitle(); dismiss() }
 
-    FullScreen(if (card.type == CardType.todo) "Todo" else if (card.isStack) "Stack" else "Note", { saveTitle(); dismiss() }, actions = {
-        if (edit) {
-            IconButton(onClick = { model.panel = EntryPanel.Tags(id) }) { Icon(Icons.Outlined.Label, "Tags", tint = Theme.text) }
-            IconButton(onClick = { page = pages.size }) { Icon(Icons.Outlined.NoteAdd, "Add a page", tint = Theme.text) }
-        }
-        IconButton(onClick = { model.panel = EntryPanel.History(id) }) { Icon(Icons.Outlined.History, "History", tint = Theme.text) }
-        Box {
-            IconButton(onClick = { menu = true }) { Icon(Icons.Outlined.MoreVert, "More", tint = Theme.text) }
-            EntryMenu(card, menu, onDismiss = { menu = false }, revealHidden = {}, onPick = {}, inSheet = true)
-        }
-    }) {
-      Column(Modifier.fillMaxSize()) {
+    Dialog(onDismissRequest = close, properties = DialogProperties(usePlatformDefaultWidth = false, decorFitsSystemWindows = false)) {
+      Column(Modifier.fillMaxSize().background(Theme.bg).padding(top = statusBarTop()).navigationBarsPadding().imePadding()) {
         Column(Modifier.weight(1f).verticalScroll(rememberScrollState()).padding(20.dp), verticalArrangement = Arrangement.spacedBy(12.dp)) {
             if (card.viewOnly || !model.canWrite(card)) {
-                IconText(Icons.Outlined.Lock, if (card.viewOnly) "View only. Turn it off in the entry's menu to change it." else "You can view this entry.")
+                IconText(Icons.Outlined.Visibility, if (card.viewOnly) "View only. Turn it off in the entry's menu to change it." else "You can view this entry.")
             }
-            if (card.type == CardType.todo) {
+            if (card.template) {
                 Row(horizontalArrangement = Arrangement.spacedBy(8.dp), verticalAlignment = Alignment.CenterVertically) {
-                    TodoCheck(card)
-                    TitleField(title, "Todo", edit) { title = it }
+                    Icon(Icons.Outlined.FileCopy, null, Modifier.size(16.dp), tint = Theme.accent)
+                    Text("Template: entries started from it get a copy, its checklists unticked and {date} filled in.", Modifier.weight(1f), color = Theme.muted, fontSize = 14.sp)
+                    if (!model.viewOnly) androidx.compose.material3.Button(onClick = { model.startFrom(card) }) { Text("Use it") }
                 }
-                TodoDates(card)
-            } else if (card.isStack || card.title.isNotEmpty()) {
-                TitleField(title, if (card.isStack) "Stack" else "Title", edit) { title = it }
             }
-            if (pages.size > 1 || page > 0) {
-                Segmented(pages.indices.map { "Page ${it + 1}" to it }, page) { page = it }
+            if (showTitle) {
+                Row(horizontalArrangement = Arrangement.spacedBy(8.dp), verticalAlignment = Alignment.CenterVertically) {
+                    if (isTodo) TodoCheck(card)
+                    TitleField(title, if (isTodo) "Todo" else if (card.isStack) "Stack" else "Title", edit, bold = !isTodo) { title = it }
+                }
+            }
+            if (behind > 0) {
+                Row(horizontalArrangement = Arrangement.spacedBy(4.dp), verticalAlignment = Alignment.CenterVertically) {
+                    Icon(Icons.AutoMirrored.Outlined.MenuBook, null, Modifier.size(14.dp), tint = Theme.muted)
+                    for (i in 0..behind) {
+                        Text(
+                            "${i + 1}",
+                            Modifier.size(28.dp).clip(CircleShape).background(if (page == i) Theme.accentSoft else Color.Transparent).border(1.dp, if (page == i) Theme.accent else Theme.line, CircleShape).clickable { page = i }.wrapContentHeight(),
+                            textAlign = TextAlign.Center, fontSize = 13.sp, fontWeight = FontWeight.SemiBold, color = if (page == i) Theme.text else Theme.muted,
+                        )
+                    }
+                    if (edit && page < stored.size) {
+                        Box(Modifier.size(28.dp).clip(CircleShape).border(1.dp, Theme.line, CircleShape).clickable { page = behind + 1 }, contentAlignment = Alignment.Center) {
+                            Icon(Icons.Outlined.Add, "Add a page", Modifier.size(14.dp), tint = Theme.muted)
+                        }
+                    }
+                    if (edit && page > 0) Text("Take out page ${page + 1}", Modifier.padding(start = 6.dp).clickable {
+                        val at = page
+                        page -= 1
+                        if (at < stored.size) {
+                            model.update(id) { c -> c.withMorePages(c.morePages.toMutableList().also { if (at - 1 < it.size) it.removeAt(at - 1) }) }
+                            model.say("Took out page ${at + 1}")
+                        }
+                    }, fontSize = 13.sp, color = Theme.muted)
+                }
             }
             androidx.compose.runtime.key("$id:$page") {
-                DocEditor(pages[page], edit, { doc -> savePage(model, id, page, doc) }, onTools = { tools = it })
+                DocEditor(pages[page], edit, { doc -> savePage(model, id, page, doc) }, onTools = { tools = it }, placeholder = if (page > 0) "Page ${page + 1}" else if (isTodo) "Details" else "Note")
             }
-            if (card.isStack) StackPreview(card)
-            EntryAttachments(card)
-            BubbleTags(card)
-            Backlinks(card)
+            SheetTags(card, edit)
+            FlowRow(horizontalArrangement = Arrangement.spacedBy(6.dp), itemVerticalAlignment = Alignment.CenterVertically) { Reactions(card, large = true) }
+            if (card.isStack && page == 0) StackPreview(card)
             CommentsSection(card)
+            Backlinks(card)
         }
-        tools?.let { HorizontalDivider(color = Theme.line); it() }
+        if (showTools) tools?.let { HorizontalDivider(color = Theme.line); it() }
+        HorizontalDivider(color = Theme.line)
+        SheetBar(card, edit, showTools, { showTools = !showTools }, showTitle, { titled = true }, behind, { page = stored.size }, original, close)
       }
     }
 }
 
+/** An entry's tags in its sheet, as the web's: each in its color, a group's empty choice dashed to pick one, all opening the tag picker. */
+@OptIn(ExperimentalLayoutApi::class)
 @Composable
-private fun TitleField(title: String, placeholder: String, edit: Boolean, set: (String) -> Unit) {
+fun SheetTags(card: Card, edit: Boolean) {
+    val model = LocalModel.current
+    val tags = model.index.resolveTags(model.index.tagGroups.order(card.tags))
+    val unset = if (edit) model.index.tagGroups.groups.filter { g -> g.choosesOne && g.members.isNotEmpty() && g.members.none { it.id in card.tags } } else emptyList()
+    if (tags.isEmpty() && unset.isEmpty()) return
+    FlowRow(horizontalArrangement = Arrangement.spacedBy(6.dp), verticalArrangement = Arrangement.spacedBy(6.dp)) {
+        for (tag in tags) TagChip(tag, Modifier.clickable { if (edit) model.panel = EntryPanel.Tags(card.id) else model.page = Page.Journal(dev.notesapp.core.StreamFilter(tagId = tag.id)) }, large = true)
+        for (g in unset) Text(
+            g.title, Modifier.clip(RoundedCornerShape(50)).border(1.dp, Theme.line, RoundedCornerShape(50)).clickable { model.panel = EntryPanel.Tags(card.id) }.padding(horizontal = 10.dp, vertical = 4.dp),
+            fontSize = 13.sp, color = Theme.muted,
+        )
+    }
+}
+
+/** The sheet's bar, as the web's: its tools in the web's order, then when it was edited, Undo, Redo, Discard and Done. */
+@OptIn(ExperimentalLayoutApi::class)
+@Composable
+fun SheetBar(card: Card, edit: Boolean, tools: Boolean, toggleTools: () -> Unit, showTitle: Boolean, addTitle: () -> Unit, behind: Int, addPage: () -> Unit, original: JsonObject, close: () -> Unit) {
+    val model = LocalModel.current
+    val context = LocalContext.current
+    var style by remember { mutableStateOf(false) }
+    @Composable
+    fun tool(icon: ImageVector, label: String, on: Boolean = false, action: () -> Unit) {
+        Icon(icon, label, Modifier.size(38.dp, 36.dp).clip(RoundedCornerShape(7.dp)).background(if (on) Theme.accentSoft else Color.Transparent).clickable(onClick = action).padding(8.dp), tint = Theme.muted)
+    }
+    Column(Modifier.fillMaxWidth().background(Theme.surface).padding(horizontal = 12.dp, vertical = 6.dp), verticalArrangement = Arrangement.spacedBy(2.dp)) {
+        FlowRow(horizontalArrangement = Arrangement.spacedBy(2.dp), itemVerticalAlignment = Alignment.CenterVertically) {
+            if (edit && !card.isStack) tool(if (card.type == CardType.todo) Icons.Outlined.CheckBox else Icons.Outlined.Description, if (card.type == CardType.todo) "Make it a note" else "Make it a todo") {
+                model.perform { it.retype(card.id, if (card.type == CardType.todo) CardType.note else CardType.todo) }
+            }
+            if (card.type == CardType.todo && edit) {
+                Row(Modifier.height(36.dp).clip(RoundedCornerShape(7.dp)).clickable { model.panel = EntryPanel.Due(card.id) }.padding(horizontal = 8.dp), horizontalArrangement = Arrangement.spacedBy(4.dp), verticalAlignment = Alignment.CenterVertically) {
+                    Icon(Icons.Outlined.CalendarMonth, null, Modifier.size(18.dp), tint = Theme.muted)
+                    val t = dueText(card, model.today, short = true)
+                    Text(t.ifEmpty { "Due date" }, fontSize = 13.sp, color = if (card.isOverdue(model.today)) Theme.alert else Theme.muted)
+                }
+            }
+            if (edit) {
+                Text("Aa", Modifier.height(36.dp).clip(RoundedCornerShape(7.dp)).background(if (tools) Theme.accentSoft else Color.Transparent).clickable(onClick = toggleTools).padding(horizontal = 8.dp).wrapContentHeight(), fontSize = 15.sp, fontWeight = FontWeight.SemiBold, color = Theme.muted)
+                tool(Icons.AutoMirrored.Outlined.Label, "Tags") { model.panel = EntryPanel.Tags(card.id) }
+                if (behind == 0) tool(Icons.AutoMirrored.Outlined.MenuBook, "Add a second page", action = addPage)
+                if (!showTitle) Text("T", Modifier.height(36.dp).clickable(onClick = addTitle).padding(horizontal = 12.dp).wrapContentHeight(), fontSize = 15.sp, fontWeight = FontWeight.SemiBold, color = Theme.muted)
+                Box {
+                    Box(Modifier.size(38.dp, 36.dp).clickable { style = true }, contentAlignment = Alignment.Center) {
+                        val tint = card.color?.let { Theme.tint(it) }
+                        Box(Modifier.size(18.dp).clip(CircleShape).background(tint ?: Color.Transparent).border(1.5.dp, tint ?: Theme.muted, CircleShape))
+                    }
+                    DropdownMenu(style, { style = false }) { StyleItems(card) { style = false } }
+                }
+            }
+            if (model.canWrite(card) && !model.viewOnly) tool(Icons.Outlined.Visibility, if (card.viewOnly) "Turn off view only" else "View only", on = card.viewOnly) {
+                model.update(card.id) { c -> c.withViewOnly(!card.viewOnly) }
+            }
+            if (edit && !card.isStack && !card.template) tool(Icons.Outlined.FileCopy, "Save a copy as a template") { model.saveAsTemplate(card) }
+            model.index.stackOf[card.id]?.let { stack -> if (edit) tool(Icons.Outlined.Layers, "Take out of the stack") { model.update(stack) { s -> s.withStack((s.stack ?: emptyList()).filter { x -> x != card.id }) } } }
+            tool(Icons.Outlined.ContentCopy, "Copy") { copyEntry(context, model, card) }
+            if (model.canManage(card)) {
+                tool(Icons.Outlined.Share, "Share") { model.panel = EntryPanel.Share(card.id) }
+                tool(Icons.Outlined.Archive, if (card.archived) "Unarchive" else "Archive") { model.archive(listOf(card.id), !card.archived); close() }
+                tool(Icons.Outlined.Delete, "Move to Trash") { model.trash(listOf(card.id)); close() }
+                Row(Modifier.padding(start = 4.dp).height(30.dp).clip(RoundedCornerShape(7.dp)).border(1.dp, Theme.line, RoundedCornerShape(7.dp)).clickable { model.panel = EntryPanel.Vaults(card.id) }.padding(horizontal = 8.dp), verticalAlignment = Alignment.CenterVertically) {
+                    Text(model.vaultNames(card).joinToString(", "), fontSize = 13.sp, color = Theme.muted, maxLines = 1)
+                    Icon(Icons.Outlined.UnfoldMore, null, Modifier.size(14.dp), tint = Theme.muted)
+                }
+            }
+        }
+        Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(8.dp, Alignment.End), verticalAlignment = Alignment.CenterVertically) {
+            Text(edited(card), Modifier.clickable { model.panel = EntryPanel.History(card.id) }, fontSize = 13.sp, color = Theme.muted)
+            tool(Icons.AutoMirrored.Outlined.Undo, "Undo") { model.undo() }
+            tool(Icons.AutoMirrored.Outlined.Redo, "Redo") { model.redo() }
+            if (edit) {
+                val changed = original != card.payload
+                TextButton(onClick = { model.update(card.id) { c -> c.copy(payload = original) }; model.say("Discarded changes"); close() }, enabled = changed) { Text("Discard") }
+            }
+            TextButton(onClick = close) { Text("Done", color = Theme.accent, fontWeight = FontWeight.SemiBold) }
+        }
+    }
+}
+
+/** "Edited 3:55 AM" today, "Edited Nov 18" before, as the web's. */
+fun edited(card: Card): String {
+    val at = java.util.Calendar.getInstance().apply { timeInMillis = card.updatedAt }
+    val now = java.util.Calendar.getInstance()
+    val sameDay = at.get(java.util.Calendar.YEAR) == now.get(java.util.Calendar.YEAR) && at.get(java.util.Calendar.DAY_OF_YEAR) == now.get(java.util.Calendar.DAY_OF_YEAR)
+    return "Edited " + if (sameDay) formatMillis(card.updatedAt, date = null) else java.text.SimpleDateFormat("MMM d", java.util.Locale.getDefault()).format(java.util.Date(card.updatedAt))
+}
+
+/** An entry's color, as swatches, and how its links and photos show, as the web's style menu. */
+@Composable
+fun StyleItems(card: Card, close: () -> Unit) {
+    val model = LocalModel.current
+    Text("Color", Modifier.padding(horizontal = 16.dp, vertical = 4.dp), fontSize = 12.sp, color = Theme.muted)
+    Swatches(card.color) { c -> close(); model.update(card.id) { it.withColor(c) } }
+    HorizontalDivider()
+    Text("Link previews", Modifier.padding(horizontal = 16.dp, vertical = 6.dp), fontSize = 12.sp, color = Theme.muted)
+    val links = card.payload["preview"]["links"].str ?: ""
+    for ((v, l) in listOf("" to "As set on this device", "card" to "Cards", "compact" to "One line", "off" to "Off")) MenuCheck(l, links == v) { close(); setPreview(model, card, "links", v) }
+    HorizontalDivider()
+    Text("Photos", Modifier.padding(horizontal = 16.dp, vertical = 6.dp), fontSize = 12.sp, color = Theme.muted)
+    val photos = card.payload["preview"]["photos"].str ?: ""
+    for ((v, l) in listOf("" to "As set on this device", "large" to "Large", "thumbs" to "Thumbnails", "off" to "Off")) MenuCheck(l, photos == v) { close(); setPreview(model, card, "photos", v) }
+}
+
+/** The colors as a row of swatches, none struck through, as the web's. */
+@Composable
+fun Swatches(value: CardColor?, pick: (CardColor?) -> Unit) {
+    Row(Modifier.padding(horizontal = 12.dp, vertical = 4.dp), horizontalArrangement = Arrangement.spacedBy(6.dp)) {
+        Box(Modifier.size(22.dp).clip(CircleShape).border(if (value == null) 2.dp else 1.dp, if (value == null) Theme.text else Theme.line, CircleShape).clickable { pick(null) }, contentAlignment = Alignment.Center) {
+            Box(Modifier.size(14.dp, 2.dp).background(Theme.alert).graphicsLayer { rotationZ = -45f })
+        }
+        for (c in CardColor.entries) Box(Modifier.size(22.dp).clip(CircleShape).background(Theme.tint(c)).border(if (value == c) 2.dp else 0.dp, Theme.text, CircleShape).clickable { pick(c) })
+    }
+}
+
+@Composable
+private fun TitleField(title: String, placeholder: String, edit: Boolean, bold: Boolean = true, set: (String) -> Unit) {
+    val weight = if (bold) FontWeight.SemiBold else FontWeight.Normal
     BasicTextField(
         title, set, Modifier.fillMaxWidth(), enabled = edit,
-        textStyle = androidx.compose.ui.text.TextStyle(color = Theme.text, fontSize = 20.sp, fontWeight = FontWeight.SemiBold), cursorBrush = SolidColor(Theme.accent),
-        decorationBox = { inner -> if (title.isEmpty()) Text(placeholder, color = Theme.muted, fontSize = 20.sp, fontWeight = FontWeight.SemiBold); inner() },
+        textStyle = androidx.compose.ui.text.TextStyle(color = Theme.text, fontSize = 20.sp, fontWeight = weight), cursorBrush = SolidColor(Theme.accent),
+        decorationBox = { inner -> if (title.isEmpty()) Text(placeholder, color = Theme.muted, fontSize = 20.sp, fontWeight = weight); inner() },
     )
 }
 
@@ -213,15 +386,25 @@ fun TodoDates(card: Card) {
     }
 }
 
-/** What links here and what's tagged with it. */
+/** What links here, as the web's: "Linked from (2)", each entry named with a line of its text, opening it. */
 @Composable
 fun Backlinks(card: Card) {
     val model = LocalModel.current
-    val links = model.index.backlinks[card.id] ?: return
+    val links = (model.index.backlinks[card.id] ?: return).filter { it.kind != dev.notesapp.core.Backlink.Kind.tag || card.type == CardType.tag }.distinctBy { it.from.id }
     if (links.isEmpty()) return
-    Column(Modifier.padding(top = 8.dp), verticalArrangement = Arrangement.spacedBy(6.dp)) {
-        Text(if (card.type == CardType.tag) "Tagged" else "Linked from", fontWeight = FontWeight.SemiBold, color = Theme.text)
-        for (link in links.take(30).distinctBy { it.from.id }) Text(link.from.displayTitle, Modifier.clickable { model.openEntry = link.from.id }, color = Theme.accent)
+    var open by remember { mutableStateOf(true) }
+    Column(Modifier.padding(top = 4.dp), verticalArrangement = Arrangement.spacedBy(6.dp)) {
+        Row(Modifier.clickable { open = !open }, verticalAlignment = Alignment.CenterVertically) {
+            Text("${if (card.type == CardType.tag) "Tagged" else "Linked from"} (${links.size})", Modifier.weight(1f), fontWeight = FontWeight.SemiBold, color = Theme.muted, fontSize = 14.sp)
+            Icon(if (open) Icons.Outlined.KeyboardArrowUp else Icons.Outlined.KeyboardArrowDown, null, tint = Theme.muted)
+        }
+        if (open) for (link in links.take(30)) {
+            Column(Modifier.fillMaxWidth().clip(RoundedCornerShape(10.dp)).background(Theme.surface).border(1.dp, Theme.line, RoundedCornerShape(10.dp)).clickable { model.openEntry = link.from.id }.padding(10.dp)) {
+                Text(link.from.displayTitle, fontWeight = FontWeight.SemiBold, color = Theme.text, maxLines = 1)
+                val preview = remember(link.from.id, link.from.updatedAt) { Doc.previewLines(link.from.content, hidden = Doc.Hidden.mask).joinToString(" ") }
+                if (preview.isNotEmpty()) Text(preview, fontSize = 13.sp, color = Theme.muted, maxLines = 2)
+            }
+        }
     }
 }
 
@@ -233,78 +416,77 @@ fun Backlinks(card: Card) {
 @Composable
 fun EntryMenu(card: Card, open: Boolean, onDismiss: () -> Unit, revealHidden: () -> Unit, onPick: () -> Unit, inSheet: Boolean = false) {
     val model = LocalModel.current
-    val clipboard = LocalClipboardManager.current
-    var level by remember(open) { mutableStateOf("") }
+    val context = LocalContext.current
     val edit = model.canEdit(card)
     fun item(label: String, color: Color? = null, action: () -> Unit) = @Composable {
         DropdownMenuItem(text = { Text(label, color = color ?: Theme.text) }, onClick = { onDismiss(); action() })
     }
-    fun sub(label: String, to: String) = @Composable {
-        DropdownMenuItem(text = { Text(label) }, onClick = { level = to }, trailingIcon = { Icon(Icons.Outlined.ChevronRight, null) })
-    }
     DropdownMenu(open, onDismiss) {
-        when (level) {
-            "color" -> {
-                item("None") { model.update(card.id) { it.withColor(null) } }()
-                for (c in CardColor.entries) DropdownMenuItem(
-                    text = { Text(Theme.colorName(c)) }, onClick = { onDismiss(); model.update(card.id) { it.withColor(c) } },
-                    leadingIcon = { Icon(if (card.color == c) Icons.Outlined.Check else Icons.Outlined.Circle, null, tint = Theme.tint(c)) },
-                )
-            }
-            "style" -> {
-                Text("Link previews", Modifier.padding(horizontal = 16.dp, vertical = 6.dp), fontSize = 12.sp, color = Theme.muted)
-                val links = card.payload["preview"]["links"].str ?: ""
-                for ((v, l) in listOf("" to "As set on this device", "card" to "Card", "compact" to "One line", "off" to "Off")) MenuCheck(l, links == v) { onDismiss(); setPreview(model, card, "links", v) }
-                HorizontalDivider()
-                Text("Photos", Modifier.padding(horizontal = 16.dp, vertical = 6.dp), fontSize = 12.sp, color = Theme.muted)
-                val photos = card.payload["preview"]["photos"].str ?: ""
-                for ((v, l) in listOf("" to "As set on this device", "large" to "Large", "thumbs" to "Thumbnails", "off" to "Count")) MenuCheck(l, photos == v) { onDismiss(); setPreview(model, card, "photos", v) }
-            }
-            "more" -> {
-                val t = Translations.states[card.id]
-                if (t is Translations.State.Done) item(if (t.shown) "Show original" else "Show in ${java.util.Locale.forLanguageTag(t.to).displayLanguage}") { Translations.show(card.id, !t.shown) }()
-                else item("Translate") { Translations.translate(card, model) }()
-                if (Doc.previewLines(card.content, hidden = Doc.Hidden.mark).joinToString("").contains(Doc.HIDE_OPEN)) item("Show hidden words", action = revealHidden)()
-                if (!card.template && card.isEntry) item("Save as template") { model.saveAsTemplate(card) }()
-                if (model.canManage(card)) item("Share…") { model.panel = EntryPanel.Share(card.id) }()
-                if (model.canWrite(card) && !model.viewOnly) DropdownMenuItem(
-                    text = { Text("View only") }, onClick = { onDismiss(); model.update(card.id) { c -> c.withViewOnly(!card.viewOnly) } },
-                    trailingIcon = { Switch(card.viewOnly, null) },
-                )
-                item("History") { model.panel = EntryPanel.History(card.id) }()
-                HorizontalDivider()
-                if (model.canManage(card)) item("Vaults…") { model.panel = EntryPanel.Vaults(card.id) }()
-                val stack = model.index.stackOf[card.id]
-                if (stack != null && edit) item("Take out of the stack") { model.update(stack) { s -> s.withStack((s.stack ?: emptyList()).filter { x -> x != card.id }) } }()
-                if (!inSheet) item("Pick") { onPick() }()
-            }
-            else -> {
-                if (!inSheet) item(if (edit) "Edit" else "Open") { model.openEntry = card.id }()
-                if (card.template) item("Use this template") { model.startFrom(card) }()
-                item("Copy") {
-                    clipboard.setText(AnnotatedString(if (copyPlain(model) ) Markdown.words(card, model.index) else Markdown.entries(listOf(card), model.index)))
-                    model.say("Copied")
-                }()
-                if (edit) {
-                    item("Tags…") { model.panel = EntryPanel.Tags(card.id) }()
-                    if (card.type == CardType.todo) item("Due date…") { model.panel = EntryPanel.Due(card.id) }()
-                    item(if (card.type == CardType.todo) "Make it a note" else "Make it a todo") {
-                        model.perform { it.retype(card.id, if (card.type == CardType.todo) CardType.note else CardType.todo) }
-                    }()
-                    if (card.type == CardType.todo && !card.isDone) item(if (card.waiting) "No longer waiting" else "Waiting") {
-                        model.update(card.id) { c -> c.withWaiting(!card.waiting) }
-                    }()
-                    sub("Style", "style")()
-                    sub("Color", "color")()
-                }
-                sub("More", "more")()
-                if (model.canManage(card)) {
-                    HorizontalDivider()
-                    item(if (card.archived) "Unarchive" else "Archive") { model.archive(listOf(card.id), !card.archived) }()
-                    item("Move to Trash", Theme.alert) { model.trash(listOf(card.id)); if (inSheet) model.openEntry = null }()
-                }
-            }
+        if (card.deleted) {
+            if (model.canWrite(card)) item("Restore") { model.perform { it.setDeleted(card.id, false) }; model.say("Restored") }()
+            item("Copy") { copyEntry(context, model, card) }()
+            return@DropdownMenu
         }
+        // In the web's order: what opens it; what it is; its color; what's done with it; where it goes.
+        if (!inSheet) item(if (edit) "Edit" else "Open") { model.openEntry = card.id }()
+        if (card.template && !model.viewOnly) item("Use this template") { model.startFrom(card) }()
+        if (edit) {
+            item("Tags…") { model.panel = EntryPanel.Tags(card.id) }()
+            if (card.type == CardType.todo) item("Due date…") { model.panel = EntryPanel.Due(card.id) }()
+            item(if (card.type == CardType.todo) "Make it a note" else "Make it a todo") {
+                model.perform { it.retype(card.id, if (card.type == CardType.todo) CardType.note else CardType.todo) }
+            }()
+            HorizontalDivider()
+            Text("Color", Modifier.padding(horizontal = 16.dp, vertical = 4.dp), fontSize = 12.sp, color = Theme.muted)
+            Swatches(card.color) { c -> onDismiss(); model.update(card.id) { it.withColor(c) } }
+        }
+        HorizontalDivider()
+        val t = Translations.states[card.id]
+        if (t is Translations.State.Done) item(if (t.shown) "Show original" else "Show in ${java.util.Locale.forLanguageTag(t.to).displayLanguage}") { Translations.show(card.id, !t.shown) }()
+        else item("Translate") { Translations.translate(card, model) }()
+        if (Doc.previewLines(card.content, hidden = Doc.Hidden.mark).joinToString("").contains(Doc.HIDE_OPEN)) item("Show hidden words", action = revealHidden)()
+        if (!card.template && card.isEntry && edit) item("Save as template") { model.saveAsTemplate(card) }()
+        if (model.canManage(card)) item("Share…") { model.panel = EntryPanel.Share(card.id) }()
+        if (model.canWrite(card) && !model.viewOnly) DropdownMenuItem(
+            text = { Text("View only") }, onClick = { onDismiss(); model.update(card.id) { c -> c.withViewOnly(!card.viewOnly) } },
+            trailingIcon = { Switch(card.viewOnly, null) },
+        )
+        val stack = model.index.stackOf[card.id]
+        if (model.canManage(card) || (stack != null && edit)) HorizontalDivider()
+        if (model.canManage(card)) item("Vaults…") { model.panel = EntryPanel.Vaults(card.id) }()
+        if (stack != null && edit) item("Take out of the stack") { model.update(stack) { s -> s.withStack((s.stack ?: emptyList()).filter { x -> x != card.id }) } }()
+        if (!inSheet) item("Pick") { onPick() }()
+        if (model.canManage(card)) {
+            HorizontalDivider()
+            item(if (card.archived) "Unarchive" else "Archive") { model.archive(listOf(card.id), !card.archived) }()
+            item("Move to Trash", Theme.alert) { model.trash(listOf(card.id)); if (inSheet) model.openEntry = null }()
+        }
+    }
+}
+
+/**
+ * An entry as the device's copy style says, as on the web: rich text (formatted for apps like Gmail, with the
+ * Markdown as its plain text, so it pastes back whole), Markdown, or just its words.
+ */
+fun copyEntry(context: android.content.Context, model: AppModel, card: Card) {
+    val markdown = Markdown.entries(listOf(card), model.index)
+    val clip = when (Settings.copyStyle) {
+        "plain" -> android.content.ClipData.newPlainText("Entry", Markdown.words(card, model.index))
+        "markdown" -> android.content.ClipData.newPlainText("Entry", markdown)
+        else -> android.content.ClipData.newHtmlText("Entry", markdown, markdownHtml(markdown))
+    }
+    (context.getSystemService(android.content.Context.CLIPBOARD_SERVICE) as android.content.ClipboardManager).setPrimaryClip(clip)
+    model.say("Copied")
+}
+
+/** Markdown as simple HTML, for apps that paste formatted text: bold, italics, links and lines. */
+fun markdownHtml(md: String): String {
+    fun esc(s: String) = s.replace("&", "&amp;").replace("<", "&lt;").replace(">", "&gt;")
+    return md.lines().joinToString("<br>") { line ->
+        esc(line)
+            .replace(Regex("\\*\\*(.+?)\\*\\*"), "<b>$1</b>")
+            .replace(Regex("(?<![*\\w])\\*(?!\\s)(.+?)\\*"), "<i>$1</i>")
+            .replace(Regex("\\[([^\\]]+)]\\((https?://[^)]+)\\)"), "<a href=\"$2\">$1</a>")
     }
 }
 

@@ -26,6 +26,7 @@ import androidx.compose.material.icons.outlined.FormatQuote
 import androidx.compose.material.icons.outlined.FormatStrikethrough
 import androidx.compose.material.icons.outlined.Title
 import androidx.compose.material.icons.outlined.VisibilityOff
+import androidx.compose.material.icons.outlined.Visibility
 import androidx.compose.material3.Icon
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
@@ -64,7 +65,7 @@ import kotlinx.coroutines.delay
 import kotlinx.serialization.json.JsonElement
 
 /** Colors the editor shows styles in. */
-data class EditorColors(val accent: Color, val sunken: Color, val hidden: Color, val muted: Color)
+data class EditorColors(val accent: Color, val sunken: Color, val hidden: Color, val muted: Color, val cover: Color? = null)
 
 /** Rich text as the editor shows it: marks as styles, headings large, links tinted, markers quiet. */
 fun styled(rich: RichText, c: EditorColors): AnnotatedString = buildAnnotatedString {
@@ -76,8 +77,9 @@ fun styled(rich: RichText, c: EditorColors): AnnotatedString = buildAnnotatedStr
                 fontWeight = if (s.bold) FontWeight.Bold else null,
                 fontStyle = if (s.italic) FontStyle.Italic else null,
                 fontFamily = if (s.code) Theme.mono else null,
-                background = if (s.hidden) c.hidden else if (s.code) c.sunken else Color.Unspecified,
-                color = if (s.link != null || s.card != null || s.node != null) c.accent else Color.Unspecified,
+                // Hidden words are covered, as the web draws them, unless shown from the formatting row.
+                background = if (s.hidden) (c.cover ?: c.hidden) else if (s.code) c.sunken else Color.Unspecified,
+                color = if (s.hidden && c.cover != null) Color.Transparent else if (s.link != null || s.card != null || s.node != null) c.accent else Color.Unspecified,
                 textDecoration = listOfNotNull(if (s.strike) TextDecoration.LineThrough else null, if (s.underline || s.link != null) TextDecoration.Underline else null)
                     .takeIf { it.isNotEmpty() }?.let { TextDecoration.combine(it) },
             ),
@@ -89,7 +91,10 @@ fun styled(rich: RichText, c: EditorColors): AnnotatedString = buildAnnotatedStr
     for (line in rich.text.split('\n')) {
         DocText.headingLevel(line)?.let { level ->
             addStyle(SpanStyle(fontWeight = FontWeight.Bold, fontSize = when (level) { 1 -> 24.sp; 2 -> 21.sp; else -> 18.sp }), start, start + line.length)
+            // Its # marks drawn as nothing, as the web shows a heading.
+            addStyle(SpanStyle(fontSize = 1.sp, color = Color.Transparent), start, start + level)
         }
+        DocText.taskMarker(line)?.let { task -> if (task.checked) addStyle(SpanStyle(color = c.accent), start + task.indent * 2, start + task.indent * 2 + 1) }
         if (line.startsWith("```")) addStyle(SpanStyle(fontFamily = Theme.mono, color = c.muted), start, start + line.length)
         start += line.length + 1
     }
@@ -100,14 +105,15 @@ fun styled(rich: RichText, c: EditorColors): AnnotatedString = buildAnnotatedStr
  * and end on an empty item; a row of buttons over the keyboard marks the words picked or the line.
  */
 @Composable
-fun DocEditor(content: JsonElement, editable: Boolean, onSave: (JsonElement) -> Unit, modifier: Modifier = Modifier, onTools: ((@Composable () -> Unit)?) -> Unit = {}) {
+fun DocEditor(content: JsonElement, editable: Boolean, onSave: (JsonElement) -> Unit, modifier: Modifier = Modifier, onTools: ((@Composable () -> Unit)?) -> Unit = {}, placeholder: String = "") {
     val model = LocalModel.current
     val start = remember { DocText.from(content, model.index.titleOf) }
     var rich by remember { mutableStateOf(start.text) }
     var value by remember { mutableStateOf(TextFieldValue(start.text.text)) }
     var dirty by remember { mutableStateOf(0) }
     val save by rememberUpdatedState(onSave)
-    val colors = EditorColors(Theme.accent, Theme.sunken, Theme.muted.copy(alpha = 0.3f), Theme.muted)
+    var showHidden by remember { mutableStateOf(false) }
+    val colors = EditorColors(Theme.accent, Theme.sunken, Theme.muted.copy(alpha = 0.3f), Theme.muted, Theme.muted.copy(alpha = 0.55f).takeIf { !showHidden })
 
     fun saveNow() { if (editable && dirty > 0) { save(DocText(rich, start.stash).doc()); dirty = 0 } }
     LaunchedEffect(dirty) { if (dirty > 0) { delay(400); saveNow() } }
@@ -225,12 +231,16 @@ fun DocEditor(content: JsonElement, editable: Boolean, onSave: (JsonElement) -> 
             Tool(Icons.Outlined.FormatListNumbered, "Numbered list") { toggleMarker("1. ") }
             Tool(Icons.Outlined.Title, "Heading") { toggleMarker("## ") }
             Tool(Icons.Outlined.FormatQuote, "Quote") { toggleMarker("> ") }
+            Tool(Icons.Outlined.Visibility, if (showHidden) "Cover hidden words" else "Show hidden words") { showHidden = !showHidden }
         }
     }
     DisposableEffect(Unit) { onDispose { onTools(null) } }
+    // The formatting row is offered to the sheet, which shows it from its Aa.
+    LaunchedEffect(showHidden) { onTools(tools) }
     Column(modifier) {
         BasicTextField(
-            value, ::changed, Modifier.fillMaxWidth().heightIn(min = 200.dp).onFocusChanged { onTools(if (it.isFocused) tools else null) },
+            value, ::changed, Modifier.fillMaxWidth().heightIn(min = 200.dp),
+            decorationBox = { inner -> androidx.compose.foundation.layout.Box { if (value.text.isEmpty() && placeholder.isNotEmpty()) Text(placeholder, color = Theme.muted.copy(alpha = 0.7f), fontSize = 17.sp); inner() } },
             textStyle = androidx.compose.ui.text.TextStyle(color = Theme.text, fontSize = 17.sp, lineHeight = 24.sp),
             cursorBrush = SolidColor(Theme.accent),
             visualTransformation = { _ -> TransformedText(styled(rich, colors), OffsetMapping.Identity) },

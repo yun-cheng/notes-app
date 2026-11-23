@@ -1,5 +1,7 @@
 package dev.notesapp.app
 
+import androidx.compose.foundation.layout.heightIn
+import androidx.compose.foundation.layout.widthIn
 import android.app.TimePickerDialog
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
@@ -175,9 +177,18 @@ fun EntrySheet(id: String, dismiss: () -> Unit) {
     DisposableEffect(id) { onDispose { saveTitle() } }
     val close = { saveTitle(); dismiss() }
 
+    // As the web's on a phone: a sheet from the foot as tall as what's in it (up to most of the screen), over the dimmed
+    // page, closed by a tap above it.
     Dialog(onDismissRequest = close, properties = DialogProperties(usePlatformDefaultWidth = false, decorFitsSystemWindows = false)) {
-      Column(Modifier.fillMaxSize().background(Theme.bg).padding(top = statusBarTop()).navigationBarsPadding().imePadding()) {
-        Column(Modifier.weight(1f).verticalScroll(rememberScrollState()).padding(20.dp), verticalArrangement = Arrangement.spacedBy(12.dp)) {
+     androidx.compose.foundation.layout.BoxWithConstraints(Modifier.fillMaxSize().imePadding()) {
+      val tallest = maxHeight * 0.88f
+      Box(Modifier.fillMaxSize().background(Color.Black.copy(alpha = 0.35f)).clickable(interactionSource = null, indication = null, onClick = close))
+      Column(
+          Modifier.align(Alignment.BottomCenter).widthIn(max = 660.dp).fillMaxWidth().heightIn(max = tallest)
+              .clip(RoundedCornerShape(topStart = 16.dp, topEnd = 16.dp)).background(Theme.bg).clickable(interactionSource = null, indication = null) {}
+              .navigationBarsPadding(),
+      ) {
+        Column(Modifier.weight(1f, fill = false).verticalScroll(rememberScrollState()).padding(20.dp), verticalArrangement = Arrangement.spacedBy(12.dp)) {
             if (card.viewOnly || !model.canWrite(card)) {
                 IconText(Icons.Outlined.Visibility, if (card.viewOnly) "View only. Turn it off in the entry's menu to change it." else "You can view this entry.")
             }
@@ -222,6 +233,9 @@ fun EntrySheet(id: String, dismiss: () -> Unit) {
             androidx.compose.runtime.key("$id:$page") {
                 DocEditor(pages[page], edit, { doc -> savePage(model, id, page, doc) }, onTools = { tools = it }, placeholder = if (page > 0) "Page ${page + 1}" else if (isTodo) "Details" else "Note")
             }
+            // Its photos, voice messages and files as the journal shows them, where the web shows them in the text; in
+            // the text they're named, to move or take out.
+            if (page == 0) EntryAttachments(card)
             SheetTags(card, edit)
             FlowRow(horizontalArrangement = Arrangement.spacedBy(6.dp), itemVerticalAlignment = Alignment.CenterVertically) { Reactions(card, large = true) }
             if (card.isStack && page == 0) StackPreview(card)
@@ -232,6 +246,7 @@ fun EntrySheet(id: String, dismiss: () -> Unit) {
         HorizontalDivider(color = Theme.line)
         SheetBar(card, edit, showTools, { showTools = !showTools }, showTitle, { titled = true }, behind, { page = stored.size }, original, close)
       }
+     }
     }
 }
 
@@ -341,16 +356,17 @@ fun SheetBar(card: Card, edit: Boolean, tools: Boolean, toggleTools: () -> Unit,
                     Icon(Icons.Outlined.UnfoldMore, null, Modifier.size(14.dp), tint = Theme.muted)
                 }
             }
+            Text(edited(card), Modifier.padding(start = 8.dp).clickable { model.panel = EntryPanel.History(card.id) }.padding(vertical = 8.dp), fontSize = 13.sp, color = Theme.muted)
         }
-        Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(8.dp, Alignment.End), verticalAlignment = Alignment.CenterVertically) {
-            Text(edited(card), Modifier.clickable { model.panel = EntryPanel.History(card.id) }, fontSize = 13.sp, color = Theme.muted)
+        // As the web's: Undo and Redo, and Discard (when it was edited closes the row of tools above).
+        Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(8.dp), verticalAlignment = Alignment.CenterVertically) {
             tool(Icons.AutoMirrored.Outlined.Undo, "Undo") { model.undo() }
             tool(Icons.AutoMirrored.Outlined.Redo, "Redo") { model.redo() }
+            Spacer(Modifier.weight(1f))
             if (edit) {
                 val changed = original != card.payload
                 TextButton(onClick = { model.update(card.id) { c -> c.copy(payload = original) }; model.say("Discarded changes"); close() }, enabled = changed) { Text("Discard") }
             }
-            TextButton(onClick = close) { Text("Done", color = Theme.accent, fontWeight = FontWeight.SemiBold) }
         }
     }
 }

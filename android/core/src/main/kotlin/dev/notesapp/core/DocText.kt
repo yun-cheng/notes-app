@@ -196,7 +196,18 @@ class DocText(val text: RichText, val stash: Map<String, JsonElement> = emptyMap
             val key = "${if (block) "b" else "i"}${stash.size + 1}"
             stash[key] = node
             val type = node["type"].str ?: "item"
-            add(if (type == "photo") "[Photo${node["attrs"]["alt"].str?.let { ": $it" } ?: ""}]" else "[$type]", TextStyle(node = key))
+            add(if (type == "photo") "[Photo${node["attrs"]["alt"].str?.let { ": $it" } ?: ""}]" else if (type == "file") fileLabel(node) else "[$type]", TextStyle(node = key))
+        }
+
+        /** How a file shows in the text while it's edited: a voice message, a video or a file, by name, as the web's chip names it. */
+        fun fileLabel(node: JsonElement): String {
+            val mime = node["attrs"]["mime"].str ?: ""
+            val name = node["attrs"]["name"].str ?: ""
+            return when {
+                mime.startsWith("audio/") -> "[Voice message]"
+                mime.startsWith("video/") -> "[Video${if (name.isEmpty()) "" else ": $name"}]"
+                else -> "[File${if (name.isEmpty()) "" else ": $name"}]"
+            }
         }
 
         fun blocks(nodes: List<JsonElement>, prefix: String) {

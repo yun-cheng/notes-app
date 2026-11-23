@@ -9,6 +9,15 @@ import SwiftUI
 /// for code, and `---` rules. Card links are links to `notes-card://ID`. Anything else, such as a photo,
 /// shows as a placeholder linked to `notes-node://KEY`, and the original node is kept in `stash`.
 public struct DocText: Sendable {
+    /// How a file shows in the text while it's edited: a voice message, a video or a file, by name, as the web's chip names it.
+    static func fileLabel(_ node: JSONValue) -> String {
+        let mime = node["attrs"]?["mime"]?.stringValue ?? ""
+        let name = node["attrs"]?["name"]?.stringValue ?? ""
+        if mime.hasPrefix("audio/") { return "[Voice message]" }
+        if mime.hasPrefix("video/") { return "[Video\(name.isEmpty ? "" : ": \(name)")]" }
+        return "[File\(name.isEmpty ? "" : ": \(name)")]"
+    }
+
     public var text: AttributedString
     /// Nodes shown as placeholders, by key.
     public var stash: [String: JSONValue]
@@ -85,7 +94,7 @@ public struct DocText: Sendable {
             let key = "\(block ? "b" : "i")\(stash.count + 1)"
             stash[key] = node
             let type = node["type"]?.stringValue ?? "item"
-            let label = type == "photo" ? "[Photo\(node["attrs"]?["alt"]?.stringValue.map { ": \($0)" } ?? "")]" : "[\(type)]"
+            let label = type == "photo" ? "[Photo\(node["attrs"]?["alt"]?.stringValue.map { ": \($0)" } ?? "")]" : type == "file" ? DocText.fileLabel(node) : "[\(type)]"
             var a = plain(label, font: font)
             a.link = DocText.nodeURL(key)
             return a

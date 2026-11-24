@@ -9,6 +9,9 @@ struct UnlockView: View {
     @State private var useRecoveryKey = false
     @State private var working = false
     @State private var wrong = false
+    /// Face ID or Touch ID is on for this vault here; it's asked for as the vault shows.
+    @State private var deviceOn = false
+    @State private var deviceFailed = false
 
     var body: some View {
         VStack(spacing: 16) {
@@ -28,6 +31,11 @@ struct UnlockView: View {
             }
             .buttonStyle(.borderedProminent)
             .disabled(pin.isEmpty || working)
+            if deviceOn && !useRecoveryKey {
+                Button("Use \(DeviceUnlock.name)", systemImage: DeviceUnlock.name == "Face ID" ? "faceid" : "touchid") { useDevice() }
+                    .buttonStyle(.borderless)
+            }
+            if deviceFailed { Text("\(DeviceUnlock.name) didn't work. Use your PIN.").foregroundStyle(.red) }
             if vault.isEncrypted {
                 Button(useRecoveryKey ? "Use the PIN instead" : "Forgot PIN?") {
                     useRecoveryKey.toggle()
@@ -39,6 +47,22 @@ struct UnlockView: View {
         }
         .padding()
         .frame(maxWidth: .infinity, maxHeight: .infinity)
+        .task(id: vault.id) {
+            deviceOn = model.account.map { DeviceUnlock.isOn($0.id, vault.id) } ?? false
+            if deviceOn { useDevice() }
+        }
+    }
+
+    private func useDevice() {
+        guard !working else { return }
+        working = true
+        deviceFailed = false
+        Task {
+            let opened = await model.unlockWithDevice(vault)
+            working = false
+            deviceFailed = !opened
+            if !opened { deviceOn = model.account.map { DeviceUnlock.isOn($0.id, vault.id) } ?? false }
+        }
     }
 
     private func unlock() {

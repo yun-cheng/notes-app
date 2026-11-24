@@ -154,6 +154,7 @@ struct VaultDetail: View {
     @State private var recoveryKey: String?
     @State private var confirmStop = false
     @State private var confirmRemove = false
+    @State private var deviceOn = false
 
     var body: some View {
         if let vault = model.vault(id) {
@@ -183,7 +184,10 @@ struct VaultDetail: View {
             }
             .formStyle(.grouped)
             .navigationTitle(vault.name)
-            .onAppear { name = vault.name }
+            .onAppear {
+                name = vault.name
+                deviceOn = model.account.map { DeviceUnlock.isOn($0.id, vault.id) } ?? false
+            }
             .sheet(id: $recoveryKey) { key in RecoveryKeySheet(key: key) }
             .confirmationDialog("Stop encrypting \(vault.name)?", isPresented: $confirmStop) {
                 Button("Stop encrypting") { step("Decrypting…") { try await VaultEncryption(model: model).decrypt(vault, keepPin: true); model.say("Vault is no longer encrypted") } }
@@ -237,6 +241,12 @@ struct VaultDetail: View {
         }
         if vault.isPrivate {
             Toggle("Hide this vault until it is unlocked", isOn: Binding(get: { vault.hidden }, set: { on in change(vault, VaultChanges(hidden: on), done: on ? "Hidden" : "No longer hidden") }))
+            if DeviceUnlock.available, let userId = model.account?.id {
+                Toggle(isOn: Binding(get: { deviceOn }, set: { on in setDevice(vault, userId: userId, on: on) })) {
+                    Text("Unlock with \(DeviceUnlock.name) on this device")
+                    Text("Anyone whose \(DeviceUnlock.name == "Face ID" ? "face" : "finger") this device knows can then open this vault, and family members often have theirs set up.")
+                }
+            }
             if !model.lockedVaults.contains(vault.id) { Button("Lock now") { model.lock(vault.id) } }
             if vault.isMemberCopy {
                 Text("Your PIN holds your copy of its key, so it can be changed but not removed. To give the vault up, leave it.").font(.caption).foregroundStyle(Theme.muted)
@@ -288,7 +298,25 @@ struct VaultDetail: View {
         step("Encrypting…") { recoveryKey = try await VaultEncryption(model: model).encrypt(vault, pin: entered) }
     }
 
+    private func setDevice(_ vault: Vault, userId: String, on: Bool) {
+        guard on else {
+            DeviceUnlock.turnOff(userId, vault.id)
+            deviceOn = false
+            return
+        }
+        Task {
+            do {
+                try await DeviceUnlock.turnOn(vault, userId: userId, keyring: model.repo.keyring)
+                deviceOn = true
+            } catch {
+                if let message = (error as? LocalizedError)?.errorDescription { model.say(message) }
+                deviceOn = false
+            }
+        }
+    }
+
     private func removePin(_ vault: Vault) {
+        if let userId = model.account?.id { DeviceUnlock.turnOff(userId, vault.id) }
         if vault.isEncrypted {
             step("Decrypting…") { try await VaultEncryption(model: model).decrypt(vault); model.say("Vault is no longer private") }
         } else {

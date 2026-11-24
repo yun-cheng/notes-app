@@ -43,6 +43,7 @@ targets:
         ENABLE_RESOURCE_ACCESS_AUDIO_INPUT: YES
         ENABLE_USER_SELECTED_FILES: readonly
         INFOPLIST_KEY_NSMicrophoneUsageDescription: Records voice messages for your notes.
+        INFOPLIST_KEY_NSFaceIDUsageDescription: Opens a private vault with Face ID, once you turn that on in its lock settings.
         INFOPLIST_KEY_NSPhotoLibraryUsageDescription: Adds photos and videos to your notes.
         ENABLE_HARDENED_RUNTIME: YES
     info:

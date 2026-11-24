@@ -28,9 +28,10 @@ _Last checked 2026-11-24._
 | A long press picks the entry (touch); there's no menu on touch, its actions are in the open entry and the picking bar | ➖ | ✅ | ✅ | T |
 | Right-click opens the entry menu (mouse) | ✅ | ➖ | ✅ with a mouse | C |
 | A mouse click leaves the bubble's text to select; a right-click on selected words offers Copy, New note, Search Google, Translate | ❌ the Mac's bubble text isn't selectable, so a double-click opens it | ➖ | ➖ | C |
-| Cmd-click picks; Shift-click picks a range | ✅ | ➖ | ➖ | T |
+| Cmd-click picks; Shift-click picks a range, on the bubble or the circle; a double-click while picking, or with a key held, doesn't open | ✅ (since 2026-11-25; before, a Shift-click on the bubble did nothing and a double-click while picking opened it) | ➖ | ➖ | T |
 | A click beside a bubble picks it | ✅ | ➖ | ➖ | T |
-| A drag from empty space picks with a box | ❌ | ➖ | ➖ | C |
+| A drag from empty space picks with a box, beside the stream too, picking as it moves; Shift or Cmd adds to what's picked | ✅ (since 2026-11-25) | ➖ | ➖ | T |
+| A click on empty space stops picking | ✅ (since 2026-11-25) | ➖ | ➖ | T |
 | Pointing at a bubble shows a copy button in its corner | ✅ | ➖ | ➖ | C |
 | Pointing at a bubble shows the pick circle on its left; while picking every circle shows | ✅ | ➖ | ➖ | T |
 | A smiley at the start of the bottom row adds a reaction, from six common ones, then + for search, Recent and every group | ✅ | ✅ | ✅ | T |
@@ -104,7 +105,7 @@ _Last checked 2026-11-24._
 
 | Web behavior | Mac | iPhone | Android | How |
 |---|---|---|---|---|
-| Over the dimmed page, as tall as what's in it; a click outside or Esc closes it | ✅ | ➖ | ➖ | T |
+| Over the dimmed page, as tall as what's in it; a click outside or Esc closes it | ✅ (Esc since 2026-11-25: the journal behind kept the keys, and a second Esc closed the whole window) | ➖ | ➖ | T |
 | On a phone: a sheet from the foot as tall as what's in it, over the dimmed page; a tap above closes it; no Done | ➖ | ✅ | ✅ | T |
 | Photos, voice messages and files show in the open entry | ⚠️ under the text, not in it; the text names them ([Photo], [Voice message], [File: name]) | ⚠️ the same | ⚠️ the same | T |
 | Grouped tag opens its group to switch it; "+ Priority" for a group it has none of; other tags are labels | ✅ | ✅ | ✅ | T |
@@ -142,7 +143,7 @@ _Last checked 2026-11-24._
 | Cmd+K: commands and search | ✅ | ➖ | ➖ | C |
 | `?` lists the shortcuts | ✅ | ➖ | ➖ | C |
 | Cmd+Z undoes the last change anywhere, Cmd+Shift+Z redoes | ✅ | ➖ | ➖ | C |
-| ↑ ↓ Home End move between entries, Space picks, Return opens, Delete trashes, Esc stops picking | ✅ | ➖ | ➖ | C |
+| ↑ ↓ Home End move between entries, Space picks, Return opens, Delete trashes, Esc stops picking; with none focused, ↑ ↓ and Space start from the entry in the middle of the screen; Shift ↑ ↓ picks from the entry it starts on | ✅ (the middle and Shift's start since 2026-11-25) | ➖ | ➖ | T |
 | ← → turn the focused entry's pages | ✅ | ➖ | ➖ | C |
 | Cmd+V outside a text field stops picking and puts what's pasted in the writing box (copied entries come back whole there) | ✅ | ➖ | ➖ | T |
 | Right-click with several picked: Copy, Cut, Stop selecting, Archive, Move to Trash | ✅ | ➖ | ➖ | C |

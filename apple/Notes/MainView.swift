@@ -18,6 +18,8 @@ struct MainView: View {
 
     var body: some View {
         @Bindable var model = model
+        // Read here, in the body, so a change shows: a binding's own closures aren't watched.
+        let panelHere = Self.panelHere(model) ? model.panel : nil
         Group {
             #if os(iOS)
             if sizeClass == .compact && !Self.forcedWide { PhoneFrame() } else { WideFrame().environment(\.horizontalSizeClass, .regular) }
@@ -37,12 +39,24 @@ struct MainView: View {
         #endif
         .sheet(isPresented: $model.showPalette) { CommandPalette() }
         .sheet(isPresented: $model.addingAccount) { SignInView() }
-        .sheet(item: $model.panel) { panel in EntryPanelView(panel: panel) }
+        // While an entry is open on a phone its panels (tags, dates, sharing) open from it: iOS shows one sheet at a time
+        // from a view, so from here they never showed.
+        .sheet(item: Binding(get: { panelHere }, set: { model.panel = $0 })) { panel in EntryPanelView(panel: panel) }
         #if os(iOS)
         .quickLookPreview($model.preview)
         #endif
         .overlay(alignment: .bottom) { ToastView() }
         .tint(Theme.accent)
+    }
+}
+
+extension MainView {
+    static func panelHere(_ model: AppModel) -> Bool {
+        #if os(iOS)
+        model.openEntry == nil
+        #else
+        true
+        #endif
     }
 }
 

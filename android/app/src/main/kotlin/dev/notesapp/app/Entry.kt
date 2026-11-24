@@ -594,11 +594,12 @@ fun AppModel.startFrom(template: Card) {
 /** The panels an entry's menu opens: its tags, due date, vaults, sharing and history. */
 @Composable
 fun EntryPanelView(panel: EntryPanel, dismiss: () -> Unit) {
+    val model = LocalModel.current
     val title = when (panel) {
         is EntryPanel.Tags -> "Tags"
         is EntryPanel.Due -> "Due date"
         is EntryPanel.Vaults -> "Vaults"
-        is EntryPanel.Share -> "Share"
+        is EntryPanel.Share -> "Share “${model.card(panel.id)?.displayTitle ?: ""}”"
         is EntryPanel.History -> "History"
     }
     FullScreen(title, dismiss) {

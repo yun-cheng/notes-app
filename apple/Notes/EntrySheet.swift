@@ -85,6 +85,8 @@ struct EntrySheet: View {
     @ViewBuilder
     private func content(_ card: Card) -> some View {
         let edit = model.canEdit(card)
+        // Read here, in the body, so its panel opening shows: a binding's own closures aren't watched.
+        let panel = model.panel
         // Its pages, and a blank one being added: kept only once something is written on it.
         let stored = [card.content] + card.morePages
         let pages = stored + Array(repeating: Doc.empty, count: max(0, page + 1 - stored.count))
@@ -162,6 +164,9 @@ struct EntrySheet: View {
         .onDisappear { saveTitle(card) }
         #if os(macOS)
         .onExitCommand { close() }
+        #endif
+        #if os(iOS)
+        .sheet(item: Binding(get: { panel }, set: { model.panel = $0 })) { panel in EntryPanelView(panel: panel) }
         #endif
     }
 

@@ -71,55 +71,83 @@ fun SharePanel(id: String) {
     var shares by remember { mutableStateOf<CardShares?>(null) }
     var email by remember { mutableStateOf("") }
     var role by remember { mutableStateOf("view") }
+    var vaultRole by remember { mutableStateOf("view") }
+    var target by remember { mutableStateOf("") }
     var failed by remember { mutableStateOf<String?>(null) }
     var expires by remember { mutableStateOf(0) }
-    fun run(work: suspend (ServerApi) -> CardShares) {
+    val card = model.card(id)
+    val home = card?.let { model.vault(it.vaultId) }
+    val isPrivate = home?.isPrivate == true
+    var confirmed by remember(id) { mutableStateOf(!isPrivate) }
+    fun people(n: Int) = if (n == 1) "1 person" else "$n people"
+    fun run(done: String? = null, missing: String? = null, work: suspend (ServerApi) -> CardShares) {
         val api = model.api
         model.scope.launch {
-            try { shares = work(api); failed = null } catch (_: ApiError.Offline) { failed = "Sharing needs a connection." } catch (_: Exception) { failed = "That didn't work. Try again." }
+            try { shares = work(api); failed = null; done?.let { model.say(it) } }
+            catch (_: ApiError.Offline) { failed = "Sharing needs a connection." }
+            catch (_: Exception) { failed = missing ?: "That didn't work. Try again." }
         }
     }
-    LaunchedEffect(id) { run { it.shares(id) } }
+    LaunchedEffect(id) { run(missing = "This card can't be shared until it has synced.") { it.shares(id) } }
     fun change(email: String, r: String) = run { it.share(id, email = email, role = r) }
-    fun changeVault(vaultId: String, r: String) { run { it.share(id, vaultId = vaultId, role = r) }; model.sync?.schedule(model.scope, 500) }
+    fun changeVault(vaultId: String, r: String, done: String? = null) { run(done) { it.share(id, vaultId = vaultId, role = r) }; model.sync?.schedule(model.scope, 500) }
     fun remove(type: String, target: String) { run { it.unshare(id, type, target) }; model.sync?.schedule(model.scope, 500) }
-    val card = model.card(id)
     Column(Modifier.fillMaxSize().verticalScroll(rememberScrollState()).padding(bottom = 24.dp)) {
-        if (card != null && model.vault(card.vaultId)?.isEncrypted == true) {
+        if (home != null) FormText("This card is in ${home.name}${if ((home.members ?: 1) > 1) " (${people(home.members ?: 1)})" else ""}. Sharing it doesn't share the cards it links to.")
+        if (home?.isEncrypted == true) {
+            // The server shares nothing from an encrypted vault; the web says only that it didn't work.
             FormText("This entry is in an encrypted vault, so it can be shared only by sharing the vault.")
             return@Column
         }
+        failed?.let { Text(it, Modifier.padding(horizontal = 20.dp), color = Theme.alert) }
+        if (isPrivate && !confirmed) FormSection {
+            FormText("This card is in a private vault. Whoever you share it with can read it without your PIN.", muted = false)
+            FormButton("I understand, continue") { confirmed = true }
+        }
+        if (shares == null || !confirmed) return@Column
         FormSection("People") {
-            FormField(email, { email = it }, "Email", keyboard = androidx.compose.ui.text.input.KeyboardType.Email)
-            ChoiceRow("Role", roles.first { it.first == role }.second) { close -> for ((r, l) in roles) MenuCheck(l, role == r) { role = r; close() } }
-            FormButton("Share", enabled = email.contains("@")) { val a = email.trim(); email = ""; change(a, role) }
+            FormField(email, { email = it }, "Email address", keyboard = androidx.compose.ui.text.input.KeyboardType.Email)
+            ChoiceRow("Access for this person", roles.first { it.first == role }.second) { close -> for ((r, l) in roles) MenuCheck(l, role == r) { role = r; close() } }
+            FormButton("Share", enabled = email.isNotBlank()) { val a = email.trim(); email = ""; change(a, role) }
             for (p in shares?.people ?: emptyList()) { FormDivider(); ShareRow(p.name.ifEmpty { p.email }, p.email, p.role, { remove("user", p.user_id) }) { change(p.email, it) } }
-            for (i in shares?.invites ?: emptyList()) { FormDivider(); ShareRow(i.email, "Invited: they'll see it once they sign in", i.role, { remove("invite", i.email) }) { change(i.email, it) } }
+            for (i in shares?.invites ?: emptyList()) { FormDivider(); ShareRow(i.email, "invited, sees it after signing up", i.role, { remove("invite", i.email) }) { change(i.email, it) } }
         }
-        FormSection("Vaults") {
-            val shared = shares?.vaults?.map { it.vault_id }?.toSet() ?: emptySet()
-            for (v in shares?.vaults ?: emptyList()) ShareRow(v.name, "${v.members} ${if (v.members == 1) "person" else "people"}", v.role, { remove("vault", v.vault_id) }) { changeVault(v.vault_id, it) }
-            val others = model.vaults.filter { it.id != card?.vaultId && it.id !in shared && !it.isEncrypted && it.role != "viewer" }
-            if (others.isNotEmpty()) ChoiceRow("Share with a vault", "Pick…") { close -> for (v in others) DropdownMenuItem(text = { Text(v.name) }, onClick = { close(); changeVault(v.id, "edit") }) }
+        val others = model.vaults.filter { it.id != card?.vaultId && !it.isEncrypted && !it.isWithheld && it.id !in model.lockedVaults }
+        if (others.isNotEmpty()) FormSection("A vault's members") {
+            val chosen = others.firstOrNull { it.id == target }
+            ChoiceRow("Vault", chosen?.name ?: "Choose a vault") { close -> for (v in others) MenuCheck(v.name + (v.members?.let { " (${people(it)})" } ?: ""), target == v.id) { target = v.id; close() } }
+            ChoiceRow("Access for the vault's members", roles.first { it.first == vaultRole }.second) { close -> for ((r, l) in roles) MenuCheck(l, vaultRole == r) { vaultRole = r; close() } }
+            if (chosen != null) {
+                FormText("This card is in ${home?.name ?: "its vault"}${home?.members?.let { " (${people(it)})" } ?: ""}. Share it with ${chosen.name}${chosen.members?.let { " (${people(it)})" } ?: ""}?", muted = false)
+                FormButton("Share with ${chosen.name}") { changeVault(chosen.id, vaultRole, "Shared with ${chosen.name}"); target = "" }
+            }
+            for (v in shares?.vaults ?: emptyList()) {
+                FormDivider()
+                // Only a vault the sharer is in can have its access changed by them.
+                if (model.vault(v.vault_id) != null) ShareRow(v.name, people(v.members), v.role, { remove("vault", v.vault_id) }) { changeVault(v.vault_id, it) }
+                else FormRow(v.name, people(v.members)) {
+                    Text(roles.firstOrNull { it.first == v.role }?.second ?: v.role, color = Theme.muted, fontSize = 14.sp)
+                    TextButton(onClick = { remove("vault", v.vault_id) }) { Text("Remove") }
+                }
+            }
         }
-        FormSection("Public links", "Anyone with a link can read this entry, without signing in.") {
+        FormSection("Anyone with the link", "Read only. The link isn't listed anywhere, and you can turn it off.") {
+            val labels = mapOf(0 to "Never expires", 1 to "Expires in 1 day", 7 to "Expires in 7 days", 30 to "Expires in 30 days")
+            ChoiceRow("Link expiry", labels[expires]!!) { close -> for ((d, l) in labels) MenuCheck(l, expires == d) { expires = d; close() } }
+            FormButton("Create link") { run("Link created") { it.createLink(id, if (expires == 0) null else expires) } }
             for (link in shares?.links ?: emptyList()) {
+                FormDivider()
                 val url = model.api.publicLink(link.token)
                 Column(Modifier.padding(horizontal = 16.dp, vertical = 8.dp)) {
                     SelectionContainer { Text(url, fontFamily = Theme.mono, fontSize = 13.sp, color = Theme.text, maxLines = 1) }
                     Row(verticalAlignment = Alignment.CenterVertically) {
-                        Text(link.expires_at?.let { "Until " + formatMillis(it, time = null) } ?: "Doesn't expire", Modifier.weight(1f), fontSize = 12.sp, color = Theme.muted)
+                        Text(link.expires_at?.let { "Until " + formatMillis(it, time = null) } ?: "No expiry", Modifier.weight(1f), fontSize = 12.sp, color = Theme.muted)
                         TextButton(onClick = { clipboard.setText(AnnotatedString(url)); model.say("Link copied") }) { Text("Copy") }
-                        TextButton(onClick = { run { it.deleteLink(id, link.token) } }) { Text("Stop sharing", color = Theme.alert) }
+                        TextButton(onClick = { run("Link turned off") { it.deleteLink(id, link.token) } }) { Text("Turn off") }
                     }
                 }
-                FormDivider()
             }
-            val labels = mapOf(0 to "Never", 1 to "In a day", 7 to "In a week", 30 to "In 30 days")
-            ChoiceRow("Expires", labels[expires]!!) { close -> for ((d, l) in labels) MenuCheck(l, expires == d) { expires = d; close() } }
-            FormButton("Make a public link") { run { it.createLink(id, if (expires == 0) null else expires) } }
         }
-        failed?.let { Text(it, Modifier.padding(horizontal = 20.dp), color = Theme.alert) }
     }
 }
 
@@ -131,7 +159,7 @@ private fun ShareRow(name: String, detail: String, role: String, remove: () -> U
             Text(roles.firstOrNull { it.first == role }?.second ?: role, Modifier.clickable { open = true }.padding(6.dp), color = Theme.accent, fontWeight = FontWeight.SemiBold, fontSize = 14.sp)
             DropdownMenu(open, { open = false }) { for ((r, l) in roles) MenuCheck(l, role == r) { open = false; change(r) } }
         }
-        Icon(Icons.Outlined.Cancel, "Stop sharing", Modifier.size(22.dp).clickable(onClick = remove), tint = Theme.alert)
+        TextButton(onClick = remove) { Text("Remove") }
     }
 }
 

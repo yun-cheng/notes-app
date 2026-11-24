@@ -24,6 +24,7 @@ class NotesApplication : Application() {
         Reminders.channel(this)
         model = AppModel(this, BuildConfig.SERVER)
         model.syncPeriodically()
+        BackgroundSync.plan(this)
     }
 }
 

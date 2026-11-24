@@ -79,6 +79,8 @@ dependencies {
     // Opening a private vault with the fingerprint; its sheet needs a FragmentActivity.
     implementation("androidx.biometric:biometric:1.1.0")
     implementation("androidx.fragment:fragment-ktx:1.8.5")
+    // A sync now and then with the app closed, so reminders know of todos made elsewhere.
+    implementation("androidx.work:work-runtime-ktx:2.10.0")
     // Translation on the device, where the server can't: offline, the day's translations used up, or an encrypted vault.
     implementation("com.google.mlkit:translate:17.0.3")
     implementation("com.google.mlkit:language-id:17.0.6")

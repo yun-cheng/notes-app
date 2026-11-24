@@ -116,7 +116,7 @@ fun SettingsPage(openDrawer: (() -> Unit)?) {
         }
     }
     val askNotifications = rememberLauncherForActivityResult(ActivityResultContracts.RequestPermission()) { granted ->
-        if (granted) { Reminders.set(context, on = true); remindersOn = true; Reminders.reschedule(context, model.index) }
+        if (granted) { Reminders.set(context, on = true); remindersOn = true; BackgroundSync.plan(context); Reminders.reschedule(context, model.index) }
         else model.say("Notifications are off for this app. Turn them on in Android's settings.")
     }
 
@@ -151,13 +151,13 @@ fun SettingsPage(openDrawer: (() -> Unit)?) {
                     if (remindersOn) {
                         TextButton(onClick = { Reminders.test(context); model.say("Sent a test reminder") }) { Text("Send a test") }
                         androidx.compose.material3.OutlinedButton(onClick = {
-                            Reminders.set(context, on = false); remindersOn = false; Reminders.reschedule(context, model.index)
+                            Reminders.set(context, on = false); remindersOn = false; BackgroundSync.plan(context); Reminders.reschedule(context, model.index)
                             model.say("Reminders are off on this device")
                         }) { Text("Turn off") }
                     } else androidx.compose.material3.Button(onClick = {
                         if (Build.VERSION.SDK_INT >= 33 && ContextCompat.checkSelfPermission(context, Manifest.permission.POST_NOTIFICATIONS) != PackageManager.PERMISSION_GRANTED) {
                             askNotifications.launch(Manifest.permission.POST_NOTIFICATIONS)
-                        } else { Reminders.set(context, on = true); remindersOn = true; Reminders.reschedule(context, model.index); model.say("Reminders are on on this device") }
+                        } else { Reminders.set(context, on = true); remindersOn = true; BackgroundSync.plan(context); Reminders.reschedule(context, model.index); model.say("Reminders are on on this device") }
                     }) { Text("Turn on reminders") }
                 }
                 val leads = listOf(0 to "At the due time", 5 to "5 minutes before", 10 to "10 minutes before", 15 to "15 minutes before", 30 to "30 minutes before", 60 to "1 hour before", 120 to "2 hours before")

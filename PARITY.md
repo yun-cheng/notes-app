@@ -91,7 +91,7 @@ _Last checked 2026-11-25._
 | Picking: Select all and Done in the title bar; a bar of N selected, Tags, Done, Not done, Waiting, Due date, Make todos/notes, Move to…, Stack, Copy, Archive, Trash, × | ✅ | ✅ | ✅ | T |
 | Filter row: All, Notes, Todos, Stacks; Todos status; Written dates; Contains; Templates | ✅ | ✅ | ✅ | T |
 | Day badges, pinned while their day scrolls past | ✅ | ✅ | ✅ | T |
-| A round button back to the newest entries (the end the journal opens at), shown once well away from it, above the writing box | ❌ | ❌ | ❌ | C |
+| A round button back to the newest entries (the end the journal opens at), shown once well away from it, above the writing box | ✅ (since 2026-11-25; C) | ✅ (since 2026-11-25) | ✅ (since 2026-11-25; the distance is estimated from the rows drawn) | T |
 | A rail down the right with the years, to point at and drag | ⚠️ | ⚠️ | ⚠️ | ? |
 
 ## Journal box
@@ -238,5 +238,5 @@ Rows marked **?** above, still to try in each app: the rail of years down the jo
 picture address becoming a photo, and dragging an open stack's cards into a new order. Rows marked **C** were read in
 the code, not tried, so they're next once these are done.
 
-Missing in all three native apps, found on 2026-11-25: the button back to the newest entries, and Paste as. (Locking
-open vaults by themselves and the wait after wrong PINs, found the same day, are done.)
+Missing in all three native apps, found on 2026-11-25: Paste as. (Locking open vaults by themselves, the wait after
+wrong PINs and the button back to the newest entries, found the same day, are done.)

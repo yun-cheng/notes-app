@@ -33,6 +33,8 @@ struct JournalView: View {
     @State private var viewportHeight: CGFloat = 0
     /// Clicks that end a box drag don't also pick or stop picking.
     @State private var quietUntil = Date.distantPast
+    /// Well away from the end the journal opens at, where the button back to it shows.
+    @State private var awayFromEnd = false
 
     /// Whether its filter is the page the app shows, kept as the page changes; the phone's Today tab keeps its own.
     let isPage: Bool
@@ -158,6 +160,18 @@ struct JournalView: View {
                     #endif
                     .overlay(alignment: .trailing) {
                         JournalRail(items: visible) { id in withAnimation(nil) { proxy.scrollTo(id, anchor: .top) } }
+                    }
+                    // A round button back to the newest entries, as the web's `ScrollJump`: once the list is more than
+                    // 400 points from the end it opens at (the foot in a chat, the top otherwise), just above the box.
+                    .onScrollGeometryChange(for: Bool.self) { g in
+                        (chat ? g.contentSize.height - g.visibleRect.maxY : g.visibleRect.minY) > 400
+                    } action: { _, away in awayFromEnd = away }
+                    .overlay(alignment: .bottomTrailing) {
+                        if awayFromEnd, let end = chat ? visible.last : visible.first {
+                            ScrollJump(down: chat) { withAnimation(nil) { proxy.scrollTo(end.card.id, anchor: chat ? .bottom : .top) } }
+                                .padding(.trailing, 14)
+                                .padding(.bottom, 10)
+                        }
                     }
                     // The anchor places the end by estimated heights; once the entries are drawn, go to the newest for
                     // real, or a list opened at the bottom can sit past its end, blank.
@@ -613,5 +627,26 @@ struct PickRow<Content: View>: View {
         #else
         content()
         #endif
+    }
+}
+
+/// The round button back to the end the journal opens at, as the web's `ScrollJump`.
+struct ScrollJump: View {
+    let down: Bool
+    let jump: () -> Void
+
+    var body: some View {
+        Button(action: jump) {
+            Image(systemName: down ? "arrow.down" : "arrow.up")
+                .font(.system(size: 15, weight: .semibold))
+                .foregroundStyle(Theme.muted)
+                .frame(width: 38, height: 38)
+                .background(Circle().fill(Theme.surface))
+                .overlay(Circle().stroke(Theme.line))
+                .shadow(color: .black.opacity(0.1), radius: 5, y: 2)
+        }
+        .buttonStyle(.plain)
+        .help(down ? "Scroll to bottom" : "Scroll to top")
+        .accessibilityLabel(down ? "Scroll to bottom" : "Scroll to top")
     }
 }

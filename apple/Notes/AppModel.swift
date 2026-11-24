@@ -59,6 +59,10 @@ final class AppModel {
     var lastSaved: String?
     /// Set by the Mac's New Note command and the sidebar's button: the journal box takes focus.
     var focusBox = 0
+    /// Text pasted in the journal outside a text field, for the writing box to take as if pasted there, as the web's.
+    var pastedToBox: String?
+    /// Turns the focused entry's pages: the entry, and which way, counted so each press is seen.
+    var turnPage: (id: String, by: Int, n: Int)?
     /// The search over everything (Cmd+K).
     var showPalette = false
     /// View only, for reading without changing anything by mistake.

@@ -143,7 +143,8 @@ _Last checked 2026-11-23._
 | `?` lists the shortcuts | ✅ | ➖ | ➖ | C |
 | Cmd+Z undoes the last change anywhere, Cmd+Shift+Z redoes | ✅ | ➖ | ➖ | C |
 | ↑ ↓ Home End move between entries, Space picks, Return opens, Delete trashes, Esc stops picking | ✅ | ➖ | ➖ | C |
-| ← → turn the focused entry's pages; Cmd+V pastes copied entries | ❌ | ➖ | ➖ | C |
+| ← → turn the focused entry's pages | ✅ | ➖ | ➖ | C |
+| Cmd+V outside a text field stops picking and puts what's pasted in the writing box (copied entries come back whole there) | ✅ | ➖ | ➖ | T |
 | Right-click with several picked: Copy, Cut, Stop selecting, Archive, Move to Trash | ✅ | ➖ | ➖ | C |
 
 | Share an entry with people, a vault's members (after saying where it goes) or a read-only link; a private vault's entry asks first | ✅ | ✅ | ✅ | T |

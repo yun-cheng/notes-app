@@ -50,6 +50,20 @@ struct NotesApp: App {
                 }
                 .keyboardShortcut("z", modifiers: [.command, .shift])
             }
+            // Cmd+V in a text field pastes there; elsewhere in the journal what's pasted goes to the writing box to look
+            // over before saving, as on the web (entries copied from the journal come back whole there).
+            CommandGroup(replacing: .pasteboard) {
+                Button("Cut") { NSApp.sendAction(#selector(NSText.cut(_:)), to: nil, from: nil) }.keyboardShortcut("x")
+                Button("Copy") { NSApp.sendAction(#selector(NSText.copy(_:)), to: nil, from: nil) }.keyboardShortcut("c")
+                Button("Paste") {
+                    if NSApp.keyWindow?.firstResponder is NSTextView { NSApp.sendAction(#selector(NSText.paste(_:)), to: nil, from: nil) }
+                    else if case .journal = model.page, model.openEntry == nil, let text = NSPasteboard.general.string(forType: .string), !text.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
+                        model.pastedToBox = text
+                    } else { NSApp.sendAction(#selector(NSText.paste(_:)), to: nil, from: nil) }
+                }
+                .keyboardShortcut("v")
+                Button("Select All") { NSApp.sendAction(#selector(NSText.selectAll(_:)), to: nil, from: nil) }.keyboardShortcut("a")
+            }
             CommandGroup(after: .textEditing) {
                 Button("Search…") { model.showPalette = true }.keyboardShortcut("k")
             }

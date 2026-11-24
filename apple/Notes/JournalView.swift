@@ -145,6 +145,8 @@ struct JournalView: View {
         .pageBackground()
         .navigationTitle(title)
         .toolbar { toolbar(all: all.map(\.card.id)) }
+        // Pasting stops picking, so the box shows to take what's pasted, as the web's.
+        .onChange(of: model.pastedToBox) { _, pasted in if pasted != nil { picked = [] } }
         #if os(iOS)
         .preference(key: PlacesPhoneHeader.self, value: phoneHeader != nil)
         .preference(key: PlacesPageStatus.self, value: phoneHeader != nil)
@@ -179,6 +181,10 @@ struct JournalView: View {
             withAnimation(nil) { proxy.scrollTo(next, anchor: .center) }
         }
         switch press.key {
+        case .leftArrow, .rightArrow:
+            // The focused entry's previous or next page, round from the last to the first, as the web's.
+            guard let f = focusedEntry else { return .ignored }
+            model.turnPage = (f, press.key == .leftArrow ? -1 : 1, (model.turnPage?.n ?? 0) + 1)
         case .downArrow: move(1)
         case .upArrow: move(-1)
         case .home: move(-ids.count)
@@ -202,6 +208,16 @@ struct JournalView: View {
                 Clipboard.copyEntries(cards, model: model)
                 if press.characters == "x" { model.trash(cards.filter(model.canManage).map(\.id)) } else { model.say("Copied \(cards.count)") }
                 picked = []
+            } else if command && press.characters == "v" {
+                // Anything pasted here goes to the writing box to look over before saving, as the web's; entries
+                // copied from the journal come back whole there.
+                #if os(macOS)
+                guard let text = NSPasteboard.general.string(forType: .string), !text.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty else { return .ignored }
+                #else
+                guard let text = UIPasteboard.general.string, !text.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty else { return .ignored }
+                #endif
+                picked = []
+                model.pastedToBox = text
             } else if press.characters == "?" {
                 showShortcuts = true
             } else {

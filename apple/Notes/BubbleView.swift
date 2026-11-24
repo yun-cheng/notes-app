@@ -88,6 +88,10 @@ struct BubbleView: View {
         #endif
         }
         .frame(maxWidth: .infinity, alignment: .leading)
+        .onChange(of: model.turnPage?.n) {
+            guard let turn = model.turnPage, turn.id == card.id, pages.count > 1 else { return }
+            withAnimation(.easeOut(duration: 0.2)) { page = (page + turn.by + pages.count) % pages.count }
+        }
         .accessibilityElement(children: .combine)
         // Opening is what pressing it does, as on the web; ticking a todo is one of its named actions.
         .accessibilityAction { model.openEntry = card.id }

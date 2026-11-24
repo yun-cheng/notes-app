@@ -117,6 +117,9 @@ struct JournalBox: View {
             if text.isEmpty, let doc = Drafts.shared.get("journal", draftKey) { text = Drafts.text(doc) }
         }
         .onChange(of: model.focusBox) { focused = true }
+        .onChange(of: model.pastedToBox) { _, pasted in takePasted(pasted) }
+        // Shown again for it, as picking stopped.
+        .onAppear { takePasted(model.pastedToBox) }
         .onChange(of: picking) { _, items in
             guard !items.isEmpty else { return }
             picking = []
@@ -151,6 +154,14 @@ struct JournalBox: View {
         let last = text.split(separator: "\n", omittingEmptySubsequences: false).last.map(String.init) ?? ""
         guard last.hasPrefix("/"), !last.contains(" ") else { return nil }
         return String(last.dropFirst())
+    }
+
+    /// Text pasted in the journal outside a text field, taken as if pasted here.
+    private func takePasted(_ pasted: String?) {
+        guard let pasted else { return }
+        text = text.isEmpty ? pasted : text + "\n" + pasted
+        model.pastedToBox = nil
+        focused = true
     }
 
     /// The `#` or `@` word being typed at the end, as the web's box suggests tags and due dates for it.

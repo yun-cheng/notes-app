@@ -65,7 +65,7 @@ fun SettingsPage(openDrawer: (() -> Unit)?) {
     var remindersOn by remember { mutableStateOf(Reminders.on(context)) }
     var remindAt by remember { mutableStateOf(Reminders.at(context)) }
     var lead by remember { mutableIntStateOf(Reminders.lead(context)) }
-    LaunchedEffect(reload) {
+    LaunchedEffect(reload, model.driveReturned) {
         try { drive = model.api.driveStatus(); apps = model.api.aiApps(); offline = false } catch (_: Exception) { offline = true }
     }
     var pendingExport by remember { mutableStateOf<ByteArray?>(null) }
@@ -191,10 +191,19 @@ fun SettingsPage(openDrawer: (() -> Unit)?) {
                         !d.configured -> FormText("Photo and file storage isn't set up on the server yet, so they stay on the device that added them for now.")
                         d.connected -> {
                             FormRow("Google Drive", "Connected" + (d.email?.let { " to $it" } ?: ""))
-                            FormButton("Disconnect Google Drive") { model.scope.launch { runCatching { model.api.disconnectDrive() }; reload++ } }
+                            FormButton("Disconnect Google Drive") {
+                                model.scope.launch {
+                                    if (runCatching { model.api.disconnectDrive() }.isSuccess) model.say("Google Drive disconnected. Photos already there stay in your Drive.")
+                                    else model.say("Couldn't disconnect. Check your connection and try again.")
+                                    reload++
+                                }
+                            }
                         }
                         else -> FormButton("Connect Google Drive") {
-                            model.scope.launch { runCatching { model.api.driveConnectUrl() }.getOrNull()?.let { context.startActivity(Intent(Intent.ACTION_VIEW, Uri.parse(it))) } }
+                            model.scope.launch {
+                                runCatching { model.api.driveConnectUrl() }.getOrNull()?.let { context.startActivity(Intent(Intent.ACTION_VIEW, Uri.parse(it))) }
+                                    ?: model.say("Couldn't start connecting. Check your connection and try again.")
+                            }
                         }
                     }
                 }
@@ -249,4 +258,12 @@ fun DeleteAccountSheet(dismiss: () -> Unit, onExport: () -> Unit) {
             }
         }
     }
+}
+
+/** What Google Drive's answer means, in the web's words. */
+fun driveResult(result: String?): String = when (result) {
+    "connected" -> "Google Drive is connected. Waiting photos and files will upload now."
+    "denied" -> "Google Drive was not connected."
+    "expired" -> "That took too long. Try connecting Google Drive again."
+    else -> "Google Drive couldn't be connected. Try again."
 }

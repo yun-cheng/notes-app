@@ -1,3 +1,4 @@
+import AuthenticationServices
 import NotesKit
 import SwiftUI
 import UniformTypeIdentifiers
@@ -6,7 +7,7 @@ import UniformTypeIdentifiers
 /// journal shows, copy and paste, photos and Google Drive, AI apps, and deleting the account.
 struct SettingsPage: View {
     @Environment(AppModel.self) private var model
-    @Environment(\.openURL) private var openURL
+    @Environment(\.webAuthenticationSession) private var webAuth
     @AppStorage("linkStyle") private var linkStyle = LinkStyle.card.rawValue
     @AppStorage("photoStyle") private var photoStyle = "large"
     @AppStorage("copyStyle") private var copyStyle = "rich"
@@ -17,6 +18,39 @@ struct SettingsPage: View {
     @State private var apps: [ConnectedApp]?
     @State private var offline = false
     @State private var deleting = false
+
+    /// Connects Google Drive in Apple's sign-in sheet, which closes on Google's answer, and says it as the web does.
+    private func connectDrive() async {
+        guard let url = try? await model.api.driveConnectURL() else { return model.say("Couldn't start connecting. Check your connection and try again.") }
+        do {
+            let back = try await webAuth.authenticate(using: url, callback: .customScheme("notesapp"), additionalHeaderFields: [:])
+            let result = URLComponents(url: back, resolvingAgainstBaseURL: false)?.queryItems?.first { $0.name == "result" }?.value
+            model.say(Self.driveResult(result))
+            await load()
+            if result == "connected" { await model.sync?.sync() }
+        } catch {
+            // Closed the sheet: Drive isn't connected, and there's nothing to say.
+        }
+    }
+
+    private func disconnectDrive() async {
+        do {
+            try await model.api.disconnectDrive()
+            model.say("Google Drive disconnected. Photos already there stay in your Drive.")
+        } catch {
+            model.say("Couldn't disconnect. Check your connection and try again.")
+        }
+        await load()
+    }
+
+    static func driveResult(_ result: String?) -> String {
+        switch result {
+        case "connected": "Google Drive is connected. Waiting photos and files will upload now."
+        case "denied": "Google Drive was not connected."
+        case "expired": "That took too long. Try connecting Google Drive again."
+        default: "Google Drive couldn't be connected. Try again."
+        }
+    }
 
     var body: some View {
         Form {
@@ -90,9 +124,9 @@ struct SettingsPage: View {
                         Text("Photo and file storage isn't set up on the server yet, so they stay on the device that added them for now.").foregroundStyle(Theme.muted)
                     } else if drive.connected {
                         LabeledContent("Google Drive", value: "Connected" + (drive.email.map { " to \($0)" } ?? ""))
-                        Button("Disconnect Google Drive") { Task { try? await model.api.disconnectDrive(); await load() } }
+                        Button("Disconnect Google Drive") { Task { await disconnectDrive() } }
                     } else {
-                        Button("Connect Google Drive") { Task { if let url = try? await model.api.driveConnectURL() { openURL(url) } } }
+                        Button("Connect Google Drive") { Task { await connectDrive() } }
                     }
                 }
                 let waiting = Attachments.shared.pending.count

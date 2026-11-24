@@ -122,6 +122,8 @@ class AppModel(private val context: Context, val site: String) {
     var addingAccount by mutableStateOf(false)
     /** Text shared into the app from another, for the journal box. */
     var sharedText by mutableStateOf<String?>(null)
+    /** Goes up when the browser comes back from connecting Google Drive, so Settings asks again. */
+    var driveReturned by mutableIntStateOf(0)
 
     /** The signed-in account's own database on this device; each account has one. */
     var repo: Repository = Repository(MemoryStore()); private set

@@ -30,6 +30,8 @@
                 <category android:name="android.intent.category.DEFAULT" />
                 <category android:name="android.intent.category.BROWSABLE" />
                 <data android:scheme="notesapp" android:host="paired" />
+                <!-- And back here once Google Drive is connected. -->
+                <data android:scheme="notesapp" android:host="drive" />
             </intent-filter>
             <!-- Text shared from another app goes into the journal box. -->
             <intent-filter>

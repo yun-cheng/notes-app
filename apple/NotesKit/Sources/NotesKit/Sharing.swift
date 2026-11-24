@@ -397,10 +397,10 @@ public struct AccountSummary: Codable, Sendable {
 extension ServerAPI {
     public func driveStatus() async throws -> DriveStatus { try await json(DriveStatus.self, "/drive") }
 
-    /// The Google page that connects Drive; opened in the browser.
+    /// The Google page that connects Drive, opened in Apple's sign-in sheet, which Google's answer closes at `notesapp://drive`.
     public func driveConnectURL() async throws -> URL {
         struct R: Decodable { let url: String }
-        guard let url = URL(string: try await json(R.self, "/drive/connect", method: "POST", body: [String: String]()).url) else { throw APIError.status(0) }
+        guard let url = URL(string: try await json(R.self, "/drive/connect", method: "POST", body: ["app": true]).url) else { throw APIError.status(0) }
         return url
     }
 

@@ -405,8 +405,8 @@ class ServerApi(
     // Settings
 
     suspend fun driveStatus() = json(DriveStatus.serializer(), "/drive")
-    /** The Google page that connects Drive; opened in the browser. */
-    suspend fun driveConnectUrl(): String = obj("/drive/connect", "POST", jobj())["url"].str ?: throw ApiError.Status(0)
+    /** The Google page that connects Drive; opened in the browser, which comes back to the app at `notesapp://drive`. */
+    suspend fun driveConnectUrl(): String = obj("/drive/connect", "POST", jobj("app" to j(true)))["url"].str ?: throw ApiError.Status(0)
     suspend fun disconnectDrive() { ok(send("/drive", "DELETE")) }
     suspend fun aiApps() = list(ConnectedApp.serializer(), "apps", "/ai/apps")
     suspend fun disconnectAiApp(id: String) { ok(send("/ai/apps/" + part(id), "DELETE")) }

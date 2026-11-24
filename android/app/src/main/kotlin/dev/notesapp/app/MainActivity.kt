@@ -52,11 +52,17 @@ class MainActivity : ComponentActivity() {
         model.scope.launchSync(model)
     }
 
-    /** A reminder opens its todo; text shared from another app goes into the journal box. */
+    /** A reminder opens its todo; text shared from another app goes into the journal box; Google Drive's answer is said. */
     private fun handle(intent: Intent?) {
         intent ?: return
         intent.getStringExtra("cardId")?.let { model.openEntry = it }
         if (intent.action == Intent.ACTION_SEND) intent.getStringExtra(Intent.EXTRA_TEXT)?.let { model.sharedText = it }
+        val data = intent.data
+        if (data?.scheme == "notesapp" && data.host == "drive") {
+            model.say(driveResult(data.getQueryParameter("result")))
+            model.driveReturned++
+            intent.data = null
+        }
     }
 }
 

@@ -1,13 +1,16 @@
 import NotesKit
 import SwiftUI
 import UserNotifications
+#if os(iOS)
+import BackgroundTasks
+#endif
 
 /// Due-date reminders on this device, as the web app's: an open todo with a due date (not waiting, archived or a
 /// template) reminds at its time less the lead, or for a date alone at the time picked. The web sends them by push from
 /// the server; here the device schedules them itself, which works offline and for encrypted vaults alike.
 @MainActor
 enum Reminders {
-    static let onKey = "remindersOn"
+    nonisolated static let onKey = "remindersOn"
     static let atKey = "remindAt"
     static let leadKey = "remindLead"
     /// The system keeps at most 64 waiting; the soonest go first.
@@ -132,3 +135,26 @@ struct RemindersSettings: View {
         }
     }
 }
+
+#if os(iOS)
+/// A sync now and then with the app in the background, while reminders are on, so a todo given a time on another
+/// device still reminds here; the web gets this from the server's pushes. iOS decides when it runs.
+enum BackgroundSync {
+    static let id = "dev.notesapp.notes.sync"
+
+    static func plan() {
+        guard UserDefaults.standard.bool(forKey: Reminders.onKey) else { return BGTaskScheduler.shared.cancel(taskRequestWithIdentifier: id) }
+        let request = BGAppRefreshTaskRequest(identifier: id)
+        request.earliestBeginDate = .now.addingTimeInterval(30 * 60)
+        try? BGTaskScheduler.shared.submit(request)
+    }
+}
+
+extension AppModel {
+    /// Pulls what changed and sets this device's reminders again.
+    func syncInBackground() async {
+        await sync?.sync()
+        await refresh()
+    }
+}
+#endif

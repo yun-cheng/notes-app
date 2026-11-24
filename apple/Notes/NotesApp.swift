@@ -3,6 +3,8 @@ import SwiftUI
 import UserNotifications
 #if os(macOS)
 import AppKit
+#else
+import BackgroundTasks
 #endif
 
 @main
@@ -27,7 +29,16 @@ struct NotesApp: App {
                 model.newDay()
                 Task { await model.sync?.sync() }
             }
+            #if os(iOS)
+            if phase == .background { BackgroundSync.plan() }
+            #endif
         }
+        #if os(iOS)
+        .backgroundTask(.appRefresh(BackgroundSync.id)) { [model] in
+            BackgroundSync.plan()
+            await model.syncInBackground()
+        }
+        #endif
         #if os(macOS)
         .defaultSize(width: 1100, height: 740)
         .commands {

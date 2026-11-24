@@ -49,6 +49,9 @@ targets:
     info:
       path: Notes/Info.plist
       properties:
+        # iOS wakes the app now and then to sync, so reminders know of todos made elsewhere.
+        BGTaskSchedulerPermittedIdentifiers: [dev.notesapp.notes.sync]
+        UIBackgroundModes: [fetch]
         CFBundleURLTypes:
           - CFBundleURLName: dev.notesapp.notes
             CFBundleURLSchemes: [notesapp]

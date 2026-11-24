@@ -3,7 +3,8 @@ import Security
 
 /// Session tokens, one for each account signed in on this device, kept in the Keychain rather than in the app's files.
 enum Keychain {
-    private static let service = "dev.notesapp.notes.session"
+    // Named after the app, so a dev build beside the released one keeps its own (dev.notesapp.notes.session for the release).
+    private static let service = AppBuild.id + ".session"
 
     private static func query(_ account: String) -> [String: Any] {
         [kSecClass as String: kSecClassGenericPassword, kSecAttrService as String: service, kSecAttrAccount as String: account]

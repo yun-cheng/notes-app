@@ -10,7 +10,7 @@ import Security
 /// On a Mac, a Keychain item locked to Touch ID needs the app signed with a provisioning profile, which builds made
 /// here aren't, so there it's kept in the ordinary Keychain and Touch ID is asked before it's read, as on the web.
 enum DeviceUnlock {
-    private static let service = "dev.notesapp.notes.vault"
+    private static let service = AppBuild.id + ".vault"
     private static let mark = Data("open".utf8)
 
     private static func query(_ userId: String, _ vaultId: String) -> [String: Any] {

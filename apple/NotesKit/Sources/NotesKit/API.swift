@@ -178,10 +178,11 @@ public struct ServerAPI: SyncAPI {
         try await json(Pairing.self, "/auth/pair/start", method: "POST", body: [String: String]())
     }
 
-    /// The page the browser opens to approve this device.
-    public func pairingPage(_ pairing: Pairing) -> URL {
+    /// The page the browser opens to approve this device; it ends at `notesapp://paired`, or `notesapp-dev://paired`
+    /// for a dev build (`dev`), which is installed beside the released app.
+    public func pairingPage(_ pairing: Pairing, dev: Bool = false) -> URL {
         var c = URLComponents(url: site.appending(path: "pair"), resolvingAgainstBaseURL: false)!
-        c.queryItems = [URLQueryItem(name: "p", value: pairing.pair), URLQueryItem(name: "return", value: "app")]
+        c.queryItems = [URLQueryItem(name: "p", value: pairing.pair), URLQueryItem(name: "return", value: dev ? "app-dev" : "app")]
         return c.url!
     }
 

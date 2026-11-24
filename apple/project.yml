@@ -46,12 +46,25 @@ targets:
         INFOPLIST_KEY_NSFaceIDUsageDescription: Opens a private vault with Face ID, once you turn that on in its lock settings.
         INFOPLIST_KEY_NSPhotoLibraryUsageDescription: Adds photos and videos to your notes.
         ENABLE_HARDENED_RUNTIME: YES
+        # The scheme the app's links come back to; Info.plist names it, and AppBuild.swift reads it.
+        APP_SCHEME: notesapp
+      # A build from Xcode is its own app, installed beside the released one: "Notes Dev" on an amber icon, with its
+      # own bundle ID, data, sign-in and link scheme. The release (the Release configuration) keeps the names above.
+      configs:
+        Debug:
+          PRODUCT_BUNDLE_IDENTIFIER: dev.notesapp.notes.dev
+          PRODUCT_NAME: Notes Dev
+          INFOPLIST_KEY_CFBundleDisplayName: Notes Dev
+          "INFOPLIST_KEY_CFBundleDisplayName[sdk=macosx*]": Notes Dev
+          ASSETCATALOG_COMPILER_APPICON_NAME: AppIconDev
+          APP_SCHEME: notesapp-dev
     info:
       path: Notes/Info.plist
       properties:
         # iOS wakes the app now and then to sync, so reminders know of todos made elsewhere.
         BGTaskSchedulerPermittedIdentifiers: [dev.notesapp.notes.sync]
         UIBackgroundModes: [fetch]
+        AppScheme: $(APP_SCHEME)
         CFBundleURLTypes:
-          - CFBundleURLName: dev.notesapp.notes
-            CFBundleURLSchemes: [notesapp]
+          - CFBundleURLName: $(PRODUCT_BUNDLE_IDENTIFIER)
+            CFBundleURLSchemes: [$(APP_SCHEME)]

@@ -21,9 +21,9 @@ struct SettingsPage: View {
 
     /// Connects Google Drive in Apple's sign-in sheet, which closes on Google's answer, and says it as the web does.
     private func connectDrive() async {
-        guard let url = try? await model.api.driveConnectURL() else { return model.say("Couldn't start connecting. Check your connection and try again.") }
+        guard let url = try? await model.api.driveConnectURL(dev: AppBuild.isDev) else { return model.say("Couldn't start connecting. Check your connection and try again.") }
         do {
-            let back = try await webAuth.authenticate(using: url, callback: .customScheme("notesapp"), additionalHeaderFields: [:])
+            let back = try await webAuth.authenticate(using: url, callback: .customScheme(AppBuild.scheme), additionalHeaderFields: [:])
             let result = URLComponents(url: back, resolvingAgainstBaseURL: false)?.queryItems?.first { $0.name == "result" }?.value
             model.say(Self.driveResult(result))
             await load()

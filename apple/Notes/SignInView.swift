@@ -111,9 +111,9 @@ struct SignInView: View {
             return
         }
         pairing = next
-        // The sheet closes itself when the page sends the browser to notesapp://paired.
+        // The sheet closes itself when the page sends the browser to notesapp://paired (notesapp-dev:// for a dev build).
         let sheet = Task {
-            _ = try? await webAuth.authenticate(using: api.pairingPage(next), callback: .customScheme("notesapp"), additionalHeaderFields: [:])
+            _ = try? await webAuth.authenticate(using: api.pairingPage(next, dev: AppBuild.isDev), callback: .customScheme(AppBuild.scheme), additionalHeaderFields: [:])
         }
         defer { sheet.cancel() }
         while !Task.isCancelled {

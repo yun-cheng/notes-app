@@ -397,10 +397,11 @@ public struct AccountSummary: Codable, Sendable {
 extension ServerAPI {
     public func driveStatus() async throws -> DriveStatus { try await json(DriveStatus.self, "/drive") }
 
-    /// The Google page that connects Drive, opened in Apple's sign-in sheet, which Google's answer closes at `notesapp://drive`.
-    public func driveConnectURL() async throws -> URL {
+    /// The Google page that connects Drive, opened in Apple's sign-in sheet, which Google's answer closes at `notesapp://drive`
+    /// (`notesapp-dev://drive` for a dev build).
+    public func driveConnectURL(dev: Bool = false) async throws -> URL {
         struct R: Decodable { let url: String }
-        guard let url = URL(string: try await json(R.self, "/drive/connect", method: "POST", body: ["app": true]).url) else { throw APIError.status(0) }
+        guard let url = URL(string: try await json(R.self, "/drive/connect", method: "POST", body: DriveConnectBody(dev: dev)).url) else { throw APIError.status(0) }
         return url
     }
 
@@ -543,4 +544,16 @@ extension ServerAPI {
         guard let (_, status) = try? await send("/attachments/" + Self.part(id) + "/link", method: "DELETE") else { return false }
         return (200..<300).contains(status)
     }
+}
+
+/// What `/drive/connect` is sent from an app: `{"app": true}` from the released one, `{"app": "dev"}` from a dev build.
+struct DriveConnectBody: Encodable {
+    let dev: Bool
+
+    func encode(to encoder: Encoder) throws {
+        var c = encoder.container(keyedBy: Key.self)
+        if dev { try c.encode("dev", forKey: .app) } else { try c.encode(true, forKey: .app) }
+    }
+
+    enum Key: CodingKey { case app }
 }

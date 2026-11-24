@@ -2,6 +2,16 @@ package dev.notesapp.app
 
 import android.content.Intent
 import android.net.Uri
+import android.util.Log
+import androidx.credentials.CredentialManager
+import androidx.credentials.CustomCredential
+import androidx.credentials.GetCredentialRequest
+import androidx.credentials.exceptions.GetCredentialCancellationException
+import androidx.credentials.exceptions.GetCredentialException
+import com.google.android.libraries.identity.googleid.GetSignInWithGoogleOption
+import com.google.android.libraries.identity.googleid.GoogleIdTokenCredential
+import kotlinx.coroutines.CancellationException
+import kotlinx.coroutines.launch
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Spacer
@@ -23,6 +33,7 @@ import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
@@ -33,21 +44,58 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import dev.notesapp.core.ApiError
 import dev.notesapp.core.Pairing
 import dev.notesapp.core.ServerApi
 import kotlinx.coroutines.delay
 
 /**
- * Signs in through the web app: the browser opens the site, where the user confirms the code shown here. Google
- * doesn't allow its sign-in inside apps, so the browser does that part, and sends it back to `notesapp://paired`.
+ * Signs in with the Google accounts on this device, through Android's own account picker (Credential Manager), and
+ * trades the ID token it gives for this device's session. Where that can't work (no Google Play services, say), it
+ * signs in through the web app instead: the browser opens the site, where the user confirms the code shown here, and
+ * sends it back to `notesapp://paired`.
  */
 @Composable
 fun SignInView() {
     val model = LocalModel.current
     val context = LocalContext.current
+    val scope = rememberCoroutineScope()
     var pairing by remember { mutableStateOf<Pairing?>(null) }
     var problem by remember { mutableStateOf<String?>(null) }
     var attempt by remember { mutableIntStateOf(0) }
+    var busy by remember { mutableStateOf(false) }
+    // Shown once the account picker has failed, so the browser is still a way in.
+    var offerBrowser by remember { mutableStateOf(false) }
+
+    fun signInWithGoogle() = scope.launch {
+        busy = true
+        problem = null
+        try {
+            val api = ServerApi(model.site, null)
+            val clientId = api.googleClientId().ifEmpty { throw IllegalStateException("Sign-in is not set up on the server.") }
+            val option = GetSignInWithGoogleOption.Builder(clientId).build()
+            val credential = CredentialManager.create(context).getCredential(context, GetCredentialRequest(listOf(option))).credential
+            if (credential !is CustomCredential || credential.type != GoogleIdTokenCredential.TYPE_GOOGLE_ID_TOKEN_CREDENTIAL) throw IllegalStateException("Google didn't send an account.")
+            val signedIn = api.signInWithGoogle(GoogleIdTokenCredential.createFrom(credential.data).idToken)
+            model.signedIn(signedIn.info, signedIn.token)
+        } catch (_: GetCredentialCancellationException) {
+            // Closed the account picker: nothing to say.
+        } catch (e: CancellationException) {
+            throw e
+        } catch (e: GetCredentialException) {
+            Log.w("SignIn", "Google sign-in failed", e)
+            problem = "Google sign-in didn't work on this device."
+            offerBrowser = true
+        } catch (_: ApiError.Offline) {
+            problem = "Connect to the internet to sign in."
+        } catch (e: Exception) {
+            Log.w("SignIn", "Google sign-in failed", e)
+            problem = e.message ?: "Sign-in failed. Try again."
+            offerBrowser = true
+        } finally {
+            busy = false
+        }
+    }
 
     LaunchedEffect(attempt) {
         if (attempt == 0) return@LaunchedEffect
@@ -85,7 +133,10 @@ fun SignInView() {
             TextButton(onClick = { attempt++ }) { Text("Start again") }
         } else {
             Spacer(Modifier.height(4.dp))
-            Button(onClick = { attempt++ }, Modifier.widthIn(min = 220.dp)) { Text("Sign in") }
+            Button(onClick = { signInWithGoogle() }, Modifier.widthIn(min = 220.dp), enabled = !busy) {
+                if (busy) CircularProgressIndicator(Modifier.size(18.dp), strokeWidth = 2.dp) else Text("Sign in with Google")
+            }
+            if (offerBrowser) TextButton(onClick = { attempt++ }) { Text("Sign in with the browser") }
         }
         problem?.let { Text(it, color = Theme.alert, textAlign = TextAlign.Center) }
         if (model.addingAccount) TextButton(onClick = { model.addingAccount = false }) { Text("Cancel") }

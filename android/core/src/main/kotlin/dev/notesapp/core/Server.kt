@@ -177,6 +177,15 @@ class ServerApi(
         data class SignedIn(val info: SessionInfo, val token: String) : Claim()
     }
 
+    /** The web app's Google client ID: a sign-in on the device names it, so the server accepts the token it gets. */
+    suspend fun googleClientId(): String = obj("/config")["googleClientId"].str.orEmpty()
+
+    /** Trades the ID token from the device's own Google account picker for this device's session. */
+    suspend fun signInWithGoogle(idToken: String): Claim.SignedIn {
+        val info = json(SessionInfo.serializer(), "/auth/google", "POST", jobj("credential" to j(idToken), "token" to j(true)))
+        return Claim.SignedIn(info, info.token ?: throw ApiError.Status(200))
+    }
+
     suspend fun startPairing() = json(Pairing.serializer(), "/auth/pair/start", "POST", jobj())
 
     /** The page the browser opens to approve this device; it comes back to the app at `notesapp://paired`. */

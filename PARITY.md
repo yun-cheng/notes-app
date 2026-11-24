@@ -149,6 +149,9 @@ _Last checked 2026-11-23._
 
 | Share an entry with people, a vault's members (after saying where it goes) or a read-only link; a private vault's entry asks first | ✅ | ✅ | ✅ | T |
 
+| Reminders: the web's words; This device with Turn on reminders, Turn off and Send a test; Todos with a time; Todos with only a date | ✅ | ✅ | ✅ | C |
+| A translation shows in the entry's words' place, with "From Japanese · Show original · Save as a page", or "Show in English" once put aside | ✅ | ✅ | ✅ | C |
+
 ## Not checked yet
 
-Reminders; translating.
+Nothing left in this list; reminders are scheduled on the device rather than pushed by the server (see the plan).

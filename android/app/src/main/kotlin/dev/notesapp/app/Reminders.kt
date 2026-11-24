@@ -57,6 +57,18 @@ object Reminders {
     }
 
     /** Schedules the soonest reminders again from the todos as they are now, when they changed. */
+    /** A notification now, to see that reminders reach this device, as the web's Send a test. */
+    fun test(c: Context) {
+        channel(c)
+        val n = android.app.Notification.Builder(c, CHANNEL)
+            .setSmallIcon(android.R.drawable.ic_popup_reminder)
+            .setContentTitle("Test reminder")
+            .setContentText("Reminders reach this device.")
+            .setAutoCancel(true)
+            .build()
+        runCatching { c.getSystemService(NotificationManager::class.java).notify(1, n) }
+    }
+
     fun reschedule(c: Context, index: CardIndex) {
         val now = System.currentTimeMillis()
         val soon = if (on(c)) index.todos.mapNotNull { card -> fireAt(c, card)?.let { card to it } }.filter { it.second > now }.sortedBy { it.second }.take(MOST) else emptyList()

@@ -67,6 +67,25 @@ final class Translations {
 
 /// An entry's translation under it, with Show original and Save as a page; one being made on the device runs here,
 /// where the system's translator can be asked.
+/// An entry's translation, shown in its words' place while it's shown: the title, then its lines.
+struct TranslatedText: View {
+    let kept: Translations.Kept
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 2) {
+            if let title = kept.pieces.first, !title.trimmingCharacters(in: .whitespaces).isEmpty { Text(title).fontWeight(.semibold) }
+            Text(kept.pieces.dropFirst().joined(separator: "\n")).fixedSize(horizontal: false, vertical: true)
+        }
+    }
+
+    /// The translation an entry shows, if it's shown.
+    @MainActor
+    static func shown(_ card: Card) -> Translations.Kept? {
+        if case .done(let kept)? = Translations.shared.states[card.id], kept.shown { return kept }
+        return nil
+    }
+}
+
 struct BubbleTranslation: View {
     @Environment(AppModel.self) private var model
     let card: Card
@@ -77,18 +96,22 @@ struct BubbleTranslation: View {
         case .working?:
             HStack { ProgressView().controlSize(.small); Text("Translating…").font(.caption).foregroundStyle(Theme.muted) }
         case .done(let kept)? where kept.shown:
-            VStack(alignment: .leading, spacing: 4) {
-                Divider()
-                Text(kept.pieces.filter { !$0.trimmingCharacters(in: .whitespaces).isEmpty }.joined(separator: "\n")).textSelection(.enabled)
-                HStack(spacing: 12) {
-                    Text("Translated from \(Locale.current.localizedString(forLanguageCode: kept.from) ?? kept.from)").foregroundStyle(Theme.muted)
-                    Button("Show original") { Translations.shared.show(card.id, false) }
-                    if model.canEdit(card) { Button("Save as a page") { saveAsPage(kept.pieces) } }
-                }
-                .buttonStyle(.plain)
-                .font(.caption)
-                .foregroundStyle(Theme.accent)
+            // Its words show in the bubble's place (`TranslatedText`); above them, as the web's, where they're from.
+            HStack(spacing: 8) {
+                Label("From \(Locale.current.localizedString(forLanguageCode: kept.from) ?? kept.from)", systemImage: "translate").foregroundStyle(Theme.muted)
+                Button("Show original") { Translations.shared.show(card.id, false) }
+                if model.canEdit(card) { Button("Save as a page") { saveAsPage(kept.pieces) }.help("Put this translation on a new page of its own") }
             }
+            .buttonStyle(.plain)
+            .font(.caption)
+            .foregroundStyle(Theme.accent)
+        case .done(let kept)?:
+            Button { Translations.shared.show(card.id, true) } label: {
+                Label("Show in \(Locale.current.localizedString(forLanguageCode: kept.to) ?? kept.to)", systemImage: "translate")
+            }
+            .buttonStyle(.plain)
+            .font(.caption)
+            .foregroundStyle(Theme.accent)
         case .onDevice(let pieces)?:
             HStack { ProgressView().controlSize(.small); Text("Translating on this device…").font(.caption).foregroundStyle(Theme.muted) }
                 .onAppear { config = TranslationSession.Configuration(source: nil, target: Locale.Language(identifier: Translations.deviceLanguage)) }

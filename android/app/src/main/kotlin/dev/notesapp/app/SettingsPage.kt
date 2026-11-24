@@ -145,24 +145,29 @@ fun SettingsPage(openDrawer: (() -> Unit)?) {
             FormSection("Import", "Bring in notes from Markdown or text files, or a zip of them, like a folder from Obsidian or Bear, or this app's Markdown export. Each file becomes an entry, titled by its front matter, its first heading or its name, with the front matter's tags, date and todo fields. Links between the files are kept.") {
                 FormButton("Import Markdown") { import.launch(arrayOf("text/*", "application/zip", "application/octet-stream")) }
             }
-            FormSection("Reminders", "Open todos with a due date remind on this device, even with the app closed.") {
-                SwitchRow("Remind me when todos come due", remindersOn) { want ->
-                    if (want) {
+            FormSection("Reminders") {
+                FormText("A notification when an open todo comes due, even with the app closed: at its time, or for a todo with only a date, at the time set below. Waiting todos don't remind. This is set for each device.")
+                FormRow("This device") {
+                    if (remindersOn) {
+                        TextButton(onClick = { Reminders.test(context); model.say("Sent a test reminder") }) { Text("Send a test") }
+                        androidx.compose.material3.OutlinedButton(onClick = {
+                            Reminders.set(context, on = false); remindersOn = false; Reminders.reschedule(context, model.index)
+                            model.say("Reminders are off on this device")
+                        }) { Text("Turn off") }
+                    } else androidx.compose.material3.Button(onClick = {
                         if (Build.VERSION.SDK_INT >= 33 && ContextCompat.checkSelfPermission(context, Manifest.permission.POST_NOTIFICATIONS) != PackageManager.PERMISSION_GRANTED) {
                             askNotifications.launch(Manifest.permission.POST_NOTIFICATIONS)
-                        } else { Reminders.set(context, on = true); remindersOn = true; Reminders.reschedule(context, model.index) }
-                    } else { Reminders.set(context, on = false); remindersOn = false; Reminders.reschedule(context, model.index) }
+                        } else { Reminders.set(context, on = true); remindersOn = true; Reminders.reschedule(context, model.index); model.say("Reminders are on on this device") }
+                    }) { Text("Turn on reminders") }
                 }
-                if (remindersOn) {
-                    FormRow("A date alone reminds at", TimeKey.format(remindAt), Modifier.clickableRow {
-                        val p = remindAt.split(":").map { it.toInt() }
-                        TimePickerDialog(context, { _, h, m -> remindAt = "%02d:%02d".format(h, m); Reminders.set(context, at = remindAt); Reminders.reschedule(context, model.index) }, p[0], p[1], android.text.format.DateFormat.is24HourFormat(context)).show()
-                    })
-                    val leads = listOf(0 to "At the time", 5 to "5 minutes before", 10 to "10 minutes before", 15 to "15 minutes before", 30 to "30 minutes before", 60 to "1 hour before", 120 to "2 hours before")
-                    ChoiceRow("A time reminds", leads.first { it.first == lead }.second) { close ->
-                        for ((m, l) in leads) MenuCheck(l, lead == m) { lead = m; Reminders.set(context, lead = m); Reminders.reschedule(context, model.index); close() }
-                    }
+                val leads = listOf(0 to "At the due time", 5 to "5 minutes before", 10 to "10 minutes before", 15 to "15 minutes before", 30 to "30 minutes before", 60 to "1 hour before", 120 to "2 hours before")
+                ChoiceRow("Todos with a time", leads.first { it.first == lead }.second) { close ->
+                    for ((m, l) in leads) MenuCheck(l, lead == m) { lead = m; Reminders.set(context, lead = m); Reminders.reschedule(context, model.index); close() }
                 }
+                FormRow("Todos with only a date", TimeKey.format(remindAt), Modifier.clickableRow {
+                    val p = remindAt.split(":").map { it.toInt() }
+                    TimePickerDialog(context, { _, h, m -> remindAt = "%02d:%02d".format(h, m); Reminders.set(context, at = remindAt); Reminders.reschedule(context, model.index) }, p[0], p[1], android.text.format.DateFormat.is24HourFormat(context)).show()
+                })
             }
             FormSection("Journal display", "How web links and photos show under entries on this device. Links in the text can always be opened.") {
                 val links = mapOf("card" to "Cards", "compact" to "One line", "off" to "Off")

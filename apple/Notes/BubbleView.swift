@@ -29,7 +29,12 @@ struct BubbleView: View {
         MaxWidth(fraction: 0.85, limit: 560) {
         VStack(alignment: .leading, spacing: 2) {
             if page == 0 { BubbleTranslation(card: card) }
-            if card.type == .todo {
+            if page == 0, let kept = TranslatedText.shown(card) {
+                HStack(alignment: .top, spacing: 6) {
+                    if card.type == .todo { TodoCheck(card: card) }
+                    TranslatedText(kept: kept)
+                }
+            } else if card.type == .todo {
                 HStack(alignment: .top, spacing: 6) {
                     TodoCheck(card: card)
                     VStack(alignment: .leading, spacing: 2) {

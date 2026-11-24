@@ -233,20 +233,20 @@ fun BubbleTranslation(card: Card) {
             CircularProgressIndicator(Modifier.size(12.dp), strokeWidth = 1.5.dp)
             Text("Translating…", fontSize = 12.sp, color = Theme.muted)
         }
-        is Translations.State.Done -> if (s.kept.shown) Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
-            HorizontalDivider(color = Theme.line)
-            SelectionContainer { Text(s.kept.pieces.filter { it.isNotBlank() }.joinToString("\n"), color = Theme.text, fontSize = 16.sp) }
-            Row(horizontalArrangement = Arrangement.spacedBy(12.dp)) {
-                Text("Translated from ${Locale.forLanguageTag(s.kept.from).displayLanguage.ifEmpty { s.kept.from }}", fontSize = 12.sp, color = Theme.muted)
-                Text("Show original", Modifier.clickable { Translations.show(card.id, false) }, fontSize = 12.sp, color = Theme.accent)
-                if (model.canEdit(card)) Text("Save as a page", Modifier.clickable {
-                    // The translation as a page of its own.
-                    val doc = Doc.fromText(s.kept.pieces.filter { it.isNotBlank() }.joinToString("\n"))
-                    model.update(card.id) { c -> c.withMorePages(c.morePages.filter { p -> !Doc.isBlank(p) } + doc) }
-                    model.say("Saved as page ${card.turnPages.size + 2}", undoable = true)
-                }, fontSize = 12.sp, color = Theme.accent)
-            }
-        }
+        // Its words show in the bubble's place; above them, as the web's, where they're from, or a way back to them.
+        is Translations.State.Done -> if (s.kept.shown) Row(horizontalArrangement = Arrangement.spacedBy(10.dp), verticalAlignment = Alignment.CenterVertically) {
+            Text("From ${Locale.forLanguageTag(s.kept.from).displayLanguage.ifEmpty { s.kept.from }}", fontSize = 12.sp, color = Theme.muted)
+            Text("Show original", Modifier.clickable { Translations.show(card.id, false) }, fontSize = 12.sp, color = Theme.accent)
+            if (model.canEdit(card)) Text("Save as a page", Modifier.clickable {
+                // The translation as a page of its own.
+                val doc = Doc.fromText(s.kept.pieces.filter { it.isNotBlank() }.joinToString("\n"))
+                model.update(card.id) { c -> c.withMorePages(c.morePages.filter { p -> !Doc.isBlank(p) } + doc) }
+                model.say("Saved as page ${card.turnPages.size + 2}", undoable = true)
+            }, fontSize = 12.sp, color = Theme.accent)
+        } else Text(
+            "Show in ${Locale.forLanguageTag(s.kept.to).displayLanguage.ifEmpty { s.kept.to }}", Modifier.clickable { Translations.show(card.id, true) },
+            fontSize = 12.sp, color = Theme.accent,
+        )
         null -> {}
     }
 }

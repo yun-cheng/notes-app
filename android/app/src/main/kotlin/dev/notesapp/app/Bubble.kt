@@ -134,7 +134,17 @@ fun BubbleView(card: Card, maxWidth: Dp, picked: Boolean = false, picking: Boole
             verticalArrangement = Arrangement.spacedBy(2.dp),
         ) {
             if (page == 0) BubbleTranslation(card)
-            if (card.type == CardType.todo) {
+            // A translation shows in the words' place while it's shown, as the web's.
+            val translated = (Translations.states[card.id] as? Translations.State.Done)?.kept?.takeIf { it.shown && page == 0 }
+            if (translated != null) {
+                Row(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
+                    if (card.type == CardType.todo) TodoCheck(card)
+                    Column(verticalArrangement = Arrangement.spacedBy(2.dp)) {
+                        translated.pieces.firstOrNull()?.takeIf { it.isNotBlank() }?.let { Text(it, fontWeight = FontWeight.SemiBold, color = Theme.text, fontSize = 16.sp) }
+                        Text(translated.pieces.drop(1).joinToString("\n"), color = Theme.text, fontSize = 16.sp, lineHeight = 22.sp)
+                    }
+                }
+            } else if (card.type == CardType.todo) {
                 Row(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
                     TodoCheck(card)
                     Column(verticalArrangement = Arrangement.spacedBy(2.dp)) {

@@ -15,6 +15,16 @@ enum Reminders {
 
     static var on: Bool { UserDefaults.standard.bool(forKey: onKey) }
 
+    /// A notification in a few seconds, to see that reminders reach this device, as the web's Send a test.
+    static func test() {
+        let content = UNMutableNotificationContent()
+        content.title = "Test reminder"
+        content.body = "Reminders reach this device."
+        content.sound = .default
+        let request = UNNotificationRequest(identifier: "test-\(UUID().uuidString)", content: content, trigger: UNTimeIntervalNotificationTrigger(timeInterval: 3, repeats: false))
+        UNUserNotificationCenter.current().add(request)
+    }
+
     static func turnOn() async -> Bool {
         let granted = (try? await UNUserNotificationCenter.current().requestAuthorization(options: [.alert, .sound, .badge])) ?? false
         UserDefaults.standard.set(granted, forKey: onKey)
@@ -80,32 +90,45 @@ struct RemindersSettings: View {
 
     var body: some View {
         Section {
-            Toggle("Remind me when todos come due", isOn: Binding(get: { on }, set: { want in
-                if want {
-                    Task {
-                        if await Reminders.turnOn() { Reminders.reschedule(model.index) } else { model.say("Notifications are off for this app. Turn them on in Settings.") }
+            Text("A notification when an open todo comes due, even with the app closed: at its time, or for a todo with only a date, at the time set below. Waiting todos don't remind. This is set for each device.")
+                .foregroundStyle(Theme.muted)
+            HStack {
+                Text("This device")
+                Spacer()
+                if on {
+                    Button("Send a test") { Reminders.test(); model.say("Sent a test reminder") }.buttonStyle(.borderless)
+                    Button("Turn off") {
+                        on = false
+                        Reminders.reschedule(model.index)
+                        model.say("Reminders are off on this device")
                     }
+                    .buttonStyle(.bordered)
                 } else {
-                    on = false
-                    Reminders.reschedule(model.index)
-                }
-            }))
-            if on {
-                DatePicker("A date alone reminds at", selection: Binding(get: { DuePicker.date(at) }, set: { at = TimeKey.of($0); Reminders.reschedule(model.index) }), displayedComponents: .hourAndMinute)
-                Picker("A time reminds", selection: Binding(get: { lead }, set: { lead = $0; Reminders.reschedule(model.index) })) {
-                    Text("At the time").tag(0)
-                    Text("5 minutes before").tag(5)
-                    Text("10 minutes before").tag(10)
-                    Text("15 minutes before").tag(15)
-                    Text("30 minutes before").tag(30)
-                    Text("1 hour before").tag(60)
-                    Text("2 hours before").tag(120)
+                    Button("Turn on reminders") {
+                        Task {
+                            if await Reminders.turnOn() {
+                                Reminders.reschedule(model.index)
+                                model.say("Reminders are on on this device")
+                            } else {
+                                model.say("Notifications are off for this app. Turn them on in Settings.")
+                            }
+                        }
+                    }
+                    .buttonStyle(.borderedProminent)
                 }
             }
+            Picker("Todos with a time", selection: Binding(get: { lead }, set: { lead = $0; Reminders.reschedule(model.index) })) {
+                Text("At the due time").tag(0)
+                Text("5 minutes before").tag(5)
+                Text("10 minutes before").tag(10)
+                Text("15 minutes before").tag(15)
+                Text("30 minutes before").tag(30)
+                Text("1 hour before").tag(60)
+                Text("2 hours before").tag(120)
+            }
+            DatePicker("Todos with only a date", selection: Binding(get: { DuePicker.date(at) }, set: { at = TimeKey.of($0); Reminders.reschedule(model.index) }), displayedComponents: .hourAndMinute)
         } header: {
             Text("Reminders")
-        } footer: {
-            Text("Open todos with a due date remind on this device, even with the app closed.")
         }
     }
 }

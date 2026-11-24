@@ -10,13 +10,19 @@ long press picks, Tags and vaults and the account's picture take the sidebar's p
 - ➖ doesn't apply on that platform (a mouse or keyboard behavior on a phone)
 
 **How each row was checked**, in its last column: **T** tried in the running app against the demo account, side by
-side with the web app; **C** read in the code side by side with the web's; **?** not checked yet.
+side with the web app; **C** read in the code side by side with the web's; **?** not checked yet. A **C** is not proof:
+on 2026-11-25 two rows marked ✅ turned out wrong once tried (Esc in a Mac open entry, Cmd-click while picking).
+
+**Keeping it current.** Every change to how the web app behaves rewrites its row here, in the same commit, and marks the
+native apps that no longer match; every native change updates that app's cell, with **T** only once tried. The rows
+were rebuilt on 2026-11-25 from the whole git history (every web commit since 2026-11-10, later ones over earlier
+ones) and the web app as it runs today.
 
 Local testing: run `npm run dev` and point the native apps at `http://localhost:5191`, not at the API on 8788, or the
 demo's photos, videos and voice messages won't load (the README says how). That was why photos and voice messages
 seemed broken on the Mac and iPhone: the API answers 503 for the demo's files, which only the dev server serves.
 
-_Last checked 2026-11-24._
+_Last checked 2026-11-25._
 
 ## Journal: bubbles
 
@@ -85,7 +91,7 @@ _Last checked 2026-11-24._
 | Picking: Select all and Done in the title bar; a bar of N selected, Tags, Done, Not done, Waiting, Due date, Make todos/notes, Move to…, Stack, Copy, Archive, Trash, × | ✅ | ✅ | ✅ | T |
 | Filter row: All, Notes, Todos, Stacks; Todos status; Written dates; Contains; Templates | ✅ | ✅ | ✅ | T |
 | Day badges, pinned while their day scrolls past | ✅ | ✅ | ✅ | T |
-| A button back to the newest entries | ? | ? | ? | ? |
+| A round button back to the newest entries (the end the journal opens at), shown once well away from it, above the writing box | ❌ | ❌ | ❌ | C |
 | A rail down the right with the years, to point at and drag | ⚠️ | ⚠️ | ⚠️ | ? |
 
 ## Journal box
@@ -100,6 +106,8 @@ _Last checked 2026-11-24._
 | Typed `- `, `1. `, `> `, `#` become lists, quotes and headings | ✅ | ✅ | ✅ | C |
 | A draft is kept per view and follows the account to its other devices | ✅ | ✅ | ✅ | C |
 | Pasting keeps formatting; a chip offers Markdown or plain instead | ❌ | ❌ | ❌ | C |
+| Buttons for a todo, a photo or video, a file and a voice message, beside Save | ✅ (T) | ✅ | ✅ | C |
+| A pasted picture, or a picture's address alone, becomes a photo; typing goes on after it | ? | ? | ? | ? |
 
 ## Open entry
 
@@ -120,6 +128,10 @@ _Last checked 2026-11-24._
 | Arrows page, Esc closes, + − 0 zoom (keyboard) | ✅ | ➖ | ➖ | C |
 | A swipe pages (touch) | ➖ | ✅ | ✅ | C |
 | Photos page: All/Photos/Videos, rows by day, count line | ✅ | ✅ | ✅ | T |
+| Photos page: pick photos to copy, download or share | ✅ | ✅ | ✅ | C |
+| Videos play under their entry, full screen and in the open entry, marked with their length | ✅ | ✅ | ✅ | C |
+| A photo, video or file shared by its Google Drive link (Share via public link) | ✅ | ✅ | ✅ | C |
+| Files page: one kind of file at a time (PDFs, documents, spreadsheets, slides, audio, images, video, archives, other) | ✅ | ✅ | ✅ | C |
 
 ## Pages
 
@@ -148,10 +160,64 @@ _Last checked 2026-11-24._
 | Cmd+V outside a text field stops picking and puts what's pasted in the writing box (copied entries come back whole there) | ✅ | ➖ | ➖ | T |
 | Right-click with several picked: Copy, Cut, Stop selecting, Archive, Move to Trash | ✅ | ➖ | ➖ | C |
 
-| Share an entry with people, a vault's members (after saying where it goes) or a read-only link; a private vault's entry asks first | ✅ | ✅ | ✅ | T |
+## Entries and todos
 
-| Reminders: the web's words; This device with Turn on reminders, Turn off and Send a test; Todos with a time; Todos with only a date | ✅ | ✅ | ✅ | C |
+| Web behavior | Mac | iPhone | Android | How |
+|---|---|---|---|---|
+| The entry menu, in order: Edit, Tags…, Make it a todo (or a note), a color, Translate, Save as template, Share…, View only, Vaults…, Take out of the stack, Archive, Move to Trash, each only where this account may | ✅ | ✅ | ✅ | C |
+| An untitled entry or stack is named by its first line | ✅ | ✅ | ✅ | C |
+| A todo has a due date and maybe a time, a start date shown until the day it starts, and a repeat; ticking a repeating one moves it on | ✅ | ✅ | ✅ | C |
+| Waiting: a todo leaves what's due without being done | ✅ | ✅ | ✅ | C |
+| Archive puts any entry away without trashing it; the Archive page holds them | ✅ | ✅ | ✅ | C |
+| Save as template saves a copy among the templates (the Templates filter), where Use it starts a new entry from it | ✅ | ✅ | ✅ | C |
+| Stack: picked entries become one, in an order of their own; Take out of the stack from the entry's menu | ✅ | ✅ | ✅ | C |
+| An open stack's cards are dragged into a new order | ? | ? | ? | ? |
+| Add a page behind the first; numbered pages, turned with ‹ › round from the last to the first | ✅ | ✅ | ✅ | C |
+| Each entry's color and its preview style (Color and previews) | ✅ | ✅ | ✅ | C |
+| Undo in the toast after ticking a todo, moving or trashing an entry | ✅ | ✅ | ✅ | C |
+| The date picker: a day or a range of days, a month or a year, a length of days from the picked day; opened from Written or a day's badge | ✅ | ✅ | ✅ | C |
+| A conflict keeps the losing side, its other pages too, as a copy | ✅ | ✅ | ✅ | C |
 | A translation shows in the entry's words' place, with "From Japanese · Show original · Save as a page", or "Show in English" once put aside | ✅ | ✅ | ✅ | C |
+
+## Vaults and privacy
+
+| Web behavior | Mac | iPhone | Android | How |
+|---|---|---|---|---|
+| Vaults page: each vault with its count and its state (Locked, Encrypted, Needs your PIN, waiting to be let in); Create vault; Hidden vaults: Unlock | ✅ | ✅ | ✅ | C |
+| A vault's page: its entries with New note here, then Settings: Rename, Make private, Encrypt end to end, AI access (Off, Read, Read and write), People with their roles (Can edit, Can view and comment), Remove, Share | ✅ | ✅ | ✅ | C |
+| A private vault: a PIN lock, Change PIN, Remove PIN, Hide this vault until it is unlocked | ✅ | ✅ | ✅ | C |
+| Encrypt end to end: a recovery key shown once, which recovers a forgotten PIN; its photos and files sealed on the device too | ✅ | ✅ | ✅ | C |
+| In a shared vault each member can lock it with a PIN of their own, and an owner can require one of everyone; in an encrypted one a member sets a PIN and asks, and the owner lets them in; everyone sees a code made from its key to compare | ✅ | ✅ | ✅ | C |
+| Every open vault locks after five idle minutes and when the app goes to the background | ❌ only from Lock private vaults, or on switching accounts | ❌ the same | ❌ the same | C |
+| After five wrong PINs, the next try waits 30 seconds | ❌ | ❌ | ❌ | C |
+
+## Sharing and comments
+
+| Web behavior | Mac | iPhone | Android | How |
+|---|---|---|---|---|
+| Share an entry with people, a vault's members (after saying where it goes) or a read-only link; a private vault's entry asks first | ✅ | ✅ | ✅ | T |
+| Share a vault: invite by email with a role, see waiting invites, change each one's access | ✅ | ✅ | ✅ | C |
+| An entry can be in several vaults (Vaults…); one shared with a vault shows in that vault's journal | ✅ | ✅ | ✅ | C |
+| A read-only public link opens a page anyone can read, with its photos and videos | ➖ the link opens in the browser | ➖ | ➖ | C |
+| A comment written but not sent is kept for each entry on the device; resolved comments hide behind Hide resolved | ✅ | ✅ | ✅ | C |
+
+## History and undo
+
+| Web behavior | Mac | iPhone | Android | How |
+|---|---|---|---|---|
+| An entry's version history, from the "Edited" date in the open entry: every version with who, which device or which AI app made it, compared with the one before, and Restore | ✅ | ✅ | ✅ | C |
+| History page: this device's changes and those from other devices, AI apps and people, with filters; undo one; Undo and Redo reach back through the newest 500 | ✅ | ✅ | ✅ | C |
+
+## Accounts and settings
+
+| Web behavior | Mac | iPhone | Android | How |
+|---|---|---|---|---|
+| Several accounts signed in at once, switched from the account's picture; Add another account | ✅ | ✅ | ✅ | C |
+| Backup: Download backup, Restore from backup, Export as Markdown; Import Markdown files or a zip | ✅ | ✅ | ✅ | C |
+| AI apps: the connector address to add in Claude and other AI apps; the apps connected, each to disconnect | ✅ | ✅ | ✅ | C |
+| Reminders: the web's words; This device with Turn on reminders, Turn off and Send a test; Todos with a time; Todos with only a date | ✅ | ✅ | ✅ | C |
+| Storage: whether the browser has agreed to keep the notes | ➖ | ➖ | ➖ | C |
+| A new version is looked for every half hour and on coming back, and offered with Reload | ➖ the apps update as releases | ➖ | ➖ | C |
 
 ## The platform's own way
 
@@ -168,4 +234,9 @@ Reviewed 2026-11-24, after Android's sign-in turned out to send people to Chrome
 
 ## Not checked yet
 
-Nothing left in this list; reminders are scheduled on the device rather than pushed by the server (see the plan).
+Rows marked **?** above, still to try in each app: the rail of years down the journal's side, a pasted picture or
+picture address becoming a photo, and dragging an open stack's cards into a new order. Rows marked **C** were read in
+the code, not tried, so they're next once these are done.
+
+Missing in all three native apps, found on 2026-11-25: locking open vaults after five idle minutes and on going to the
+background, the wait after five wrong PINs, the button back to the newest entries, and Paste as.

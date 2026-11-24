@@ -45,6 +45,15 @@ describe('sign-in', () => {
     expect((await call('/api/auth/google', { method: 'POST', body: JSON.stringify({ credential: 'bad' }) })).status).toBe(401);
     expect((await call('/api/auth/google', { method: 'POST', body: '{}' })).status).toBe(400);
   });
+  it('gives a native app its session as a bearer token, with no cookie', async () => {
+    const { call } = setup();
+    const res = await call('/api/auth/google', { method: 'POST', body: JSON.stringify({ credential: 'ann', token: true }) });
+    expect(res.headers.get('set-cookie')).toBeNull();
+    const body = (await res.json()) as SessionInfo & { token: string };
+    expect(body.user.name).toBe('ann');
+    const me = await call('/api/me', { headers: { Authorization: `Bearer ${body.token}` } });
+    expect(((await me.json()) as SessionInfo).user.name).toBe('ann');
+  });
   it('refuses sign-in when no client ID is configured', async () => {
     const app = createApp();
     const res = await app.request('/api/auth/google', { method: 'POST', body: '{"credential":"x"}' }, { DB: createTestDb(), GOOGLE_CLIENT_ID: '' });

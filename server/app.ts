@@ -110,14 +110,19 @@ export function createApp({
 
   app.post('/auth/google', async (c) => {
     if (!c.env.GOOGLE_CLIENT_ID) return c.json({ error: 'Sign-in is not configured' }, 503);
-    const body = await c.req.json<{ credential?: unknown }>().catch(() => null);
+    // A native app signs in with the ID token its own Google account picker gives it, and asks for `token: true` to get
+    // its session as a bearer token instead of a cookie.
+    const body = await c.req.json<{ credential?: unknown; token?: unknown }>().catch(() => null);
     if (typeof body?.credential !== 'string') return c.json({ error: 'Missing credential' }, 400);
     try {
       const identity = await verifyGoogle(body.credential, c.env.GOOGLE_CLIENT_ID);
       const at = now();
       const user = await upsertUser(c.env.DB, identity, at);
-      await sendSessionCookie(c, await createSession(c.env.DB, user.id, at));
-      return c.json<SessionInfo>({ user, vaults: await listVaults(c.env.DB, user.id) });
+      const session = await createSession(c.env.DB, user.id, at);
+      const info: SessionInfo = { user, vaults: await listVaults(c.env.DB, user.id) };
+      if (body.token === true) return c.json({ ...info, token: session });
+      await sendSessionCookie(c, session);
+      return c.json<SessionInfo>(info);
     } catch (err) {
       if (err instanceof InvalidGoogleToken) return c.json({ error: 'Google sign-in failed' }, 401);
       throw err;

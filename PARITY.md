@@ -188,8 +188,8 @@ _Last checked 2026-11-25._
 | A private vault: a PIN lock, Change PIN, Remove PIN, Hide this vault until it is unlocked | ✅ | ✅ | ✅ | C |
 | Encrypt end to end: a recovery key shown once, which recovers a forgotten PIN; its photos and files sealed on the device too | ✅ | ✅ | ✅ | C |
 | In a shared vault each member can lock it with a PIN of their own, and an owner can require one of everyone; in an encrypted one a member sets a PIN and asks, and the owner lets them in; everyone sees a code made from its key to compare | ✅ | ✅ | ✅ | C |
-| Every open vault locks after five idle minutes and when the app goes to the background | ❌ only from Lock private vaults, or on switching accounts | ❌ the same | ❌ the same | C |
-| After five wrong PINs, the next try waits 30 seconds | ❌ | ❌ | ❌ | C |
+| Every open vault locks after five idle minutes and when the app goes to the background | ✅ (since 2026-11-25) clicks and keys keep it open; hidden or minimized, it locks (C) | ✅ (since 2026-11-25) touches keep it open; the Home Screen locks it (T) | ✅ (since 2026-11-25) touches keep it open; Home and the screen going off lock it, but not a picker or browser tab the app opened itself (T) | T/C |
+| After five wrong PINs, the next try waits 30 seconds ("Too many tries. Wait 30 seconds and try again."); a wrong one says "That PIN isn't right." | ✅ (since 2026-11-25) | ✅ (since 2026-11-25) | ✅ (since 2026-11-25) | T |
 
 ## Sharing and comments
 
@@ -238,5 +238,5 @@ Rows marked **?** above, still to try in each app: the rail of years down the jo
 picture address becoming a photo, and dragging an open stack's cards into a new order. Rows marked **C** were read in
 the code, not tried, so they're next once these are done.
 
-Missing in all three native apps, found on 2026-11-25: locking open vaults after five idle minutes and on going to the
-background, the wait after five wrong PINs, the button back to the newest entries, and Paste as.
+Missing in all three native apps, found on 2026-11-25: the button back to the newest entries, and Paste as. (Locking
+open vaults by themselves and the wait after wrong PINs, found the same day, are done.)

@@ -105,7 +105,7 @@ _Last checked 2026-11-25._
 | `/` lists what can be added | ✅ | ✅ | ✅ | T |
 | Typed `- `, `1. `, `> `, `#` become lists, quotes and headings | ✅ | ✅ | ✅ | C |
 | A draft is kept per view and follows the account to its other devices | ✅ | ✅ | ✅ | C |
-| Pasting keeps formatting; a chip offers Markdown or plain instead | ❌ | ❌ | ❌ | C |
+| Pasting keeps formatting; a chip offers Markdown or plain instead | ❌ the editor keeps formatting, with no choice | ❌ the same | ❌ the editor takes plain words only | C |
 | Buttons for a todo, a photo or video, a file and a voice message, beside Save | ✅ (T) | ✅ | ✅ | C |
 | A pasted picture, or a picture's address alone, becomes a photo; typing goes on after it | ? | ? | ? | ? |
 
@@ -238,5 +238,7 @@ Rows marked **?** above, still to try in each app: the rail of years down the jo
 picture address becoming a photo, and dragging an open stack's cards into a new order. Rows marked **C** were read in
 the code, not tried, so they're next once these are done.
 
-Missing in all three native apps, found on 2026-11-25: Paste as. (Locking open vaults by themselves, the wait after
+Missing in all three native apps, found on 2026-11-25: Paste as. Restyling a paste after the editor has taken it
+means reading the clipboard again, which on the iPhone asks "Allow Paste?" every time (and newer macOS is moving the
+same way), so it waits on a design that takes the paste itself; a first try is kept in `.git/paste-as-wip.patch`. (Locking open vaults by themselves, the wait after
 wrong PINs and the button back to the newest entries, found the same day, are done.)

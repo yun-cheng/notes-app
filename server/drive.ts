@@ -30,11 +30,21 @@ export class DriveRefused extends Error {}
 /** Drive no longer has a resumable upload's session (a week old, or lost): it starts again from the first byte. */
 export class UploadExpired extends Error {}
 
-/** A state ending in this came from a native app, so Google's answer goes back to the app rather than to the web app. */
-export const APP_STATE = '.app';
+/**
+ * A state ending in one of these came from a native app, so Google's answer goes back to that app's own URL scheme
+ * rather than to the web app: the released apps' `notesapp`, or the dev builds' `notesapp-dev`, installed beside them.
+ */
+export const APP_RETURNS = { '.app': 'notesapp', '.app-dev': 'notesapp-dev' } as const;
+export type AppReturn = keyof typeof APP_RETURNS;
 
-export async function startConnect(db: Database, config: DriveConfig, userId: string, now: number, toApp = false): Promise<string> {
-  const state = randomToken() + (toApp ? APP_STATE : '');
+/** The app scheme a state asks to go back to, or null for the web app. */
+export function appScheme(state: string | undefined): string | null {
+  const end = state?.slice(state.lastIndexOf('.')) as AppReturn | undefined;
+  return end && end in APP_RETURNS ? APP_RETURNS[end] : null;
+}
+
+export async function startConnect(db: Database, config: DriveConfig, userId: string, now: number, toApp: AppReturn | null = null): Promise<string> {
+  const state = randomToken() + (toApp ?? '');
   await db.prepare(`INSERT INTO drive_states (state_hash, user_id, expires_at) VALUES (?, ?, ?)`).bind(await hashToken(state), userId, now + STATE_TTL).run();
   const params = new URLSearchParams({
     client_id: config.clientId,

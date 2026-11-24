@@ -7,7 +7,7 @@ import {
   disconnect,
   downloadFile,
   DriveFailed,
-  APP_STATE,
+  appScheme,
   DriveNotConnected,
   DriveRefused,
   driveStatus,
@@ -90,8 +90,9 @@ function driveError(c: Context<AppEnv>, err: unknown) {
 export function drivePublicRoutes(app: Hono<AppEnv>, fetcher: GoogleFetch, now: () => number) {
   app.get('/drive/callback', async (c) => {
     const { code, state, error } = c.req.query();
-    // A native app opened this in its sign-in sheet or the browser, and is waiting at notesapp://drive.
-    const back = (result: string) => c.redirect(state?.endsWith(APP_STATE) ? `notesapp://drive?result=${result}` : `/settings?drive=${result}`, 302);
+    // A native app opened this in its sign-in sheet or the browser, and is waiting at notesapp://drive (notesapp-dev:// for a dev build).
+    const scheme = appScheme(state);
+    const back = (result: string) => c.redirect(scheme ? `${scheme}://drive?result=${result}` : `/settings?drive=${result}`, 302);
     const config = driveConfig(c, fetcher);
     if (!config || error || !code || !state) return back(error === 'access_denied' ? 'denied' : 'failed');
     try {
@@ -131,7 +132,9 @@ export function photoRoutes(app: Hono<AppEnv>, fetcher: GoogleFetch, now: () => 
     const config = driveConfig(c, fetcher);
     if (!config) return c.json({ error: 'photos_not_configured' }, 503);
     const body = await c.req.json<{ app?: unknown }>().catch(() => null);
-    return c.json({ url: await startConnect(c.env.DB, config, c.get('user').id, now(), body?.app === true) });
+    // `app: true` from a released app, `app: "dev"` from a dev build.
+    const toApp = body?.app === true ? '.app' : body?.app === 'dev' ? '.app-dev' : null;
+    return c.json({ url: await startConnect(c.env.DB, config, c.get('user').id, now(), toApp) });
   });
 
   app.delete('/drive', async (c) => {

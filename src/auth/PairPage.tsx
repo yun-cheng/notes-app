@@ -7,8 +7,12 @@ import { useAccount } from './AuthContext';
 export function PairPage() {
   const params = new URLSearchParams(useLocation().search);
   const pair = params.get('p') ?? '';
-  /** The native apps open this page in a sign-in sheet that closes when it reaches their own URL scheme. */
-  const returnToApp = params.get('return') === 'app';
+  /**
+   * The native apps open this page in a sign-in sheet that closes when it reaches their own URL scheme: the released
+   * apps' `notesapp`, or `notesapp-dev` for a dev build installed beside them.
+   */
+  const asked = params.get('return');
+  const returnTo = asked === 'app' ? 'notesapp' : asked === 'app-dev' ? 'notesapp-dev' : null;
   const { account } = useAccount();
   const [code, setCode] = useState<string | null>(null);
   const [state, setState] = useState<'loading' | 'ready' | 'done' | 'expired'>('loading');
@@ -27,7 +31,7 @@ export function PairPage() {
     try {
       await approvePairing(pair);
       setState('done');
-      if (returnToApp) location.href = 'notesapp://paired';
+      if (returnTo) location.href = `${returnTo}://paired`;
     } catch {
       setState('expired');
     }

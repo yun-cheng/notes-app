@@ -68,7 +68,8 @@ fun UnlockView(vault: Vault, modifier: Modifier = Modifier) {
     var pin by remember { mutableStateOf("") }
     var useRecoveryKey by remember { mutableStateOf(false) }
     var working by remember { mutableStateOf(false) }
-    var wrong by remember { mutableStateOf(false) }
+    /** What went wrong with the last try, in the web's words. */
+    var problem by remember { mutableStateOf<String?>(null) }
     val context = LocalContext.current
     // The fingerprint is on for this vault here: it's asked for as the vault shows.
     var deviceOn by remember(vault.id) { mutableStateOf(DeviceUnlock.isOn(context, model.accountId, vault.id)) }
@@ -89,13 +90,15 @@ fun UnlockView(vault: Vault, modifier: Modifier = Modifier) {
     fun unlock() {
         if (pin.isEmpty() || working) return
         working = true
-        wrong = false
+        problem = null
         val entered = pin
+        val recovery = useRecoveryKey
         model.scope.launch {
-            val opened = model.unlock(vault, entered, useRecoveryKey)
+            // A PIN counts toward the wait after five wrong ones; a recovery key doesn't, as on the web.
+            val result = if (recovery) (if (model.unlock(vault, entered, true)) PinResult.Ok else PinResult.Wrong) else model.unlockWithPin(vault, entered)
             working = false
-            wrong = !opened
-            if (opened) pin = ""
+            problem = if (recovery && result == PinResult.Wrong) "That recovery key isn't right." else result.problem
+            if (result == PinResult.Ok) pin = ""
         }
     }
     Column(modifier.fillMaxWidth().padding(24.dp), horizontalAlignment = Alignment.CenterHorizontally, verticalArrangement = Arrangement.spacedBy(14.dp, Alignment.CenterVertically)) {
@@ -103,7 +106,7 @@ fun UnlockView(vault: Vault, modifier: Modifier = Modifier) {
         Text("${vault.name} is private", fontSize = 22.sp, fontWeight = FontWeight.Bold, color = Theme.text)
         Text(if (useRecoveryKey) "Enter the recovery key you saved when the vault was encrypted." else "Enter its PIN to open it on this device.", color = Theme.muted, textAlign = TextAlign.Center)
         PinField(pin, { pin = it }, if (useRecoveryKey) "Recovery key" else "PIN", ::unlock, Modifier.widthIn(max = 300.dp))
-        if (wrong) Text(if (useRecoveryKey) "That recovery key doesn't open this vault." else "Wrong PIN.", color = Theme.alert)
+        problem?.let { Text(it, color = Theme.alert) }
         Button(onClick = ::unlock, enabled = pin.isNotEmpty() && !working) {
             if (working) CircularProgressIndicator(Modifier.size(18.dp), strokeWidth = 2.dp) else Text("Unlock")
         }
@@ -113,7 +116,7 @@ fun UnlockView(vault: Vault, modifier: Modifier = Modifier) {
             Text("Use fingerprint")
         }
         if (deviceFailed) Text("Fingerprint didn't work. Use your PIN.", color = Theme.alert)
-        if (vault.isEncrypted) TextButton(onClick = { useRecoveryKey = !useRecoveryKey; pin = ""; wrong = false }) { Text(if (useRecoveryKey) "Use the PIN instead" else "Forgot PIN?") }
+        if (vault.isEncrypted) TextButton(onClick = { useRecoveryKey = !useRecoveryKey; pin = ""; problem = null }) { Text(if (useRecoveryKey) "Use the PIN instead" else "Forgot PIN?") }
     }
 }
 
@@ -212,11 +215,7 @@ fun VaultsPage(openDrawer: (() -> Unit)?) {
     fun openHidden() {
         val entered = hiddenPin
         hiddenPin = ""
-        model.scope.launch {
-            var opened = 0
-            for (v in model.vaults) if (v.hidden && v.id !in model.openVaults && model.unlock(v, entered, false)) opened++
-            message = if (opened == 0) "No hidden vault has that PIN." else null
-        }
+        model.scope.launch { message = model.unlockHidden(entered).problem }
     }
     Column(Modifier.fillMaxSize().background(Theme.bg)) {
         TopBar("Vaults", openDrawer, filters = false, eye = false)
@@ -473,7 +472,7 @@ fun LetInSheet(vault: Vault, person: VaultMember, dismiss: () -> Unit, done: (Va
                 Text("If it isn't the same, someone may have put their key in place of theirs: don't let them in.", fontSize = 12.sp, color = Theme.muted, textAlign = TextAlign.Center)
             }
             if (model.repo.keyring.key(vault.id) == null) PinField(pin, { pin = it }, "Your PIN")
-            if (wrong) Text("Wrong PIN.", color = Theme.alert)
+            if (wrong) Text("That PIN isn't right.", color = Theme.alert)
             Row(horizontalArrangement = Arrangement.spacedBy(10.dp)) {
                 TextButton(onClick = dismiss) { Text("Cancel") }
                 Button(onClick = {

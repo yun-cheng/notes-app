@@ -106,6 +106,10 @@ class AppModel(private val context: Context, val site: String) {
     var unsynced by mutableStateOf<Set<String>>(emptySet()); private set
     /** Private vaults opened with their PIN on this device, until the app locks them again. */
     var openVaults by mutableStateOf<Set<String>>(emptySet()); private set
+    /** Locking open vaults by themselves and slowing PIN guesses, as the web's `VaultLocks` (`VaultGuard.kt`). */
+    internal var idleLock: kotlinx.coroutines.Job? = null
+    internal var pinFailures = 0
+    internal var pinBlockedUntil = 0L
     var sync by mutableStateOf<SyncEngine?>(null); private set
     var syncStatus by mutableStateOf(SyncEngine.Status()); private set
     var toast by mutableStateOf<Toast?>(null)
@@ -345,6 +349,7 @@ class AppModel(private val context: Context, val site: String) {
     /** Opens a private vault on this device: its cards show until the app locks again. */
     suspend fun openVault(vaultId: String) {
         openVaults = openVaults + vaultId
+        touchVaults()
         sync?.schedule(scope, 200)
         refresh()
     }
@@ -356,6 +361,8 @@ class AppModel(private val context: Context, val site: String) {
     }
 
     fun lockAll() {
+        idleLock?.cancel()
+        idleLock = null
         openVaults = emptySet()
         repo.keyring.forgetAll()
         scope.launch { refresh() }

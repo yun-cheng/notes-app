@@ -21,6 +21,8 @@ android {
         // The local dev server, from the emulator: `adb reverse tcp:5191 tcp:5191`, then
         // `./gradlew installDebug -Pserver=http://localhost:5191` (Vite serves the demo's photos and files; the API alone can't).
         buildConfigField("String", "SERVER", "\"${project.findProperty("server") ?: "https://notes-app.yuncheng-dev.workers.dev"}\"")
+        // How long open vaults stay open with nothing done in the app: five minutes, or `-PvaultIdleSeconds=20` to try it.
+        buildConfigField("long", "VAULT_IDLE_SECONDS", "${project.findProperty("vaultIdleSeconds") ?: 300}L")
         manifestPlaceholders["appName"] = "Notes"
         manifestPlaceholders["appScheme"] = "notesapp"
         buildConfigField("String", "APP_SCHEME", "\"notesapp\"")

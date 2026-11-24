@@ -21,6 +21,9 @@ android {
         // The local dev server, from the emulator: `adb reverse tcp:5191 tcp:5191`, then
         // `./gradlew installDebug -Pserver=http://localhost:5191` (Vite serves the demo's photos and files; the API alone can't).
         buildConfigField("String", "SERVER", "\"${project.findProperty("server") ?: "https://notes-app.yuncheng-dev.workers.dev"}\"")
+        manifestPlaceholders["appName"] = "Notes"
+        manifestPlaceholders["appScheme"] = "notesapp"
+        buildConfigField("String", "APP_SCHEME", "\"notesapp\"")
     }
 
     buildFeatures {
@@ -46,6 +49,15 @@ android {
     }
 
     buildTypes {
+        // A build from here is its own app, "Notes Dev" on an amber icon (src/debug/res), installed beside the
+        // released one with its own data, sign-in and link scheme (notesapp-dev://). Google sign-in knows it by its
+        // own Android OAuth client: package dev.notesapp.notes.dev with this Mac's debug key.
+        debug {
+            applicationIdSuffix = ".dev"
+            manifestPlaceholders["appName"] = "Notes Dev"
+            manifestPlaceholders["appScheme"] = "notesapp-dev"
+            buildConfigField("String", "APP_SCHEME", "\"notesapp-dev\"")
+        }
         release {
             isMinifyEnabled = true
             isShrinkResources = true

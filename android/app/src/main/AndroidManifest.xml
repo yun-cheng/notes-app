@@ -8,7 +8,7 @@
 
     <application
         android:name=".NotesApplication"
-        android:label="Notes"
+        android:label="${appName}"
         android:icon="@mipmap/ic_launcher"
         android:roundIcon="@mipmap/ic_launcher"
         android:supportsRtl="true"
@@ -29,9 +29,9 @@
                 <action android:name="android.intent.action.VIEW" />
                 <category android:name="android.intent.category.DEFAULT" />
                 <category android:name="android.intent.category.BROWSABLE" />
-                <data android:scheme="notesapp" android:host="paired" />
+                <data android:scheme="${appScheme}" android:host="paired" />
                 <!-- And back here once Google Drive is connected. -->
-                <data android:scheme="notesapp" android:host="drive" />
+                <data android:scheme="${appScheme}" android:host="drive" />
             </intent-filter>
             <!-- Text shared from another app goes into the journal box. -->
             <intent-filter>
@@ -42,7 +42,7 @@
         </activity>
         <provider
             android:name="androidx.core.content.FileProvider"
-            android:authorities="dev.notesapp.notes.files"
+            android:authorities="${applicationId}.files"
             android:exported="false"
             android:grantUriPermissions="true">
             <meta-data android:name="android.support.FILE_PROVIDER_PATHS" android:resource="@xml/file_paths" />

@@ -188,8 +188,11 @@ class ServerApi(
 
     suspend fun startPairing() = json(Pairing.serializer(), "/auth/pair/start", "POST", jobj())
 
-    /** The page the browser opens to approve this device; it comes back to the app at `notesapp://paired`. */
-    fun pairingPage(p: Pairing) = site.trimEnd('/') + "/pair" + query(listOf("p" to p.pair, "return" to "app"))
+    /**
+     * The page the browser opens to approve this device; it comes back to the app at `notesapp://paired`, or at
+     * `notesapp-dev://paired` for a dev build (`dev` true), which is installed beside the released app.
+     */
+    fun pairingPage(p: Pairing, dev: Boolean = false) = site.trimEnd('/') + "/pair" + query(listOf("p" to p.pair, "return" to if (dev) "app-dev" else "app"))
 
     suspend fun claim(p: Pairing): Claim {
         val r = send("/auth/pair/claim", "POST", jobj("pair" to j(p.pair), "token" to j(true)))
@@ -405,8 +408,9 @@ class ServerApi(
     // Settings
 
     suspend fun driveStatus() = json(DriveStatus.serializer(), "/drive")
-    /** The Google page that connects Drive; opened in the browser, which comes back to the app at `notesapp://drive`. */
-    suspend fun driveConnectUrl(): String = obj("/drive/connect", "POST", jobj("app" to j(true)))["url"].str ?: throw ApiError.Status(0)
+    /** The Google page that connects Drive; opened in the browser, which comes back to the app at `notesapp://drive` (`notesapp-dev://` for a dev build). */
+    suspend fun driveConnectUrl(dev: Boolean = false): String =
+        obj("/drive/connect", "POST", jobj("app" to if (dev) j("dev") else j(true)))["url"].str ?: throw ApiError.Status(0)
     suspend fun disconnectDrive() { ok(send("/drive", "DELETE")) }
     suspend fun aiApps() = list(ConnectedApp.serializer(), "apps", "/ai/apps")
     suspend fun disconnectAiApp(id: String) { ok(send("/ai/apps/" + part(id), "DELETE")) }

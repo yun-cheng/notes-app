@@ -201,7 +201,7 @@ fun SettingsPage(openDrawer: (() -> Unit)?) {
                         }
                         else -> FormButton("Connect Google Drive") {
                             model.scope.launch {
-                                runCatching { model.api.driveConnectUrl() }.getOrNull()?.let { context.startActivity(Intent(Intent.ACTION_VIEW, Uri.parse(it))) }
+                                runCatching { model.api.driveConnectUrl(BuildConfig.DEBUG) }.getOrNull()?.let { context.startActivity(Intent(Intent.ACTION_VIEW, Uri.parse(it))) }
                                     ?: model.say("Couldn't start connecting. Check your connection and try again.")
                             }
                         }

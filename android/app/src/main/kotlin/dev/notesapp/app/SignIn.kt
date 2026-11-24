@@ -107,7 +107,7 @@ fun SignInView() {
             return@LaunchedEffect
         }
         pairing = next
-        context.startActivity(Intent(Intent.ACTION_VIEW, Uri.parse(api.pairingPage(next))))
+        context.startActivity(Intent(Intent.ACTION_VIEW, Uri.parse(api.pairingPage(next, BuildConfig.DEBUG))))
         while (true) {
             when (val c = runCatching { api.claim(next) }.getOrNull()) {
                 is ServerApi.Claim.SignedIn -> { model.signedIn(c.info, c.token); return@LaunchedEffect }

@@ -60,7 +60,7 @@ class MainActivity : FragmentActivity() {
         intent.getStringExtra("cardId")?.let { model.openEntry = it }
         if (intent.action == Intent.ACTION_SEND) intent.getStringExtra(Intent.EXTRA_TEXT)?.let { model.sharedText = it }
         val data = intent.data
-        if (data?.scheme == "notesapp" && data.host == "drive") {
+        if (data?.scheme == BuildConfig.APP_SCHEME && data.host == "drive") {
             model.say(driveResult(data.getQueryParameter("result")))
             model.driveReturned++
             intent.data = null

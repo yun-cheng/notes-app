@@ -181,7 +181,7 @@ object Attachments {
     fun Bitmap.jpeg(quality: Int): ByteArray = ByteArrayOutputStream().also { compress(Bitmap.CompressFormat.JPEG, quality, it) }.toByteArray()
 
     /** The address another app opens one of this app's files by. */
-    fun uriFor(context: Context, file: File): Uri = FileProvider.getUriForFile(context, "dev.notesapp.notes.files", file)
+    fun uriFor(context: Context, file: File): Uri = FileProvider.getUriForFile(context, context.packageName + ".files", file)
 
     private fun newId() = UUID.randomUUID().toString().lowercase()
 

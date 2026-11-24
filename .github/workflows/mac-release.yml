@@ -1,0 +1,108 @@
+# Builds the Mac app and publishes it as a GitHub release whenever the Apple code changes on main, as the Android
+# release does. Without Apple's paid Developer Program there's no Developer ID to sign with, so the app is signed ad hoc
+# and not notarized: macOS asks once, on each Mac, before it first opens (README, "Mac releases").
+name: Mac release
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - 'apple/**'
+      - '.github/workflows/mac-release.yml'
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+# One release at a time, in order.
+concurrency:
+  group: mac-release
+  cancel-in-progress: false
+
+jobs:
+  release:
+    # macOS 26 with Xcode 26, which the app's macOS 26 target needs.
+    runs-on: macos-26
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          # The whole history and its tags: the build number is the commit count, and the notes start from the last release.
+          fetch-depth: 0
+
+      - name: Get XcodeGen
+        run: |
+          curl -sSL -o "$RUNNER_TEMP/xcodegen.zip" https://github.com/yonaskolb/XcodeGen/releases/download/2.46.0/xcodegen.zip
+          echo "4d9e34b62172d645eed6457cac13fc222569974098ef4ee9c3368bedf0196806  $RUNNER_TEMP/xcodegen.zip" | shasum -a 256 -c -
+          unzip -q "$RUNNER_TEMP/xcodegen.zip" -d "$RUNNER_TEMP"
+          echo "$RUNNER_TEMP/xcodegen/bin" >> "$GITHUB_PATH"
+
+      - name: Work out the version
+        id: version
+        run: |
+          # Named by the day of the commit, as the Android releases are: 2026.11.24, then 2026.11.24.2 for a second
+          # release that day. The build number is the commit count, which only grows.
+          day=$(git log -1 --format=%cd --date=format:%Y.%m.%d)
+          name=$day
+          n=1
+          while git rev-parse -q --verify "refs/tags/mac-v$name" >/dev/null; do
+            n=$((n + 1))
+            name="$day.$n"
+          done
+          echo "code=$(git rev-list --count HEAD)" >> "$GITHUB_OUTPUT"
+          echo "name=$name" >> "$GITHUB_OUTPUT"
+
+      - name: Test
+        working-directory: apple/NotesKit
+        run: swift test
+
+      - name: Build
+        working-directory: apple
+        run: |
+          xcodegen -q
+          # Signed ad hoc: no team, no certificate. The sandbox and the rest of its entitlements still apply.
+          xcodebuild -project Notes.xcodeproj -scheme Notes -configuration Release -destination 'generic/platform=macOS' \
+            -derivedDataPath "$RUNNER_TEMP/build" \
+            CODE_SIGN_STYLE=Manual CODE_SIGN_IDENTITY=- DEVELOPMENT_TEAM= \
+            MARKETING_VERSION=${{ steps.version.outputs.name }} CURRENT_PROJECT_VERSION=${{ steps.version.outputs.code }} \
+            build
+
+      - name: Make the disk image
+        env:
+          VERSION: ${{ steps.version.outputs.name }}
+        run: |
+          # The app next to a link to Applications, to drag it across.
+          stage="$RUNNER_TEMP/dmg"
+          mkdir -p "$stage"
+          app="$stage/Notes App.app"
+          ditto "$RUNNER_TEMP/build/Build/Products/Release/Notes App.app" "$app"
+          ln -s /Applications "$stage/Applications"
+          # Signed again without the debugger's entitlement, which an ad hoc build gets; the sandbox's stay.
+          codesign -d --entitlements - --xml "$app" > "$RUNNER_TEMP/entitlements.plist"
+          /usr/libexec/PlistBuddy -c 'Delete :com.apple.security.get-task-allow' "$RUNNER_TEMP/entitlements.plist" || true
+          codesign --force --sign - --options runtime --entitlements "$RUNNER_TEMP/entitlements.plist" "$app"
+          codesign -d --entitlements - "$app" | grep -q app-sandbox
+          codesign --verify --deep --strict "$app"
+          # hdiutil now and then finds the folder busy on a fresh runner; it works on a second try.
+          for try in 1 2 3; do
+            hdiutil create -volname "Notes App" -srcfolder "$stage" -fs APFS -format UDZO -ov "notes-app-$VERSION.dmg" && break
+            sleep 5
+          done
+          test -f "notes-app-$VERSION.dmg"
+
+      - name: Publish the release
+        env:
+          GH_TOKEN: ${{ github.token }}
+          VERSION: ${{ steps.version.outputs.name }}
+        run: |
+          dmg="notes-app-$VERSION.dmg"
+          # What changed in the Apple app since the last release, one line a commit.
+          last=$(git describe --tags --match 'mac-v*' --abbrev=0 2>/dev/null || true)
+          {
+            echo "Download \`$dmg\`, open it and drag Notes App to Applications."
+            echo
+            echo "It isn't notarized by Apple, so the first time it opens, macOS says it can't check it. Click Done, then open System Settings, Privacy & Security, scroll to \"Notes App was blocked\", click Open Anyway and confirm. Each update asks once more."
+            echo
+            echo "Changes:"
+            git log --format='- %s' ${last:+$last..}HEAD -- apple | head -50
+          } > notes.md
+          gh release create "mac-v$VERSION" "$dmg" --title "Mac $VERSION" --notes-file notes.md --target "$GITHUB_SHA"

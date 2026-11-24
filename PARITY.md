@@ -163,7 +163,7 @@ Reviewed 2026-11-24, after Android's sign-in turned out to send people to Chrome
 | Connect Google Drive for photos and files, and come back to Settings saying how it went | ✅ in Apple's sign-in sheet, which Google's answer closes (it used to open Safari and end on the web app's Settings page) | ✅ the same | ✅ the browser comes back to the app at `notesapp://drive` (it used to stay on the web app's Settings page) | C |
 | Unlock a vault with the device's fingerprint (a vault's lock settings: Unlock with fingerprint, which keeps an encrypted vault's key on the device) | ❌ no Touch ID | ❌ no Face ID | ❌ no fingerprint | C |
 | A due todo's reminder comes even when it was made on another device and this one hasn't been opened since (the server pushes it) | ⚠️ only todos this device has synced; nothing syncs in the background | ⚠️ the same | ⚠️ the same | C |
-| A long press that picks gives a small vibration (touch) | ➖ | ❌ | ✅ | C |
+| A long press that picks gives a small vibration (touch) | ➖ | ✅ | ✅ Compose's long click does it | C |
 
 ## Not checked yet
 

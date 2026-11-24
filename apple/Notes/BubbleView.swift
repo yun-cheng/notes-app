@@ -201,11 +201,15 @@ enum BubbleMemo {
 /// menu offers is in the open entry's bar and the picking bar).
 struct PickOnCommandClick: ViewModifier {
     let onPick: () -> Void
+    /// Goes up with each long press, for the small vibration the web gives there too.
+    @State private var pressed = 0
     func body(content: Content) -> some View {
         #if os(macOS)
         content.simultaneousGesture(TapGesture().modifiers(.command).onEnded { onPick() })
         #else
-        content.onLongPressGesture(minimumDuration: 0.5) { onPick() }
+        content
+            .onLongPressGesture(minimumDuration: 0.5) { pressed += 1; onPick() }
+            .sensoryFeedback(.impact(weight: .light), trigger: pressed)
         #endif
     }
 }

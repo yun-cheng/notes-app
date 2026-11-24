@@ -96,11 +96,13 @@ final class AppModel {
     @ObservationIgnored private var refreshing = false
     @ObservationIgnored private var refreshAgain = false
     @ObservationIgnored private var refreshTask: Task<Void, Never>?
+    /// The page `-page` asks for at launch, shown once the account opens.
+    @ObservationIgnored private var launchPage: Page?
 
     init(site: URL = ServerAPI.production) {
         self.site = site
         // `-page vaults` at launch opens on that page, for testing.
-        if let key = UserDefaults.standard.string(forKey: "page"), let named = Page.destinations.first(where: { $0.key == key }) { page = named.page }
+        if let key = UserDefaults.standard.string(forKey: "page"), let named = Page.destinations.first(where: { $0.key == key }) { launchPage = named.page }
         repo = try! Repository(path: ":memory:")
         Task { await start() }
     }
@@ -157,7 +159,8 @@ final class AppModel {
             Task { @MainActor in self?.changed() }
         }
         UserDefaults.standard.set(account.id, forKey: "currentAccount")
-        page = .journal(StreamFilter())
+        page = launchPage ?? .journal(StreamFilter())
+        launchPage = nil
         await begin(account: account, token: token)
     }
 

@@ -138,12 +138,14 @@ struct PhoneFrame: View {
     @Environment(AppModel.self) private var model
     enum Tab: Hashable { case journal, today, calendar, search }
     @State private var tab: Tab = .journal
+    @State private var shown: Date?
 
     var body: some View {
         // As the web's tabs, which are links: Journal goes to the whole journal, pressed again too; a page picked from
         // the sidebar shows in the Journal tab, and the calendar in its own.
         let selection = Binding<Tab>(get: { tab }, set: { next in
-            if next == .journal { model.page = .journal(StreamFilter()) }
+            // Not as the tabs first appear, which keeps a page the app was opened on (`-page`).
+            if next == .journal, let shown, Date().timeIntervalSince(shown) > 0.5 { model.page = .journal(StreamFilter()) }
             tab = next
         })
         TabView(selection: selection) {
@@ -161,6 +163,7 @@ struct PhoneFrame: View {
             }
         }
         .onChange(of: model.page) { _, page in tab = page == .calendar ? .calendar : .journal }
+        .onAppear { shown = Date() }
     }
 }
 

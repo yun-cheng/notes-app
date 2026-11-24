@@ -130,7 +130,7 @@ _Last checked 2026-11-23._
 | Calendar on a phone: counts per day, Today, the day's todos and Written this day | ➖ | ✅ | ✅ | T |
 | Search: words across notes, todos and tags | ✅ | ✅ | ✅ | T |
 | Links and Files: a search button opens a field under the filters | ✅ | ✅ | ✅ | T |
-| Links, Files, Trash, History and Tags on a phone, against the web's | ➖ | ✅ | ✅ | T |
+| Links, Files, Trash, History, Tags and Vaults on a phone, against the web's | ➖ | ✅ | ✅ | T |
 | "Today" moves on at midnight in an app left open | ✅ | ✅ | ✅ | C |
 | Backup & settings: account, backup, import, reminders, journal display, copy as, photos and files, AI apps, delete account | ✅ | ✅ | ✅ | T |
 | Backup & settings: Paste as (keep formatting, Markdown, plain) | ❌ | ❌ | ❌ | T |
@@ -148,4 +148,4 @@ _Last checked 2026-11-23._
 
 ## Not checked yet
 
-Vaults on a phone; sharing and public links; reminders; translating.
+Sharing and public links; reminders; translating.

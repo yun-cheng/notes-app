@@ -86,7 +86,7 @@ Run Gradle with `JAVA_HOME="/Applications/Android Studio.app/Contents/jbr/Conten
 
 ### Android releases
 
-Each push to `main` that changes `android/` builds the app on GitHub (`.github/workflows/android-release.yml`), runs the core tests, and publishes the APK as a release named `android-v1.0.<n>`, where `n` is the commit count, so every release installs over the one before. Its notes list the Android commits since the last release. On a phone, open the release on GitHub and tap the `.apk`. It talks to the deployed server.
+Each push to `main` that changes `android/` builds the app on GitHub (`.github/workflows/android-release.yml`), runs the core tests, and publishes the APK as a release named by the day of the commit (`Android 2026.11.24`, tagged `android-v2026.11.24`; a second that day is `2026.11.24.2`). Its version code is the commit count, which only grows, so every release installs over the one before. Its notes list the Android commits since the last release. On a phone, open the release on GitHub and tap the `.apk`. It talks to the deployed server.
 
 It needs a release key, made once and kept out of the repo. Without one, the workflow stops and says so. Make the key with Android Studio's `keytool`, which asks for the passwords itself (keep the file and the passwords somewhere safe: an update must be signed with the same key):
 

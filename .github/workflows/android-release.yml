@@ -48,9 +48,17 @@ jobs:
       - name: Work out the version
         id: version
         run: |
-          code=$(git rev-list --count HEAD)
-          echo "code=$code" >> "$GITHUB_OUTPUT"
-          echo "name=1.0.$code" >> "$GITHUB_OUTPUT"
+          # Named by the day of the commit, in its author's own time zone: 2026.11.24, then 2026.11.24.2 for a second
+          # release that day. Android compares the version code, the commit count, which only grows.
+          day=$(git log -1 --format=%cd --date=format:%Y.%m.%d)
+          name=$day
+          n=1
+          while git rev-parse -q --verify "refs/tags/android-v$name" >/dev/null; do
+            n=$((n + 1))
+            name="$day.$n"
+          done
+          echo "code=$(git rev-list --count HEAD)" >> "$GITHUB_OUTPUT"
+          echo "name=$name" >> "$GITHUB_OUTPUT"
 
       - name: Test and build
         working-directory: android

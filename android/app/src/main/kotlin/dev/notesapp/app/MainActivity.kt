@@ -3,7 +3,7 @@ package dev.notesapp.app
 import android.app.Application
 import android.content.Intent
 import android.os.Bundle
-import androidx.activity.ComponentActivity
+import androidx.fragment.app.FragmentActivity
 import androidx.activity.compose.setContent
 import androidx.activity.enableEdgeToEdge
 import androidx.compose.runtime.CompositionLocalProvider
@@ -27,7 +27,8 @@ class NotesApplication : Application() {
     }
 }
 
-class MainActivity : ComponentActivity() {
+// A FragmentActivity, as the fingerprint sheet needs one; it's a ComponentActivity too.
+class MainActivity : FragmentActivity() {
     private val model get() = (application as NotesApplication).model
 
     override fun onCreate(savedInstanceState: Bundle?) {

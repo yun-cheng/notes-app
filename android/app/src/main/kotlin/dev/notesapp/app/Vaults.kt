@@ -10,6 +10,8 @@ import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
+import androidx.compose.foundation.layout.Spacer
+import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.layout.widthIn
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.RoundedCornerShape
@@ -17,6 +19,7 @@ import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.outlined.ChevronRight
 import androidx.compose.material.icons.automirrored.outlined.ArrowBack
+import androidx.compose.material.icons.outlined.Fingerprint
 import androidx.compose.material.icons.outlined.Key
 import androidx.compose.material.icons.outlined.Lock
 import androidx.compose.material3.AlertDialog
@@ -37,6 +40,7 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.platform.LocalClipboardManager
+import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.AnnotatedString
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
@@ -65,6 +69,23 @@ fun UnlockView(vault: Vault, modifier: Modifier = Modifier) {
     var useRecoveryKey by remember { mutableStateOf(false) }
     var working by remember { mutableStateOf(false) }
     var wrong by remember { mutableStateOf(false) }
+    val context = LocalContext.current
+    // The fingerprint is on for this vault here: it's asked for as the vault shows.
+    var deviceOn by remember(vault.id) { mutableStateOf(DeviceUnlock.isOn(context, model.accountId, vault.id)) }
+    var deviceFailed by remember { mutableStateOf(false) }
+    fun useDevice() {
+        val activity = context.fragmentActivity() ?: return
+        if (working) return
+        working = true
+        deviceFailed = false
+        model.scope.launch {
+            val opened = model.unlockWithDevice(activity, vault)
+            working = false
+            deviceFailed = !opened
+            if (!opened) deviceOn = DeviceUnlock.isOn(context, model.accountId, vault.id)
+        }
+    }
+    LaunchedEffect(vault.id) { if (deviceOn) useDevice() }
     fun unlock() {
         if (pin.isEmpty() || working) return
         working = true
@@ -86,6 +107,12 @@ fun UnlockView(vault: Vault, modifier: Modifier = Modifier) {
         Button(onClick = ::unlock, enabled = pin.isNotEmpty() && !working) {
             if (working) CircularProgressIndicator(Modifier.size(18.dp), strokeWidth = 2.dp) else Text("Unlock")
         }
+        if (deviceOn && !useRecoveryKey) TextButton(onClick = ::useDevice) {
+            Icon(Icons.Outlined.Fingerprint, null, Modifier.size(18.dp))
+            Spacer(Modifier.width(6.dp))
+            Text("Use fingerprint")
+        }
+        if (deviceFailed) Text("Fingerprint didn't work. Use your PIN.", color = Theme.alert)
         if (vault.isEncrypted) TextButton(onClick = { useRecoveryKey = !useRecoveryKey; pin = ""; wrong = false }) { Text(if (useRecoveryKey) "Use the PIN instead" else "Forgot PIN?") }
     }
 }
@@ -233,6 +260,8 @@ fun VaultDetail(id: String, back: () -> Unit) {
     var recoveryKey by remember { mutableStateOf<String?>(null) }
     var confirmStop by remember { mutableStateOf(false) }
     var confirmRemove by remember { mutableStateOf(false) }
+    val context = LocalContext.current
+    var deviceOn by remember(id) { mutableStateOf(DeviceUnlock.isOn(context, model.accountId, id)) }
     Column(Modifier.fillMaxSize().background(Theme.bg)) {
         TopBar(vault?.name ?: "Not found", null) { IconButton(onClick = back) { Icon(Icons.AutoMirrored.Outlined.ArrowBack, "Back", tint = Theme.text) } }
         vault ?: return@Column
@@ -299,6 +328,16 @@ fun VaultDetail(id: String, back: () -> Unit) {
                 }
                 if (vault.isPrivate) {
                     SwitchRow("Hide this vault until it is unlocked", vault.hidden) { on -> change(VaultChanges(hidden = on), if (on) "Hidden" else "No longer hidden") }
+                    if (DeviceUnlock.available(context)) {
+                        SwitchRow("Unlock with fingerprint on this device", deviceOn) { on ->
+                            if (!on) { DeviceUnlock.turnOff(context, model.accountId, vault.id); deviceOn = false; return@SwitchRow }
+                            val activity = context.fragmentActivity() ?: return@SwitchRow
+                            model.scope.launch {
+                                deviceOn = try { DeviceUnlock.turnOn(activity, vault, model.accountId, model.repo.keyring.key(vault.id)) } catch (e: Exception) { model.say(e.message ?: "Fingerprint couldn't be set up on this device."); false }
+                            }
+                        }
+                        FormText("Anyone with a fingerprint enrolled on it can then open this vault, and family members often have theirs enrolled.")
+                    }
                     if (vault.id !in model.lockedVaults) FormButton("Lock now") { model.lock(vault.id) }
                     when {
                         vault.isMemberCopy -> FormText("Your PIN holds your copy of its key, so it can be changed but not removed. To give the vault up, leave it.")
@@ -323,6 +362,8 @@ fun VaultDetail(id: String, back: () -> Unit) {
         if (confirmRemove) Confirm(
             "Remove the PIN from ${vault.name}?", if (vault.isEncrypted) "Its cards, photos and files will be decrypted and stored readable again." else "It won't be private any more.", "Remove PIN", { confirmRemove = false }, destructive = true,
         ) {
+            DeviceUnlock.turnOff(context, model.accountId, vault.id)
+            deviceOn = false
             if (vault.isEncrypted) step("Decrypting…") { VaultEncryption(model).decrypt(vault); model.say("Vault is no longer private") }
             else change(VaultChanges(clearPin = true), if (owner) "Vault is no longer private" else "Your PIN is removed")
         }

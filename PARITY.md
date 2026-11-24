@@ -159,9 +159,9 @@ Reviewed 2026-11-24, after Android's sign-in turned out to send people to Chrome
 
 | Web behavior | Mac | iPhone | Android | How |
 |---|---|---|---|---|
-| Sign in with Google | ⚠️ Apple's sign-in sheet opens the web app's `/pair` page, and the code is confirmed there, rather than going straight to Google | ⚠️ the same | ✅ the phone's own Google account picker; the browser only if that can't work | T |
+| Sign in with Google | ⚠️ Apple's sign-in sheet opens the web app's `/pair` page, and the code is confirmed there, rather than going straight to Google | ⚠️ the same | ✅ the phone's own Google account picker; the browser too once the picker is closed, for an account kept off the phone | T |
 | Connect Google Drive for photos and files, and come back to Settings saying how it went | ✅ in Apple's sign-in sheet, which Google's answer closes (it used to open Safari and end on the web app's Settings page) | ✅ the same | ✅ the browser comes back to the app at `notesapp://drive` (it used to stay on the web app's Settings page) | C |
-| Unlock a vault with the device's fingerprint (a vault's lock settings: Unlock with fingerprint, which keeps an encrypted vault's key on the device) | ✅ Touch ID, asked before the key is read from the Keychain (C) | ✅ Face ID, asked as the locked vault shows; the key is in a Keychain item only Face ID opens (T) | ❌ no fingerprint | T/C |
+| Unlock a vault with the device's fingerprint (a vault's lock settings: Unlock with fingerprint, which keeps an encrypted vault's key on the device) | ✅ Touch ID, asked before the key is read from the Keychain (C) | ✅ Face ID, asked as the locked vault shows; the key is in a Keychain item only Face ID opens (T) | ✅ Android's fingerprint sheet, asked as the locked vault shows; the key is sealed with a Keystore key only a fingerprint opens, which adding a fingerprint throws away (T) | T/C |
 | A due todo's reminder comes even when it was made on another device and this one hasn't been opened since (the server pushes it) | ⚠️ only todos this device has synced; nothing syncs in the background | ⚠️ the same | ⚠️ the same | C |
 | A long press that picks gives a small vibration (touch) | ➖ | ✅ | ✅ Compose's long click does it | C |
 

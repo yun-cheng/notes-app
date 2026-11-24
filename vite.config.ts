@@ -111,10 +111,31 @@ function demoSignIn(): Plugin {
   };
 }
 
+/**
+ * Only in `npm run dev`: the tab says "Notes Dev" with the icon on amber, as the native dev builds do, so the dev
+ * server is told apart from the deployed app at a glance. Builds keep "Notes" and the green icon.
+ */
+function devLook(): Plugin {
+  return {
+    name: 'dev-look',
+    apply: 'serve',
+    transformIndexHtml(html) {
+      const icons = /\s*<link rel="icon"[^>]*>|\s*<link rel="apple-touch-icon"[^>]*>/g;
+      const changed = html
+        .replace('<title>Notes</title>', '<title>Notes Dev</title>')
+        .replace(icons, '')
+        .replace('</title>', '</title>\n    <link rel="icon" href="/src/assets/icon-dev.svg" type="image/svg+xml" />');
+      if (changed === html || !changed.includes('Notes Dev')) throw new Error('dev-look: index.html no longer has <title>Notes</title>');
+      return changed;
+    },
+  };
+}
+
 export default defineConfig({
   plugins: [
     react(),
     demoSignIn(),
+    devLook(),
     VitePWA({
       registerType: 'prompt',
       includeAssets: ['icon.svg', 'apple-touch-icon-180x180.png', 'favicon.ico'],

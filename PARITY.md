@@ -125,10 +125,13 @@ _Last checked 2026-11-23._
 | Web behavior | Mac | iPhone | Android | How |
 |---|---|---|---|---|
 | Board: drag cards between columns and within one (a finger by the card's grip), scrolling near the sides; add a card in a column | ✅ | ✅ | ✅ | T |
-| Calendar: a month with bars for spans, a todo dragged to another day, the day's list below | ✅ | ✅ | ⚠️ no dragging | C |
+| Calendar: a month with bars for spans, a todo dragged to another day (with a mouse; the web can't drag there with a finger either), the day's list below | ✅ | ✅ | ⚠️ no dragging on a tablet | C |
 | Timeline: bars dragged or stretched | ✅ | ✅ | ✅ | C |
 | Calendar on a phone: counts per day, Today, the day's todos and Written this day | ➖ | ✅ | ✅ | T |
 | Search: words across notes, todos and tags | ✅ | ✅ | ✅ | T |
+| Links and Files: a search button opens a field under the filters | ✅ | ✅ | ✅ | T |
+| Links, Files, Trash, History and Tags on a phone, against the web's | ➖ | ✅ | ✅ | T |
+| "Today" moves on at midnight in an app left open | ✅ | ✅ | ✅ | C |
 | Backup & settings: account, backup, import, reminders, journal display, copy as, photos and files, AI apps, delete account | ✅ | ✅ | ✅ | T |
 | Backup & settings: Paste as (keep formatting, Markdown, plain) | ❌ | ❌ | ❌ | T |
 
@@ -145,5 +148,4 @@ _Last checked 2026-11-23._
 
 ## Not checked yet
 
-Links, Files, Archive, Trash, History, Tags and Vaults against the web on a phone; sharing and public links;
-reminders; translating; Today.
+Vaults on a phone; sharing and public links; reminders; translating.

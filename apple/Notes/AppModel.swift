@@ -63,7 +63,27 @@ final class AppModel {
     var showPalette = false
     /// View only, for reading without changing anything by mistake.
     var viewOnly = false
-    private(set) var today = DateKey.today()
+    private(set) var today = DateKey.today() {
+        didSet { if today != oldValue { scheduleNewDay() } }
+    }
+    @ObservationIgnored private var dayTimer: Timer?
+
+    /// Moves `today` on at midnight, as the web's `useToday`, so "Yesterday" and what's due stay right in an app left
+    /// open overnight.
+    func scheduleNewDay() {
+        dayTimer?.invalidate()
+        let next = Calendar.current.startOfDay(for: Date().addingTimeInterval(86_400)).addingTimeInterval(1)
+        dayTimer = Timer(fire: next, interval: 0, repeats: false) { [weak self] _ in
+            MainActor.assumeIsolated { self?.newDay() }
+        }
+        RunLoop.main.add(dayTimer!, forMode: .common)
+    }
+
+    /// The day as it is now; also called as the app comes back to the front.
+    func newDay() {
+        let now = DateKey.today()
+        if now != today { today = now } else { scheduleNewDay() }
+    }
 
     /// The signed-in account's own database on this device; each account has one.
     private(set) var repo: Repository

@@ -48,6 +48,7 @@ class MainActivity : ComponentActivity() {
 
     override fun onResume() {
         super.onResume()
+        model.newDay()
         model.scope.launchSync(model)
     }
 

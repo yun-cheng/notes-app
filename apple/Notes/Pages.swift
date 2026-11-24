@@ -146,6 +146,7 @@ struct HeldList<T: Identifiable, Row: View, Lead: View>: View where T.ID == Stri
     @ViewBuilder var lead: Lead
     @ViewBuilder var row: (T, Card) -> Row
     @State private var query = ""
+    @State private var searching = false
 
     var body: some View {
         let q = query.trimmingCharacters(in: .whitespaces)
@@ -154,6 +155,7 @@ struct HeldList<T: Identifiable, Row: View, Lead: View>: View where T.ID == Stri
         let all = shown.flatMap(\.items)
         VStack(spacing: 0) {
             LibraryFilterRow(filter: $filter) { lead }
+            if searching { PageSearchField(query: $query, close: { searching = false; query = "" }) }
             if all.isEmpty {
                 ContentUnavailableView {
                     Text(q.isEmpty ? "" : "No \(noun.1) here have “\(q)” in them or their entries.")
@@ -197,7 +199,15 @@ struct HeldList<T: Identifiable, Row: View, Lead: View>: View where T.ID == Stri
         }
         .pageBackground()
         .navigationTitle(title)
-        .searchable(text: $query, prompt: "Search \(noun.1)")
+        // As the web's: a search button (or /) opens a field under the filters, narrowing the page as it's typed.
+        .toolbar {
+            ToolbarItemGroup(placement: .primaryAction) {
+                Button { searching.toggle(); if !searching { query = "" } } label: { Label("Search", systemImage: "magnifyingglass") }
+                    .keyboardShortcut("/", modifiers: [])
+                PhoneTail()
+            }
+        }
+        .placesPhoneTail()
     }
 }
 

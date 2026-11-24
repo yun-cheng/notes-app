@@ -132,7 +132,22 @@ class AppModel(private val context: Context, val site: String) {
     private var refreshAgain = false
     private var watching: Job? = null
 
-    init { scope.launch { start() } }
+    init {
+        scope.launch { start() }
+        // Moves `today` on at midnight, as the web's `useToday`, so "Yesterday" and what's due stay right in an app
+        // left open overnight.
+        scope.launch {
+            while (true) {
+                val now = java.time.LocalDateTime.now()
+                val next = now.toLocalDate().plusDays(1).atStartOfDay().plusSeconds(1)
+                kotlinx.coroutines.delay(java.time.Duration.between(now, next).toMillis())
+                newDay()
+            }
+        }
+    }
+
+    /** The day as it is now; also called as the app comes back to the front. */
+    fun newDay() { DateKey.today().let { if (it != today) today = it } }
 
     private fun saveAccounts(list: List<Account>) { accounts = list; tokens.accounts = list }
 

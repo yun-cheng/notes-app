@@ -23,7 +23,10 @@ struct NotesApp: App {
                 .onOpenURL { _ in Task { await model.sync?.sync() } }
         }
         .onChange(of: scenePhase) { _, phase in
-            if phase == .active { Task { await model.sync?.sync() } }
+            if phase == .active {
+                model.newDay()
+                Task { await model.sync?.sync() }
+            }
         }
         #if os(macOS)
         .defaultSize(width: 1100, height: 740)

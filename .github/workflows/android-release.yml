@@ -1,0 +1,79 @@
+# Builds the Android app and publishes it as a GitHub release whenever the Android code changes on main.
+# The APK is signed with the release key in the repo's secrets (see README, "Android releases"), so each release
+# installs over the one before it.
+name: Android release
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - 'android/**'
+      - '.github/workflows/android-release.yml'
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+# One release at a time, in order.
+concurrency:
+  group: android-release
+  cancel-in-progress: false
+
+jobs:
+  release:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          # The whole history and its tags: the version is the commit count, and the notes start from the last release.
+          fetch-depth: 0
+
+      - uses: actions/setup-java@d1374f8ac74474200d16ef8ecee22c7ae7a51880 # v6.3.0
+        with:
+          distribution: temurin
+          java-version: '21'
+
+      - uses: gradle/actions/setup-gradle@8da46b539cd8fe6ab27ca75128919a18d757604c # v6.4.1
+
+      - name: Get the signing key
+        env:
+          ANDROID_KEYSTORE_BASE64: ${{ secrets.ANDROID_KEYSTORE_BASE64 }}
+        run: |
+          if [ -z "$ANDROID_KEYSTORE_BASE64" ]; then
+            echo "::error::No release key: add the ANDROID_KEYSTORE_BASE64, ANDROID_KEYSTORE_PASSWORD, ANDROID_KEY_ALIAS and ANDROID_KEY_PASSWORD secrets (README, Android releases)."
+            exit 1
+          fi
+          echo "$ANDROID_KEYSTORE_BASE64" | base64 --decode > "$RUNNER_TEMP/release.jks"
+
+      - name: Work out the version
+        id: version
+        run: |
+          code=$(git rev-list --count HEAD)
+          echo "code=$code" >> "$GITHUB_OUTPUT"
+          echo "name=1.0.$code" >> "$GITHUB_OUTPUT"
+
+      - name: Test and build
+        working-directory: android
+        env:
+          ANDROID_KEYSTORE_FILE: ${{ runner.temp }}/release.jks
+          ANDROID_KEYSTORE_PASSWORD: ${{ secrets.ANDROID_KEYSTORE_PASSWORD }}
+          ANDROID_KEY_ALIAS: ${{ secrets.ANDROID_KEY_ALIAS }}
+          ANDROID_KEY_PASSWORD: ${{ secrets.ANDROID_KEY_PASSWORD }}
+        run: ./gradlew :core:test :app:assembleRelease -PversionCode=${{ steps.version.outputs.code }} -PversionName=${{ steps.version.outputs.name }}
+
+      - name: Publish the release
+        env:
+          GH_TOKEN: ${{ github.token }}
+          VERSION: ${{ steps.version.outputs.name }}
+        run: |
+          apk="notes-app-$VERSION.apk"
+          cp android/app/build/outputs/apk/release/app-release.apk "$apk"
+          # What changed in the Android app since the last release, one line a commit.
+          last=$(git describe --tags --match 'android-v*' --abbrev=0 2>/dev/null || true)
+          {
+            echo "Download \`$apk\` on the phone and open it to install or update (allow your browser to install apps the first time)."
+            echo
+            echo "Changes:"
+            git log --format='- %s' ${last:+$last..}HEAD -- android | head -50
+          } > notes.md
+          gh release create "android-v$VERSION" "$apk" --title "Android $VERSION" --notes-file notes.md --target "$GITHUB_SHA"

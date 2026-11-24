@@ -82,7 +82,19 @@ The Android app is in `android/`, a native Kotlin and Jetpack Compose app with t
 | `adb reverse tcp:5191 tcp:5191` then `./gradlew :app:installDebug -Pserver=http://localhost:5191` | Builds the app against the local server through `npm run dev` (so the demo's photos, videos and voice messages load) and installs it on the running emulator or phone |
 | `./gradlew :app:assembleRelease` | Builds a shrunk app, signed with the debug key until there's a release key; it starts much faster than a debug build |
 
-Run Gradle with `JAVA_HOME="/Applications/Android Studio.app/Contents/jbr/Contents/Home"`. Sign-in pairs with the web app as the Apple app does: the browser opens `/pair`, and once the code is confirmed there it comes back to the app at `notesapp://paired`. Translation on the device, where the server can't, uses Google's ML Kit, which downloads a language's model the first time.
+Run Gradle with `JAVA_HOME="/Applications/Android Studio.app/Contents/jbr/Contents/Home"`.
+
+### Android releases
+
+Each push to `main` that changes `android/` builds the app on GitHub (`.github/workflows/android-release.yml`), runs the core tests, and publishes the APK as a release named `android-v1.0.<n>`, where `n` is the commit count, so every release installs over the one before. Its notes list the Android commits since the last release. On a phone, open the release on GitHub and tap the `.apk`. It talks to the deployed server.
+
+It needs a release key, made once and kept out of the repo. Without one, the workflow stops and says so. Make the key with Android Studio's `keytool`, which asks for the passwords itself (keep the file and the passwords somewhere safe: an update must be signed with the same key):
+
+```
+"/Applications/Android Studio.app/Contents/jbr/Contents/Home/bin/keytool" -genkeypair -v -keystore ~/notes-app-release.jks -keyalg RSA -keysize 4096 -validity 10000 -alias notes-app
+```
+
+Then add four repository secrets (GitHub, Settings, Secrets and variables, Actions): `ANDROID_KEYSTORE_BASE64` (the output of `base64 -i ~/notes-app-release.jks`), `ANDROID_KEYSTORE_PASSWORD`, `ANDROID_KEY_ALIAS` (`notes-app`) and `ANDROID_KEY_PASSWORD`. A build on this Mac is still signed with its debug key, so a phone with a build from here installed needs that one uninstalled once before the first release installs. Sign-in pairs with the web app as the Apple app does: the browser opens `/pair`, and once the code is confirmed there it comes back to the app at `notesapp://paired`. Translation on the device, where the server can't, uses Google's ML Kit, which downloads a language's model the first time.
 
 ```
 src/

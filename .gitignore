@@ -7,3 +7,6 @@ dev-dist
 coverage
 .wrangler
 .dev.vars
+# Signing keys never go in the repo.
+*.jks
+*.keystore

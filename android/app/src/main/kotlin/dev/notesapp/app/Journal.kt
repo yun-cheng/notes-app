@@ -34,6 +34,8 @@ import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.text.BasicTextField
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.outlined.Archive
+import androidx.compose.material.icons.outlined.ArrowDownward
+import androidx.compose.material.icons.outlined.ArrowUpward
 import androidx.compose.material.icons.outlined.Close
 import androidx.compose.material.icons.outlined.Inventory2
 import androidx.compose.material.icons.outlined.Search
@@ -192,6 +194,25 @@ fun JournalView(initial: StreamFilter, openDrawer: (() -> Unit)?, fixed: Boolean
                         if (all.isEmpty()) item { EmptyJournal(filter, searching) }
                     }
                     JournalRail(visible, Modifier.align(Alignment.CenterEnd)) { id -> rowOf[id]?.let { scope.launch { list.scrollToItem(it) } } }
+                    // A round button back to the newest entries, as the web's `ScrollJump`: once the list is more than
+                    // 400 dp from the end it opens at (the foot in a chat, the top otherwise), just above the box.
+                    val awayPx = with(androidx.compose.ui.platform.LocalDensity.current) { 400.dp.toPx() }
+                    val away by remember(chat, awayPx) {
+                        androidx.compose.runtime.derivedStateOf {
+                            val info = list.layoutInfo
+                            val shownRows = info.visibleItemsInfo
+                            if (shownRows.isEmpty()) return@derivedStateOf false
+                            // Rows not drawn are taken as tall as those drawn, on average.
+                            val rowSize = shownRows.sumOf { it.size }.toFloat() / shownRows.size
+                            if (chat) {
+                                val last = shownRows.last()
+                                (info.totalItemsCount - 1 - last.index) * rowSize + (last.offset + last.size - info.viewportEndOffset) > awayPx
+                            } else list.firstVisibleItemIndex * rowSize + list.firstVisibleItemScrollOffset > awayPx
+                        }
+                    }
+                    if (away) ScrollJump(chat, Modifier.align(Alignment.BottomEnd).padding(end = 14.dp, bottom = 10.dp)) {
+                        scope.launch { if (chat) { list.scrollToItem(rows - 1); list.scrollBy(100_000f) } else list.scrollToItem(0) }
+                    }
                 }
                 if (picked.isNotEmpty()) BatchBar(picked, all.map { it.card.id }) { picked = it }
                 else if (model.viewOnly) ViewOnlyBar()
@@ -499,5 +520,27 @@ fun ViewOnlyBar() {
         Icon(Icons.Outlined.Visibility, null, Modifier.size(20.dp), tint = Theme.muted)
         Text("View only. Entries can be read and copied, not changed.", Modifier.weight(1f), color = Theme.muted, fontSize = 15.sp)
         TextButton(onClick = { model.viewOnly = false }) { Text("Turn off") }
+    }
+}
+
+/** The round button back to the end the journal opens at, as the web's `ScrollJump`. */
+@Composable
+private fun ScrollJump(down: Boolean, modifier: Modifier, jump: () -> Unit) {
+    androidx.compose.material3.Surface(
+        onClick = jump,
+        modifier = modifier.size(38.dp),
+        shape = androidx.compose.foundation.shape.CircleShape,
+        color = Theme.surface,
+        border = androidx.compose.foundation.BorderStroke(1.dp, Theme.line),
+        shadowElevation = 3.dp,
+    ) {
+        Box(contentAlignment = Alignment.Center) {
+            Icon(
+                if (down) Icons.Outlined.ArrowDownward else Icons.Outlined.ArrowUpward,
+                if (down) "Scroll to bottom" else "Scroll to top",
+                Modifier.size(20.dp),
+                tint = Theme.muted,
+            )
+        }
     }
 }

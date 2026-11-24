@@ -2,14 +2,18 @@ import AuthenticationServices
 import NotesKit
 import SwiftUI
 
-/// Signs in through the web app: a sign-in sheet opens the site, where the user confirms the code shown here.
-/// Google doesn't allow its sign-in inside apps, so the browser does that part.
+/// Signs in with Google in Apple's sign-in sheet, straight to Google's page for the app's own client, and trades the
+/// answer for this device's session (`GoogleSignIn`). Where that can't work, it signs in through the web app instead:
+/// the sheet opens the site, where the user confirms the code shown here.
 struct SignInView: View {
     @Environment(AppModel.self) private var model
     @Environment(\.webAuthenticationSession) private var webAuth
     @State private var pairing: ServerAPI.Pairing?
     @State private var problem: String?
     @State private var attempt: Task<Void, Never>?
+    @State private var busy = false
+    /// Shown once Google's sheet is closed or fails, so the web app is still a way in.
+    @State private var offerBrowser = false
 
     var body: some View {
         VStack(spacing: 20) {
@@ -35,13 +39,15 @@ struct SignInView: View {
                 Button("Start again") { start() }.buttonStyle(.borderless)
             } else {
                 Button {
-                    start()
+                    startGoogle()
                 } label: {
-                    Text("Sign in").frame(maxWidth: 260)
+                    Group { if busy { ProgressView().controlSize(.small) } else { Text("Sign in with Google") } }.frame(maxWidth: 260)
                 }
                 .buttonStyle(.borderedProminent)
                 .controlSize(.large)
+                .disabled(busy)
                 .padding(.top, 8)
+                if offerBrowser { Button("Sign in with the browser") { start() }.buttonStyle(.borderless) }
             }
             if let problem {
                 Text(problem).foregroundStyle(.red).multilineTextAlignment(.center)
@@ -51,6 +57,42 @@ struct SignInView: View {
         .padding()
         .frame(maxWidth: .infinity, maxHeight: .infinity)
         .onDisappear { attempt?.cancel() }
+    }
+
+    private func startGoogle() {
+        attempt?.cancel()
+        problem = nil
+        attempt = Task { await signInWithGoogle() }
+    }
+
+    private func signInWithGoogle() async {
+        let api = model.api
+        busy = true
+        defer { busy = false }
+        let clientId: String?
+        do { clientId = try await api.googleAppleClientId() } catch {
+            problem = "Connect to the internet to sign in."
+            return
+        }
+        // A server without the Apple client signs in through the web app.
+        guard let clientId else { return start() }
+        let google = GoogleSignIn(clientId: clientId)
+        do {
+            let answer = try await webAuth.authenticate(using: google.page, callback: .customScheme(google.callbackScheme), additionalHeaderFields: [:])
+            let idToken = try await google.idToken(code: google.code(from: answer))
+            let (info, token) = try await api.signInWithGoogle(idToken: idToken)
+            await model.signedIn(info, token: token)
+        } catch let error as ASWebAuthenticationSessionError where error.code == .canceledLogin {
+            // Closed the sheet: nothing to say, but the web app is another way in.
+            offerBrowser = true
+        } catch GoogleSignIn.Problem.cancelled {
+            offerBrowser = true
+        } catch APIError.offline {
+            problem = "Connect to the internet to sign in."
+        } catch {
+            problem = "Google sign-in didn't work. Try again, or sign in with the browser."
+            offerBrowser = true
+        }
     }
 
     private func start() {

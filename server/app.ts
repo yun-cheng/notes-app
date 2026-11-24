@@ -106,7 +106,7 @@ export function createApp({
     if (!c.res.headers.has('Cache-Control')) c.header('Cache-Control', 'no-store');
   });
 
-  app.get('/config', (c) => c.json<ConfigResponse>({ googleClientId: c.env.GOOGLE_CLIENT_ID ?? '' }));
+  app.get('/config', (c) => c.json<ConfigResponse>({ googleClientId: c.env.GOOGLE_CLIENT_ID ?? '', googleAppleClientId: c.env.GOOGLE_APPLE_CLIENT_ID ?? '' }));
 
   app.post('/auth/google', async (c) => {
     if (!c.env.GOOGLE_CLIENT_ID) return c.json({ error: 'Sign-in is not configured' }, 503);
@@ -115,7 +115,7 @@ export function createApp({
     const body = await c.req.json<{ credential?: unknown; token?: unknown }>().catch(() => null);
     if (typeof body?.credential !== 'string') return c.json({ error: 'Missing credential' }, 400);
     try {
-      const identity = await verifyGoogle(body.credential, c.env.GOOGLE_CLIENT_ID);
+      const identity = await verifyGoogle(body.credential, [c.env.GOOGLE_CLIENT_ID, c.env.GOOGLE_APPLE_CLIENT_ID ?? ''].filter(Boolean));
       const at = now();
       const user = await upsertUser(c.env.DB, identity, at);
       const session = await createSession(c.env.DB, user.id, at);

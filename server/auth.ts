@@ -16,18 +16,19 @@ export interface GoogleIdentity {
 /** Only a web address served over HTTPS is kept as a photo. */
 const photoUrl = (value: unknown) => (typeof value === 'string' && value.startsWith('https://') ? value : null);
 
-export type VerifyGoogleToken = (credential: string, clientId: string) => Promise<GoogleIdentity>;
+/** Checks a Google ID token issued to one of the app's own clients: the web app's, or the native apps' that sign in themselves. */
+export type VerifyGoogleToken = (credential: string, clientIds: string | string[]) => Promise<GoogleIdentity>;
 
 export class InvalidGoogleToken extends Error {}
 
 const googleKeys = createRemoteJWKSet(new URL('https://www.googleapis.com/oauth2/v3/certs'));
 
 export function googleVerifier(keys: JWTVerifyGetKey = googleKeys): VerifyGoogleToken {
-  return async (credential, clientId) => {
+  return async (credential, clientIds) => {
     try {
       const { payload } = await jwtVerify(credential, keys, {
         issuer: ['https://accounts.google.com', 'accounts.google.com'],
-        audience: clientId,
+        audience: clientIds,
       });
       if (typeof payload.sub !== 'string' || typeof payload.email !== 'string' || payload.email_verified !== true) {
         throw new InvalidGoogleToken('Google account has no verified email');

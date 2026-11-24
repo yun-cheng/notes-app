@@ -22,6 +22,8 @@
   "ai": { "binding": "AI", "remote": true },
   "triggers": { "crons": ["17 4 * * *", "*/5 * * * *"] },
   "vars": {
-    "GOOGLE_CLIENT_ID": "468133721722-vll21ap6270hafml9rc7gra71sbbmg3i.apps.googleusercontent.com"
+    "GOOGLE_CLIENT_ID": "468133721722-vll21ap6270hafml9rc7gra71sbbmg3i.apps.googleusercontent.com",
+    // The Mac and iPhone apps sign in to Google with their own client (type iOS), in Apple's sign-in sheet.
+    "GOOGLE_APPLE_CLIENT_ID": "468133721722-9vottks4ombc3lc96osecoprik89m547.apps.googleusercontent.com"
   }
 }

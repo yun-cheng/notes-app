@@ -61,7 +61,7 @@ describe('sign-in', () => {
   });
   it('publishes the client ID', async () => {
     const { call } = setup();
-    expect(await (await call('/api/config')).json()).toEqual({ googleClientId: CLIENT_ID });
+    expect(await (await call('/api/config')).json()).toEqual({ googleClientId: CLIENT_ID, googleAppleClientId: '' });
   });
 });
 
@@ -158,6 +158,12 @@ describe('google token verification', () => {
   it('accepts a valid token', async () => {
     const { verify, sign } = await keys();
     expect(await verify(await sign({}), CLIENT_ID)).toEqual({ sub: 'google-1', email: 'a@b.c', name: 'A', picture: null });
+  });
+  it("accepts a token for any of the app's own clients, the native apps' too", async () => {
+    const { verify, sign } = await keys();
+    const apple = 'apple-client';
+    expect((await verify(await sign({}, { aud: apple }), [CLIENT_ID, apple])).email).toBe('a@b.c');
+    await expect(verify(await sign({}, { aud: apple }), CLIENT_ID)).rejects.toBeInstanceOf(InvalidGoogleToken);
   });
   it('keeps the profile photo only from an https address', async () => {
     const { verify, sign } = await keys();

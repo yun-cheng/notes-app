@@ -17,6 +17,8 @@ export interface Database {
 export interface Bindings {
   DB: Database;
   GOOGLE_CLIENT_ID: string;
+  /** The OAuth client the Mac and iPhone apps sign in to Google with, in Apple's sign-in sheet; public, as the web's. */
+  GOOGLE_APPLE_CLIENT_ID?: string;
   /** Only needed for photos: the server's side of the Google Drive connection. A secret, never in config files. */
   GOOGLE_CLIENT_SECRET?: string;
   /** Only needed for due-date reminders: the server's VAPID key pair (base64url), set by the owner. The private one is a secret. */

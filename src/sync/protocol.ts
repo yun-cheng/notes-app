@@ -30,6 +30,8 @@ export interface SessionInfo {
 
 export interface ConfigResponse {
   googleClientId: string;
+  /** The Google client the Mac and iPhone apps sign in with; empty where the server has none. */
+  googleAppleClientId?: string;
 }
 
 /** A record's `seq` on push is the last server version this device saw. */

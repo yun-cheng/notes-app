@@ -108,13 +108,7 @@ struct VaultsPage: View {
     private func openHidden() {
         let entered = hiddenPin
         hiddenPin = ""
-        Task {
-            var opened = 0
-            for vault in model.vaults where vault.hidden && !model.openVaults.contains(vault.id) {
-                if await model.unlock(vault, pin: entered, recoveryKey: false) { opened += 1 }
-            }
-            message = opened == 0 ? "No hidden vault has that PIN." : nil
-        }
+        Task { message = await model.unlockHidden(pin: entered).problem }
     }
 }
 
@@ -464,7 +458,7 @@ struct LetInSheet: View {
             if model.repo.keyring.key(vault.id) == nil {
                 PinField("Your PIN", text: $pin).frame(maxWidth: 240)
             }
-            if wrong { Text("Wrong PIN.").foregroundStyle(Theme.alert) }
+            if wrong { Text("That PIN isn't right.").foregroundStyle(Theme.alert) }
             HStack {
                 Button("Cancel") { dismiss() }
                 Button("Let in") {

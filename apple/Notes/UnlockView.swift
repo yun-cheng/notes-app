@@ -8,7 +8,8 @@ struct UnlockView: View {
     @State private var pin = ""
     @State private var useRecoveryKey = false
     @State private var working = false
-    @State private var wrong = false
+    /// What went wrong with the last try, in the web's words.
+    @State private var problem: String?
     /// Face ID or Touch ID is on for this vault here; it's asked for as the vault shows.
     @State private var deviceOn = false
     @State private var deviceFailed = false
@@ -23,9 +24,7 @@ struct UnlockView: View {
             PinField(useRecoveryKey ? "Recovery key" : "PIN", text: $pin, onSubmit: unlock)
                 .textFieldStyle(.roundedBorder)
                 .frame(maxWidth: 260)
-            if wrong {
-                Text(useRecoveryKey ? "That recovery key doesn't open this vault." : "Wrong PIN.").foregroundStyle(.red)
-            }
+            if let problem { Text(problem).foregroundStyle(.red) }
             Button(action: unlock) {
                 if working { ProgressView() } else { Text("Unlock") }
             }
@@ -40,7 +39,7 @@ struct UnlockView: View {
                 Button(useRecoveryKey ? "Use the PIN instead" : "Forgot PIN?") {
                     useRecoveryKey.toggle()
                     pin = ""
-                    wrong = false
+                    problem = nil
                 }
                 .buttonStyle(.borderless)
             }
@@ -68,14 +67,17 @@ struct UnlockView: View {
     private func unlock() {
         guard !pin.isEmpty, !working else { return }
         working = true
-        wrong = false
+        problem = nil
         let entered = pin
         let recovery = useRecoveryKey
         Task {
-            let opened = await model.unlock(vault, pin: entered, recoveryKey: recovery)
+            // A PIN counts toward the wait after five wrong ones; a recovery key doesn't, as on the web.
+            let result = recovery
+                ? (await model.unlock(vault, pin: entered, recoveryKey: true) ? PinResult.ok : .wrong)
+                : await model.unlock(vault, pin: entered)
             working = false
-            wrong = !opened
-            if opened { pin = "" }
+            problem = recovery && result == .wrong ? "That recovery key isn't right." : result.problem
+            if result == .ok { pin = "" }
         }
     }
 }

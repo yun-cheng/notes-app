@@ -28,7 +28,10 @@ struct NotesApp: App {
             if phase == .active {
                 model.newDay()
                 Task { await model.sync?.sync() }
+                VaultActivity.watch(model)
             }
+            // Gone to the background, every private vault locks, as the web's do when the page is hidden.
+            if phase == .background { model.lockAll() }
             #if os(iOS)
             if phase == .background { BackgroundSync.plan() }
             #endif

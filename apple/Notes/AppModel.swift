@@ -43,6 +43,10 @@ final class AppModel {
     private(set) var unsynced: Set<String> = []
     /// Private vaults opened with their PIN on this device, until the app locks them again.
     private(set) var openVaults: Set<String> = []
+    /// Locking open vaults by themselves and slowing PIN guesses, as the web's `VaultLocks` (`VaultGuard.swift`).
+    @ObservationIgnored var idleLock: Task<Void, Never>?
+    @ObservationIgnored var pinFailures = 0
+    @ObservationIgnored var pinBlockedUntil = Date.distantPast
     private(set) var sync: SyncEngine?
     /// What a toast says, with an action to undo, for a moment.
     var toast: Toast?
@@ -330,6 +334,7 @@ final class AppModel {
     /// Opens a private vault on this device: its cards show until the app locks again.
     func open(_ vaultId: String) async {
         openVaults.insert(vaultId)
+        touchVaults()
         // Edits made before this device knew the vault's key are encrypted and pushed now.
         sync?.schedule(after: 0.2)
         await refresh()
@@ -347,6 +352,8 @@ final class AppModel {
 
     /// Locks every private vault again and forgets their keys.
     func lockAll() {
+        idleLock?.cancel()
+        idleLock = nil
         openVaults = []
         repo.keyring.forgetAll()
         Attachments.shared.forgetThumbnails()

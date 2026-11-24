@@ -7,6 +7,9 @@ import SwiftUI
 struct EntryOverlay: View {
     @Environment(AppModel.self) private var model
     let id: String
+    /// The open entry takes the keys from the page under it, so Esc reaches it: before 2026-11-25 the journal kept them,
+    /// and Esc never closed an entry opened with a double-click.
+    @FocusState private var focused: Bool
 
     var body: some View {
         GeometryReader { geo in
@@ -26,8 +29,16 @@ struct EntryOverlay: View {
                     .background(Theme.surface)
                     .clipShape(RoundedRectangle(cornerRadius: 16))
                     .shadow(color: .black.opacity(0.3), radius: 24, y: 8)
+                    .focusable()
+                    .focusEffectDisabled()
+                    .focused($focused)
+                    .onKeyPress(.escape) {
+                        model.openEntry = nil
+                        return .handled
+                    }
             }
             .frame(width: geo.size.width, height: geo.size.height)
+            .onAppear { focused = true }
         }
     }
 }
@@ -78,7 +89,11 @@ struct EntrySheet: View {
 
     /// Closes it, as a sheet on a phone or as the overlay on a Mac.
     private func close() {
+        // On a Mac the entry is drawn over the window (`EntryOverlay`), not presented, so dismissing there would close
+        // the window itself, as Esc in an open entry did until 2026-11-25; clearing the open entry is all it takes.
+        #if os(iOS)
         dismiss()
+        #endif
         model.openEntry = nil
     }
 

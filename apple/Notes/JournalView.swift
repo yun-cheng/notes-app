@@ -208,6 +208,8 @@ struct JournalView: View {
 
     /// The journal's keys, as the web app's `useEntryShortcuts`.
     private func keys(_ press: KeyPress, _ ids: [String], all: [String], proxy: ScrollViewProxy) -> KeyPress.Result {
+        // An open entry over the journal has the keys; none of these act on the journal behind it.
+        guard model.openEntry == nil else { return .ignored }
         let command = press.modifiers.contains(.command)
         func move(_ by: Int) {
             guard !ids.isEmpty else { return }

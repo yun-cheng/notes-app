@@ -7,6 +7,7 @@ import {
   disconnect,
   downloadFile,
   DriveFailed,
+  APP_STATE,
   DriveNotConnected,
   DriveRefused,
   driveStatus,
@@ -88,9 +89,10 @@ function driveError(c: Context<AppEnv>, err: unknown) {
 /** Google redirects here after the user approves Drive access. There is no session cookie on this request. */
 export function drivePublicRoutes(app: Hono<AppEnv>, fetcher: GoogleFetch, now: () => number) {
   app.get('/drive/callback', async (c) => {
-    const back = (result: string) => c.redirect(`/settings?drive=${result}`, 302);
-    const config = driveConfig(c, fetcher);
     const { code, state, error } = c.req.query();
+    // A native app opened this in its sign-in sheet or the browser, and is waiting at notesapp://drive.
+    const back = (result: string) => c.redirect(state?.endsWith(APP_STATE) ? `notesapp://drive?result=${result}` : `/settings?drive=${result}`, 302);
+    const config = driveConfig(c, fetcher);
     if (!config || error || !code || !state) return back(error === 'access_denied' ? 'denied' : 'failed');
     try {
       return back((await finishConnect(c.env.DB, config, state, code, now())) ? 'connected' : 'expired');
@@ -128,7 +130,8 @@ export function photoRoutes(app: Hono<AppEnv>, fetcher: GoogleFetch, now: () => 
   app.post('/drive/connect', async (c) => {
     const config = driveConfig(c, fetcher);
     if (!config) return c.json({ error: 'photos_not_configured' }, 503);
-    return c.json({ url: await startConnect(c.env.DB, config, c.get('user').id, now()) });
+    const body = await c.req.json<{ app?: unknown }>().catch(() => null);
+    return c.json({ url: await startConnect(c.env.DB, config, c.get('user').id, now(), body?.app === true) });
   });
 
   app.delete('/drive', async (c) => {

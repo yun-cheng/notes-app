@@ -16,7 +16,7 @@ Local testing: run `npm run dev` and point the native apps at `http://localhost:
 demo's photos, videos and voice messages won't load (the README says how). That was why photos and voice messages
 seemed broken on the Mac and iPhone: the API answers 503 for the demo's files, which only the dev server serves.
 
-_Last checked 2026-11-23._
+_Last checked 2026-11-24._
 
 ## Journal: bubbles
 
@@ -151,6 +151,19 @@ _Last checked 2026-11-23._
 
 | Reminders: the web's words; This device with Turn on reminders, Turn off and Send a test; Todos with a time; Todos with only a date | ✅ | ✅ | ✅ | C |
 | A translation shows in the entry's words' place, with "From Japanese · Show original · Save as a page", or "Show in English" once put aside | ✅ | ✅ | ✅ | C |
+
+## The platform's own way
+
+The native apps should do what the web does the way their platform does it, not copy how a web page has to do it.
+Reviewed 2026-11-24, after Android's sign-in turned out to send people to Chrome for no reason.
+
+| Web behavior | Mac | iPhone | Android | How |
+|---|---|---|---|---|
+| Sign in with Google | ⚠️ Apple's sign-in sheet opens the web app's `/pair` page, and the code is confirmed there, rather than going straight to Google | ⚠️ the same | ✅ the phone's own Google account picker; the browser only if that can't work | T |
+| Connect Google Drive for photos and files, and come back to Settings saying how it went | ✅ in Apple's sign-in sheet, which Google's answer closes (it used to open Safari and end on the web app's Settings page) | ✅ the same | ✅ the browser comes back to the app at `notesapp://drive` (it used to stay on the web app's Settings page) | C |
+| Unlock a vault with the device's fingerprint (a vault's lock settings: Unlock with fingerprint, which keeps an encrypted vault's key on the device) | ❌ no Touch ID | ❌ no Face ID | ❌ no fingerprint | C |
+| A due todo's reminder comes even when it was made on another device and this one hasn't been opened since (the server pushes it) | ⚠️ only todos this device has synced; nothing syncs in the background | ⚠️ the same | ⚠️ the same | C |
+| A long press that picks gives a small vibration (touch) | ➖ | ❌ | ✅ | C |
 
 ## Not checked yet
 

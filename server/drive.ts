@@ -30,8 +30,11 @@ export class DriveRefused extends Error {}
 /** Drive no longer has a resumable upload's session (a week old, or lost): it starts again from the first byte. */
 export class UploadExpired extends Error {}
 
-export async function startConnect(db: Database, config: DriveConfig, userId: string, now: number): Promise<string> {
-  const state = randomToken();
+/** A state ending in this came from a native app, so Google's answer goes back to the app rather than to the web app. */
+export const APP_STATE = '.app';
+
+export async function startConnect(db: Database, config: DriveConfig, userId: string, now: number, toApp = false): Promise<string> {
+  const state = randomToken() + (toApp ? APP_STATE : '');
   await db.prepare(`INSERT INTO drive_states (state_hash, user_id, expires_at) VALUES (?, ?, ?)`).bind(await hashToken(state), userId, now + STATE_TTL).run();
   const params = new URLSearchParams({
     client_id: config.clientId,

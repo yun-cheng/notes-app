@@ -136,6 +136,14 @@ describe('photos in Google Drive', () => {
     expect(await (await t.call('/api/drive', {}, t.ann.cookie)).json()).toEqual({ configured: true, connected: true, email: 'ann@gmail.com' });
     expect((await t.call(`/api/drive/callback?code=good&state=${t.state}`)).headers.get('location')).toBe('/settings?drive=expired');
   });
+  it('sends a native app back to itself once Drive is connected', async () => {
+    const t = setup({ googleFetch: fakeGoogle().fetcher, clientSecret: 'shh' });
+    const ann = await t.signIn('ann');
+    const start = (await (await t.call('/api/drive/connect', { method: 'POST', body: '{"app":true}' }, ann.cookie)).json()) as { url: string };
+    const state = new URL(start.url).searchParams.get('state')!;
+    expect((await t.call(`/api/drive/callback?code=good&state=${state}`)).headers.get('location')).toBe('notesapp://drive?result=connected');
+    expect((await t.call(`/api/drive/callback?error=access_denied&state=${state}`)).headers.get('location')).toBe('notesapp://drive?result=denied');
+  });
   it('says when photos are not set up on the server', async () => {
     const t = setup();
     const ann = await t.signIn('ann');

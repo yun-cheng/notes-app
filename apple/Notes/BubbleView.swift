@@ -11,6 +11,8 @@ struct BubbleView: View {
     let card: Card
     var picked = false
     var onPick: () -> Void = {}
+    /// A Shift-click: picks every entry from the last picked to this one; without it, Shift-click picks this one alone.
+    var onPickRange: (() -> Void)?
     var picking = false
     /// Every entry picked with it, for the menu of several, as the web's; and how to stop picking.
     var selection: [String] = []
@@ -72,10 +74,16 @@ struct BubbleView: View {
             #endif
         }
         .contentShape(shape)
+        // Where the bubble is, so a drag that starts on it doesn't pick with a box (`BoxPick`).
+        .streamPlace(card.id, part: "bubble")
         #if os(macOS)
-        // A double-click opens it on a computer, as on the web; a click picks it while picking.
-        .onTapGesture(count: 2) { model.openEntry = card.id }
+        // A double-click opens it on a computer, as on the web, unless picking or with a key held; a click picks it
+        // while picking, and Cmd-click, or Shift-click for a range, picks it at any time. The keys go with the click
+        // itself: a plain click waits to see if it's a double-click, by when they may be up.
+        .onTapGesture(count: 2) { if !picking && PickKeys.none { model.openEntry = card.id } }
         .onTapGesture { if picking { onPick() } }
+        .highPriorityGesture(TapGesture().modifiers(.command).onEnded { onPick() })
+        .highPriorityGesture(TapGesture().modifiers(.shift).onEnded { (onPickRange ?? onPick)() })
         .onHover { hovering = $0 }
         #else
         // A tap opens it on a phone, with no wait for a second tap.
@@ -197,15 +205,15 @@ enum BubbleMemo {
     }
 }
 
-/// Cmd-click picks an entry, as in the web app's journal; on a phone a long press does, as on the web there (what the
-/// menu offers is in the open entry's bar and the picking bar).
+/// On a phone a long press picks an entry, as on the web there (what the menu offers is in the open entry's bar and the
+/// picking bar). On a Mac a Cmd-click does, which the bubble's own click gestures handle.
 struct PickOnCommandClick: ViewModifier {
     let onPick: () -> Void
     /// Goes up with each long press, for the small vibration the web gives there too.
     @State private var pressed = 0
     func body(content: Content) -> some View {
         #if os(macOS)
-        content.simultaneousGesture(TapGesture().modifiers(.command).onEnded { onPick() })
+        content
         #else
         content
             .onLongPressGesture(minimumDuration: 0.5) { pressed += 1; onPick() }
@@ -908,5 +916,15 @@ struct SeveralMenu: View {
             }
         }
     }
+}
+#endif
+
+#if os(macOS)
+/// The keys held now, as the web reads them from its events: a double-click with one held doesn't open, and Shift or
+/// Cmd at the start of a box drag adds to what's picked.
+enum PickKeys {
+    static var held: NSEvent.ModifierFlags { NSEvent.modifierFlags.intersection(.deviceIndependentFlagsMask) }
+    static var none: Bool { held.intersection([.command, .shift, .option, .control]).isEmpty }
+    static var adding: Bool { !held.intersection([.command, .shift]).isEmpty }
 }
 #endif

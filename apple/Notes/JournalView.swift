@@ -21,6 +21,18 @@ struct JournalView: View {
     @State private var focusedEntry: String?
     @State private var showShortcuts = false
     @FocusState private var streamFocused: Bool
+    /// Where each entry is, for picking with a box and for the keys' "the entry in the middle" (`BoxPick`).
+    @State private var places = StreamPlaces()
+    /// The box being dragged from empty space, and whether this drag started somewhere a box can't.
+    @State private var box: PickBox?
+    @State private var boxRefused = false
+    /// The pointer as the box was last dragged, in the scroll view's own space, to follow scrolling under it.
+    @State private var boxPointer: CGPoint?
+    /// Where the stream's top left is in the scroll view, and how tall the scroll view is.
+    @State private var streamOrigin: CGPoint = .zero
+    @State private var viewportHeight: CGFloat = 0
+    /// Clicks that end a box drag don't also pick or stop picking.
+    @State private var quietUntil = Date.distantPast
 
     /// Whether its filter is the page the app shows, kept as the page changes; the phone's Today tab keeps its own.
     let isPage: Bool
@@ -77,12 +89,13 @@ struct JournalView: View {
                             ForEach(groups(visible), id: \.day) { group in
                                 Section {
                                     ForEach(group.items) { item in
-                                        PickRow(picked: picked.contains(item.card.id), picking: !picked.isEmpty, pick: { shift in togglePick(item.card.id, range: shift ? visible.map(\.card.id) : nil) }) {
+                                        PickRow(picked: picked.contains(item.card.id), picking: !picked.isEmpty, pick: { shift in clickPick(item.card.id, range: shift ? visible.map(\.card.id) : nil) }) {
                                             VStack(alignment: .leading, spacing: 4) {
-                                                BubbleView(card: item.card, picked: picked.contains(item.card.id), onPick: { togglePick(item.card.id) }, picking: !picked.isEmpty, selection: Array(picked), stopPicking: { picked = [] })
-                                                EntryAttachments(card: item.card)
+                                                BubbleView(card: item.card, picked: picked.contains(item.card.id), onPick: { clickPick(item.card.id, range: nil) }, onPickRange: { clickPick(item.card.id, range: visible.map(\.card.id)) }, picking: !picked.isEmpty, selection: Array(picked), stopPicking: { picked = [] })
+                                                EntryAttachments(card: item.card).streamPlace(item.card.id, part: "files")
                                             }
                                         }
+                                            .streamPlace(item.card.id)
                                             .overlay(alignment: .leading) {
                                                 if focusedEntry == item.card.id {
                                                     RoundedRectangle(cornerRadius: 2).fill(Theme.accent).frame(width: 3).offset(x: -8)
@@ -110,6 +123,18 @@ struct JournalView: View {
                         .padding(.bottom, 10)
                         .frame(maxWidth: 720)
                         .frame(maxWidth: .infinity)
+                        #if os(macOS)
+                        .coordinateSpace(.named(StreamPlaces.space))
+                        .environment(\.streamPlaces, places)
+                        .overlay(alignment: .topLeading) {
+                            if let box, box.rect.width + box.rect.height > 6 { PickBoxShape(rect: box.rect) }
+                        }
+                        .onGeometryChange(for: CGPoint.self) { $0.frame(in: .named("journalViewport")).origin } action: { origin in
+                            streamOrigin = origin
+                            // Scrolling under a box moves its far corner with the stream, as the web's.
+                            if let at = boxPointer { dragBox(to: at, ids: visible.map(\.card.id)) }
+                        }
+                        #endif
                     }
                     .defaultScrollAnchor(chat ? .bottom : .top)
                     // Made again once there's something in it: a list laid out empty, before the cards are read, keeps
@@ -119,6 +144,18 @@ struct JournalView: View {
                     .focused($streamFocused)
                     .focusEffectDisabled()
                     .onKeyPress { press in keys(press, visible.map(\.card.id), all: all.map(\.card.id), proxy: proxy) }
+                    #if os(macOS)
+                    .coordinateSpace(.named("journalViewport"))
+                    .onGeometryChange(for: CGFloat.self) { $0.size.height } action: { viewportHeight = $0 }
+                    // A drag from empty space picks with a box, and a click there stops picking, as the web's.
+                    .simultaneousGesture(
+                        DragGesture(minimumDistance: 6, coordinateSpace: .named("journalViewport"))
+                            .onChanged { drag in startOrDragBox(drag, ids: visible.map(\.card.id)) }
+                            // The last stretch of a quick drag comes only with the release.
+                            .onEnded { drag in dragBox(to: drag.location, ids: visible.map(\.card.id)); endBox() }
+                    )
+                    .onTapGesture { clickEmpty() }
+                    #endif
                     .overlay(alignment: .trailing) {
                         JournalRail(items: visible) { id in withAnimation(nil) { proxy.scrollTo(id, anchor: .top) } }
                     }
@@ -174,9 +211,22 @@ struct JournalView: View {
         let command = press.modifiers.contains(.command)
         func move(_ by: Int) {
             guard !ids.isEmpty else { return }
-            let at = focusedEntry.flatMap { ids.firstIndex(of: $0) } ?? (by > 0 ? -1 : ids.count)
-            let next = ids[max(0, min(ids.count - 1, at + by))]
-            if press.modifiers.contains(.shift) { picked.insert(next) }
+            let next: String
+            if let f = focusedEntry, let at = ids.firstIndex(of: f) {
+                next = ids[max(0, min(ids.count - 1, at + by))]
+                // With Shift, picking from here to there, the entry it starts from too, as the web's.
+                if press.modifiers.contains(.shift) {
+                    if !picked.contains(f) { togglePick(f) }
+                    togglePick(next, range: ids)
+                }
+            } else {
+                // With none focused, from the entry in the middle of the screen: Space focuses it, and an arrow the one
+                // after or before it, as the web's. Home and End go to the first and the last.
+                let middle = abs(by) > 1 ? nil : middleEntry(ids)
+                let at = middle.flatMap { ids.firstIndex(of: $0) } ?? (by > 0 ? -1 : ids.count)
+                next = ids[max(0, min(ids.count - 1, at + by))]
+                if press.modifiers.contains(.shift) { togglePick(next) }
+            }
             focusedEntry = next
             withAnimation(nil) { proxy.scrollTo(next, anchor: .center) }
         }
@@ -237,6 +287,63 @@ struct JournalView: View {
     }
 
     @State private var pickedLast: String?
+
+    /// The entry in the middle of what's shown, on a Mac.
+    private func middleEntry(_ ids: [String]) -> String? {
+        #if os(macOS)
+        let top = -streamOrigin.y
+        return places.middle(of: ids, shown: top...(top + viewportHeight))
+        #else
+        return nil
+        #endif
+    }
+
+    /// A click that picks, unless it's the end of a box drag.
+    private func clickPick(_ id: String, range: [String]?) {
+        guard Date() >= quietUntil else { return }
+        togglePick(id, range: range)
+    }
+
+    #if os(macOS)
+    /// A drag over the stream: one that starts on empty space picks every entry its box touches as it moves, with what
+    /// was picked before when Shift or Cmd was held as it started, as the web's `useBoxSelect`.
+    private func startOrDragBox(_ drag: DragGesture.Value, ids: [String]) {
+        guard !boxRefused else { return }
+        if box == nil {
+            let start = CGPoint(x: drag.startLocation.x - streamOrigin.x, y: drag.startLocation.y - streamOrigin.y)
+            guard !places.isSolid(start, among: ids) else { boxRefused = true; return }
+            box = PickBox(start: start, end: start, before: PickKeys.adding ? picked : [])
+        }
+        dragBox(to: drag.location, ids: ids)
+    }
+
+    /// Moves the box's far corner to the pointer (in the scroll view's space) and picks what it touches.
+    private func dragBox(to pointer: CGPoint, ids: [String]) {
+        guard var b = box else { return }
+        boxPointer = pointer
+        b.end = CGPoint(x: pointer.x - streamOrigin.x, y: pointer.y - streamOrigin.y)
+        box = b
+        let rect = b.rect
+        picked = b.before.union(ids.filter { places.rows[$0]?.intersects(rect) == true })
+    }
+
+    private func endBox() {
+        if box != nil {
+            quietUntil = Date().addingTimeInterval(0.3)
+            streamFocused = true
+        }
+        box = nil
+        boxPointer = nil
+        boxRefused = false
+    }
+
+    /// A click on empty space stops picking, as the web's, and gives the stream the keys.
+    private func clickEmpty() {
+        guard Date() >= quietUntil else { return }
+        picked = []
+        streamFocused = true
+    }
+    #endif
 
     /// Picks or unpicks an entry; with `range` (the entries in order, for a Shift-click), every one from the last picked
     /// to it, as the web's.

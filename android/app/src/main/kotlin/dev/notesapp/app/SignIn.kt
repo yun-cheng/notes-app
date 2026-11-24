@@ -79,7 +79,8 @@ fun SignInView() {
             val signedIn = api.signInWithGoogle(GoogleIdTokenCredential.createFrom(credential.data).idToken)
             model.signedIn(signedIn.info, signedIn.token)
         } catch (_: GetCredentialCancellationException) {
-            // Closed the account picker: nothing to say.
+            // Closed the account picker: nothing to say, but the browser is a way in without adding the account to the phone.
+            offerBrowser = true
         } catch (e: CancellationException) {
             throw e
         } catch (e: GetCredentialException) {

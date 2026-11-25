@@ -9,6 +9,8 @@ struct TrashPage: View {
     @Environment(AppModel.self) private var model
     @State private var filter = StreamFilter()
     @State private var picked: Set<String> = []
+    @State private var rail = RailPlace()
+    @State private var position = ScrollPosition()
 
     private var items: [Card] {
         let match = Stream.matcher(filter, today: model.today, sharedInto: model.sharedInto)
@@ -23,7 +25,13 @@ struct TrashPage: View {
         let restorable: [Card] = (items + tags).filter { model.canWrite($0) }
         VStack(spacing: 0) {
             FilterRow(filter: $filter, pickDates: .constant(false), templates: false)
-            ScrollView { list(items, tags) }
+            // The rail goes by the day each entry was trashed, newest first, as the web's.
+            let days = Self.days(items)
+            ScrollViewReader { proxy in
+                ScrollView { list(days, items.isEmpty, tags) }
+                    .pageRail(keys: days.flatMap { d in d.value.map { _ in d.key } }, ids: days.flatMap { $0.value.map(\.id) },
+                        name: { DateKey.relativeDay($0, today: model.today) }, place: rail, position: $position, proxy: proxy)
+            }
             if !picked.isEmpty { pickBar }
         }
         .pageBackground()
@@ -53,16 +61,20 @@ struct TrashPage: View {
         .placesPhoneTail()
     }
 
-    private func list(_ items: [Card], _ tags: [Card]) -> some View {
-        let days: [(key: String, value: [Card])] = Dictionary(grouping: items) { DateKey.of(Date(ms: $0.updatedAt)) }.sorted { $0.key > $1.key }
+    /// The entries under the day each was trashed, newest first.
+    private static func days(_ items: [Card]) -> [(key: String, value: [Card])] {
+        Dictionary(grouping: items) { DateKey.of(Date(ms: $0.updatedAt)) }.sorted { $0.key > $1.key }
+    }
+
+    private func list(_ days: [(key: String, value: [Card])], _ empty: Bool, _ tags: [Card]) -> some View {
         let attachmentsShown = !filter.with { $0.vaultId = nil }.isFiltered
         return LazyVStack(alignment: .leading, spacing: 8) {
             if attachmentsShown { TrashedAttachments(vaultId: filter.vaultId) }
             ForEach(days, id: \.key) { day in
                 DayBadge(day: day.key, sort: .edited) { _ in }
-                ForEach(day.value) { card in trashedEntry(card) }
+                ForEach(day.value) { card in trashedEntry(card).id(card.id).railRow(card.id, rail) }
             }
-            if items.isEmpty {
+            if empty {
                 Text(emptyText(tags))
                     .foregroundStyle(Theme.muted).frame(maxWidth: .infinity).padding(.vertical, 40)
             }
@@ -74,6 +86,7 @@ struct TrashPage: View {
         .padding(16)
         .frame(maxWidth: 720)
         .frame(maxWidth: .infinity)
+        .coordinateSpace(.named(RailPlace.space))
     }
 
     private func emptyText(_ tags: [Card]) -> String {
@@ -147,6 +160,8 @@ struct HeldList<T: Identifiable, Row: View, Lead: View>: View where T.ID == Stri
     @ViewBuilder var row: (T, Card) -> Row
     @State private var query = ""
     @State private var searching = false
+    @State private var rail = RailPlace()
+    @State private var position = ScrollPosition()
 
     var body: some View {
         let q = query.trimmingCharacters(in: .whitespaces)
@@ -163,6 +178,7 @@ struct HeldList<T: Identifiable, Row: View, Lead: View>: View where T.ID == Stri
                     Text(q.isEmpty ? (filtered ? emptyFiltered : empty) : "")
                 }
             } else {
+                ScrollViewReader { proxy in
                 ScrollView {
                     LazyVStack(alignment: .leading, spacing: 0) {
                         Text(countLine(all.count == 1 ? "1 \(noun.0)" : "\(all.count) \(noun.1)", entries: Set(all.map(\.card.id)).count))
@@ -188,12 +204,19 @@ struct HeldList<T: Identifiable, Row: View, Lead: View>: View where T.ID == Stri
                                     Button("Open entry") { model.openEntry = pair.card.id }
                                     Button("Show in journal") { model.page = .journal(StreamFilter()); model.lastSaved = pair.card.id }
                                 }
+                                .id(pair.item.id)
+                                .railRow(pair.item.id, rail)
                             }
                         }
                     }
                     .padding(16)
                     .frame(maxWidth: 760, alignment: .leading)
                     .frame(maxWidth: .infinity, alignment: .leading)
+                    .coordinateSpace(.named(RailPlace.space))
+                }
+                // Each one by the day its entry was written, as the web's.
+                .pageRail(keys: shown.flatMap { d in d.items.map { _ in d.day } }, ids: all.map(\.item.id),
+                    name: { DateKey.relativeDay($0, today: model.today) }, place: rail, position: $position, proxy: proxy)
                 }
             }
         }

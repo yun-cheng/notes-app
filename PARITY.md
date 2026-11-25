@@ -92,7 +92,7 @@ _Last checked 2026-11-25._
 | Filter row: All, Notes, Todos, Stacks; Todos status; Written dates; Contains; Templates | ✅ | ✅ | ✅ | T |
 | Day badges, pinned while their day scrolls past | ✅ | ✅ | ✅ | T |
 | A round button back to the newest entries (the end the journal opens at), shown once well away from it, above the writing box | ✅ (since 2026-11-25) | ✅ (since 2026-11-25) | ✅ (since 2026-11-25; the distance is estimated from the rows drawn) | T |
-| A rail down the right with the years, to point at and drag | ✅ (since 2026-11-25: each entry an equal share, the web's marks, a thumb where the journal is, the month pointed at or dragged to, and the scroll bar hidden behind it; before, each month had an equal share, so most of it went through a few old entries, and years showed only at a January) (T) | ⚠️ the same rail, its thumb going by how far the page is scrolled; the web's phone rail is a handle shown while scrolling | ⚠️ | ? |
+| A rail down the right of the Journal, Archive and Templates, the Trash, Photos, Links and Files, with the years (or months, or days) by where their items fall, a thumb at where the page is, to point at, press and drag | ✅ (since 2026-11-25 on all six; before, the journal's gave each month an equal share and the others had none) (T) | ⚠️ the same rail on all six, its thumb by how far the journal is scrolled there; the web's phone rail is a handle shown while scrolling | ⚠️ only the journal's, each month an equal share | ? |
 
 ## Journal box
 

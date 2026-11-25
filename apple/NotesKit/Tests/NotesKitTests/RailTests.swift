@@ -59,4 +59,25 @@ import Testing
         #expect(Rail.readingLine(scrolled: 500, scrollable: 1000, top: 60, height: 500) == 310)
         #expect(Rail.readingLine(scrolled: 0, scrollable: 0, top: 60, height: 500) == 60)
     }
+
+    @Test func scrollForTurnsReadingLineRound() {
+        let s = Rail.scrollFor(2000, scrollable: 3000, top: 60, height: 500)
+        #expect(abs(s + Rail.readingLine(scrolled: s, scrollable: 3000, top: 60, height: 500) - 2000) < 1e-9)
+        #expect(Rail.scrollFor(10, scrollable: 3000, top: 60, height: 500) == 0)
+        #expect(Rail.scrollFor(99_999, scrollable: 3000, top: 60, height: 500) == 3000)
+    }
+
+    @Test func rowsOfItemsSideBySide() {
+        let downs: [Double] = [4, 5, 6].map { Rail.intoRow($0, into: 0.25, first: 4, count: 3) }
+        let expected: [Double] = [0.25 / 3, 1.25 / 3, 2.25 / 3]
+        #expect(downs == expected)
+        #expect(Rail.intoRow(6, into: 1, first: 4, count: 3) == 1)
+        #expect(Rail.intoRow(9, into: 0.5, first: 9, count: 1) == 0.5)
+        for (index, into) in [(4, 0.25), (5, 0.9), (6, 0.0)] {
+            let down = Rail.intoRow(index, into: into, first: 4, count: 3)
+            let at = Rail.rowRailAt(first: 4, count: 3, down: down, n: 20)
+            #expect(abs(at - (Double(index) + into) / 20) < 1e-9)
+        }
+        #expect(abs(Rail.rowRailAt(first: 4, count: 3, down: 2, n: 20) - 7.0 / 20) < 1e-9)
+    }
 }

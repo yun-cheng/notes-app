@@ -181,6 +181,8 @@ struct PhotosPage: View {
     @State private var viewing: String?
     @State private var picked: Set<String> = []
     @State private var sharing: [URL] = []
+    @State private var rail = RailPlace()
+    @State private var position = ScrollPosition()
 
     struct Item: Identifiable, Hashable {
         var media: Doc.Media
@@ -212,6 +214,7 @@ struct PhotosPage: View {
                 ContentUnavailableView(filter.isFiltered || kind != .all ? "No photos here match" : "No photos yet", systemImage: "photo",
                     description: Text(filter.isFiltered || kind != .all ? "Take a filter off above, or pick another." : "Add one to an entry with the photo button, or paste or drop it in."))
             } else {
+                ScrollViewReader { proxy in
                 ScrollView {
                     VStack(alignment: .leading, spacing: 4) {
                         Text(countLine(EntryAttachments.mediaCount(all.map(\.media)), entries: Set(all.map(\.card.id)).count))
@@ -229,10 +232,31 @@ struct PhotosPage: View {
                                 }
                             }
                             .preference(key: HeightKey.self, value: laid.height)
+                            // Where each photo is, for the rail: laid out here, so known without drawing it.
+                            .onGeometryChange(for: [CGFloat].self) { g in
+                                // Again when the photos are laid out anew, though the frame stays.
+                                let f = g.frame(in: .named(RailPlace.space))
+                                return [f.minX, f.minY, laid.height, CGFloat(all.count)]
+                            } action: { place in
+                                let frame = CGPoint(x: place[0], y: place[1])
+                                var rows: [String: CGRect] = [:]
+                                for (d, day) in days.enumerated() {
+                                    for (i, pair) in day.items.enumerated() where i < laid.tiles[d].count {
+                                        let b = laid.tiles[d][i]
+                                        rows[pair.item.id] = CGRect(x: frame.x + b.x, y: frame.y + b.y, width: b.w, height: b.h)
+                                    }
+                                }
+                                rail.rows = rows
+                            }
                         }
                         .modifier(FitHeight())
                     }
                     .padding(16)
+                    .coordinateSpace(.named(RailPlace.space))
+                }
+                // Each photo by the day its entry was written, as the web's.
+                .pageRail(keys: days.flatMap { d in d.items.map { _ in d.day } }, ids: all.map(\.id),
+                    name: { DateKey.relativeDay($0, today: model.today) }, place: rail, position: $position, proxy: proxy)
                 }
             }
         }

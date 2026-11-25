@@ -95,9 +95,27 @@ public enum Rail {
         return (index, min(1, exact - Double(index)))
     }
 
+    /// Items side by side (photos in a row) share one stretch of the page, from the row's top to the next row's:
+    /// `first` is the row's first item and `count` how many it holds. How far down that stretch the place `into` the
+    /// item at `index` is, so a slow drag goes smoothly down a row and the gap and heading under it, never back to its top.
+    public static func intoRow(_ index: Int, into: Double, first: Int, count: Int) -> Double {
+        count > 0 ? min(1, max(0, (Double(index - first) + into) / Double(count))) : 0
+    }
+
+    /// `intoRow`, turned round: the place on a rail of `n` items that's `down` the stretch of a row.
+    public static func rowRailAt(first: Int, count: Int, down: Double, n: Int) -> Double {
+        n > 0 ? min(1, (Double(first) + min(1, max(0, down)) * Double(count)) / Double(n)) : 0
+    }
+
     /// Where the page is, as the rail tells it: the line it reads at runs from the top of what's in view, scrolled to
     /// the top, to its foot, scrolled to the end, so the thumb is at either end exactly when the page is.
     public static func readingLine(scrolled: Double, scrollable: Double, top: Double, height: Double) -> Double {
         top + (scrollable > 0 ? height * min(1, max(0, scrolled / scrollable)) : 0)
+    }
+
+    /// How far to scroll so the reading line meets `y`, a place on the page (from its top): `readingLine`, turned round.
+    public static func scrollFor(_ y: Double, scrollable: Double, top: Double, height: Double) -> Double {
+        guard scrollable > 0 else { return 0 }
+        return min(scrollable, max(0, (y - top) / (1 + height / scrollable)))
     }
 }

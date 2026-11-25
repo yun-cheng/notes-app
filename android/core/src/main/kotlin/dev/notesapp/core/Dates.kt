@@ -13,7 +13,9 @@ import kotlinx.serialization.json.JsonNull
 
 /** Local calendar days as `YYYY-MM-DD` keys, never UTC instants, as the web app's `dates.ts`. */
 object DateKey {
-    fun parse(key: String?): LocalDate? = key?.takeIf { Regex("""\d{4}-\d{2}-\d{2}""").matches(it) }?.let { runCatching { LocalDate.parse(it) }.getOrNull() }
+    // Each pattern is made once: making one is slow, and a long journal checks thousands of days at a time.
+    private val shape = Regex("""\d{4}-\d{2}-\d{2}""")
+    fun parse(key: String?): LocalDate? = key?.takeIf { shape.matches(it) }?.let { runCatching { LocalDate.parse(it) }.getOrNull() }
     fun isKey(s: String?) = parse(s) != null
     fun of(date: LocalDate): String = date.toString()
     fun of(instant: Instant, zone: ZoneId = ZoneId.systemDefault()): String = instant.atZone(zone).toLocalDate().toString()
@@ -62,11 +64,13 @@ object DateKey {
 
 /** Times of day as stored: `HH:MM`, 24-hour, local. */
 object TimeKey {
-    fun isKey(s: String?) = s != null && Regex("""([01]\d|2[0-3]):[0-5]\d""").matches(s)
+    private val shape = Regex("""([01]\d|2[0-3]):[0-5]\d""")
+    private val spoken = Regex("""(?i)(\d{1,2})(?::(\d{2}))?([ap]m?)?""")
+    fun isKey(s: String?) = s != null && shape.matches(s)
 
     /** `15:00`, `9:30`, `3pm`, `3:30pm`, `9am` or `9a` as a time key. A bare number isn't a time. */
     fun parse(word: String): String? {
-        val m = Regex("""(?i)(\d{1,2})(?::(\d{2}))?([ap]m?)?""").matchEntire(word) ?: return null
+        val m = spoken.matchEntire(word) ?: return null
         val (h, min, suffix) = m.destructured
         if (min.isEmpty() && suffix.isEmpty()) return null
         var hour = h.toInt()
@@ -135,11 +139,13 @@ val Repeat.word: String
         return if (every == 1) repeatNames.getValue(unit).first.lowercase() else "every-$every-${unit.name}s"
     }
 
+private val everyWord = Regex("""every-(?:(\d{1,3})-)?(day|week|month|year|weekday)s?""")
+
 fun parseRepeat(word: String): Repeat? {
     val w = word.lowercase()
     val words = mapOf("daily" to Repeat.Unit.day, "weekly" to Repeat.Unit.week, "monthly" to Repeat.Unit.month, "yearly" to Repeat.Unit.year, "annually" to Repeat.Unit.year, "weekdays" to Repeat.Unit.weekday)
     words[w]?.let { return Repeat(it, 1) }
-    val m = Regex("""every-(?:(\d{1,3})-)?(day|week|month|year|weekday)s?""").matchEntire(w) ?: return null
+    val m = everyWord.matchEntire(w) ?: return null
     val every = m.groupValues[1].takeIf { it.isNotEmpty() }?.toInt() ?: 1
     if (every < 1) return null
     return Repeat(Repeat.Unit.valueOf(m.groupValues[2]), every).takeIf { it.isValid }

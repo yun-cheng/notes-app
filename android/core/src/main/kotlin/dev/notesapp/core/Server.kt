@@ -149,13 +149,22 @@ class ServerApi(
         return r
     }
 
-    suspend fun obj(path: String, method: String = "GET", body: JsonElement? = null): JsonElement =
-        parseJson(ok(if (body == null && method == "GET") send(path) else send(path, method, body ?: JsonObject(emptyMap()))).body.decodeToString()) ?: throw ApiError.Status(200, "unreadable")
+    // Replies are read off the main thread: a pull of hundreds of cards, or the list of thousands of photos and files,
+    // takes a while to parse, and the app calls the server from the main thread.
+    suspend fun obj(path: String, method: String = "GET", body: JsonElement? = null): JsonElement {
+        val r = ok(if (body == null && method == "GET") send(path) else send(path, method, body ?: JsonObject(emptyMap())))
+        return withContext(Dispatchers.Default) { parseJson(r.body.decodeToString()) } ?: throw ApiError.Status(200, "unreadable")
+    }
 
-    suspend fun <T> json(ser: KSerializer<T>, path: String, method: String = "GET", body: JsonElement? = null): T = json.decodeFromJsonElement(ser, obj(path, method, body))
+    suspend fun <T> json(ser: KSerializer<T>, path: String, method: String = "GET", body: JsonElement? = null): T {
+        val o = obj(path, method, body)
+        return withContext(Dispatchers.Default) { json.decodeFromJsonElement(ser, o) }
+    }
 
-    private suspend fun <T> list(ser: KSerializer<T>, key: String, path: String, method: String = "GET", body: JsonElement? = null): List<T> =
-        json.decodeFromJsonElement(ListSerializer(ser), obj(path, method, body)[key] ?: JsonArray(emptyList()))
+    private suspend fun <T> list(ser: KSerializer<T>, key: String, path: String, method: String = "GET", body: JsonElement? = null): List<T> {
+        val o = obj(path, method, body)
+        return withContext(Dispatchers.Default) { json.decodeFromJsonElement(ListSerializer(ser), o[key] ?: JsonArray(emptyList())) }
+    }
 
     // Sync
 

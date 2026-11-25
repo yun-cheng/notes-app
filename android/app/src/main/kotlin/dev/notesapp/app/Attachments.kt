@@ -380,13 +380,20 @@ object AttachmentKeeper {
             val api = model.api
             val stored = runCatching { api.attachments() }.getOrNull() ?: return
             val holders = model.repo.metaString("attachmentHolders")?.let { runCatching { json.decodeFromString(holdersSer, it) }.getOrNull() } ?: emptyMap()
-            // A vault this device can't read all of (locked, or just encrypted elsewhere) isn't judged.
-            val unread = AttachmentSweep.unreadVaults(model.lockedVaults, model.vaults, model.cards) { model.repo.keyring.key(it) != null }
-            val plan = AttachmentSweep.plan(
-                stored, model.cards.filter { it.vaultId !in unread },
-                judges = { id -> model.vault(id)?.let { it.role != "viewer" && id !in unread } ?: false }, mayDelete = unread.isEmpty(),
-                holders = holders, now = System.currentTimeMillis(),
-            )
+            // Worked out off the main thread, from what the app shows now: it walks every entry.
+            val locked = model.lockedVaults
+            val vaults = model.vaults
+            val cards = model.cards
+            val keyring = model.repo.keyring
+            val plan = withContext(Dispatchers.Default) {
+                // A vault this device can't read all of (locked, or just encrypted elsewhere) isn't judged.
+                val unread = AttachmentSweep.unreadVaults(locked, vaults, cards) { keyring.key(it) != null }
+                AttachmentSweep.plan(
+                    stored, cards.filter { it.vaultId !in unread },
+                    judges = { id -> vaults.firstOrNull { it.id == id }?.let { it.role != "viewer" && id !in unread } ?: false }, mayDelete = unread.isEmpty(),
+                    holders = holders, now = System.currentTimeMillis(),
+                )
+            }
             model.repo.setMetaString("attachmentHolders", json.encodeToString(holdersSer, plan.holders))
             if (plan.trash.isNotEmpty() || plan.keep.isNotEmpty()) runCatching { api.markAttachments(plan.trash, plan.keep) }
             for (id in plan.remove) runCatching { api.deleteAttachment(id) }

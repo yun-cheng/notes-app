@@ -70,7 +70,7 @@ object Doc {
             }
         }
         visit(node)
-        return parts.toString().split(Regex("\\s+")).filter { it.isNotEmpty() }.joinToString(" ")
+        return parts.toString().split(spaces).filter { it.isNotEmpty() }.joinToString(" ")
     }
 
     fun linkedCardIds(node: JsonElement): List<String> {
@@ -195,7 +195,11 @@ object Doc {
         }
 
     private fun shortened(line: String) = if (line.length > 80) line.take(79).trimEnd() + "…" else line
-    private fun stripMarker(line: String) = line.replace(Regex("""^(• |\d+\. )"""), "").trim()
+    // Each pattern is made once: making one is slow, and these run for every entry.
+    private val spaces = Regex("\\s+")
+    private val marker = Regex("""^(• |\d+\. )""")
+    private val picture = Regex("""(?i).*\.(jpe?g|png|gif|webp|avif|heic|heif|bmp|svg)""")
+    private fun stripMarker(line: String) = line.replace(marker, "").trim()
 
     /** The first line of text in the body, shortened to fit a title. Hidden words stay hidden. */
     fun firstLine(content: JsonElement): String {
@@ -274,7 +278,7 @@ object Doc {
     fun siteName(url: String): String = runCatching { URI(url).host?.removePrefix("www.") }.getOrNull() ?: url
 
     fun isImageUrl(url: String): Boolean = runCatching {
-        Regex("""(?i).*\.(jpe?g|png|gif|webp|avif|heic|heif|bmp|svg)""").matches(URI(url).path ?: "")
+        picture.matches(URI(url).path ?: "")
     }.getOrDefault(false)
 
     fun hasPhoto(content: JsonElement) = photoIds(content).isNotEmpty() || linkUrls(content).any(::isImageUrl)

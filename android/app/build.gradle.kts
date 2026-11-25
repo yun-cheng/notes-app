@@ -66,6 +66,18 @@ android {
             proguardFiles(getDefaultProguardFile("proguard-android-optimize.txt"), "proguard-rules.pro")
             signingConfig = signingConfigs.getByName(if (keystore != null) "release" else "debug")
         }
+        // A release build to measure speed with (PERFORMANCE.md): optimized and not debuggable, as a debug build runs
+        // most code in the interpreter and is many times slower, but its own app, "Notes Bench", signed with this
+        // Mac's debug key and open to a profiler (src/bench). `./gradlew installBench -Pserver=http://localhost:5191`.
+        create("bench") {
+            initWith(getByName("release"))
+            applicationIdSuffix = ".bench"
+            signingConfig = signingConfigs.getByName("debug")
+            matchingFallbacks += listOf("release")
+            manifestPlaceholders["appName"] = "Notes Bench"
+            manifestPlaceholders["appScheme"] = "notesapp-bench"
+            buildConfigField("String", "APP_SCHEME", "\"notesapp-bench\"")
+        }
     }
 }
 

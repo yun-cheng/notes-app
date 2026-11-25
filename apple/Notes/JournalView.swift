@@ -147,6 +147,8 @@ struct JournalView: View {
                     .focusEffectDisabled()
                     .onKeyPress { press in keys(press, visible.map(\.card.id), all: all.map(\.card.id), proxy: proxy) }
                     #if os(macOS)
+                    // A click in a bubble's words takes the keys; they give them back.
+                    .environment(\.refocusJournal, { streamFocused = true })
                     .coordinateSpace(.named("journalViewport"))
                     .onGeometryChange(for: CGFloat.self) { $0.size.height } action: { viewportHeight = $0 }
                     // A drag from empty space picks with a box, and a click there stops picking, as the web's.

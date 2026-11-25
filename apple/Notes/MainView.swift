@@ -519,6 +519,15 @@ struct ToastView: View {
         if let toast = model.toast {
             HStack(spacing: 14) {
                 Text(toast.message)
+                if let id = toast.open {
+                    Button("Open") {
+                        model.toast = nil
+                        model.openEntry = id
+                    }
+                    .fontWeight(.semibold)
+                    .buttonStyle(.plain)
+                    .foregroundStyle(Theme.accent)
+                }
                 if toast.undo {
                     Button("Undo") {
                         model.toast = nil

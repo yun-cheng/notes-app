@@ -494,6 +494,8 @@ struct Toast: Equatable, Identifiable {
     let id = UUID()
     var message: String
     var undo: Bool
+    /// An entry the toast offers to open, as the web's Open on a new note.
+    var open: String? = nil
 }
 
 /// What the main column shows.

@@ -85,6 +85,8 @@ struct BubbleView: View {
         .highPriorityGesture(TapGesture().modifiers(.command).onEnded { onPick() })
         .highPriorityGesture(TapGesture().modifiers(.shift).onEnded { (onPickRange ?? onPick)() })
         .onHover { hovering = $0 }
+        // Its words take the mouse to be selectable (`BubbleWords`), and leave it to these clicks while picking.
+        .environment(\.bubbleClicks, BubbleClicks(card: card, picking: picking))
         #else
         // A tap opens it on a phone, with no wait for a second tap.
         .onTapGesture { if picking { onPick() } else { model.openEntry = card.id } }
@@ -266,21 +268,28 @@ struct BubbleText: View {
             ForEach(Array(limited.enumerated()), id: \.offset) { i, part in
                 switch part {
                 case .text(let lines):
-                    Text(Self.attributed(lines.joined(separator: "\n"), revealed: revealed, shown: shown, from: starts[i]))
+                    let text = Self.attributed(lines.joined(separator: "\n"), revealed: revealed, shown: shown, from: starts[i])
+                    #if os(macOS)
+                    BubbleWords(text: text, toggleHidden: toggle)
+                    #else
+                    Text(text)
                         .environment(\.openURL, OpenURLAction { url in
                             guard url.scheme == "notes-hidden", let n = Int(url.absoluteString.dropFirst("notes-hidden:".count)) else { return .systemAction }
-                            if shown.contains(n) { shown.remove(n) } else { shown.insert(n) }
+                            toggle(n)
                             return .handled
                         })
                         .fixedSize(horizontal: false, vertical: true)
-                        #if os(iOS)
                         .textSelection(.enabled)
-                        #endif
+                    #endif
                 case .code(let text, let language, _):
                     CodeSnippet(text: text, language: language)
                 }
             }
         }
+    }
+
+    private func toggle(_ n: Int) {
+        if shown.contains(n) { shown.remove(n) } else { shown.insert(n) }
     }
 
     /// The first `lines` lines of a preview.

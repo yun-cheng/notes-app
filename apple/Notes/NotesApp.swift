@@ -72,7 +72,7 @@ struct NotesApp: App {
                 Button("Cut") { NSApp.sendAction(#selector(NSText.cut(_:)), to: nil, from: nil) }.keyboardShortcut("x")
                 Button("Copy") { NSApp.sendAction(#selector(NSText.copy(_:)), to: nil, from: nil) }.keyboardShortcut("c")
                 Button("Paste") {
-                    if NSApp.keyWindow?.firstResponder is NSTextView { NSApp.sendAction(#selector(NSText.paste(_:)), to: nil, from: nil) }
+                    if (NSApp.keyWindow?.firstResponder as? NSTextView)?.isEditable == true { NSApp.sendAction(#selector(NSText.paste(_:)), to: nil, from: nil) }
                     else if case .journal = model.page, model.openEntry == nil, let text = NSPasteboard.general.string(forType: .string), !text.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
                         model.pastedToBox = text
                     } else { NSApp.sendAction(#selector(NSText.paste(_:)), to: nil, from: nil) }

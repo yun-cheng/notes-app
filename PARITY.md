@@ -33,7 +33,7 @@ _Last checked 2026-11-25._
 | A tap opens an entry (touch) | ➖ | ✅ | ✅ | T |
 | A long press picks the entry (touch); there's no menu on touch, its actions are in the open entry and the picking bar | ➖ | ✅ | ✅ | T |
 | Right-click opens the entry menu (mouse) | ✅ | ➖ | ✅ with a mouse | C |
-| A mouse click leaves the bubble's text to select; a right-click on selected words offers Copy, New note, Search Google, Translate | ❌ the Mac's bubble text isn't selectable, so a double-click opens it | ➖ | ➖ | C |
+| A mouse click leaves the bubble's text to select; a right-click on selected words offers Copy, New note, Search Google, Translate | ✅ (since 2026-11-25; Copy has no chip for the other styles, as no copy on the Mac has yet; Shift with the right-click gives the Mac's own text menu, as the browser's on the web) | ➖ | ➖ | T |
 | Cmd-click picks; Shift-click picks a range, on the bubble or the circle; a double-click while picking, or with a key held, doesn't open | ✅ (since 2026-11-25; before, a Shift-click on the bubble did nothing and a double-click while picking opened it) | ➖ | ➖ | T |
 | A click beside a bubble picks it | ✅ | ➖ | ➖ | T |
 | A drag from empty space picks with a box, beside the stream too, picking as it moves; Shift or Cmd adds to what's picked | ✅ (since 2026-11-25) | ➖ | ➖ | T |

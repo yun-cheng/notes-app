@@ -253,8 +253,21 @@ enum Clipboard {
         }
     }
 
-    /// Markdown as formatted text, with the Markdown itself as the plain text beside it.
-    static func copyRich(_ markdown: String) {
+    /// Words selected in an entry, as the device's copy style says, as the web's `styledWords`: as they are, as
+    /// Markdown, or formatted with the words themselves as the plain text beside it.
+    @MainActor
+    static func copyWords(_ words: String) {
+        let style = UserDefaults.standard.string(forKey: "copyStyle") ?? "rich"
+        let markdown = Markdown.from(Doc.fromText(words))
+        switch style {
+        case "plain": copy(words)
+        case "markdown": copy(markdown)
+        default: copyRich(markdown, plain: words)
+        }
+    }
+
+    /// Markdown as formatted text, with the Markdown itself (or `plain`) as the plain text beside it.
+    static func copyRich(_ markdown: String, plain: String? = nil) {
         let options = AttributedString.MarkdownParsingOptions(interpretedSyntax: .inlineOnlyPreservingWhitespace)
         guard let parsed = try? AttributedString(markdown: markdown, options: options) else { return copy(markdown) }
         let attributed = NSAttributedString(parsed)
@@ -264,9 +277,9 @@ enum Clipboard {
         board.clearContents()
         board.declareTypes([.rtf, .string], owner: nil)
         board.setData(rtf, forType: .rtf)
-        board.setString(markdown, forType: .string)
+        board.setString(plain ?? markdown, forType: .string)
         #else
-        UIPasteboard.general.items = [["public.rtf": rtf, "public.utf8-plain-text": markdown]]
+        UIPasteboard.general.items = [["public.rtf": rtf, "public.utf8-plain-text": plain ?? markdown]]
         #endif
     }
 }

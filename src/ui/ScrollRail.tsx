@@ -151,7 +151,6 @@ export function ScrollRail({ keys, name, root, reveal }: Props) {
       clearTimeout(sleep);
       sleep = setTimeout(() => setAwake(false), AWAKE_MS);
     };
-    keepScrollbarRoom();
     update();
     window.addEventListener('scroll', onScroll, { passive: true });
     window.addEventListener('resize', update);
@@ -167,6 +166,9 @@ export function ScrollRail({ keys, name, root, reveal }: Props) {
       watch.disconnect();
     };
   }, [root, n]);
+
+  // Measured once: it forces the page to be laid out, and the items change often (each sync, each edit).
+  useEffect(keepScrollbarRoom, []);
 
   // Going somewhere: once a frame, to the last place asked for, waiting for it to be drawn if it isn't yet.
   const jump = useRef({ to: null as number | null, frame: 0, tries: 0 });

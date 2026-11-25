@@ -362,6 +362,18 @@ describe('safety while syncing', () => {
     expect(await server.transport(cookie).pull(0)).toMatchObject({ records: [] });
   });
 
+  it('puts several pages of a long pull away at once', async () => {
+    const { phone, mac } = await twoDevices();
+    for (let i = 0; i < 450; i++) await mac.repo.createNote({ title: `n${i}` });
+    await mac.engine.sync();
+    const pulls = vi.spyOn(phone.transport, 'pull');
+    const puts = vi.spyOn(phone.repo, 'applyRemote');
+    await phone.engine.sync();
+    expect(pulls.mock.calls.length).toBeGreaterThanOrEqual(3);
+    expect(puts).toHaveBeenCalledTimes(1);
+    expect((await phone.titles()).length).toBe(450);
+  });
+
   it('runs one sync at a time and follows up when asked mid-run', async () => {
     const { phone } = await twoDevices();
     const spy = vi.spyOn(phone.transport, 'pull');

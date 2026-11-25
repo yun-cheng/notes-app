@@ -22,6 +22,8 @@ export interface SyncStatus {
 }
 
 const PERIODIC_MS = 60_000;
+/** How many pulled cards are put away at once, at most a page more (`pull`). */
+const PULL_BATCH = 2000;
 
 export class SyncEngine {
   private status: SyncStatus = { state: 'idle', pending: 0, lastSyncedAt: null };
@@ -139,15 +141,33 @@ export class SyncEngine {
     }
   }
 
+  /**
+   * Takes what changed on the server since the last pull, a page at a time, and puts it away a few pages at once
+   * (`PULL_BATCH` cards): each time cards are put away everything on screen is drawn again, so a first sync of
+   * thousands, page by page, would draw it dozens of times over.
+   */
   private async pull() {
     let since = await this.repo.getCursor();
     for (;;) {
-      const page = await this.transport.pull(since);
-      await this.repo.applyRemote(page.records);
-      if (page.gone?.length) await this.repo.dropCards(page.gone);
-      since = page.next;
+      const records = new Map<string, CardRecord>();
+      const gone = new Set<string>();
+      let more: boolean;
+      do {
+        const page = await this.transport.pull(since);
+        // A later page has the newer copy, and a card back after leaving this account's vaults stays.
+        for (const r of page.records) {
+          records.delete(r.id);
+          records.set(r.id, r);
+          gone.delete(r.id);
+        }
+        for (const id of page.gone ?? []) gone.add(id);
+        since = page.next;
+        more = page.more;
+      } while (more && records.size < PULL_BATCH);
+      await this.repo.applyRemote([...records.values()]);
+      if (gone.size) await this.repo.dropCards([...gone]);
       await this.repo.setCursor(since);
-      if (!page.more) return;
+      if (!more) return;
     }
   }
 

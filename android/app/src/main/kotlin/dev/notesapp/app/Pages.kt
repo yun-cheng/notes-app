@@ -135,8 +135,17 @@ fun TrashPage(openDrawer: (() -> Unit)?) {
         FilterRow(filter, { filter = it }, {}, templates = false)
         BoxWithConstraints(Modifier.weight(1f).fillMaxWidth()) {
             val width = minOf(560.dp, (minOf(maxWidth, 720.dp) - 32.dp) * 0.85f)
-            LazyColumn(Modifier.fillMaxSize(), contentPadding = PaddingValues(16.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
-                if (!filter.copy(vaultId = null).isFiltered) item { TrashedAttachments(filter.vaultId) }
+            val list = androidx.compose.foundation.lazy.rememberLazyListState()
+            val attachmentsShown = !filter.copy(vaultId = null).isFiltered
+            // Rows in the list, for the rail to go to an entry: the photos and files, then each day and its entries.
+            val rowOf = remember(days, attachmentsShown) {
+                val m = mutableMapOf<String, Int>()
+                var i = if (attachmentsShown) 1 else 0
+                for ((_, cards) in days) { i++; for (c in cards) m[c.id] = i++ }
+                m
+            }
+            LazyColumn(Modifier.fillMaxSize(), list, contentPadding = PaddingValues(16.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                if (attachmentsShown) item { TrashedAttachments(filter.vaultId) }
                 for ((day, cards) in days) {
                     item(key = "day:$day") { DayBadge(day, StreamFilter.Sort.Edited) {} }
                     items(cards, key = { it.id }) { card ->
@@ -162,6 +171,9 @@ fun TrashPage(openDrawer: (() -> Unit)?) {
                     }
                 }
             }
+            // By the day each entry was trashed, newest first, as the web's.
+            LazyRail(list, days.flatMap { (day, cards) -> cards.map { day } }, days.flatMap { (_, cards) -> cards.map { it.id } },
+                { DateKey.relativeDay(it, model.today) }, { rowOf[it] }, Modifier.align(Alignment.CenterEnd))
         }
         if (picked.isNotEmpty()) Row(Modifier.fillMaxWidth().background(Theme.surface).padding(horizontal = 16.dp, vertical = 8.dp), verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(12.dp)) {
             Text("${picked.size} selected", fontWeight = FontWeight.SemiBold, color = Theme.text)

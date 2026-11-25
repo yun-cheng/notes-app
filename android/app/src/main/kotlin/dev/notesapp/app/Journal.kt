@@ -193,7 +193,11 @@ fun JournalView(initial: StreamFilter, openDrawer: (() -> Unit)?, fixed: Boolean
                         if (!chat && all.size > visible.size) item { TextButton(onClick = { shown += PAGE_SIZE }, Modifier.fillMaxWidth()) { Text("Show more entries") } }
                         if (all.isEmpty()) item { EmptyJournal(filter, searching) }
                     }
-                    JournalRail(visible, Modifier.align(Alignment.CenterEnd)) { id -> rowOf[id]?.let { scope.launch { list.scrollToItem(it) } } }
+                    LazyRail(list, all.map { it.day }, all.map { it.card.id }, { dayLabel(it, filter.sort, model) }, { rowOf[it] }, Modifier.align(Alignment.CenterEnd)) { index ->
+                        // Past those drawn: draw on to it, as the web's.
+                        val need = if (chat) all.size - index else index + 1
+                        if (need > shown) shown = minOf(all.size, need + PAGE_SIZE / 2)
+                    }
                     // A round button back to the newest entries, as the web's `ScrollJump`: once the list is more than
                     // 400 dp from the end it opens at (the foot in a chat, the top otherwise), just above the box.
                     val awayPx = with(androidx.compose.ui.platform.LocalDensity.current) { 400.dp.toPx() }
@@ -354,14 +358,17 @@ fun SetChip(label: String, icon: ImageVector, clear: () -> Unit) {
 }
 
 /** A day's badge over its entries, pinned under the title bar while they scroll past. Pressing it opens the date picker there. */
+/** What a day (or a group sort's tag) is called, on its badge and on the rail. */
+fun dayLabel(day: String, sort: StreamFilter.Sort, model: AppModel): String = when {
+    sort is StreamFilter.Sort.Group -> model.card(day)?.displayTitle ?: "No tag"
+    day.isEmpty() -> "No due date"
+    else -> DateKey.relativeDay(day, model.today)
+}
+
 @Composable
 fun DayBadge(day: String, sort: StreamFilter.Sort, pick: (String) -> Unit) {
     val model = LocalModel.current
-    val label = when {
-        sort is StreamFilter.Sort.Group -> model.card(day)?.displayTitle ?: "No tag"
-        day.isEmpty() -> "No due date"
-        else -> DateKey.relativeDay(day, model.today)
-    }
+    val label = dayLabel(day, sort, model)
     Box(Modifier.fillMaxWidth().padding(top = 14.dp, bottom = 2.dp), contentAlignment = Alignment.Center) {
         Text(
             label,
@@ -395,49 +402,6 @@ fun PageSearchField(query: String, set: (String) -> Unit, placeholder: String = 
             decorationBox = { inner -> if (query.isEmpty()) Text(placeholder, color = Theme.muted, fontSize = 16.sp); inner() },
         )
         Icon(Icons.Outlined.Close, "Close search", Modifier.size(18.dp).clickable(onClick = close), tint = Theme.muted)
-    }
-}
-
-/**
- * A rail down the right, as a photo library has, with the years or months marked down it: pressed or dragged to go
- * anywhere in the journal at once, as the web app's `ScrollRail`.
- */
-@Composable
-fun JournalRail(items: List<StreamItem>, modifier: Modifier, go: (String) -> Unit) {
-    val months = remember(items) {
-        val out = mutableListOf<Pair<String, String>>()
-        for (item in items) if (DateKey.isKey(item.day)) {
-            val m = DateKey.monthKey(item.day)
-            if (out.lastOrNull()?.first != m) out.add(m to item.id)
-        }
-        out
-    }
-    if (months.size < 2) return
-    val years = months.map { it.first.take(4) }.toSet().size > 1
-    var height by remember { mutableIntStateOf(1) }
-    var pointing by remember { mutableStateOf<String?>(null) }
-    val density = LocalDensity.current
-    fun at(y: Float) {
-        val i = (y / height * months.size).toInt().coerceIn(0, months.size - 1)
-        pointing = months[i].first
-        go(months[i].second)
-    }
-    Box(
-        modifier.fillMaxHeight().width(40.dp).padding(vertical = 8.dp).onSizeChanged { height = maxOf(1, it.height) }
-            .pointerInput(months) { detectVerticalDragGestures(onDragStart = { at(it.y) }, onDragEnd = { pointing = null }, onDragCancel = { pointing = null }) { change, _ -> at(change.position.y) } },
-    ) {
-        val step = with(density) { (height.toFloat() / months.size).toDp() }
-        months.forEachIndexed { i, (m, _) ->
-            val mark = if (years) (if (m.endsWith("-01") || i == 0) m.take(4) else null) else DateKey.formatMonth(m).take(3)
-            if (mark != null && (step > 14.dp || years)) Text(mark, Modifier.align(Alignment.TopEnd).offset(y = step * i), fontSize = 10.sp, fontWeight = FontWeight.SemiBold, color = Theme.muted)
-        }
-        pointing?.let { p ->
-            val i = months.indexOfFirst { it.first == p }
-            Text(
-                DateKey.formatMonth(p), Modifier.align(Alignment.TopEnd).offset(x = (-44).dp, y = step * i).shadow(3.dp, RoundedCornerShape(50)).background(Theme.raised, RoundedCornerShape(50)).padding(horizontal = 8.dp, vertical = 3.dp),
-                fontSize = 12.sp, fontWeight = FontWeight.SemiBold, color = Theme.text,
-            )
-        }
     }
 }
 

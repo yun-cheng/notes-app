@@ -8,6 +8,7 @@ import androidx.compose.foundation.combinedClickable
 import androidx.compose.foundation.horizontalScroll
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
+import androidx.compose.ui.layout.onGloballyPositioned
 import androidx.compose.foundation.layout.BoxWithConstraints
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
@@ -124,7 +125,7 @@ fun LibraryFilterRow(filter: StreamFilter, set: (StreamFilter) -> Unit, lead: @C
 @Composable
 fun <T> HeldList(
     title: String, noun: Pair<String, String>, days: List<HeldDay<T>>, filter: StreamFilter, setFilter: (StreamFilter) -> Unit, filtered: Boolean,
-    text: (T) -> String, empty: String, emptyFiltered: String, openDrawer: (() -> Unit)?, lead: @Composable () -> Unit = {}, row: @Composable (T, Card) -> Unit,
+    text: (T) -> String, empty: String, emptyFiltered: String, openDrawer: (() -> Unit)?, id: (T) -> String, lead: @Composable () -> Unit = {}, row: @Composable (T, Card) -> Unit,
 ) {
     val model = LocalModel.current
     var query by remember { mutableStateOf("") }
@@ -141,11 +142,22 @@ fun <T> HeldList(
         LibraryFilterRow(filter, setFilter, lead)
         if (all.isEmpty()) {
             Text(if (q.isNotEmpty()) "No ${noun.second} here have “$q” in them or their entries." else if (filtered) emptyFiltered else empty, Modifier.fillMaxWidth().padding(24.dp), color = Theme.muted, textAlign = TextAlign.Center)
-        } else LazyColumn(Modifier.fillMaxSize(), contentPadding = androidx.compose.foundation.layout.PaddingValues(16.dp)) {
+        } else Box(Modifier.fillMaxSize()) {
+            val list = androidx.compose.foundation.lazy.rememberLazyListState()
+            // Each one's key in the list, the thing and its entry (a link can be in two), and its row there.
+            val keyOf = { t: T, card: Card -> "held:${id(t)}:${card.id}" }
+            val ids = shown.flatMap { d -> d.items.map { (t, card) -> keyOf(t, card) } }
+            val rowOf = remember(ids, shown.size) {
+                val m = mutableMapOf<String, Int>()
+                var i = 1
+                for (d in shown) { i++; for ((t, card) in d.items) m[keyOf(t, card)] = i++ }
+                m
+            }
+            LazyColumn(Modifier.fillMaxSize(), list, contentPadding = androidx.compose.foundation.layout.PaddingValues(16.dp)) {
             item { Text(countLine(if (all.size == 1) "1 ${noun.first}" else "${all.size} ${noun.second}", all.map { it.second.id }.toSet().size), Modifier.padding(bottom = 8.dp), color = Theme.muted, fontSize = 14.sp) }
             for (day in shown) {
                 item(key = "day:${day.day}") { Text(DateKey.relativeDay(day.day, model.today), Modifier.padding(top = 12.dp, bottom = 6.dp), fontWeight = FontWeight.SemiBold, fontSize = 15.sp, color = Theme.text) }
-                for ((t, card) in day.items) item {
+                for ((t, card) in day.items) item(key = keyOf(t, card)) {
                     Column(Modifier.padding(bottom = 10.dp), verticalArrangement = Arrangement.spacedBy(4.dp)) {
                         row(t, card)
                         Row(Modifier.clickable { model.openEntry = card.id }.padding(start = 4.dp), verticalAlignment = Alignment.CenterVertically) {
@@ -155,6 +167,9 @@ fun <T> HeldList(
                     }
                 }
             }
+            }
+            // Each one by the day its entry was written, as the web's.
+            LazyRail(list, shown.flatMap { d -> d.items.map { d.day } }, ids, { DateKey.relativeDay(it, model.today) }, { rowOf[it] }, Modifier.align(Alignment.CenterEnd))
         }
     }
 }
@@ -166,7 +181,7 @@ fun LinksPage(openDrawer: (() -> Unit)?) {
     var filter by remember { mutableStateOf(StreamFilter()) }
     val days = heldDays(model, filter, once = false, id = { it }) { card -> (listOf(card.content) + card.morePages).flatMap { Doc.linkUrls(it) }.distinct() }
     HeldList("Links", "link" to "links", days, filter, { filter = it }, filter.isFiltered, { it },
-        "No links yet. Paste or type a web address into an entry and it shows here.", "No links here match. Take a filter off above, or pick another.", openDrawer,
+        "No links yet. Paste or type a web address into an entry and it shows here.", "No links here match. Take a filter off above, or pick another.", openDrawer, id = { it },
     ) { url, card -> LinkCard(url, compact = false, preview = model.vault(card.vaultId)?.isEncrypted == false, address = true) }
 }
 
@@ -215,7 +230,7 @@ fun FilesPage(openDrawer: (() -> Unit)?) {
     HeldList("Files", "file" to "files", days, filter, { filter = it }, filter.isFiltered || kind != null, { it.name },
         "No files yet. Attach one to an entry with the paperclip, or by sharing it to the app.",
         kind?.let { "No ${if (it == FileKind.audio || it == FileKind.video) "${it.label.lowercase()} files" else it.label.lowercase()} here. Pick All above, or take a filter off." } ?: "No files here match. Take a filter off above, or pick another.",
-        openDrawer,
+        openDrawer, id = { it.id },
         lead = { if (kinds.size > 1 || kind != null) Segmented(listOf<Pair<String, FileKind?>>("All" to null) + kinds.map { it.label to it }, kind) { kind = it } },
     ) { file, card -> FileChip(file, card.vaultId) }
 }
@@ -325,13 +340,21 @@ fun PhotosPage(openDrawer: (() -> Unit)?) {
             Text(if (filter.isFiltered || kind != "All") "No photos here match. Take a filter off above, or pick another." else "No photos yet. Add one to an entry with the photo button.", Modifier.fillMaxWidth().padding(24.dp), color = Theme.muted, textAlign = TextAlign.Center)
             return@Column
         }
-        Column(Modifier.verticalScroll(rememberScrollState()).padding(16.dp)) {
+        val scroll = rememberScrollState()
+        // Where the photos' box is in the scrolled content, and each photo there, in pixels, for the rail.
+        var content by remember { mutableStateOf<androidx.compose.ui.layout.LayoutCoordinates?>(null) }
+        var boxTop by remember { mutableStateOf(0f) }
+        var laidTiles by remember { mutableStateOf(emptyList<PhotoLayout.Box>()) }
+        val density = androidx.compose.ui.platform.LocalDensity.current.density
+        Box(Modifier.weight(1f)) {
+        Column(Modifier.verticalScroll(scroll).onGloballyPositioned { content = it }.padding(16.dp)) {
             Text(countLine(mediaCount(all.map { it.first }), all.map { it.second.id }.toSet().size), Modifier.padding(bottom = 4.dp), color = Theme.muted, fontSize = 14.sp)
             BoxWithConstraints(Modifier.fillMaxWidth()) {
                 val width = maxWidth.value
                 val ratios = days.map { d -> d.items.map { (m, _) -> PhotoShapes.ratios[m.id] ?: (if (m is Doc.Media.Video && (m.file.height ?: 0.0) > 0) (m.file.width ?: 1.0).toFloat() / m.file.height!!.toFloat() else 1f) } }
                 val (tiles, heads, height) = PhotoLayout.layout(ratios, PhotoLayout.options(width))
-                Box(Modifier.fillMaxWidth().height(height.dp)) {
+                laidTiles = tiles.flatten()
+                Box(Modifier.fillMaxWidth().height(height.dp).onGloballyPositioned { box -> content?.let { boxTop = it.localPositionOf(box, androidx.compose.ui.geometry.Offset.Zero).y } }) {
                     days.forEachIndexed { d, day ->
                         val head = heads[d]
                         Row(Modifier.offset(head.x.dp, head.y.dp).width(maxOf(head.w, 120f).dp).height(head.h.dp).padding(bottom = 8.dp), verticalAlignment = Alignment.Bottom) {
@@ -355,6 +378,10 @@ fun PhotosPage(openDrawer: (() -> Unit)?) {
                     }
                 }
             }
+        }
+        // Each photo by the day its entry was written, as the web's.
+        LaidRail(scroll, days.flatMap { d -> d.items.map { d.day } }, laidTiles.map { boxTop + it.y * density }, laidTiles.map { boxTop + (it.y + it.h) * density },
+            { DateKey.relativeDay(it, model.today) }, Modifier.align(Alignment.CenterEnd))
         }
     }
     viewing?.let { start -> MediaViewer(all.map { it.first }, start, all.firstOrNull { it.first.id == start }?.second?.vaultId ?: "", all.associate { it.first.id to it.second }) { viewing = null } }

@@ -10,3 +10,4 @@ coverage
 # Signing keys never go in the repo.
 *.jks
 *.keystore
+scripts/perf/.profile*

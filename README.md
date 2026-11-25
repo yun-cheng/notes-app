@@ -55,6 +55,7 @@ Sign-in needs a Google OAuth client ID in `GOOGLE_CLIENT_ID` in `wrangler.jsonc`
 | `npm run db:migrate:local` | Apply database migrations locally |
 | `npm run db:migrate:remote` | Apply database migrations to production |
 | `npm run demo` | Fill the local server with a demo account (see above) |
+| `node scripts/perf/pages.mjs` (and the others in `scripts/perf/`) | Measure the web app's speed with the demo; PERFORMANCE.md says how, for every app, and keeps the results |
 | `npm run icons` | Regenerate the PWA icons from `public/icon.svg` |
 
 The service worker only runs in the built app, so use `build` then `preview` to test offline behaviour. Installing on a phone needs HTTPS.

@@ -74,10 +74,13 @@ extension AppModel {
 }
 
 #if os(macOS)
-/// Every click and key in the app counts as being there.
+/// Every click and key in the app counts as being there. And as the web's lock when its page is hidden: a Mac's
+/// scene doesn't go to the background when its window is minimized or the app hidden, so those lock here, as does the
+/// screen sleeping or locking.
 @MainActor
 enum VaultActivity {
     private static var monitor: Any?
+    private static var hidden: [NSObjectProtocol] = []
 
     static func watch(_ model: AppModel) {
         guard monitor == nil else { return }
@@ -85,6 +88,16 @@ enum VaultActivity {
             model?.touchVaults()
             return event
         }
+        let lock: @Sendable (Notification) -> Void = { [weak model] _ in Task { @MainActor in model?.lockAll() } }
+        let center = NotificationCenter.default
+        let workspace = NSWorkspace.shared.notificationCenter
+        hidden = [
+            center.addObserver(forName: NSWindow.didMiniaturizeNotification, object: nil, queue: .main, using: lock),
+            center.addObserver(forName: NSApplication.didHideNotification, object: nil, queue: .main, using: lock),
+            workspace.addObserver(forName: NSWorkspace.screensDidSleepNotification, object: nil, queue: .main, using: lock),
+            workspace.addObserver(forName: NSWorkspace.sessionDidResignActiveNotification, object: nil, queue: .main, using: lock),
+            DistributedNotificationCenter.default().addObserver(forName: .init("com.apple.screenIsLocked"), object: nil, queue: .main, using: lock),
+        ]
     }
 }
 #else

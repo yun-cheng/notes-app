@@ -21,6 +21,8 @@ struct NotesApp: App {
                 .task {
                     UNUserNotificationCenter.current().delegate = ReminderDelegate.shared
                     ReminderDelegate.shared.open = { id in model.openEntry = id }
+                    // From launch too: an app that opens already active never sees the phase change to it below.
+                    VaultActivity.watch(model)
                 }
                 .onOpenURL { _ in Task { await model.sync?.sync() } }
         }

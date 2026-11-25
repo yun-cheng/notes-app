@@ -91,7 +91,7 @@ _Last checked 2026-11-25._
 | Picking: Select all and Done in the title bar; a bar of N selected, Tags, Done, Not done, Waiting, Due date, Make todos/notes, Move to…, Stack, Copy, Archive, Trash, × | ✅ | ✅ | ✅ | T |
 | Filter row: All, Notes, Todos, Stacks; Todos status; Written dates; Contains; Templates | ✅ | ✅ | ✅ | T |
 | Day badges, pinned while their day scrolls past | ✅ | ✅ | ✅ | T |
-| A round button back to the newest entries (the end the journal opens at), shown once well away from it, above the writing box | ✅ (since 2026-11-25; C) | ✅ (since 2026-11-25) | ✅ (since 2026-11-25; the distance is estimated from the rows drawn) | T |
+| A round button back to the newest entries (the end the journal opens at), shown once well away from it, above the writing box | ✅ (since 2026-11-25) | ✅ (since 2026-11-25) | ✅ (since 2026-11-25; the distance is estimated from the rows drawn) | T |
 | A rail down the right with the years, to point at and drag | ⚠️ | ⚠️ | ⚠️ | ? |
 
 ## Journal box
@@ -188,8 +188,8 @@ _Last checked 2026-11-25._
 | A private vault: a PIN lock, Change PIN, Remove PIN, Hide this vault until it is unlocked | ✅ | ✅ | ✅ | C |
 | Encrypt end to end: a recovery key shown once, which recovers a forgotten PIN; its photos and files sealed on the device too | ✅ | ✅ | ✅ | C |
 | In a shared vault each member can lock it with a PIN of their own, and an owner can require one of everyone; in an encrypted one a member sets a PIN and asks, and the owner lets them in; everyone sees a code made from its key to compare | ✅ | ✅ | ✅ | C |
-| Every open vault locks after five idle minutes and when the app goes to the background | ✅ (since 2026-11-25) clicks and keys keep it open; hidden or minimized, it locks (C) | ✅ (since 2026-11-25) touches keep it open; the Home Screen locks it (T) | ✅ (since 2026-11-25) touches keep it open; Home and the screen going off lock it, but not a picker or browser tab the app opened itself (T) | T/C |
-| After five wrong PINs, the next try waits 30 seconds ("Too many tries. Wait 30 seconds and try again."); a wrong one says "That PIN isn't right." | ✅ (since 2026-11-25) | ✅ (since 2026-11-25) | ✅ (since 2026-11-25) | T |
+| Every open vault locks after five idle minutes and when the app goes to the background | ✅ (since 2026-11-25) clicks and keys keep it open; a minimized window, the app hidden, or the screen sleeping or locking locks it (T) | ✅ (since 2026-11-25) touches keep it open; the Home Screen locks it (T) | ✅ (since 2026-11-25) touches keep it open; Home and the screen going off lock it, but not a picker or browser tab the app opened itself (T) | T |
+| After five wrong PINs, the next try waits 30 seconds ("Too many tries. Wait 30 seconds and try again."); a wrong one says "That PIN isn't right." | ✅ (since 2026-11-25; the iPhone's code, tried there: the Mac's test tools can't type in a PIN field) | ✅ (since 2026-11-25) | ✅ (since 2026-11-25) | T |
 
 ## Sharing and comments
 

@@ -124,15 +124,37 @@ class SyncEngine(private val repo: Repository, private val api: SyncApi) {
         }
     }
 
+    /**
+     * Takes what changed on the server since the last pull, a page at a time, and puts it away a few pages at once
+     * (`PULL_BATCH` cards), as the web does: each time cards are put away the app reads them all again, so a first sync
+     * of thousands, page by page, would do so dozens of times over.
+     */
     private suspend fun pull() {
         var since = repo.cursor()
         while (true) {
-            val page = api.pull(since)
-            repo.applyRemote(page.records)
-            page.gone?.takeIf { it.isNotEmpty() }?.let { repo.dropCards(it) }
-            since = page.next
+            val records = LinkedHashMap<String, CardRecord>()
+            val gone = LinkedHashSet<String>()
+            var more: Boolean
+            do {
+                val page = api.pull(since)
+                // A later page has the newer copy, and a card back after leaving this account's vaults stays.
+                for (r in page.records) {
+                    records[r.id] = r
+                    gone.remove(r.id)
+                }
+                page.gone?.let { gone.addAll(it) }
+                since = page.next
+                more = page.more
+            } while (more && records.size < PULL_BATCH)
+            repo.applyRemote(records.values.toList())
+            if (gone.isNotEmpty()) repo.dropCards(gone.toList())
             repo.setCursor(since)
-            if (!page.more) return
+            if (!more) return
         }
+    }
+
+    companion object {
+        /** How many pulled cards are put away at once, at most a page more (`pull`). */
+        const val PULL_BATCH = 2000
     }
 }

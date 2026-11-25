@@ -67,6 +67,20 @@ func makeRepo(_ clock: Clock = Clock()) async throws -> Repository {
         #expect(done.isDone && done.completedAt != nil && done.due == "2026-11-12")
     }
 
+    @Test func everyCardReadAgainShowsWhatChanged() async throws {
+        let repo = try await makeRepo()
+        let a = try await repo.createNote(title: "A")
+        let b = try await repo.createNote(title: "B")
+        #expect(try await repo.allCards().map(\.title).sorted() == ["A", "B"])
+        // Read again: one renamed, one marked sent, and one new.
+        try await repo.update(a.id) { $0.title = "A2" }
+        try await repo.markSynced(id: b.id, updatedAt: b.updatedAt, seq: 9)
+        _ = try await repo.createNote(title: "C")
+        let all = try await repo.allCards()
+        #expect(all.map(\.title).sorted() == ["A2", "B", "C"])
+        #expect(all.first { $0.id == b.id }?.seq == 9)
+    }
+
     @Test func blankNewCardsStayLocal() async throws {
         let repo = try await makeRepo()
         _ = try await repo.createNote()

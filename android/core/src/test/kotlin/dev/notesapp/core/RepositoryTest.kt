@@ -36,6 +36,20 @@ class RepositoryTest {
         assertTrue(done.isDone && done.completedAt != null && done.due == "2026-11-12")
     }
 
+    @Test fun everyCardReadAgainShowsWhatChanged() = runBlocking {
+        val repo = makeRepo()
+        val a = repo.createNote(title = "A")
+        val b = repo.createNote(title = "B")
+        assertEquals(listOf("A", "B"), repo.allCards().map { it.title }.sorted())
+        // Read again: one renamed, one marked sent, and one new.
+        repo.update(a.id) { it.withTitle("A2") }
+        repo.markSynced(b.id, b.updatedAt, 9)
+        repo.createNote(title = "C")
+        val all = repo.allCards()
+        assertEquals(listOf("A2", "B", "C"), all.map { it.title }.sorted())
+        assertEquals(9, all.first { it.id == b.id }.seq)
+    }
+
     @Test fun blankNewCardsStayLocal() = runBlocking {
         val repo = makeRepo()
         repo.createNote()
@@ -165,6 +179,9 @@ class FakeServer : SyncApi {
     var vaultList = listOf(personal)
     var reachable = true
     var goneIds = listOf<String>()
+    /** How many cards a pull gives at most, and how many pulls there have been. */
+    var pageSize = Int.MAX_VALUE
+    var pulls = 0
 
     private fun put(r: CardRecord) { seq += 1; records[r.id] = r.copy(seq = seq) }
 
@@ -181,8 +198,10 @@ class FakeServer : SyncApi {
 
     override suspend fun pull(since: Long): PullResponse {
         if (!reachable) throw ApiError.Offline()
+        pulls++
         val newer = records.values.filter { it.seq > since }.sortedBy { it.seq }
-        return PullResponse(newer, goneIds, newer.lastOrNull()?.seq ?: since, false)
+        val page = newer.take(pageSize)
+        return PullResponse(page, goneIds, page.lastOrNull()?.seq ?: since, newer.size > page.size)
     }
 
     override suspend fun vaults(): List<Vault> { if (!reachable) throw ApiError.Offline(); return vaultList }
@@ -200,6 +219,22 @@ class SyncTest {
         assertEquals(0, syncA.status.value.pending)
         syncB.sync()
         assertEquals("Hello", b.card(note.id)?.title)
+    }
+
+    @Test fun aLongPullIsPutAwayAFewPagesAtOnce() = runBlocking {
+        val server = FakeServer().apply { pageSize = 2 }
+        val a = makeRepo(); val b = makeRepo()
+        val syncB = SyncEngine(b, server)
+        syncB.sync()
+        repeat(5) { a.createNote(title = "n$it") }
+        SyncEngine(a, server).sync()
+        var changes = 0
+        b.onChange = { changes++ }
+        val before = server.pulls
+        syncB.sync()
+        assertTrue(server.pulls - before >= 3)
+        assertTrue(changes < 3, "changes: $changes")
+        assertEquals(5, b.allCards().count { !it.deleted })
     }
 
     @Test fun aConflictKeepsBothVersions() = runBlocking {

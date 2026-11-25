@@ -40,7 +40,27 @@ class Repository(
         return Card(r.id, r.vault_id, r.updated_at, r.deleted, r.seq, jobj("type" to j("note"), "title" to j(""), "tags" to jarr(emptyList()), "content" to Doc.empty), sealed = true)
     }
 
-    suspend fun allCards() = locked { store.listCards().map(::decode) }
+    /**
+     * Each card's payload as last read by `allCards`, by ID, with the text it was read from, so a card not changed since
+     * isn't parsed again: the app reads every card after each change, thousands of them. Only those not encrypted, as
+     * reading an encrypted one depends on its vault's key being open here.
+     */
+    private var parsed = HashMap<String, Pair<String, JsonObject>>()
+
+    suspend fun allCards() = locked {
+        val next = HashMap<String, Pair<String, JsonObject>>()
+        val cards = store.listCards().map { r ->
+            val hit = parsed[r.id]
+            if (hit != null && hit.first == r.payload) {
+                next[r.id] = hit
+                Card(r.id, r.vault_id, r.updated_at, r.deleted, r.seq, hit.second)
+            } else {
+                decode(r).also { c -> if (!c.sealed && !VaultCrypto.isEncrypted(r.payload)) next[r.id] = r.payload to c.payload }
+            }
+        }
+        parsed = next
+        cards
+    }
     suspend fun card(id: String) = locked { store.getCard(id)?.let(::decode) }
     private fun read(id: String) = store.getCard(id)?.let(::decode)
     suspend fun vaults() = locked { store.listVaults() }

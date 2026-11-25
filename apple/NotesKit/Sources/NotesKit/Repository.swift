@@ -44,7 +44,25 @@ public actor Repository {
         keyring.decode(payload, id: id, vaultId: vaultId).map { modernPayload($0) }
     }
 
-    public func allCards() throws -> [Card] { try store.listCards().map(decode) }
+    /// Each card's payload as last read by `allCards`, by ID, with the text it was read from, so a card not changed since
+    /// isn't parsed again: the app reads every card after each change, thousands of them. Only those not encrypted, as
+    /// reading an encrypted one depends on its vault's key being open here.
+    private var parsed: [String: (text: String, payload: [String: JSONValue])] = [:]
+
+    public func allCards() throws -> [Card] {
+        var next: [String: (text: String, payload: [String: JSONValue])] = [:]
+        let cards = try store.listCards().map { r -> Card in
+            if let hit = parsed[r.id], hit.text == r.payload {
+                next[r.id] = hit
+                return Card(id: r.id, vaultId: r.vault_id, updatedAt: r.updated_at, deleted: r.deleted, seq: r.seq, payload: hit.payload)
+            }
+            let card = decode(r)
+            if !card.sealed && !VaultCrypto.isEncrypted(r.payload) { next[r.id] = (r.payload, card.payload) }
+            return card
+        }
+        parsed = next
+        return cards
+    }
 
     public func card(_ id: String) throws -> Card? { try store.getCard(id).map(decode) }
 

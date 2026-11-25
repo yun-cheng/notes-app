@@ -10,6 +10,9 @@ actor FakeServer: SyncAPI {
     var vaultList: [Vault] = [personal]
     var reachable = true
     var goneIds: [String] = []
+    /// How many cards a pull gives at most, and how many pulls there have been.
+    var pageSize = Int.max
+    var pulls = 0
 
     func setReachable(_ value: Bool) { reachable = value }
 
@@ -37,8 +40,10 @@ actor FakeServer: SyncAPI {
 
     func pull(since: Int64) async throws -> PullResponse {
         guard reachable else { throw APIError.offline }
+        pulls += 1
         let newer = records.values.filter { $0.seq > since }.sorted { $0.seq < $1.seq }
-        return PullResponse(records: newer, gone: goneIds, next: newer.last?.seq ?? since, more: false)
+        let page = Array(newer.prefix(pageSize))
+        return PullResponse(records: page, gone: goneIds, next: page.last?.seq ?? since, more: newer.count > page.count)
     }
 
     func vaults() async throws -> [Vault] {
@@ -49,6 +54,7 @@ actor FakeServer: SyncAPI {
     func shared() async throws -> SharedResponse { SharedResponse(cards: [], vaults: [], comments: [CommentCount(card_id: "c-talk", open: 2)]) }
 
     func setGone(_ ids: [String]) { goneIds = ids }
+    func setPageSize(_ n: Int) { pageSize = n }
     func setVaults(_ vaults: [Vault]) { vaultList = vaults }
 }
 
@@ -66,6 +72,30 @@ actor FakeServer: SyncAPI {
         #expect(syncA.state == .idle && syncA.pending == 0)
         await syncB.sync()
         #expect(try await b.card(note.id)?.title == "Hello")
+    }
+
+    @Test func aLongPullIsPutAwayAFewPagesAtOnce() async throws {
+        let server = FakeServer()
+        await server.setPageSize(2)
+        let a = try await makeRepo()
+        let b = try await makeRepo()
+        let syncB = SyncEngine(repo: b, api: server)
+        await syncB.sync()
+        for i in 0..<5 { _ = try await a.createNote(title: "n\(i)") }
+        await SyncEngine(repo: a, api: server).sync()
+        final class Count: @unchecked Sendable {
+            private let lock = NSLock()
+            private var n = 0
+            func add() { lock.withLock { n += 1 } }
+            var value: Int { lock.withLock { n } }
+        }
+        let changes = Count()
+        await b.onChange { changes.add() }
+        let before = await server.pulls
+        await syncB.sync()
+        #expect(await server.pulls - before >= 3)
+        #expect(changes.value < 3)
+        #expect(try await b.allCards().filter { !$0.deleted }.count == 5)
     }
 
     @Test func aConflictKeepsBothVersions() async throws {

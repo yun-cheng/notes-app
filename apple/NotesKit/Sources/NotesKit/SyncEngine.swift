@@ -120,15 +120,34 @@ public final class SyncEngine {
         }
     }
 
+    /// How many pulled cards are put away at once, at most a page more (`pull`).
+    static let pullBatch = 2000
+
+    /// Takes what changed on the server since the last pull, a page at a time, and puts it away a few pages at once,
+    /// as the web does: each time cards are put away the app reads them all again, so a first sync of thousands, page
+    /// by page, would do so dozens of times over.
     private func pull() async throws {
         var since = try await repo.cursor()
         while true {
-            let page = try await api.pull(since: since)
-            try await repo.applyRemote(page.records)
-            if let gone = page.gone, !gone.isEmpty { try await repo.dropCards(gone) }
-            since = page.next
+            var records: [CardRecord] = []
+            var at: [String: Int] = [:]
+            var gone: Set<String> = []
+            var more = false
+            repeat {
+                let page = try await api.pull(since: since)
+                // A later page has the newer copy, and a card back after leaving this account's vaults stays.
+                for r in page.records {
+                    if let i = at[r.id] { records[i] = r } else { at[r.id] = records.count; records.append(r) }
+                    gone.remove(r.id)
+                }
+                gone.formUnion(page.gone ?? [])
+                since = page.next
+                more = page.more
+            } while more && records.count < Self.pullBatch
+            try await repo.applyRemote(records)
+            if !gone.isEmpty { try await repo.dropCards(Array(gone)) }
             try await repo.setCursor(since)
-            if !page.more { return }
+            if !more { return }
         }
     }
 }

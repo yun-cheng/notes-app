@@ -101,8 +101,10 @@ extension View {
             }
         }
         .scrollPosition(position)
-        // Room for it, so nothing lies under its marks.
+        #if os(macOS)
+        // Room for it, so nothing lies under its marks; on a phone only its handle shows, over the page, as the web's.
         .contentMargins(.trailing, place.shown ? 28 : 0, for: .scrollContent)
+        #endif
         .onScrollGeometryChange(for: RailPlace.Geometry.self) { RailPlace.Geometry($0) } action: { _, g in
             place.update(g, ids: ids, count: ids.count)
         }
@@ -115,7 +117,9 @@ extension View {
 
 /// A rail down the right of a long page, as a photo library has, as the web's `ScrollRail`: the years down it (or the
 /// months, or the groups), each item an equal share of it, a thumb at where the page is, and, pointed at or dragged,
-/// the month or day there. A press goes there, a drag goes through the page, and the thumb held moves from where it was.
+/// the month or day there. On a Mac a press goes there, a drag goes through the page, and the thumb held moves from
+/// where it was. On a phone, as the web's on a touch screen, only a handle shows, at the edge while the page scrolls,
+/// held and dragged, with the marks and the month or day showing while it's dragged; the rest of it takes no touches.
 struct RailView: View {
     /// Each item's key, top to bottom: the day it's under, or the tag that groups it.
     let keys: [String]
@@ -126,7 +130,78 @@ struct RailView: View {
     @State private var point: Double?
     /// Held at the thumb: where it was, to move from.
     @State private var heldFrom: Double?
+    #if os(iOS)
+    /// Scrolled lately: the handle shows, for a second and a half after.
+    @State private var awake = false
+    @State private var wakes = 0
+    #endif
 
+    #if os(iOS)
+    var body: some View {
+        GeometryReader { geo in
+            let height = geo.size.height
+            let marks = drag == nil ? [] : Rail.marks(keys, height: height, name: name)
+            let thumb = drag ?? place.at
+            ZStack(alignment: .topLeading) {
+                Color.clear.allowsHitTesting(false)
+                ForEach(Array(marks.enumerated()), id: \.offset) { _, mark in
+                    if let label = mark.label {
+                        Text(label).font(.system(size: 11, weight: .semibold)).foregroundStyle(Theme.muted).lineLimit(1).fixedSize()
+                            .padding(.horizontal, 6).padding(.vertical, 2)
+                            .background(Capsule().fill(Theme.surface).shadow(color: .black.opacity(0.12), radius: 2, y: 1))
+                            .opacity(0.85)
+                            .frame(width: 0, alignment: .trailing)
+                            .position(x: 4, y: mark.at * height + 8)
+                            .allowsHitTesting(false)
+                    } else {
+                        Circle().fill(Theme.line).frame(width: 4, height: 4).position(x: 8, y: mark.at * height).allowsHitTesting(false)
+                    }
+                }
+                if awake || drag != nil {
+                    VStack(spacing: 0) {
+                        Image(systemName: "chevron.up")
+                        Image(systemName: "chevron.down")
+                    }
+                    .font(.system(size: 10, weight: .semibold)).foregroundStyle(Theme.muted)
+                    .frame(width: 32, height: 44)
+                    .background(UnevenRoundedRectangle(topLeadingRadius: 22, bottomLeadingRadius: 22).fill(Theme.surface).shadow(color: .black.opacity(0.14), radius: 5, y: 2))
+                    .overlay(UnevenRoundedRectangle(topLeadingRadius: 22, bottomLeadingRadius: 22).stroke(Theme.line))
+                    .contentShape(Rectangle())
+                    .position(x: 28, y: min(max(22, thumb * height), height - 22))
+                    // In the rail's own space: the handle moves as it's dragged.
+                    .gesture(DragGesture(minimumDistance: 0, coordinateSpace: .named("rail")).onChanged { v in
+                        guard height > 0 else { return }
+                        if drag == nil { heldFrom = place.at }
+                        let to = min(1, max(0, (heldFrom ?? place.at) + v.translation.height / height))
+                        drag = to
+                        go(to)
+                    }.onEnded { _ in drag = nil; heldFrom = nil; wakes += 1 })
+                }
+                if let told = drag, !keys.isEmpty {
+                    Text(Rail.label(keys[Rail.item(at: told, count: keys.count).index], scale: Rail.scale(keys), name: name))
+                        .font(.system(size: 12, weight: .semibold)).foregroundStyle(Theme.bg).lineLimit(1).fixedSize()
+                        .padding(.horizontal, 10).padding(.vertical, 4)
+                        .background(Capsule().fill(Theme.text).shadow(color: .black.opacity(0.18), radius: 4, y: 2))
+                        .frame(width: 0, alignment: .trailing)
+                        .position(x: 4, y: min(height - 14, max(14, told * height)))
+                        .allowsHitTesting(false)
+                }
+            }
+            .frame(width: 44, height: height)
+            .coordinateSpace(.named("rail"))
+        }
+        .frame(width: 44)
+        .accessibilityHidden(true)
+        .onChange(of: place.at) {
+            awake = true
+            wakes += 1
+        }
+        .task(id: wakes) {
+            try? await Task.sleep(for: .seconds(1.5))
+            if !Task.isCancelled && drag == nil { awake = false }
+        }
+    }
+    #else
     var body: some View {
         GeometryReader { geo in
             let height = geo.size.height
@@ -181,4 +256,5 @@ struct RailView: View {
         .frame(width: 44)
         .accessibilityHidden(true)
     }
+    #endif
 }

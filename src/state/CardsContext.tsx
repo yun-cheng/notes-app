@@ -369,15 +369,21 @@ export function CardsProvider({ accountId, children }: { accountId: string; chil
       lastRecords = records;
       const run = ++latest;
       const generation = keyring.getGeneration();
-      const loaded = await Promise.all(
-        records.map(async (r) => {
-          const hit = decoded.get(r.id);
-          if (hit && hit.at === r.updated_at && hit.payload === r.payload && hit.deleted === r.deleted && hit.generation === generation) return hit.card;
-          const card = await repo.decode(r);
-          decoded.set(r.id, { at: r.updated_at, payload: r.payload, deleted: r.deleted, generation, card });
-          return card;
-        }),
-      );
+      // Only the cards that changed are decoded; with thousands, waiting on each of the rest would take a while too.
+      const loaded: Card[] = new Array<Card>(records.length);
+      const misses: Promise<void>[] = [];
+      records.forEach((r, i) => {
+        const hit = decoded.get(r.id);
+        if (hit && hit.at === r.updated_at && hit.payload === r.payload && hit.deleted === r.deleted && hit.generation === generation) loaded[i] = hit.card;
+        else
+          misses.push(
+            repo.decode(r).then((card) => {
+              decoded.set(r.id, { at: r.updated_at, payload: r.payload, deleted: r.deleted, generation, card });
+              loaded[i] = card;
+            }),
+          );
+      });
+      if (misses.length) await Promise.all(misses);
       // A sync that only marked cards as sent changes none of them: nothing to redraw.
       if (active && run === latest) setCards((prev) => (prev && prev.length === loaded.length && prev.every((card, i) => card === loaded[i]) ? prev : loaded));
     };

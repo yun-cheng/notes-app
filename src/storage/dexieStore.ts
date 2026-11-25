@@ -23,11 +23,79 @@ class NotesDb extends Dexie {
   }
 }
 
+/** Where a card with this ID is in records kept in ID order, or would go: as IndexedDB orders the keys. */
+function placeOf(records: readonly CardRecord[], id: string): { at: number; found: boolean } {
+  let lo = 0;
+  let hi = records.length;
+  while (lo < hi) {
+    const mid = (lo + hi) >> 1;
+    if (records[mid].id < id) lo = mid + 1;
+    else hi = mid;
+  }
+  return { at: lo, found: records[lo]?.id === id };
+}
+
+/** Records in ID order with these written and those removed, as a new list. */
+function withWrite(records: readonly CardRecord[], put: readonly CardRecord[], removed: readonly string[]): CardRecord[] {
+  const next = records.slice();
+  for (const record of put) {
+    const { at, found } = placeOf(next, record.id);
+    next.splice(at, found ? 1 : 0, record);
+  }
+  for (const id of removed) {
+    const { at, found } = placeOf(next, id);
+    if (found) next.splice(at, 1);
+  }
+  return next;
+}
+
 export class DexieStore implements CardStore, PhotoStore, TranslationStore {
   private db: NotesDb;
+  /**
+   * Every card, in ID order, as `subscribe` gives them: read in full once, then kept up to date with this store's own
+   * writes, so a change doesn't read thousands of cards back. Another tab's writes (heard on `channel`) read them all
+   * again. Null until something subscribes, and while it's first read.
+   */
+  private mirror: CardRecord[] | null = null;
+  private cardListeners = new Set<(records: CardRecord[]) => void>();
+  /** Writes made while every card is being read, put on top of what's read, in order: a read may or may not see them. */
+  private during: { put: readonly CardRecord[]; removed: readonly string[] }[] | null = null;
+  private reads = 0;
+  private channel: BroadcastChannel | null = null;
 
   constructor(name = 'notes-app') {
     this.db = new NotesDb(name);
+    if (typeof BroadcastChannel !== 'undefined') {
+      this.channel = new BroadcastChannel(`notes-app:cards:${name}`);
+      this.channel.onmessage = () => {
+        if (this.cardListeners.size) void this.readAll().catch((err: unknown) => console.error('Reading cards failed', err));
+      };
+      // Where it can be (Node, in tests), it doesn't keep the process going.
+      (this.channel as BroadcastChannel & { unref?: () => void }).unref?.();
+    }
+  }
+
+  /** Reads every card again, with what's written meanwhile put on top, and tells subscribers. */
+  private async readAll(): Promise<void> {
+    const run = ++this.reads;
+    this.during = [];
+    const all = await this.db.cards.toArray();
+    if (run !== this.reads || !this.cardListeners.size) return;
+    const during = this.during;
+    this.during = null;
+    this.mirror = during.reduce((records, w) => withWrite(records, w.put, w.removed), all);
+    for (const listener of this.cardListeners) listener(this.mirror);
+  }
+
+  /** What this store just wrote, put into what subscribers have, and told to other tabs. */
+  private wrote(put: readonly CardRecord[], removed: readonly string[] = []) {
+    if (!put.length && !removed.length) return;
+    this.channel?.postMessage('cards');
+    this.during?.push({ put, removed });
+    if (!this.mirror) return;
+    const next = withWrite(this.mirror, put, removed);
+    this.mirror = next;
+    for (const listener of this.cardListeners) listener(next);
   }
 
   listCards() {
@@ -41,6 +109,8 @@ export class DexieStore implements CardStore, PhotoStore, TranslationStore {
   }
 
   close() {
+    this.channel?.close();
+    this.channel = null;
     this.db.close();
   }
   getCard(id: string) {
@@ -52,6 +122,7 @@ export class DexieStore implements CardStore, PhotoStore, TranslationStore {
       await cards.bulkPut(records);
       await dirty.bulkPut(records.map(({ id }) => ({ id })));
     });
+    this.wrote(records);
   }
   async listDirty() {
     const ids = await this.db.dirty.toCollection().primaryKeys();
@@ -60,30 +131,37 @@ export class DexieStore implements CardStore, PhotoStore, TranslationStore {
   }
   async applyRemote(records: CardRecord[]) {
     const { cards, dirty } = this.db;
-    await this.db.transaction('rw', cards, dirty, async () => {
+    const changed = await this.db.transaction('rw', cards, dirty, async () => {
       const ids = records.map((r) => r.id);
       const [pending, current] = await Promise.all([dirty.bulkGet(ids), cards.bulkGet(ids)]);
       const changed = records.filter((r, i) => !pending[i] && current[i]?.seq !== r.seq);
       if (changed.length) await cards.bulkPut(changed);
+      return changed;
     });
+    this.wrote(changed);
   }
   async forceRemote(record: CardRecord, ifUpdatedAt?: number) {
     const { cards, dirty } = this.db;
-    return this.db.transaction('rw', cards, dirty, async () => {
+    const done = await this.db.transaction('rw', cards, dirty, async () => {
       if (ifUpdatedAt !== undefined && (await cards.get(record.id))?.updated_at !== ifUpdatedAt) return false;
       await cards.put(record);
       await dirty.delete(record.id);
       return true;
     });
+    if (done) this.wrote([record]);
+    return done;
   }
   async markSynced(id: string, updatedAt: number, seq: number) {
     const { cards, dirty } = this.db;
-    await this.db.transaction('rw', cards, dirty, async () => {
+    const marked = await this.db.transaction('rw', cards, dirty, async () => {
       const card = await cards.get(id);
-      if (!card) return;
-      await cards.put({ ...card, seq });
+      if (!card) return null;
+      const next = { ...card, seq };
+      await cards.put(next);
       if (card.updated_at === updatedAt) await dirty.delete(id);
+      return next;
     });
+    if (marked) this.wrote([marked]);
   }
   listTranslations() {
     return this.db.translations.toArray();
@@ -120,6 +198,7 @@ export class DexieStore implements CardStore, PhotoStore, TranslationStore {
       await cards.bulkDelete(ids);
       await dirty.bulkDelete(ids);
     });
+    this.wrote([], ids);
   }
   subscribeVaults(listener: (vaults: Vault[]) => void) {
     const subscription = liveQuery(() => this.db.vaults.toArray()).subscribe({
@@ -144,14 +223,24 @@ export class DexieStore implements CardStore, PhotoStore, TranslationStore {
     await this.db.photos.delete(id);
   }
   async destroy() {
+    this.mirror = null;
+    this.reads++;
     await this.db.delete();
   }
   subscribe(listener: (records: CardRecord[]) => void) {
-    const subscription = liveQuery(() => this.db.cards.toArray()).subscribe({
-      next: listener,
-      error: (err) => console.error('Reading cards failed', err),
-    });
-    return () => subscription.unsubscribe();
+    this.cardListeners.add(listener);
+    if (this.cardListeners.size === 1) {
+      void this.readAll().catch((err: unknown) => console.error('Reading cards failed', err));
+    } else if (this.mirror) {
+      listener(this.mirror);
+    }
+    return () => {
+      this.cardListeners.delete(listener);
+      if (this.cardListeners.size) return;
+      this.mirror = null;
+      this.during = null;
+      this.reads++;
+    };
   }
 
   subscribeDirty(listener: (ids: string[]) => void) {

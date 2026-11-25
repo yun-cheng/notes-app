@@ -1,5 +1,5 @@
 import 'fake-indexeddb/auto';
-import { describe, expect, it } from 'vitest';
+import { describe, expect, it, vi } from 'vitest';
 import { DexieStore } from './dexieStore';
 import { EMPTY_DOC, type CardRecord } from '../domain/types';
 
@@ -49,6 +49,37 @@ describe('DexieStore', () => {
     await dx.putCards([rec('a')]);
     await seen;
     expect(counts.at(-1)).toBe(1);
+  });
+  it('keeps what subscribers have up to date with its own writes, in ID order, without reading every card again', async () => {
+    const dx = new DexieStore(`t-${Math.random()}`);
+    await dx.putCards([rec('b'), rec('d')]);
+    const seen: string[][] = [];
+    const stop = dx.subscribe((records) => seen.push(records.map((r) => `${r.id}${r.seq}`)));
+    // Written while every card is first read: in what's given, whether or not the read saw it.
+    await dx.putCards([rec('c')]);
+    await vi.waitFor(() => expect(seen.at(-1)).toEqual(['b0', 'c0', 'd0']));
+    const reads = vi.spyOn((dx as unknown as { db: { cards: { toArray: () => Promise<unknown> } } }).db.cards, 'toArray');
+    await dx.putCards([rec('a')]);
+    expect(seen.at(-1)).toEqual(['a0', 'b0', 'c0', 'd0']);
+    await dx.markSynced('a', 1, 7);
+    await dx.applyRemote([{ ...rec('e'), seq: 3 }, { ...rec('b'), seq: 0 }]);
+    await dx.forceRemote({ ...rec('c'), seq: 9 });
+    await dx.deleteCards(['d']);
+    expect(seen.at(-1)).toEqual(['a7', 'b0', 'c9', 'e3']);
+    expect(reads).not.toHaveBeenCalled();
+    reads.mockRestore();
+    stop();
+  });
+  it('reads every card again when another tab writes', async () => {
+    const name = `t-${Math.random()}`;
+    const here = new DexieStore(name);
+    const there = new DexieStore(name);
+    const seen: number[] = [];
+    const stop = here.subscribe((records) => seen.push(records.length));
+    await vi.waitFor(() => expect(seen).toEqual([0]));
+    await there.putCards([rec('a'), rec('b')]);
+    await vi.waitFor(() => expect(seen.at(-1)).toBe(2));
+    stop();
   });
   it('tracks unpushed changes and protects them from remote updates', async () => {
     const dx = new DexieStore(`t-${Math.random()}`);

@@ -39,7 +39,9 @@ import androidx.compose.material3.Icon
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.derivedStateOf
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.key
 import androidx.compose.runtime.mutableStateMapOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.produceState
@@ -346,6 +348,15 @@ fun PhotosPage(openDrawer: (() -> Unit)?) {
         var boxTop by remember { mutableStateOf(0f) }
         var laidTiles by remember { mutableStateOf(emptyList<PhotoLayout.Box>()) }
         val density = androidx.compose.ui.platform.LocalDensity.current.density
+        // The stretch of the scrolled content near what's in view, in pixels: only photos in it are drawn, as on the
+        // web, since thousands at once each load and decode their picture. It moves in steps of half a screen.
+        val near by remember {
+            derivedStateOf {
+                val screen = scroll.viewportSize.coerceAtLeast(1).toFloat()
+                val step = maxOf(200f * density, screen / 2)
+                kotlin.math.floor((scroll.value - screen * 1.5f) / step) * step to kotlin.math.ceil((scroll.value + screen * 2.5f) / step) * step
+            }
+        }
         Box(Modifier.weight(1f)) {
         Column(Modifier.verticalScroll(scroll).onGloballyPositioned { content = it }.padding(16.dp)) {
             Text(countLine(mediaCount(all.map { it.first }), all.map { it.second.id }.toSet().size), Modifier.padding(bottom = 4.dp), color = Theme.muted, fontSize = 14.sp)
@@ -354,24 +365,49 @@ fun PhotosPage(openDrawer: (() -> Unit)?) {
                 val ratios = days.map { d -> d.items.map { (m, _) -> PhotoShapes.ratios[m.id] ?: (m as? Doc.Media.Photo)?.ratio?.toFloat() ?: (if (m is Doc.Media.Video && (m.file.height ?: 0.0) > 0) (m.file.width ?: 1.0).toFloat() / m.file.height!!.toFloat() else 1f) } }
                 val (tiles, heads, height) = PhotoLayout.layout(ratios, PhotoLayout.options(width))
                 laidTiles = tiles.flatten()
-                Box(Modifier.fillMaxWidth().height(height.dp).onGloballyPositioned { box -> content?.let { boxTop = it.localPositionOf(box, androidx.compose.ui.geometry.Offset.Zero).y } }) {
-                    days.forEachIndexed { d, day ->
-                        val head = heads[d]
-                        Row(Modifier.offset(head.x.dp, head.y.dp).width(maxOf(head.w, 120f).dp).height(head.h.dp).padding(bottom = 8.dp), verticalAlignment = Alignment.Bottom) {
-                            Text(DateKey.relativeDay(day.day, model.today), Modifier.clickable {
-                                val ids = day.items.map { it.first.id }
-                                if (picked.isNotEmpty()) picked = if (ids.all { it in picked }) picked - ids.toSet() else picked + ids
-                            }, fontWeight = FontWeight.SemiBold, fontSize = 15.sp, color = Theme.text, maxLines = 1)
-                        }
-                        day.items.forEachIndexed { i, (m, card) ->
-                            val b = tiles[d][i]
-                            var menu by remember { mutableStateOf(false) }
-                            Box(Modifier.offset(b.x.dp, b.y.dp).size(b.w.dp, b.h.dp)) {
-                                FillThumb(m, card.vaultId, Modifier.fillMaxSize().combinedClickable(onClick = { if (picked.isEmpty()) viewing = m.id else picked = if (m.id in picked) picked - m.id else picked + m.id }, onLongClick = { menu = true }))
-                                if (picked.isNotEmpty()) Icon(if (m.id in picked) Icons.Outlined.CheckCircle else Icons.Outlined.RadioButtonUnchecked, null, Modifier.align(Alignment.TopStart).padding(6.dp).size(22.dp), tint = Color.White)
-                                DropdownMenu(menu, { menu = false }) {
-                                    DropdownMenuItem(text = { Text("Pick") }, onClick = { menu = false; picked = picked + m.id })
-                                    PhotoMenu(m.id, card) { menu = false }
+                // In bands no taller than BAND, each starting with a day below all that's above it: one box as tall as
+                // thousands of photos is more than a layout can say (its constraints top out at about 260,000 pixels).
+                val bands = remember(heads, tiles, height) {
+                    val starts = mutableListOf(0)
+                    var top = 0f
+                    var foot = 0f
+                    heads.forEachIndexed { d, head ->
+                        if (d > 0 && head.y >= foot && head.y - top > BAND) { starts.add(d); top = head.y }
+                        foot = maxOf(foot, head.y + head.h, tiles[d].maxOfOrNull { it.y + it.h } ?: 0f)
+                    }
+                    starts.mapIndexed { k, first -> val next = starts.getOrNull(k + 1); Triple(first, next ?: heads.size, if (k == 0) 0f else heads[first].y) to (next?.let { heads[it].y } ?: height) }
+                }
+                Column(Modifier.fillMaxWidth().onGloballyPositioned { box -> content?.let { boxTop = it.localPositionOf(box, androidx.compose.ui.geometry.Offset.Zero).y } }) {
+                    val (from, to) = near
+                    // Where a stretch of the laid-out photos is in the scrolled content, and whether it's near the screen.
+                    fun shown(y: Float, h: Float) = boxTop + (y + h) * density >= from && boxTop + y * density <= to
+                    for ((span, bottom) in bands) {
+                        val (firstDay, endDay, top) = span
+                        Box(Modifier.fillMaxWidth().height((bottom - top).dp)) {
+                            if (shown(top, bottom - top)) for (d in firstDay until endDay) {
+                                val day = days[d]
+                                val head = heads[d]
+                                if (shown(head.y, tiles[d].maxOfOrNull { it.y + it.h - head.y } ?: head.h)) {
+                                    Row(Modifier.offset(head.x.dp, (head.y - top).dp).width(maxOf(head.w, 120f).dp).height(head.h.dp).padding(bottom = 8.dp), verticalAlignment = Alignment.Bottom) {
+                                        Text(DateKey.relativeDay(day.day, model.today), Modifier.clickable {
+                                            val ids = day.items.map { it.first.id }
+                                            if (picked.isNotEmpty()) picked = if (ids.all { it in picked }) picked - ids.toSet() else picked + ids
+                                        }, fontWeight = FontWeight.SemiBold, fontSize = 15.sp, color = Theme.text, maxLines = 1)
+                                    }
+                                    day.items.forEachIndexed { i, (m, card) ->
+                                        val b = tiles[d][i]
+                                        if (shown(b.y, b.h)) key(m.id) {
+                                            var menu by remember { mutableStateOf(false) }
+                                            Box(Modifier.offset(b.x.dp, (b.y - top).dp).size(b.w.dp, b.h.dp)) {
+                                                FillThumb(m, card.vaultId, Modifier.fillMaxSize().combinedClickable(onClick = { if (picked.isEmpty()) viewing = m.id else picked = if (m.id in picked) picked - m.id else picked + m.id }, onLongClick = { menu = true }))
+                                                if (picked.isNotEmpty()) Icon(if (m.id in picked) Icons.Outlined.CheckCircle else Icons.Outlined.RadioButtonUnchecked, null, Modifier.align(Alignment.TopStart).padding(6.dp).size(22.dp), tint = Color.White)
+                                                DropdownMenu(menu, { menu = false }) {
+                                                    DropdownMenuItem(text = { Text("Pick") }, onClick = { menu = false; picked = picked + m.id })
+                                                    PhotoMenu(m.id, card) { menu = false }
+                                                }
+                                            }
+                                        }
+                                    }
                                 }
                             }
                         }
@@ -386,6 +422,9 @@ fun PhotosPage(openDrawer: (() -> Unit)?) {
     }
     viewing?.let { start -> MediaViewer(all.map { it.first }, start, all.firstOrNull { it.first.id == start }?.second?.vaultId ?: "", all.associate { it.first.id to it.second }) { viewing = null } }
 }
+
+/** The tallest band of the Photos page's layout, in points: see `bands` there. */
+private const val BAND = 20_000f
 
 /** A photo or a video's still filling its tile, cut to its shape; its shape kept once it's seen. */
 @Composable

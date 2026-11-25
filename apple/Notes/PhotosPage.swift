@@ -183,6 +183,11 @@ struct PhotosPage: View {
     @State private var sharing: [URL] = []
     @State private var rail = RailPlace()
     @State private var position = ScrollPosition()
+    /// The stretch of the page near what's in view, in the scrolled content's points: only photos in it are drawn,
+    /// as the web's, since thousands at once each load and decode their picture. It moves in steps of half a screen.
+    @State private var near: ClosedRange<CGFloat> = 0...2000
+    /// Where the photos' canvas starts in the scrolled content, under the count line.
+    @State private var canvasTop: CGFloat = 0
 
     struct Item: Identifiable, Hashable {
         var media: Doc.Media
@@ -237,10 +242,16 @@ struct PhotosPage: View {
                             ZStack(alignment: .topLeading) {
                                 ForEach(Array(days.enumerated()), id: \.element.day) { d, day in
                                     let head = laid.heads[d]
-                                    dayHead(day).frame(width: max(head.w, 120), height: head.h, alignment: .bottomLeading).offset(x: head.x, y: head.y)
-                                    ForEach(Array(day.items.enumerated()), id: \.element.item.id) { i, pair in
-                                        let box = laid.tiles[d][i]
-                                        tile(Item(media: pair.item, card: pair.card)).frame(width: box.w, height: box.h).offset(x: box.x, y: box.y)
+                                    let boxes = laid.tiles[d]
+                                    let foot = boxes.reduce(head.y + head.h) { max($0, $1.y + $1.h) }
+                                    if canvasTop + foot >= near.lowerBound && canvasTop + head.y <= near.upperBound {
+                                        dayHead(day).frame(width: max(head.w, 120), height: head.h, alignment: .bottomLeading).offset(x: head.x, y: head.y)
+                                        ForEach(Array(day.items.enumerated()), id: \.element.item.id) { i, pair in
+                                            let box = boxes[i]
+                                            if canvasTop + box.y + box.h >= near.lowerBound && canvasTop + box.y <= near.upperBound {
+                                                tile(Item(media: pair.item, card: pair.card)).frame(width: box.w, height: box.h).offset(x: box.x, y: box.y)
+                                            }
+                                        }
                                     }
                                 }
                             }
@@ -252,6 +263,7 @@ struct PhotosPage: View {
                                 return [f.minX, f.minY, laid.height, CGFloat(all.count)]
                             } action: { place in
                                 let frame = CGPoint(x: place[0], y: place[1])
+                                canvasTop = place[1]
                                 var rows: [String: CGRect] = [:]
                                 for (d, day) in days.enumerated() {
                                     for (i, pair) in day.items.enumerated() where i < laid.tiles[d].count {
@@ -266,6 +278,15 @@ struct PhotosPage: View {
                     }
                     .padding(16)
                     .coordinateSpace(.named(RailPlace.space))
+                }
+                .onScrollGeometryChange(for: ClosedRange<CGFloat>.self) { g in
+                    let screen = max(1, g.containerSize.height)
+                    let step = max(200, screen / 2)
+                    let from = ((g.contentOffset.y - screen * 1.5) / step).rounded(.down) * step
+                    let to = ((g.contentOffset.y + screen * 2.5) / step).rounded(.up) * step
+                    return from...to
+                } action: { _, range in
+                    near = range
                 }
                 // Each photo by the day its entry was written, as the web's.
                 .pageRail(keys: days.flatMap { d in d.items.map { _ in d.day } }, ids: all.map(\.id),

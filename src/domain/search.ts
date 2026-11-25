@@ -32,7 +32,19 @@ export interface CardSearch {
   search(query: string): SearchHit[];
 }
 
+const built = new WeakMap<CardIndex, CardSearch>();
+
+/**
+ * The search over an index's cards, made once for each index (each change to the cards makes a new one): indexing
+ * thousands of entries takes a while, so the search page, the command palette and a page's search share it.
+ */
 export function buildSearch(index: CardIndex): CardSearch {
+  let search = built.get(index);
+  if (!search) built.set(index, (search = makeSearch(index)));
+  return search;
+}
+
+function makeSearch(index: CardIndex): CardSearch {
   const engine = new MiniSearch<{ id: string; title: string; text: string; tags: string }>({
     fields: ['title', 'text', 'tags'],
     tokenize,

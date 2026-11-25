@@ -131,14 +131,14 @@ struct EntrySheet: View {
                             removePage(card, stored: stored.count)
                         }
                     }
-                    DocEditor(content: pages[page], editable: edit, titleOf: model.index.titleOf, tools: tools, placeholder: page > 0 ? "Page \(page + 1)" : isTodo ? "Details" : "Note") { doc in
+                    DocEditor(content: pages[page], editable: edit, titleOf: model.index.titleOf, tools: tools, placeholder: page > 0 ? "Page \(page + 1)" : isTodo ? "Details" : "Note", card: card) { doc in
                         savePage(card.id, page, doc)
                     }
                     .frame(minHeight: 80)
                     .id("\(card.id):\(page)")
-                    // Its photos, voice messages and files as the journal shows them, where the web shows them in the
-                    // text; in the text they're named, to move or take out.
-                    if page == 0 { EntryAttachments(card: card) }
+                    // Its photos, voice messages and files are in the text, where they are (`DocEditor`); its links'
+                    // previews under it, as the journal shows them.
+                    if page == 0 { BubbleLinks(card: card) }
                     SheetTags(card: card, edit: edit)
                     FlowLayout(spacing: 6) { Reactions(card: card, large: true) }
                     if card.isStack && page == 0 { StackPreview(stack: card) }

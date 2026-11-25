@@ -27,6 +27,8 @@ final class AppModel {
     private(set) var index = CardIndex() {
         didSet { cachedSearch = nil }
     }
+    /// The cards have been read once: until then the journal is empty because it hasn't been read, not because it is.
+    private(set) var loaded = false
     /// Search over `index`, built when first asked for after it changes rather than on every keystroke.
     var search: CardSearch {
         if let cachedSearch { return cachedSearch }
@@ -309,12 +311,16 @@ final class AppModel {
         setIfChanged(\.unsynced, waiting)
         let marks = all.map(CardMark.init)
         let locked = lockedVaults
-        guard marks != indexed.marks || locked != indexed.locked else { return }
+        guard marks != indexed.marks || locked != indexed.locked else {
+            loaded = true
+            return
+        }
         let index = await Task.detached(priority: .userInitiated) { CardIndex(all, locked: locked) }.value
         guard run == refreshes else { return }
         indexed = (marks, locked)
         cards = all
         self.index = index
+        loaded = true
         Transcriber.shared.apply(model: self)
         Reminders.reschedule(index)
     }

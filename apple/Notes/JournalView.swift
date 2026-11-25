@@ -117,7 +117,7 @@ struct JournalView: View {
                             if !chat && all.count > visible.count {
                                 Button("Show more entries") { shown += Self.pageSize }.buttonStyle(.borderless).frame(maxWidth: .infinity)
                             }
-                            if all.isEmpty { EmptyJournal(filter: filter, searching: searching) }
+                            if all.isEmpty && model.loaded { EmptyJournal(filter: filter, searching: searching) }
                         }
                         .padding(.horizontal, 16)
                         #if os(macOS)

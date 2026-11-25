@@ -191,7 +191,7 @@ fun JournalView(initial: StreamFilter, openDrawer: (() -> Unit)?, fixed: Boolean
                             }
                         }
                         if (!chat && all.size > visible.size) item { TextButton(onClick = { shown += PAGE_SIZE }, Modifier.fillMaxWidth()) { Text("Show more entries") } }
-                        if (all.isEmpty()) item { EmptyJournal(filter, searching) }
+                        if (all.isEmpty() && model.loaded) item { EmptyJournal(filter, searching) }
                     }
                     LazyRail(list, all.map { it.day }, all.map { it.card.id }, { dayLabel(it, filter.sort, model) }, { rowOf[it] }, Modifier.align(Alignment.CenterEnd)) { index ->
                         // Past those drawn: draw on to it, as the web's.

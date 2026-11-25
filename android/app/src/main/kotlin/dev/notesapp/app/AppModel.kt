@@ -99,6 +99,8 @@ class AppModel(private val context: Context, val site: String) {
     /** Goes up each time `cards` changes: a cheap key for an effect to watch instead of every card. */
     var cardsVersion by mutableIntStateOf(0); private set
     var index by mutableStateOf(CardIndex()); private set
+    /** The cards have been read once: until then the journal is empty because it hasn't been read, not because it is. */
+    var loaded by mutableStateOf(false); private set
     /** The vaults each card is shared into besides its own. */
     var sharedInto by mutableStateOf<SharedInto>(emptyMap()); private set
     var commentCounts by mutableStateOf<Map<String, Int>>(emptyMap()); private set
@@ -330,13 +332,14 @@ class AppModel(private val context: Context, val site: String) {
         if (unsynced != waiting) unsynced = waiting
         val marks = all.map { CardMark(it.id, it.vaultId, it.updatedAt, it.seq, it.deleted, it.sealed) }
         val locked = lockedVaults
-        if (marks == indexed?.first && locked == indexed?.second) return
+        if (marks == indexed?.first && locked == indexed?.second) { loaded = true; return }
         val next = kotlinx.coroutines.withContext(Dispatchers.Default) { CardIndex(all, locked) }
         if (run != refreshes) return
         indexed = marks to locked
         cards = all
         cardsVersion++
         index = next
+        loaded = true
         Reminders.reschedule(context, next)
         Transcriber.apply(this)
     }

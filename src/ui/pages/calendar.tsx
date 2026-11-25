@@ -4,7 +4,7 @@ import { Link, useLocation, useNavigate, useSearchParams } from 'react-router';
 import { diaryVault } from '../../domain/access';
 import { lanes, shiftDates, spanOn, spans, type Span } from '../../domain/calendar';
 import { displayTitle } from '../../domain/content';
-import { addMonths, daysBetween, formatDay, formatMonth, isDateKey, monthGrid, monthKey, parseDateKey, relativeDay, relativeDayInSentence, toDateKey } from '../../domain/dates';
+import { addMonths, daysBetween, formatDate, formatDay, formatMonth, isDateKey, monthGrid, monthKey, parseDateKey, relativeDay, relativeDayInSentence, toDateKey } from '../../domain/dates';
 import { entryMatcher, filterParams, type StreamFilter } from '../../domain/stream';
 import type { TodoCard } from '../../domain/types';
 import { useCards, useToday } from '../../state/CardsContext';
@@ -196,7 +196,7 @@ export function CalendarPage() {
         <div className="month__week month__week--head" role="row">
           {grid.slice(0, 7).map((d) => (
             <div className="month__weekday" key={d} role="columnheader">
-              {parseDateKey(d).toLocaleDateString(undefined, { weekday: 'short' })}
+              {formatDate(parseDateKey(d), { weekday: 'short' })}
             </div>
           ))}
         </div>
@@ -208,7 +208,7 @@ export function CalendarPage() {
               {week.map((d, i) => {
                 const items = rows.flatMap((lane) => spanOn(lane, d) ?? []);
                 const more = items.length - shown.filter((lane) => spanOn(lane, d)).length;
-                const label = `${parseDateKey(d).toLocaleDateString(undefined, { weekday: 'long', month: 'long', day: 'numeric' })}${items.length ? `, ${count(items.length, 'todo')}` : ''}`;
+                const label = `${formatDate(parseDateKey(d), { weekday: 'long', month: 'long', day: 'numeric' })}${items.length ? `, ${count(items.length, 'todo')}` : ''}`;
                 const cls = ['month__day', monthKey(d) !== month && 'is-outside', d === today && 'is-today', d === day && 'is-picked', d === over && 'is-over'].filter(Boolean).join(' ');
                 return (
                   <div

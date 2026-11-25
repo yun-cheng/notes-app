@@ -49,12 +49,24 @@ export function monthGrid(month: string, weekStart: number): string[] {
   return Array.from({ length: 42 }, (_, i) => addDays(start, i));
 }
 
+const formats = new Map<string, Intl.DateTimeFormat>();
+/**
+ * A date (or a time) written as the locale writes it, as `toLocaleDateString` does, with a formatter made once for
+ * each locale and set of options: making one is slow, and a long page writes thousands of dates.
+ */
+export function formatDate(date: Date, opts: Intl.DateTimeFormatOptions, locale?: string): string {
+  const key = `${locale ?? ''}|${JSON.stringify(opts)}`;
+  let format = formats.get(key);
+  if (!format) formats.set(key, (format = new Intl.DateTimeFormat(locale, opts)));
+  return format.format(date);
+}
+
 export function formatDay(key: string, locale?: string): string {
-  return parseDateKey(key).toLocaleDateString(locale, { weekday: 'long', month: 'long', day: 'numeric', year: 'numeric' });
+  return formatDate(parseDateKey(key), { weekday: 'long', month: 'long', day: 'numeric', year: 'numeric' }, locale);
 }
 
 export function formatMonth(month: string, locale?: string): string {
-  return parseDateKey(`${month}-01`).toLocaleDateString(locale, { month: 'long', year: 'numeric' });
+  return formatDate(parseDateKey(`${month}-01`), { month: 'long', year: 'numeric' }, locale);
 }
 
 /** "Today", "Tomorrow", "Yesterday", or a short date. */
@@ -64,7 +76,7 @@ export function relativeDay(key: string, today: string, locale?: string): string
   if (key === addDays(today, -1)) return 'Yesterday';
   const opts: Intl.DateTimeFormatOptions = { weekday: 'short', month: 'short', day: 'numeric' };
   if (key.slice(0, 4) !== today.slice(0, 4)) opts.year = 'numeric';
-  return parseDateKey(key).toLocaleDateString(locale, opts);
+  return formatDate(parseDateKey(key), opts, locale);
 }
 
 /** A time of day as stored: `HH:MM`, 24-hour, local. */
@@ -94,12 +106,12 @@ export function toTimeKey(d: Date): string {
 /** "3:00 PM" or "15:00", as the locale writes times. */
 /** A moment (milliseconds since 1970) as the clock time it was: "3:05 PM". */
 export function formatClock(ms: number, locale?: string): string {
-  return new Date(ms).toLocaleTimeString(locale, { hour: 'numeric', minute: '2-digit' });
+  return formatDate(new Date(ms), { hour: 'numeric', minute: '2-digit' }, locale);
 }
 
 /** A moment as its day and clock time: "Nov 3, 2026, 3:05 PM". */
 export function formatMoment(ms: number, locale?: string): string {
-  return new Date(ms).toLocaleString(locale, { dateStyle: 'medium', timeStyle: 'short' });
+  return formatDate(new Date(ms), { dateStyle: 'medium', timeStyle: 'short' }, locale);
 }
 
 /** Two days as one short range, with the year when either isn't this one: "Nov 3 – 9", "Dec 28, 2026 – Jan 3, 2027". */
@@ -112,7 +124,7 @@ export function formatRange(from: string, to: string, today: string, locale?: st
 
 export function formatTime(key: string, locale?: string): string {
   const [h, m] = key.split(':').map(Number);
-  return new Date(2000, 0, 1, h, m).toLocaleTimeString(locale, { hour: 'numeric', minute: '2-digit' });
+  return formatDate(new Date(2000, 0, 1, h, m), { hour: 'numeric', minute: '2-digit' }, locale);
 }
 
 /** `relativeDay` for the middle of a sentence: "due today", but "due Tue, Nov 10". */

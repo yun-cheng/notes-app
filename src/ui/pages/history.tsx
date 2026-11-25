@@ -2,7 +2,7 @@ import { useEffect, useMemo, useRef, useState } from 'react';
 import { Link, useNavigate, useParams } from 'react-router';
 import { linkTitle } from '../../domain/cardIndex';
 import { displayTitle } from '../../domain/content';
-import { DAY, formatClock } from '../../domain/dates';
+import { DAY, formatClock, formatDate } from '../../domain/dates';
 import { cardLines, changeSize, diffLines, restorePatch, sameContent, type DiffLine } from '../../domain/history';
 import type { Card } from '../../domain/types';
 import { useCards } from '../../state/CardsContext';
@@ -43,7 +43,7 @@ function when(at: number): string {
   const days = Math.round((today.getTime() - day.getTime()) / DAY);
   if (days === 0) return `Today, ${time}`;
   if (days === 1) return `Yesterday, ${time}`;
-  return `${d.toLocaleDateString(undefined, { weekday: 'short', day: 'numeric', month: 'short', year: days > 300 ? 'numeric' : undefined })}, ${time}`;
+  return `${formatDate(d, { weekday: 'short', day: 'numeric', month: 'short', ...(days > 300 ? { year: 'numeric' } : {}) })}, ${time}`;
 }
 
 function problem(err: unknown): string {

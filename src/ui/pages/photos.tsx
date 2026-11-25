@@ -162,6 +162,41 @@ export function PhotosPage() {
     () => (width ? layoutPhotos(days.map((d) => d.items.map((i) => shapes.get(i.id) ?? 1)), sizes(width)) : null),
     [days, width, learned],
   );
+  // The stretch of the canvas near the screen, in its own pixels: only what's in it is drawn, as thousands of tiles
+  // at once take seconds to lay out. It moves in steps of half a screen, so scrolling redraws now and then, not on
+  // every frame.
+  const [near, setNear] = useState<readonly [number, number]>([0, 0]);
+  useEffect(() => {
+    const el = canvas.current;
+    if (!el) return;
+    let frame = 0;
+    const update = () => {
+      cancelAnimationFrame(frame);
+      frame = requestAnimationFrame(() => {
+        const top = el.getBoundingClientRect().top;
+        const screen = window.innerHeight;
+        const step = Math.max(200, screen / 2);
+        const from = Math.floor((-top - screen * 1.5) / step) * step;
+        const to = Math.ceil((-top + screen * 2.5) / step) * step;
+        setNear((was) => (was[0] === from && was[1] === to ? was : [from, to]));
+      });
+    };
+    update();
+    window.addEventListener('scroll', update, { passive: true });
+    window.addEventListener('resize', update);
+    return () => {
+      cancelAnimationFrame(frame);
+      window.removeEventListener('scroll', update);
+      window.removeEventListener('resize', update);
+    };
+  }, [any]);
+  const tiles = useMemo(() => layout?.tiles.flat() ?? [], [layout]);
+  // The rail going to a photo not drawn: scroll near it, which draws it, and the rail finds it the frame after.
+  const reveal = (index: number) => {
+    const el = canvas.current;
+    const box = tiles[index];
+    if (el && box) window.scrollTo({ top: el.getBoundingClientRect().top + window.scrollY + box.y - window.innerHeight / 3, behavior: 'instant' });
+  };
   const onShape = (id: string, ratio: number) => {
     if (Math.abs((shapes.get(id) ?? 1) - ratio) < 0.01) return;
     keepShape(id, ratio);
@@ -252,6 +287,9 @@ export function PhotosPage() {
                 const first = n;
                 n += items.length;
                 const head = layout.heads[d];
+                const boxes = layout.tiles[d];
+                const foot = boxes.reduce((y, b) => Math.max(y, b.y + b.h), head.y + head.h);
+                if (foot < near[0] || head.y > near[1]) return null;
                 const ids = items.map((i) => i.id);
                 const whole = ids.every((id) => picked.has(id));
                 const label = relativeDay(day, today);
@@ -272,7 +310,7 @@ export function PhotosPage() {
                       <span className="photos__day-name">{label}</span>
                     </h2>
                     {items.map((item, i) => (
-                      <Tile
+                      boxes[i].y + boxes[i].h < near[0] || boxes[i].y > near[1] ? null : <Tile
                         key={item.id}
                         item={item}
                         at={first + i}
@@ -289,7 +327,7 @@ export function PhotosPage() {
                 );
               })}
           </div>
-          <ScrollRail keys={railKeys} name={(day) => relativeDay(day, today)} root={canvas} />
+          <ScrollRail keys={railKeys} name={(day) => relativeDay(day, today)} root={canvas} reveal={reveal} />
         </div>
       )}
       {viewing !== null && (

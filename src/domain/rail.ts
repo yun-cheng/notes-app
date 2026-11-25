@@ -1,4 +1,4 @@
-import { isDateKey, parseDateKey } from './dates';
+import { formatDate, isDateKey, parseDateKey } from './dates';
 
 /**
  * The rail beside a long page of entries, photos or what entries hold, as a photo library has: marks for the years
@@ -33,8 +33,8 @@ export function railScale(keys: readonly string[]): RailScale {
   return years.size > 1 ? 'year' : months.size > 1 ? 'month' : 'day';
 }
 
-const monthYear = (key: string, locale?: string) => parseDateKey(key).toLocaleDateString(locale, { month: 'short', year: 'numeric' });
-const month = (key: string, locale?: string) => parseDateKey(key).toLocaleDateString(locale, { month: 'short' });
+const monthYear = (key: string, locale?: string) => formatDate(parseDateKey(key), { month: 'short', year: 'numeric' }, locale);
+const month = (key: string, locale?: string) => formatDate(parseDateKey(key), { month: 'short' }, locale);
 
 /** What the place an item is at is called, pointed at or dragged to: its month on a rail of years, else its own name. */
 export function railLabel(key: string, scale: RailScale, name: (key: string) => string, locale?: string): string {

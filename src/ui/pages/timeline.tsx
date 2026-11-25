@@ -2,7 +2,7 @@ import { useEffect, useLayoutEffect, useRef, useState, type CSSProperties, type 
 import { Link, useSearchParams } from 'react-router';
 import { endPatch, placeIn, type Span } from '../../domain/calendar';
 import { displayTitle } from '../../domain/content';
-import { addDays, formatDay, formatRange, isDateKey, parseDateKey, relativeDayInSentence } from '../../domain/dates';
+import { addDays, formatDate, formatDay, formatRange, isDateKey, parseDateKey, relativeDayInSentence } from '../../domain/dates';
 import { isFiltered } from '../../domain/stream';
 import { useCards, useToday } from '../../state/CardsContext';
 import { Empty, Page } from '../components';
@@ -150,8 +150,8 @@ export function TimelinePage() {
               const weekend = date.getDay() === 0 || date.getDay() === 6;
               return (
                 <span key={d} className={`timeline__day${weekend ? ' is-weekend' : ''}${d === today ? ' is-today' : ''}`}>
-                  {first && <span className="timeline__month">{date.toLocaleDateString(undefined, { month: 'short' })}</span>}
-                  <span className="timeline__wd">{date.toLocaleDateString(undefined, { weekday: 'narrow' })}</span>
+                  {first && <span className="timeline__month">{formatDate(date, { month: 'short' })}</span>}
+                  <span className="timeline__wd">{formatDate(date, { weekday: 'narrow' })}</span>
                   {date.getDate()}
                 </span>
               );

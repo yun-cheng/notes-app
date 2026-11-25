@@ -48,7 +48,10 @@ export function usePhotoInput(editor: RefObject<TiptapEditor | null>, vaultId: (
   const navigate = useNavigate();
   const picker = useRef<HTMLInputElement>(null);
   const filePicker = useRef<HTMLInputElement>(null);
-  const photo = (picture: () => Promise<Blob>): Adding => async () => ({ type: 'photo', attrs: { id: await photos.add(await picture(), vaultId()!) } });
+  const photo = (picture: () => Promise<Blob>): Adding => async () => {
+    const { id, width, height } = await photos.addPhoto(await picture(), vaultId()!);
+    return { type: 'photo', attrs: { id, ...(width && height ? { width, height } : {}) } };
+  };
 
   /** Adds each in turn, in order: at the cursor, or from `at` on. */
   const addAll = async (adding: Adding[], at?: number) => {

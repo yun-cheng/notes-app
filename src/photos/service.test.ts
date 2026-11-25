@@ -66,6 +66,13 @@ describe('a file this browser may not read', () => {
   });
 });
 
+describe('adding a photo', () => {
+  it('tells the size it is kept at, for its block to keep', async () => {
+    const { photos } = fixture();
+    expect(await photos.addPhoto(image(), 'v')).toEqual({ id: 'photo-0001', width: 10, height: 5 });
+  });
+});
+
 describe('PhotoService in an encrypted vault', () => {
   it('keeps and sends a photo or file only sealed, and opens it again here and on another device', async () => {
     const { keys, lock } = await diaryKeys();

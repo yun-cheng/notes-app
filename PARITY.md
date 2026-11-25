@@ -129,6 +129,7 @@ _Last checked 2026-11-25._
 | A swipe pages (touch) | ➖ | ✅ | ✅ | C |
 | Photos page: All/Photos/Videos, rows by day, count line | ✅ | ✅ | ✅ | T |
 | Photos page: pick photos to copy, download or share | ✅ | ✅ | ✅ | C |
+| Photos page: tiles at each photo's shape before it loads, from the size its block keeps (added since 2026-11-26), so nothing moves as they load | ✅ | ✅ | ✅ | C |
 | Videos play under their entry, full screen and in the open entry, marked with their length | ✅ | ✅ | ✅ | C |
 | A photo, video or file shared by its Google Drive link (Share via public link) | ✅ | ✅ | ✅ | C |
 | Files page: one kind of file at a time (PDFs, documents, spreadsheets, slides, audio, images, video, archives, other) | ✅ | ✅ | ✅ | C |

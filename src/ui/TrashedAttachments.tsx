@@ -157,7 +157,7 @@ function usePutBack() {
     const still = isVideoItem(a) && attachments.getState().trash?.some((t) => t.id === posterId(a.id)) ? posterId(a.id) : null;
     const node: JSONNode = isFile(a)
       ? { type: 'file', attrs: { id: a.id, name: a.name ?? 'Untitled', mime: a.mime, size: a.size, ...(still ? { poster: still } : {}), ...(isVideoItem(a) ? videoFacts(a) : {}) } }
-      : { type: 'photo', attrs: { id: a.id } };
+      : { type: 'photo', attrs: { id: a.id, ...(a.width && a.height ? { width: a.width, height: a.height } : {}) } };
     const from = a.trashed_from ? index.byId.get(a.trashed_from) : undefined;
     // The entry's own permissions: everything shown in the Trash counts as read only, but the entry isn't in it.
     if (from && from.type !== 'tag' && !from.deleted && permissions(from, vaults, shared).edit) {

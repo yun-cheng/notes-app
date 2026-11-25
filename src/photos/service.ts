@@ -253,12 +253,17 @@ export class PhotoService {
 
   /** Shrinks and saves a photo for a card in `vaultId`, and returns its ID right away. */
   async add(file: Blob, vaultId: string): Promise<string> {
+    return (await this.addPhoto(file, vaultId)).id;
+  }
+
+  /** `add`, telling the size the photo is kept at too, for its block to keep, so its shape is known before it loads. */
+  async addPhoto(file: Blob, vaultId: string): Promise<{ id: string; width: number | null; height: number | null }> {
     const prepared = await this.prepare(file);
     const id = this.newId();
     await this.keep({ id, vaultId, ...prepared, uploaded: 0, addedAt: this.now() }, { mime: prepared.mime, width: prepared.width, height: prepared.height });
     this.publish({ pending: this.state.pending + 1 });
     void this.upload();
-    return id;
+    return { id, width: prepared.width, height: prepared.height };
   }
 
   /**

@@ -159,7 +159,7 @@ export function PhotosPage() {
     return () => watch.disconnect();
   }, [any]);
   const layout = useMemo(
-    () => (width ? layoutPhotos(days.map((d) => d.items.map((i) => shapes.get(i.id) ?? 1)), sizes(width)) : null),
+    () => (width ? layoutPhotos(days.map((d) => d.items.map((i) => shapes.get(i.id) ?? i.ratio ?? 1)), sizes(width)) : null),
     [days, width, learned],
   );
   // The stretch of the canvas near the screen, in its own pixels: only what's in it is drawn, as thousands of tiles

@@ -1,4 +1,5 @@
 /** Helpers the demo's seed (`demoData.ts`) and its years of history (`demoHistory.ts`) write entries with. */
+import { readFileSync } from 'node:fs';
 import type { JSONNode } from '../src/domain/types';
 
 // ---- Document helpers ----
@@ -32,6 +33,21 @@ export const doc = (...blocks: JSONNode[]): JSONNode => ({ type: 'doc', content:
 export const lines = (...ls: string[]) => doc(...ls.map((l) => (l ? p(l) : { type: 'paragraph' })));
 export const cardLink = (id: string, label: string): JSONNode => ({ type: 'cardLink', attrs: { id, label } });
 export const web = (label: string, href: string): JSONNode => ({ type: 'text', text: label, marks: [{ type: 'link', attrs: { href } }] });
+
+/** A JPEG's size in pixels, from its frame header, as a device knows it when the photo is added. */
+export function jpegSize(path: string): { width: number; height: number } {
+  const b = readFileSync(path);
+  for (let i = 2; i + 9 < b.length; ) {
+    if (b[i] !== 0xff) return { width: 0, height: 0 };
+    const marker = b[i + 1];
+    // A start-of-frame marker (not DHT, JPG or DAC), which holds the height and width.
+    if (marker >= 0xc0 && marker <= 0xcf && marker !== 0xc4 && marker !== 0xc8 && marker !== 0xcc) return { height: b.readUInt16BE(i + 5), width: b.readUInt16BE(i + 7) };
+    i += 2 + b.readUInt16BE(i + 2);
+  }
+  return { width: 0, height: 0 };
+}
+/** A demo photo's block: one from scripts/demoPhotos, under `id`, with its size, so its shape is known before it loads. */
+export const photoNode = (name: string, id: string, alt: string): JSONNode => ({ type: 'photo', attrs: { id, alt, ...jpegSize(`scripts/demoPhotos/${name}.jpg`) } });
 
 // ---- Time helpers ----
 

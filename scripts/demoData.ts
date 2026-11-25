@@ -21,7 +21,7 @@ import { hashPin } from '../src/domain/pin';
 import type { CardColor, CardPayload, CardRecord, JSONNode, NoteCard, Repeat, Vault } from '../src/domain/types';
 import { PUSH_LIMIT, type SessionInfo } from '../src/sync/protocol';
 import { history } from './demoHistory';
-import { ago, at, bullets, checklist, code, doc, h, h3, lines, list, nested, p, quote, rule, steps, text } from './demoDoc';
+import { ago, at, bullets, photoNode, checklist, code, doc, h, h3, lines, list, nested, p, quote, rule, steps, text } from './demoDoc';
 
 const API = 'http://localhost:8788/api';
 export const DEMO_PIN = '1234';
@@ -402,7 +402,7 @@ export async function seed() {
   const link = (id: string, label: string): JSONNode => ({ type: 'cardLink', attrs: { id, label } });
   const web = (label: string, href: string): JSONNode => ({ type: 'text', text: label, marks: [{ type: 'link', attrs: { href } }] });
   /** A photo from scripts/demoPhotos, which the dev server serves in place of Google Drive (vite.config.ts). */
-  const photo = (name: string, alt: string): JSONNode => ({ type: 'photo', attrs: { id: `demo-photo-${name}`, alt } });
+  const photo = (name: string, alt: string): JSONNode => photoNode(name, `demo-photo-${name}`, alt);
   /** A file from scripts/demoFiles, likewise served by the dev server, with the name, type and size it's shown with. */
   const file = (name: string, ext: string, mime: string): JSONNode => ({
     type: 'file',

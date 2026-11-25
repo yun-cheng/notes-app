@@ -82,6 +82,9 @@ export const Photo = Node.create({
     return {
       id: { default: null, parseHTML: (el) => el.getAttribute('data-photo-id') },
       alt: { default: null, parseHTML: (el) => el.getAttribute('data-alt') },
+      // Its size in pixels, when known as it was added, so its shape is known before it loads (the Photos page).
+      width: { default: null, parseHTML: (el) => Number(el.getAttribute('data-width')) || null },
+      height: { default: null, parseHTML: (el) => Number(el.getAttribute('data-height')) || null },
     };
   },
 
@@ -90,7 +93,7 @@ export const Photo = Node.create({
   },
 
   renderHTML({ node }) {
-    return ['figure', { 'data-photo-id': String(node.attrs.id), ...(node.attrs.alt ? { 'data-alt': String(node.attrs.alt) } : {}) }];
+    return ['figure', { 'data-photo-id': String(node.attrs.id), ...(node.attrs.alt ? { 'data-alt': String(node.attrs.alt) } : {}), ...(node.attrs.width && node.attrs.height ? { 'data-width': String(node.attrs.width), 'data-height': String(node.attrs.height) } : {}) }];
   },
 
   renderText() {

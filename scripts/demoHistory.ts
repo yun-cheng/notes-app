@@ -15,7 +15,7 @@
 import { readFileSync, statSync } from 'node:fs';
 import { addDays, toDateKey } from '../src/domain/dates';
 import type { CardColor, CardPayload, JSONNode, Repeat } from '../src/domain/types';
-import { at, bullets, cardLink, checklist, code, doc, h, h3, lines, list, nested, p, quote, rule, steps, text, web } from './demoDoc';
+import { at, bullets, photoNode, cardLink, checklist, code, doc, h, h3, lines, list, nested, p, quote, rule, steps, text, web } from './demoDoc';
 
 /** How many entries, all told, about. */
 const TARGET = 10_000;
@@ -425,7 +425,7 @@ export function history(v: HistoryVaults, t: HistoryTags, people: { demo: string
     const [name, alt] = pick(PHOTOS);
     const id = `demo-photo-${name}--${++copies}`;
     attachments.push({ id, owner: own(vaultId, sam), vaultId, mime: 'image/jpeg', size: statSync(`scripts/demoPhotos/${name}.jpg`).size, at: when, name: null });
-    return { type: 'photo', attrs: { id, alt } };
+    return photoNode(name, id, alt);
   };
   const video = (vaultId: string, when: number, sam: boolean): JSONNode => {
     const [name, width, height] = pick(VIDEOS);

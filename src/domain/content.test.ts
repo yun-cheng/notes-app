@@ -143,6 +143,9 @@ describe('files', () => {
       ['v-1', true],
       ['v-2', true],
     ]);
+    // Their shapes, where the entry says, to lay them out before they load.
+    const sized = doc({ type: 'photo', attrs: { id: 'p-2', width: 1800, height: 600 } }, { type: 'photo', attrs: { id: 'p-3', width: 0, height: 5 } });
+    expect([...mediaItems(sized), ...mediaItems(body)].map((m) => m.ratio)).toEqual([3, undefined, undefined, 1920 / 1080, undefined]);
     expect(isPoster('v-1-poster')).toBe(true);
     expect(isPoster('v-1')).toBe(false);
     expect(previewLines(body, undefined, true)).toEqual(['[Photo]', '[Video: Beach.mov]', '[File: a.pdf]', '[Video: clip.mkv]']);

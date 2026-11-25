@@ -426,16 +426,28 @@ export interface Media {
   id: string;
   /** Set for a video. */
   video?: FileInfo;
+  /**
+   * Its width over its height, when the entry says: a video's, and a photo's added since 2026-11-26 (its node's
+   * `width` and `height`), so it can be laid out at its shape before it loads.
+   */
+  ratio?: number;
 }
+
+/** A width over a height, when both are known and real. */
+const ratioOf = (width: unknown, height: unknown): number | undefined =>
+  typeof width === 'number' && typeof height === 'number' && width > 0 && height > 0 ? width / height : undefined;
 
 /** The photos and videos in the body, in order. */
 export function mediaItems(content: JSONNode): Media[] {
   const items: Media[] = [];
   walk(content, (n) => {
-    if (n.type === 'photo' && typeof n.attrs?.id === 'string') items.push({ id: n.attrs.id });
-    else if (n.type === 'file') {
+    if (n.type === 'photo' && typeof n.attrs?.id === 'string') {
+      const ratio = ratioOf(n.attrs.width, n.attrs.height);
+      items.push({ id: n.attrs.id, ...(ratio ? { ratio } : {}) });
+    } else if (n.type === 'file') {
       const [file] = fileAttachments(n);
-      if (file && isVideo(file)) items.push({ id: file.id, video: file });
+      const ratio = file && ratioOf(file.width, file.height);
+      if (file && isVideo(file)) items.push({ id: file.id, video: file, ...(ratio ? { ratio } : {}) });
     }
   });
   return items;

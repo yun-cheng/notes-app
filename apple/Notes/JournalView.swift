@@ -35,6 +35,8 @@ struct JournalView: View {
     @State private var quietUntil = Date.distantPast
     /// Well away from the end the journal opens at, where the button back to it shows.
     @State private var awayFromEnd = false
+    /// Where the page is, for the rail beside it: its own object, so the stream isn't drawn again as it scrolls.
+    @State private var railPlace = RailPlace()
 
     /// Whether its filter is the page the app shows, kept as the page changes; the phone's Today tab keeps its own.
     let isPage: Bool
@@ -161,8 +163,26 @@ struct JournalView: View {
                     .onTapGesture { clickEmpty() }
                     #endif
                     .overlay(alignment: .trailing) {
-                        JournalRail(items: visible) { id in withAnimation(nil) { proxy.scrollTo(id, anchor: .top) } }
+                        if railPlace.shown {
+                            JournalRail(keys: all.map(\.day), name: { DayBadge.label($0, sort: filter.sort, model: model) }, place: railPlace) { to in
+                                railGo(to, all: all, visible: visible, proxy: proxy)
+                            }
+                            .padding(.vertical, 8)
+                            // Clear of the button back to the newest entries, as the web's.
+                            .padding(.bottom, awayFromEnd ? 52 : 0)
+                        }
                     }
+                    // Where the page is: on a Mac by the entry at its reading line, as the web's; elsewhere by how far
+                    // it's scrolled.
+                    .onScrollGeometryChange(for: RailPlace.Geometry.self) { g in
+                        RailPlace.Geometry(offset: g.contentOffset.y + g.contentInsets.top, scrollable: g.contentSize.height + g.contentInsets.top + g.contentInsets.bottom - g.containerSize.height, height: g.containerSize.height)
+                    } action: { _, g in
+                        railPlace.update(g, ids: visible.map(\.card.id), first: chat ? all.count - visible.count : 0, count: all.count, rows: places.rows)
+                    }
+                    #if os(macOS)
+                    // With a mouse the rail stands in for the scroll bar, as on the web.
+                    .scrollIndicators(railPlace.shown ? .never : .automatic)
+                    #endif
                     // A round button back to the newest entries, as the web's `ScrollJump`: once the list is more than
                     // 400 points from the end it opens at (the foot in a chat, the top otherwise), just above the box.
                     .onScrollGeometryChange(for: Bool.self) { g in
@@ -363,6 +383,23 @@ struct JournalView: View {
     }
     #endif
 
+    /// Goes to a place on the rail (0 at the top, 1 at the foot): to the entry there, drawing it first if it's past
+    /// those drawn, placed as far down the view as the place is down the rail, so the top and the foot of the rail are
+    /// the top and the foot of the journal.
+    private func railGo(_ to: Double, all: [StreamItem], visible: [StreamItem], proxy: ScrollViewProxy) {
+        guard !all.isEmpty else { return }
+        let index = Rail.item(at: to, count: all.count).index
+        let id = all[index].card.id
+        let anchor = UnitPoint(x: 0, y: to)
+        let need = chat ? all.count - index : index + 1
+        if need > shown {
+            shown = min(all.count, need + Self.pageSize / 2)
+            DispatchQueue.main.async { withAnimation(nil) { proxy.scrollTo(id, anchor: anchor) } }
+        } else {
+            withAnimation(nil) { proxy.scrollTo(id, anchor: anchor) }
+        }
+    }
+
     /// Picks or unpicks an entry; with `range` (the entries in order, for a Shift-click), every one from the last picked
     /// to it, as the web's.
     private func togglePick(_ id: String, range: [String]? = nil) {
@@ -464,12 +501,15 @@ struct DayBadge: View {
     let sort: StreamFilter.Sort
     let pick: (String) -> Void
 
+    /// What a day (or a group sort's tag) is called, on its badge and on the rail.
+    static func label(_ day: String, sort: StreamFilter.Sort, model: AppModel) -> String {
+        if case .group = sort { return model.card(day)?.displayTitle ?? "No tag" }
+        if day.isEmpty { return "No due date" }
+        return DateKey.relativeDay(day, today: model.today)
+    }
+
     var body: some View {
-        let label: String = {
-            if case .group = sort { return model.card(day)?.displayTitle ?? "No tag" }
-            if day.isEmpty { return "No due date" }
-            return DateKey.relativeDay(day, today: model.today)
-        }()
+        let label = Self.label(day, sort: sort, model: model)
         HStack {
             Spacer()
             Button { if DateKey.isKey(day) { pick(day) } } label: {
@@ -526,51 +566,109 @@ struct PageSearchField: View {
     }
 }
 
-/// A rail down the right, as a photo library has, with the years or months marked down it: pressed or dragged to go
-/// anywhere in the journal at once, as the web app's `ScrollRail`.
+/// Where the journal is scrolled to, for its rail: kept apart from the journal's own state, so scrolling redraws the
+/// rail alone.
+@Observable @MainActor final class RailPlace {
+    struct Geometry: Equatable {
+        var offset: CGFloat
+        var scrollable: CGFloat
+        var height: CGFloat
+    }
+
+    /// Where the page is, 0 at the top and 1 at the end.
+    var at: Double = 0
+    /// Whether there's a rail: on a page more than half a screen longer than the screen, as the web's.
+    var shown = false
+
+    func update(_ g: Geometry, ids: [String], first: Int, count n: Int, rows: [String: CGRect]) {
+        let show = n > 1 && g.scrollable > g.height / 2
+        if show != shown { shown = show }
+        guard show else { return }
+        let fraction = Double(min(1, max(0, g.offset / g.scrollable)))
+        var next = fraction
+        // The line it reads at, in the stream's space, and the last entry starting above it.
+        let line = Rail.readingLine(scrolled: g.offset, scrollable: g.scrollable, top: g.offset, height: g.height)
+        var found: (i: Int, row: CGRect)?
+        var after: CGRect?
+        for (i, id) in ids.enumerated() {
+            guard let row = rows[id] else { continue }
+            if row.minY <= line { found = (i, row) } else { after = row; break }
+        }
+        if let found {
+            let extent = after.map { $0.minY - found.row.minY } ?? found.row.height
+            let down = extent > 0 ? min(1, max(0, (line - found.row.minY) / extent)) : 0
+            next = min(1, (Double(first + found.i) + down) / Double(n))
+        }
+        if abs(next - at) > 1e-4 { at = next }
+    }
+}
+
+/// A rail down the right, as a photo library has, as the web's `ScrollRail`: the years down it (or the months, or the
+/// groups), each entry an equal share of it, a thumb at where the journal is, and, pointed at or dragged, the month or
+/// day there. A press goes there, a drag goes through the journal, and the thumb held moves from where it was.
 struct JournalRail: View {
-    let items: [StreamItem]
-    let go: (String) -> Void
-    @State private var pointing: String?
+    /// Each entry's key, top to bottom: the day it's under, or the tag that groups it.
+    let keys: [String]
+    let name: (String) -> String
+    let place: RailPlace
+    let go: (Double) -> Void
+    @State private var drag: Double?
+    @State private var point: Double?
+    /// Held at the thumb: where it was, to move from.
+    @State private var heldFrom: Double?
 
     var body: some View {
-        // The first entry of each month, in the order shown.
-        var months: [(key: String, id: String)] = []
-        for item in items where DateKey.isKey(item.day) {
-            let m = DateKey.monthKey(item.day)
-            if months.last?.key != m { months.append((m, item.id)) }
-        }
-        let years = Set(months.map { $0.key.prefix(4) }).count > 1
-        return GeometryReader { geo in
-            if months.count > 1 {
-                let step = geo.size.height / CGFloat(months.count)
-                ZStack(alignment: .topTrailing) {
-                    ForEach(Array(months.enumerated()), id: \.offset) { i, m in
-                        let mark = years ? (m.key.hasSuffix("-01") || i == 0 ? String(m.key.prefix(4)) : nil) : String(DateKey.formatMonth(m.key).prefix(3))
-                        if let mark, step > 14 || years {
-                            Text(mark).font(.caption2.weight(.semibold)).foregroundStyle(Theme.muted)
-                                .offset(y: CGFloat(i) * step)
-                        }
-                    }
-                    if let pointing {
-                        Text(DateKey.formatMonth(pointing)).font(.caption.weight(.semibold))
-                            .padding(.horizontal, 8).padding(.vertical, 3)
-                            .background(Capsule().fill(Theme.raised).shadow(radius: 3))
-                            .offset(x: -40, y: CGFloat(months.firstIndex { $0.key == pointing } ?? 0) * step)
+        GeometryReader { geo in
+            let height = geo.size.height
+            let marks = Rail.marks(keys, height: height, name: name)
+            let thumb = drag ?? place.at
+            let told = drag ?? point
+            ZStack(alignment: .topLeading) {
+                Color.clear
+                ForEach(Array(marks.enumerated()), id: \.offset) { _, mark in
+                    if let label = mark.label {
+                        Text(label).font(.system(size: 11, weight: .semibold)).foregroundStyle(Theme.muted).lineLimit(1).fixedSize()
+                            .frame(width: 0, alignment: .trailing)
+                            .position(x: 34, y: mark.at * height + 6)
+                    } else {
+                        Circle().fill(Theme.line).frame(width: 4, height: 4).position(x: 24, y: mark.at * height)
                     }
                 }
-                .frame(width: 36, height: geo.size.height, alignment: .topTrailing)
-                .contentShape(Rectangle())
-                .gesture(DragGesture(minimumDistance: 0).onChanged { v in
-                    let i = max(0, min(months.count - 1, Int(v.location.y / step)))
-                    pointing = months[i].key
-                    go(months[i].id)
-                }.onEnded { _ in pointing = nil })
-                .frame(maxWidth: .infinity, alignment: .trailing)
+                if let point, drag == nil {
+                    Rectangle().fill(Theme.muted).frame(width: 32, height: 1).position(x: 24, y: point * height)
+                }
+                Capsule().fill(Theme.accent).frame(width: 32, height: 3).position(x: 24, y: thumb * height)
+                if let told, !keys.isEmpty {
+                    Text(Rail.label(keys[Rail.item(at: told, count: keys.count).index], scale: Rail.scale(keys), name: name))
+                        .font(.system(size: 12, weight: .semibold)).foregroundStyle(Theme.bg).lineLimit(1).fixedSize()
+                        .padding(.horizontal, 10).padding(.vertical, 4)
+                        .background(Capsule().fill(Theme.text).shadow(color: .black.opacity(0.18), radius: 4, y: 2))
+                        .frame(width: 0, alignment: .trailing)
+                        .position(x: -2, y: min(height - 14, max(14, told * height)))
+                }
             }
+            .frame(width: 44, height: height)
+            .contentShape(Rectangle())
+            .gesture(DragGesture(minimumDistance: 0).onChanged { v in
+                guard height > 0 else { return }
+                if drag == nil {
+                    // Pressed on the thumb, it moves with the pointer from where it was; elsewhere, it goes there.
+                    heldFrom = abs(v.startLocation.y - place.at * height) <= 8 ? place.at : nil
+                }
+                let to = min(1, max(0, heldFrom.map { $0 + v.translation.height / height } ?? v.location.y / height))
+                drag = to
+                go(to)
+            }.onEnded { _ in drag = nil; heldFrom = nil })
+            #if os(macOS)
+            .onContinuousHover { phase in
+                switch phase {
+                case .active(let p): point = height > 0 ? min(1, max(0, p.y / height)) : nil
+                case .ended: point = nil
+                }
+            }
+            #endif
         }
         .frame(width: 44)
-        .padding(.vertical, 8)
         .accessibilityHidden(true)
     }
 }

@@ -1,5 +1,5 @@
 import type { NoteCard, TodoCard } from '../domain/types';
-import { useCards } from '../state/CardsContext';
+import { useServices } from '../state/CardsContext';
 import { useEntryActions } from './entryActions';
 import { Icon } from './Icon';
 import { useUndo } from './useUndo';
@@ -35,7 +35,7 @@ export function TypeSwitch({ card, className, size }: { card: NoteCard | TodoCar
 
 /** Turns an entry's own view only on or off, with an undo. */
 export function useEntryViewOnly(card: Entry) {
-  const { repo } = useCards();
+  const { repo } = useServices();
   const { said } = useUndo();
   return () => {
     const on = !card.viewOnly;

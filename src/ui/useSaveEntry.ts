@@ -5,7 +5,7 @@ import type { StreamFilter } from '../domain/stream';
 import { isGroupName, settleTags } from '../domain/tagGroups';
 import { tagNamedIn } from '../domain/tagScope';
 import type { Card } from '../domain/types';
-import { useCards, useToday } from '../state/CardsContext';
+import { useToday, useServices } from '../state/CardsContext';
 import { useToast } from './Toast';
 import { useViewOnly, VIEW_ONLY_NOTE } from './viewOnly';
 
@@ -49,7 +49,8 @@ function onDay(date: string, now = new Date()): number {
 
 /** Saves entries read from the journal box, or typed text read the same way (`saveText`). */
 export function useSaveEntries() {
-  const { repo, index, vaults, locked, accountId, sharedInto } = useCards();
+  // The cards as they are when saving: drawing nothing, it needn't redraw each time they change.
+  const { repo, accountId, latest } = useServices();
   const today = useToday();
   const viewOnly = useViewOnly();
   const toast = useToast();
@@ -60,6 +61,7 @@ export function useSaveEntries() {
       toast(VIEW_ONLY_NOTE);
       return { saved: 0, ids: [] };
     }
+    const { index, vaults, locked, sharedInto } = latest();
     const diary = diaryVault(vaults, accountId)?.id;
     const main = mainVault(vaults, accountId)?.id;
     const vaultOf = (entry: Entry) => (entry.diary && diary ? diary : opts.vaultId);

@@ -1,4 +1,4 @@
-import { createContext, useContext, useEffect, useRef, useState, type KeyboardEvent as ReactKeyboardEvent, type MouseEvent as ReactMouseEvent, type PointerEvent as ReactPointerEvent, type RefObject } from 'react';
+import { createContext, useContext, useEffect, useMemo, useRef, useState, type KeyboardEvent as ReactKeyboardEvent, type MouseEvent as ReactMouseEvent, type PointerEvent as ReactPointerEvent, type RefObject } from 'react';
 import { rangeBetween } from '../domain/batch';
 
 /** Entries picked in the journal for a batch change. */
@@ -26,6 +26,11 @@ export function useSelectionState(order: string[]): Selection {
   const anchor = useRef<string | null>(null);
   const ids = order.filter((id) => picked.has(id));
   const selecting = ids.length > 0;
+  // The order as last drawn, read when picking a range, so the selection itself stays the same object until what's
+  // picked changes: every bubble reads it, and a new one each time the page is drawn would redraw them all.
+  const orderNow = useRef(order);
+  orderNow.current = order;
+  const idsKey = ids.join('\n');
 
   // Nothing picked left on screen (unpicked, trashed, or filtered away): picking stops, and hidden picks go with it.
   useEffect(() => {
@@ -35,7 +40,7 @@ export function useSelectionState(order: string[]): Selection {
     }
   }, [selecting, picked]);
 
-  const selection: Selection = {
+  const selection = useMemo<Selection>(() => ({
     selecting,
     ids,
     has: (id) => picked.has(id),
@@ -44,7 +49,7 @@ export function useSelectionState(order: string[]): Selection {
       const from = range ? anchor.current : null;
       setPicked((now) => {
         const next = new Set(now);
-        if (from) rangeBetween(order, from, id).forEach((x) => next.add(x));
+        if (from) rangeBetween(orderNow.current, from, id).forEach((x) => next.add(x));
         else if (next.has(id)) next.delete(id);
         else next.add(id);
         return next;
@@ -55,12 +60,13 @@ export function useSelectionState(order: string[]): Selection {
       setPicked((now) => new Set(add ? [...now, ...ids] : ids));
       if (ids.length) anchor.current = ids[ids.length - 1];
     },
-    selectAll: () => setPicked(new Set(order)),
+    selectAll: () => setPicked(new Set(orderNow.current)),
     clear: () => {
       setPicked(new Set());
       anchor.current = null;
     },
-  };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }), [picked, idsKey]);
 
   // Escape stops selecting, unless a dialog is open to take it. The other keys are in `useEntryShortcuts`.
   const latest = useRef(selection);

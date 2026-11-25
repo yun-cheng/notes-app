@@ -5,7 +5,7 @@ import { cardText, resolveTags, type Backlink } from '../domain/cardIndex';
 import { displayTitle } from '../domain/content';
 import { clashingTags, orderTags, pickInGroup, withTag, type TagGroup } from '../domain/tagGroups';
 import type { Card, TagCard } from '../domain/types';
-import { useCards } from '../state/CardsContext';
+import { useCards, useCardsSelect } from '../state/CardsContext';
 import { usePermissions, useViewOnly, VIEW_ONLY_NOTE, ViewOnlyToggle } from './viewOnly';
 import { Icon, type IconName } from './Icon';
 import { cardPath, entryPath, journalPath, sheetState } from './paths';
@@ -78,10 +78,54 @@ const TYPE_ICON: Record<Card['type'], IconName> = { note: 'note', todo: 'todo', 
  * and the menus sit fixed so the scrolling sheet doesn't clip them.
  */
 export function TagChips({ tagIds, onChange, inSheet = false }: { tagIds: string[]; onChange?: (tags: string[]) => void; inSheet?: boolean }) {
+  return onChange ? <EditableTagChips tagIds={tagIds} onChange={onChange} inSheet={inSheet} /> : <ShownTagChips tagIds={tagIds} />;
+}
+
+/** A tag chip as `ShownTagChips` draws it: plain words, so a list of them can be compared. */
+interface ChipLook {
+  id: string;
+  title: string;
+  className: string;
+  tip?: string;
+}
+const sameLooks = (a: ChipLook[], b: ChipLook[]) => JSON.stringify(a) === JSON.stringify(b);
+
+/**
+ * Tags only shown, as under an entry in the stream: worked out from the cards as plain words, so the chips are drawn
+ * again only when they'd look different, not each time any card changes (every bubble has them).
+ */
+function ShownTagChips({ tagIds }: { tagIds: string[] }) {
+  const looks = useCardsSelect((v): ChipLook[] => {
+    const { groupOf } = v.index.tagGroups;
+    const clashes = clashingTags(tagIds, groupOf);
+    return resolveTags(v.index, orderTags(tagIds, v.index.tagGroups)).map((t) => {
+      const group = groupOf.get(t.id);
+      const clash = clashes.has(t.id);
+      return {
+        id: t.id,
+        title: t.title,
+        className: `chip chip--small${colorClass(t)}${group ? ' chip--grouped' : ''}${clash ? ' chip--clash' : ''}`,
+        tip: group ? `${group.title}: ${t.title}${clash ? ` (more than one ${group.title.toLowerCase()})` : ''}` : undefined,
+      };
+    });
+  }, sameLooks);
+  if (!looks.length) return null;
+  return (
+    <span className="chips">
+      {looks.map((t) => (
+        <span className={t.className} key={t.id} title={t.tip}>
+          {t.title}
+        </span>
+      ))}
+    </span>
+  );
+}
+
+function EditableTagChips({ tagIds, onChange, inSheet }: { tagIds: string[]; onChange: (tags: string[]) => void; inSheet: boolean }) {
   const { index } = useCards();
   const { groupOf, groups } = index.tagGroups;
   const tags = resolveTags(index, orderTags(tagIds, index.tagGroups));
-  const unset = inSheet && onChange ? groups.filter((g) => g.choice === 'one' && g.members.length && !g.members.some((m) => tagIds.includes(m.id))) : [];
+  const unset = inSheet ? groups.filter((g) => g.choice === 'one' && g.members.length && !g.members.some((m) => tagIds.includes(m.id))) : [];
   if (!tags.length && !unset.length) return null;
   const clashes = clashingTags(tagIds, groupOf);
   return (
@@ -98,8 +142,7 @@ export function TagChips({ tagIds, onChange, inSheet = false }: { tagIds: string
           </span>
         );
       })}
-      {onChange &&
-        unset.map((g) => (
+      {unset.map((g) => (
           <GroupChip key={g.id} group={g} tagIds={tagIds} className="chip chip--small chip--unset" title={`No ${g.title.toLowerCase()}`} onChange={onChange} fixed={inSheet} />
         ))}
     </span>

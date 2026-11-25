@@ -2,7 +2,7 @@ import { createContext, useCallback, useContext, useSyncExternalStore } from 're
 import { Icon } from './Icon';
 import { permissions, type Permissions } from '../domain/access';
 import type { Card } from '../domain/types';
-import { useCards } from '../state/CardsContext';
+import { useCardsSelect } from '../state/CardsContext';
 
 const KEY = 'notes-app:view-only';
 
@@ -60,7 +60,8 @@ export const useInTrash = () => useContext(InTrash);
 
 /** What this account may do with a card: nothing that changes it while view only is on, or in the Trash. */
 export function usePermissions(): (card: Card) => Permissions {
-  const { vaults, shared } = useCards();
+  const vaults = useCardsSelect((v) => v.vaults);
+  const shared = useCardsSelect((v) => v.shared);
   const viewOnly = useViewOnly();
   const trashed = useInTrash();
   return useCallback(
@@ -74,7 +75,8 @@ export function usePermissions(): (card: Card) => Permissions {
 
 /** Whether a card in the Trash can be brought back: by those who may remove it, as for moving it there. */
 export function useCanRestore(): (card: Card) => boolean {
-  const { vaults, shared } = useCards();
+  const vaults = useCardsSelect((v) => v.vaults);
+  const shared = useCardsSelect((v) => v.shared);
   const viewOnly = useViewOnly();
   return useCallback((card: Card) => !!card.deleted && !viewOnly && permissions(card, vaults, shared).manage, [vaults, shared, viewOnly]);
 }

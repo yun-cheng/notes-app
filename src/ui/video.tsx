@@ -1,13 +1,13 @@
 import { useEffect, useState, useSyncExternalStore, type MouseEvent } from 'react';
 import { clipLength, type FileInfo } from '../domain/content';
-import { useCards } from '../state/CardsContext';
+import { useServices } from '../state/CardsContext';
 import { UNREADABLE, usePhotoUrl } from './editor/photo';
 import { SealedUnreadable } from '../photos/service';
 import { Icon } from './Icon';
 
 /** Where a video plays from: this device's copy, or the server a range at a time (`PhotoService.playAddress`). */
 export function useVideoAddress(id: string): { address: string | null; failed: boolean; unreadable?: boolean } {
-  const { photos } = useCards();
+  const { photos } = useServices();
   const [found, setFound] = useState<{ id: string; address: string | null; failed: boolean; unreadable?: boolean } | null>(null);
   useEffect(() => {
     if (!id) return;
@@ -23,7 +23,7 @@ export function useVideoAddress(id: string): { address: string | null; failed: b
 
 /** How far a video added here has gone up to the server, from 0 to 1, while it goes in pieces; else null. */
 export function useUploadShare(id: string): number | null {
-  const { photos } = useCards();
+  const { photos } = useServices();
   const { sending } = useSyncExternalStore(photos.subscribe, photos.getState);
   return sending?.id === id ? sending.done : null;
 }

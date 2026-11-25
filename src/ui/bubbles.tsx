@@ -1,11 +1,11 @@
-import { useLayoutEffect, useMemo, useRef, useState, type KeyboardEvent as ReactKeyboardEvent, type ReactNode } from 'react';
+import { memo, useLayoutEffect, useMemo, useRef, useState, type KeyboardEvent as ReactKeyboardEvent, type ReactNode } from 'react';
 import { count as plural } from '../domain/plural';
 import { useLocation, useNavigate } from 'react-router';
 import { linkTitle, resolveTags } from '../domain/cardIndex';
 import { cardPages, checklistProgress, linkedCardIds, CODE_CLOSE, CODE_OPEN, displayTitle, HIDE_CLOSE, HIDE_OPEN, leadLine, previewParts, splitLinks, translationPage, pagesHaveTranslation, withNewPage, withoutLeadLine, type PreviewPart } from '../domain/content';
 import { formatClock } from '../domain/dates';
 import { type JSONNode, type NoteCard, type TodoCard } from '../domain/types';
-import { useCards } from '../state/CardsContext';
+import { useCards, useCardsSelect, useServices } from '../state/CardsContext';
 import { setViewOnly, useInTrash, usePermissions } from './viewOnly';
 import { ScrollJump } from './ScrollJump';
 import { useCanComment } from './Comments';
@@ -50,19 +50,23 @@ export function PickCircle({ id }: { id: string }) {
   );
 }
 
-export function EntryBubble({ card, at }: { card: NoteCard | TodoCard; at: number }) {
+/**
+ * An entry in the stream. Drawn again only when the entry itself changes, or what it shows of others (its tags'
+ * names, the titles it links to, its vault, its comments): each reads those with `useCardsSelect`, not the cards
+ * context, as one tick would otherwise redraw every bubble on screen.
+ */
+export const EntryBubble = memo(function EntryBubble({ card, at }: { card: NoteCard | TodoCard; at: number }) {
   if (card.type === 'todo') return <TodoBubble todo={card} at={at} />;
   if (isStack(card)) return <StackEntry stack={card} at={at} />;
   return <NoteBubble note={card} at={at} />;
-}
+});
 
 function BubbleMeta({ card, at, fold, pager, lead }: { card: NoteCard | TodoCard; at: number; fold: Fold; pager: Pager; lead?: ReactNode }) {
-  const { index } = useCards();
   const may = usePermissions();
   const editable = may(card).edit;
   // An entry's tags and a todo's dates share a row over the rest: the tags on the left, the dates on the right. The
   // first of either is added from the entry's menu, so nothing waits on hover for them.
-  const tagged = resolveTags(index, card.tags).length > 0;
+  const tagged = useCardsSelect((v) => resolveTags(v.index, card.tags).length > 0);
   const dated = card.type === 'todo' && !!(card.due || card.start);
   const waiting = card.type === 'todo' && card.waiting && card.status === 'open';
   return (
@@ -113,10 +117,9 @@ function BubbleMeta({ card, at, fold, pager, lead }: { card: NoteCard | TodoCard
  * it is), and how many of its comments are still open.
  */
 function CardBadges({ card }: { card: NoteCard | TodoCard }) {
-  const { commentCounts } = useCards();
   const openComments = useOpenComments(card);
   const checks = useMemo(() => checklistProgress(card.content), [card.content]);
-  const comments = commentCounts.get(card.id) ?? 0;
+  const comments = useCardsSelect((v) => v.commentCounts.get(card.id) ?? 0);
   if (!checks && !comments) return null;
   const all = !!checks && checks.done === checks.total;
   return (
@@ -163,10 +166,10 @@ function useOpenComments(card: NoteCard | TodoCard) {
  * that has no open comments yet (one that has some shows their count, which opens them too).
  */
 function CommentButton({ card }: { card: NoteCard | TodoCard }) {
-  const { commentCounts } = useCards();
+  const comments = useCardsSelect((v) => v.commentCounts.get(card.id) ?? 0);
   const writable = useCanComment(card);
   const open = useOpenComments(card);
-  if (!writable || !open || (commentCounts.get(card.id) ?? 0) > 0) return null;
+  if (!writable || !open || comments > 0) return null;
   return (
     <button type="button" className="bubble__add bubble__comment" aria-label="Comment" title="Comment" onClick={open}>
       <Icon name="comment" size={12} />
@@ -181,13 +184,15 @@ function CommentButton({ card }: { card: NoteCard | TodoCard }) {
  * this account alone, from someone else's vault, says so.
  */
 function VaultLabel({ card }: { card: NoteCard | TodoCard }) {
-  const { vaults, shared, sharedInto } = useCards();
+  const vaults = useCardsSelect((v) => v.vaults);
+  const sharedHere = useCardsSelect((v) => v.shared.has(card.id));
+  const into = useCardsSelect((v) => v.sharedInto.get(card.id)?.join('\n') ?? '');
   const filter = useJournalFilter();
   const home = vaults.find((v) => v.id === card.vaultId);
-  const also = vaults.filter((v) => v.id !== card.vaultId && sharedInto.get(card.id)?.includes(v.id));
+  const also = vaults.filter((v) => v.id !== card.vaultId && into.split('\n').includes(v.id));
   const inVaults = home ? [home, ...also] : also;
   if (!inVaults.length) {
-    return shared.has(card.id) ? (
+    return sharedHere ? (
       <span className="bubble__vault" title="Shared with you from someone else's vault">
         <Icon name="share" size={11} />
         Shared with you
@@ -519,17 +524,17 @@ function translatedParts(parts: PreviewPart[], pieces: string[]): PreviewPart[] 
  */
 /** With `titleFromText`, the first line of its text is shown as its name (`title`), so it's left out of the text. */
 function useBubble(card: NoteCard | TodoCard, title: string, titleFromText = false) {
-  const { index, keyring, repo } = useCards();
+  const { keyring, repo, latest } = useServices();
   const may = usePermissions();
   const { said } = useUndo();
   const toast = useToast();
   const pager = usePager(card);
   const doc = pager.at ? pager.pages[pager.at - 1] : card.content;
-  const titleOf = (id: string, label: string) => linkTitle(index, id, label);
+  const titleOf = (id: string, label: string) => linkTitle(latest().index, id, label);
   // The document's previews are worked out again only when it changes or a card it links to is renamed, not on
-  // every redraw: what its links show is the one thing the index changes.
+  // every redraw: what its links show is the one thing the index changes, and the bubble is drawn again for it.
   const linked = useMemo(() => linkedCardIds(doc), [doc]);
-  const linkTitles = linked.map((id) => titleOf(id, '')).join('\u0000');
+  const linkTitles = useCardsSelect((v) => linked.map((id) => linkTitle(v.index, id, '')).join('\u0000'));
   // eslint-disable-next-line react-hooks/exhaustive-deps
   const masked = useMemo(() => previewParts(doc, titleOf, { hidden: 'mask' }), [doc, linkTitles]);
   // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -707,7 +712,7 @@ function StackEntry({ stack, at }: { stack: NoteCard; at: number }) {
  * at once, before it's saved. Each change can be undone; taking one out is in its menu.
  */
 function StackCards({ stack, members }: { stack: NoteCard; members: Entry[] }) {
-  const { repo } = useCards();
+  const { repo } = useServices();
   const may = usePermissions();
   const can = may(stack).edit;
   // The order just dropped, shown until it's saved: while the stack's saved list is one from before it (`stale`).

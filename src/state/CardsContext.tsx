@@ -1,6 +1,6 @@
 import Dexie from 'dexie';
 import { canWriteIn } from '../domain/access';
-import { createContext, useContext, useEffect, useMemo, useRef, useState, useSyncExternalStore, type ReactNode } from 'react';
+import { createContext, useContext, useEffect, useLayoutEffect, useMemo, useRef, useState, useSyncExternalStore, type ReactNode } from 'react';
 import { buildIndex, type CardIndex } from '../domain/cardIndex';
 import { toDateKey } from '../domain/dates';
 import { lockedVaultIds, sortVaults, unreadVaultIds, VaultLocks, type VaultKeyHooks } from '../domain/locks';
@@ -157,8 +157,56 @@ interface CardsValue {
 
 const CardsContext = createContext<CardsValue | null>(null);
 
+/**
+ * What doesn't change while an account is open (its storage, sync, keys), and a way to the cards as they are now. An
+ * entry's bubble reads these rather than `useCards`, which redraws everything that reads it whenever any card changes:
+ * with thousands of entries and 150 drawn, one tick redrew them all. What a bubble shows it takes with
+ * `useCardsSelect`, which redraws it only when that changes; what it needs only to act, from `latest()` at the time.
+ */
+export interface CardsServices {
+  repo: CardRepository;
+  engine: SyncEngine;
+  locks: VaultLocks;
+  photos: PhotoService;
+  attachments: AttachmentKeeper;
+  reseal: CardsValue['reseal'];
+  keyring: Keyring;
+  unsynced: Unsynced;
+  drafts: Drafts;
+  accountId: string;
+  /** The cards and all that goes with them, as they are now: to read while acting, never to draw from. */
+  latest: () => CardsValue;
+  /** Hears each change to `latest()`. */
+  subscribe: (listener: () => void) => () => void;
+}
+
+const ServicesContext = createContext<CardsServices | null>(null);
+
 export function CardsProvider({ accountId, children }: { accountId: string; children: ReactNode }) {
   const [{ store, repo, engine, locks, photos, attachments, reseal, keyring, unsynced, drafts }] = useState(() => openAccount(accountId));
+  // The latest value, set as it's drawn, and those to tell once it's on screen (`useCardsSelect`).
+  const current = useRef<CardsValue | null>(null);
+  const [heard] = useState(() => new Set<() => void>());
+  const [services] = useState<CardsServices>(() => ({
+    repo,
+    engine,
+    locks,
+    photos,
+    attachments,
+    reseal,
+    keyring,
+    unsynced,
+    drafts,
+    accountId,
+    latest: () => {
+      if (!current.current) throw new Error('The cards are not read yet');
+      return current.current;
+    },
+    subscribe: (listener) => {
+      heard.add(listener);
+      return () => heard.delete(listener);
+    },
+  }));
   // This account's translations, kept on this device.
   useEffect(() => {
     void keepTranslationsIn(store);
@@ -412,7 +460,9 @@ export function CardsProvider({ accountId, children }: { accountId: string; chil
     });
     const stopVaults = repo.store.subscribeVaults((list) => {
       keyring.setVaults(list);
-      setVaults(sortVaults(list));
+      // Every sync stores the list again: the same one keeps its identity, so what reads it doesn't redraw.
+      const sorted = sortVaults(list);
+      setVaults((was) => (was && JSON.stringify(was) === JSON.stringify(sorted) ? was : sorted));
     });
     const stopLocks = locks.start();
     return () => {
@@ -427,6 +477,12 @@ export function CardsProvider({ accountId, children }: { accountId: string; chil
     };
   }, [repo, engine, locks, photos, unsynced]);
 
+  current.current = value;
+  // Told after the change is drawn, so what reads it sees the same cards as what's drawn around it.
+  useLayoutEffect(() => {
+    if (value) for (const listener of [...heard]) listener();
+  }, [value, heard]);
+
   if (error) {
     return (
       <div className="boot">
@@ -437,7 +493,37 @@ export function CardsProvider({ accountId, children }: { accountId: string; chil
     );
   }
   if (!value) return <div className="boot" aria-busy="true" />;
-  return <CardsContext.Provider value={value}>{children}</CardsContext.Provider>;
+  return (
+    <ServicesContext.Provider value={services}>
+      <CardsContext.Provider value={value}>{children}</CardsContext.Provider>
+    </ServicesContext.Provider>
+  );
+}
+
+/** What doesn't change while the account is open: reading it never redraws (`CardsServices`). */
+export function useServices(): CardsServices {
+  const services = useContext(ServicesContext);
+  if (!services) throw new Error('useServices must be used inside CardsProvider');
+  return services;
+}
+
+/** The same lists, item by item: for a selection that makes a new list each time. */
+export const sameItems = <T,>(a: readonly T[], b: readonly T[]) => a.length === b.length && a.every((x, i) => x === b[i]);
+
+/**
+ * A piece of the cards, picked by `select`, redrawing only when what it picks changes (by `same`, else identity). The
+ * picking runs on each change to any card, so it's to be quick: a lookup, not a walk through every card.
+ */
+export function useCardsSelect<T>(select: (cards: CardsValue) => T, same: (a: T, b: T) => boolean = Object.is): T {
+  const { latest, subscribe } = useServices();
+  const last = useRef<{ value: T } | null>(null);
+  const pick = () => {
+    const next = select(latest());
+    if (last.current && same(last.current.value, next)) return last.current.value;
+    last.current = { value: next };
+    return next;
+  };
+  return useSyncExternalStore(subscribe, pick);
 }
 
 export function useCards(): CardsValue {
@@ -447,20 +533,20 @@ export function useCards(): CardsValue {
 }
 
 export function useSyncStatus(): SyncStatus {
-  const { engine } = useCards();
+  const { engine } = useServices();
   return useSyncExternalStore(engine.subscribe, engine.getStatus);
 }
 
 /** Today's date key, kept current if the app stays open past midnight. */
 /** Every card with changes not yet sent to the server. */
 export function useUnsynced(): ReadonlySet<string> {
-  const { unsynced } = useCards();
+  const { unsynced } = useServices();
   return useSyncExternalStore(unsynced.subscribe, unsynced.getIds);
 }
 
 /** Whether this card has changes not yet sent. Redraws only when that answer changes. */
 export function useIsUnsynced(id: string): boolean {
-  const { unsynced } = useCards();
+  const { unsynced } = useServices();
   return useSyncExternalStore(unsynced.subscribe, () => unsynced.getIds().has(id));
 }
 

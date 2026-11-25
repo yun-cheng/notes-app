@@ -2,7 +2,7 @@ import { Node } from '@tiptap/core';
 import { NodeViewWrapper, ReactNodeViewRenderer, type ReactNodeViewProps } from '@tiptap/react';
 import { withEditorMenu } from './nodeMenu';
 import { useEffect, useState } from 'react';
-import { useCards } from '../../state/CardsContext';
+import { useServices } from '../../state/CardsContext';
 import { SealedUnreadable } from '../../photos/service';
 
 type PhotoState = 'loading' | 'ready' | 'waiting' | 'offline' | 'unreadable';
@@ -15,7 +15,7 @@ const RETRY_MS = 30_000;
  */
 /** `edge`, for a thumbnail: the photo shrunk to that many pixels on its longer side. */
 export function usePhotoUrl(id: string, edge?: number): { url: string | null; state: PhotoState } {
-  const { photos } = useCards();
+  const { photos } = useServices();
   const [result, setResult] = useState<{ url: string | null; state: PhotoState }>({ url: null, state: 'loading' });
 
   useEffect(() => {

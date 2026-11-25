@@ -1,8 +1,8 @@
-import { useEffect, useMemo, useRef, useState, type ReactNode } from 'react';
+import { memo, useEffect, useMemo, useRef, useState, type ReactNode } from 'react';
 import { createPortal } from 'react-dom';
 import { fileAttachments, isAudio, isVideo, linkUrls, mediaItems, siteName, type FileInfo, type Media } from '../domain/content';
 import type { Card } from '../domain/types';
-import { useCards } from '../state/CardsContext';
+import { useCardsSelect, useServices } from '../state/CardsContext';
 import { usePhotoUrl } from './editor/photo';
 import { usePhotoZoom } from './photoZoom';
 import { previewFor, useDisplayPrefs } from './displayPrefs';
@@ -37,13 +37,16 @@ const MAX_LINKS = 3;
  * messages playing where they are, with their transcripts; files as chips that open them; links as cards, as one line each or not at all (they stay links in the text). The entry's
  * own style, from its style menu, wins over the device's setting.
  */
-export function Attachments({ card }: { card: Card }) {
-  const { vaults, repo } = useCards();
+/** Drawn again only when its entry changes or what it reads of the cards does (`useCardsSelect`), as `EntryBubble`. */
+export const Attachments = memo(function Attachments({ card }: { card: Card }) {
+  const { repo } = useServices();
   const device = useDisplayPrefs();
   const prefs = previewFor(card.type === 'tag' ? undefined : card.preview, device);
   // Links in an encrypted vault, or in a card from a vault this account can't see, aren't sent anywhere to preview.
-  const vault = vaults.find((v) => v.id === card.vaultId);
-  const previews = !!vault && !vault.encryption;
+  const previews = useCardsSelect((v) => {
+    const vault = v.vaults.find((x) => x.id === card.vaultId);
+    return !!vault && !vault.encryption;
+  });
   // Worked out again only when its text changes, not on every redraw (a pick, the index after another card's edit).
   const { photos, voices, files, found } = useMemo(() => {
     const all = fileAttachments(card.content);
@@ -107,7 +110,7 @@ export function Attachments({ card }: { card: Card }) {
       {photoMenu && <PhotoMenu id={photoMenu.id} video={photoMenu.video} at={photoMenu.at} onClose={() => setPhotoMenu(null)} />}
     </div>
   );
-}
+});
 
 function Thumb({ id }: { id: string }) {
   // Whole under its entry, at most about 560 points wide on a sharp screen.

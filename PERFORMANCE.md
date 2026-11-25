@@ -67,7 +67,8 @@ cpu-clock -f 1000 -g --duration 15"`; the bench build's names are shrunk, so loo
 | First sync, production build | | 3.5 s | |
 | Reload, production build | | 1.8 s until the journal shows | |
 | Ticking a todo, dev server | 125–213 ms | 88–175 ms | Cards kept in memory and each write put into them, rather than reading all 10,000 back (`DexieStore`) |
-| Ticking a todo, production build | 70–113 ms | 92–111 ms | Mostly drawing again every bubble shown; see below |
+| Ticking a todo, dev server, bubbles drawn only when theirs changes | 93–111 ms | 58–93 ms | Bubbles memoized, reading the cards through `useCardsSelect` and `useServices`; the selection object kept; the rail's days kept when the same |
+| Ticking a todo, production build | 70–113 ms | 69–107 ms | About 30 ms is the IndexedDB write; about 45 ms is drawing the page around the bubbles (the journal's list, the sidebar's filter counts) |
 | Photos tiles moving as they load | moved (laid out as squares) | none of 40 moved | Each photo's size kept in its block (`width`, `height`) |
 
 Already fine, unchanged: the journal reloads in about 1.2 s on the dev server; Calendar, Timeline, Tags, History and
@@ -97,9 +98,8 @@ a jump on the rail settles in under 0.2 s; typing in the journal box takes 17 ms
 
 ## Still slow
 
-- **Web: every edit draws every shown bubble again.** About 90 ms in production with 150 drawn: each bubble reads the
-  cards context, so any change redraws them all. Fixing it means each bubble taking only what it shows from the
-  cards (a selector store), across about 25 places that read the context.
+- **Web: an edit still takes 70–110 ms in production.** Bubbles are no longer drawn again (2026-11-26), but the journal
+  page around them is (`Stream`, the sidebar's `FilterPanel` counts), and the save waits about 30 ms on IndexedDB.
 - **Android: launching with 10,000 cards takes 8–9 s** before the journal shows, with about 4 s of CPU: every card's
   payload is parsed at launch, and what it waits on for the rest isn't known yet.
 - **Not yet measured:** ticking a todo or typing on the Mac, iPhone and Android; scrolling the journal for a long time

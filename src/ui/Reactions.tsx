@@ -1,7 +1,7 @@
 import { useState, type KeyboardEvent } from 'react';
 import { COMMON_REACTIONS, emojisIn, reactedBy, reactionCounts, toggleReaction } from '../domain/reactions';
 import type { NoteCard, TodoCard } from '../domain/types';
-import { useCards } from '../state/CardsContext';
+import { useServices } from '../state/CardsContext';
 import { EMOJI_GROUPS, searchEmoji } from './emojiData';
 import { Icon } from './Icon';
 import { usePopover } from './usePopover';
@@ -35,7 +35,7 @@ function remember(emoji: string) {
  * change the entry can, even while it's set to view only, since a reaction leaves its words alone; not in the Trash.
  */
 export function useReact(card: Entry): ((emoji: string) => void) | undefined {
-  const { repo, accountId } = useCards();
+  const { repo, accountId } = useServices();
   const may = usePermissions();
   const trashed = useInTrash();
   if (trashed || !may(card).protect) return undefined;
@@ -46,7 +46,7 @@ export function useReact(card: Entry): ((emoji: string) => void) | undefined {
 
 /** An entry's reactions, each emoji with how many put it on; pressed where this account did, and a press toggles it. */
 export function ReactionChips({ card, react }: { card: Entry; react?: (emoji: string) => void }) {
-  const { accountId } = useCards();
+  const { accountId } = useServices();
   const counts = reactionCounts(card.reactions, accountId);
   if (!counts.length) return null;
   return (
@@ -156,7 +156,7 @@ export function ReactionPicker({ mine, onPick }: { mine: (emoji: string) => bool
 
 /** A smiley that opens the picker, and closes it once an emoji is picked. `look` is the bubble's hover button or the sheet's chip. */
 export function AddReaction({ card, react, look = 'bubble' }: { card: Entry; react: (emoji: string) => void; look?: 'bubble' | 'sheet' }) {
-  const { accountId } = useCards();
+  const { accountId } = useServices();
   const { open, root, toggle, close, fixedStyle } = usePopover();
   return (
     // Clicks in the menu stay out of the bubble's own click handling (picking, opening).

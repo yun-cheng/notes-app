@@ -5,7 +5,7 @@ import { canChangeInTheOpen } from '../domain/access';
 import { cueAt, cutPoints, joinTranscripts, PEAK_BARS, VOICE_RATE, wavBytes, type Transcript } from '../domain/voice';
 import { decodeVoice } from '../photos/audio';
 import type { PhotoService } from '../photos/service';
-import { useCards } from '../state/CardsContext';
+import { useCardsSelect, useServices } from '../state/CardsContext';
 import { transcribePiece, type TranscribeResult } from '../sync/http';
 import { writeClipboard } from './entryActions';
 import { Icon } from './Icon';
@@ -175,7 +175,8 @@ async function transcribe(id: string, vaultId: string, photos: PhotoService, dec
  * itself. `vaultId` is the vault of the entry holding it.
  */
 export function VoiceMessage({ file, vaultId, onTranscript }: { file: FileInfo; vaultId?: string; onTranscript?: (words: Transcript) => void }) {
-  const { photos, vaults } = useCards();
+  const { photos } = useServices();
+  const vault = useCardsSelect((v) => v.vaults.find((x) => x.id === vaultId));
   const toast = useToast();
   const { address, failed, unreadable } = useVideoAddress(file.id);
   const audio = useRef<HTMLAudioElement>(null);
@@ -185,7 +186,6 @@ export function VoiceMessage({ file, vaultId, onTranscript }: { file: FileInfo; 
   const [speed, setSpeed] = useState(1);
   const [broken, setBroken] = useState(false);
   const job = useSyncExternalStore(subscribe, () => jobs.get(file.id));
-  const vault = vaults.find((v) => v.id === vaultId);
   const can = !!onTranscript && canChangeInTheOpen(vault);
   const latest = useRef(onTranscript);
   latest.current = onTranscript;

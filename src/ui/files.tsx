@@ -3,7 +3,7 @@ import type { FileInfo } from '../domain/content';
 import { fileKind, type FileKind } from '../domain/library';
 import { fileSize, SealedUnreadable } from '../photos/service';
 import { UNREADABLE } from './editor/photo';
-import { useCards } from '../state/CardsContext';
+import { useCardsSelect, useServices } from '../state/CardsContext';
 import { canChangeInTheOpen } from '../domain/access';
 import { useShareLink } from './driveLink';
 import { Icon, type IconName } from './Icon';
@@ -34,7 +34,7 @@ export function fileIcon(file: Pick<FileInfo, 'name' | 'mime'>): IconName {
  * fills in when the file is here.
  */
 export function useFileActions() {
-  const { photos } = useCards();
+  const { photos } = useServices();
   const toast = useToast();
   return async (file: FileInfo, save = false) => {
     const show = !save && showsInTab(file.mime);
@@ -75,9 +75,8 @@ export const FileVault = createContext<string | undefined>(undefined);
  */
 export function FileChip({ file, vaultId }: { file: FileInfo; vaultId?: string }) {
   const act = useFileActions();
-  const { vaults } = useCards();
   const inVault = useContext(FileVault);
-  const sharable = canChangeInTheOpen(vaults.find((v) => v.id === (vaultId ?? inVault)));
+  const sharable = canChangeInTheOpen(useCardsSelect((v) => v.vaults.find((x) => x.id === (vaultId ?? inVault))));
   const share = useShareLink();
   const stop = (e: MouseEvent) => e.stopPropagation();
   const detail = [file.size !== null ? fileSize(file.size) : null, extensionLabel(file.name)].filter(Boolean).join(' · ');

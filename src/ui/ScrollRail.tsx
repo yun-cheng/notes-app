@@ -118,7 +118,12 @@ function measure(root: HTMLElement, n: number): Place {
  * shows, while the page scrolls, to be held and dragged, the marks with it. It shows on a page more than half a
  * screen longer than the screen. Screen readers skip it: the page scrolls as ever.
  */
-export function ScrollRail({ keys, name, root, reveal }: Props) {
+export function ScrollRail({ keys: given, name, root, reveal }: Props) {
+  // The same days as last time are the same list, so its marks aren't worked out again for each change to an entry:
+  // the page hands a new list each time it's drawn, of thousands.
+  const kept = useRef(given);
+  if (kept.current !== given && (kept.current.length !== given.length || kept.current.some((k, i) => k !== given[i]))) kept.current = given;
+  const keys = kept.current;
   const n = keys.length;
   const [place, setPlace] = useState<Place | null>(null);
   // Where it's dragged to, and where the pointer is over it.

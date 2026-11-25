@@ -3,7 +3,7 @@ import { useLocation, useSearchParams } from 'react-router';
 import { canRedo, canUndo, changeTitle, describeChange, matchesChange, nextRedo, nextUndo, type Change } from '../domain/changes';
 import { isFiltered, parseFilter, type StreamFilter } from '../domain/stream';
 import type { Card } from '../domain/types';
-import { useCards, useToday } from '../state/CardsContext';
+import { useServices, useToday } from '../state/CardsContext';
 import { usePermissions } from './viewOnly';
 import { useToast } from './Toast';
 
@@ -14,11 +14,13 @@ export type Direction = 'undo' | 'redo';
  * no vault it touches is locked, and this account may still change the card that way.
  */
 export function useCanRevert() {
-  const { vaults, locked } = useCards();
+  // Read when undoing, as they are then: drawing nothing, it needn't redraw when they change.
+  const { latest } = useServices();
   const may = usePermissions();
   return useCallback(
     (change: Change, current: Card | undefined, direction: Direction): boolean => {
       if (!current || !(direction === 'undo' ? canUndo(change, current) : canRedo(change, current))) return false;
+      const { vaults, locked } = latest();
       const touched = [change.after.vaultId, change.before?.vaultId, current.vaultId];
       if (touched.some((id) => id && locked.has(id))) return false;
       const can = may(current);
@@ -33,7 +35,7 @@ export function useCanRevert() {
       if (change.fields.every((f) => f === 'viewOnly' || f === 'updatedAt')) return can.protect;
       return managing ? can.manage : can.edit;
     },
-    [vaults, locked, may],
+    [latest, may],
   );
 }
 
@@ -64,7 +66,7 @@ export function useUndoScope(): StreamFilter | undefined {
  * finds that action.
  */
 export function useUndo() {
-  const { repo } = useCards();
+  const { repo } = useServices();
   const canRevert = useCanRevert();
   const toast = useToast();
   const today = useToday();

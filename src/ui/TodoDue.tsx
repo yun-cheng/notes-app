@@ -5,7 +5,7 @@ import { firstDue, REPEAT_CHOICES, repeatLabel } from '../domain/repeat';
 import { completeTodo, isOverdue } from '../domain/todos';
 import type { Repeat, TodoCard } from '../domain/types';
 import type { CardPatch } from '../storage/journal';
-import { useCards, useToday } from '../state/CardsContext';
+import { useServices, useToday } from '../state/CardsContext';
 import { Icon } from './Icon';
 import { useToast } from './Toast';
 import { useUndo } from './useUndo';
@@ -17,13 +17,13 @@ import { usePopover } from './usePopover';
  * Done column, ticking moves the todo there and reopening moves it back (`tagsForStatus`), as one change to undo.
  */
 export function useTickTodo() {
-  const { repo, index } = useCards();
+  const { repo, latest } = useServices();
   const today = useToday();
   const toast = useToast();
   const { undoButton } = useUndo();
   // Only a change of tags goes in the patch, so a todo on no board changes as it always has.
   const retag = (todo: TodoCard, status: 'open' | 'done') => {
-    const tags = tagsForStatus(todo.tags, index.tagGroups.groups, status);
+    const tags = tagsForStatus(todo.tags, latest().index.tagGroups.groups, status);
     return tags === todo.tags ? {} : { tags };
   };
   return (todo: TodoCard, { announce = false } = {}) => {
@@ -42,7 +42,7 @@ export function useTickTodo() {
  * lists of what's due, so the change says where it went.
  */
 export function useToggleWaiting() {
-  const { repo } = useCards();
+  const { repo } = useServices();
   const { said } = useUndo();
   return (todo: TodoCard) => {
     const waiting = !todo.waiting;
@@ -101,7 +101,7 @@ const repeatKey = (r: Repeat | null | undefined) => (r ? `${r.unit}:${r.every}` 
  * off takes them too.
  */
 function useDueEdits(card: TodoCard) {
-  const { repo } = useCards();
+  const { repo } = useServices();
   const today = useToday();
   const update = (patch: CardPatch) => void repo.update(card.id, patch);
   const clear = () => update({ due: null, dueTime: null, repeat: null });

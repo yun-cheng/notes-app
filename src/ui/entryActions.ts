@@ -5,7 +5,7 @@ import { encodeEntries, entriesClipboard, ENTRIES_TYPE, toEntries } from '../dom
 import type { Entry } from '../domain/entry';
 import type { EntryType } from '../domain/retype';
 import type { Card, NoteCard, TodoCard } from '../domain/types';
-import { useCards } from '../state/CardsContext';
+import { useServices } from '../state/CardsContext';
 import { entryOnScreen, showChoiceNear } from './clipboardChoice';
 import { clipboardPrefs, COPY_STYLES, COPY_WORDS, type CopyStyle } from './clipboardPrefs';
 import { useCanRestore, usePermissions } from './viewOnly';
@@ -61,22 +61,23 @@ const live = (c: Card | undefined): c is NoteCard | TodoCard => copyable(c) && !
 
 /** Copy, cut, trash, restore, archive and paste for journal entries, each with a toast and, where it changes something, an undo. */
 export function useEntryActions() {
-  const { index, repo, vaults } = useCards();
+  // The cards as they are when acting: drawing nothing, it needn't redraw each time they change (every bubble has it).
+  const { repo, latest } = useServices();
   const may = usePermissions();
   const canRestore = useCanRestore();
   const toast = useToast();
   const { saveEntries } = useSaveEntries();
   const { said, undoButton } = useUndo();
 
-  const cardsFor = (ids: string[]) => ids.map((id) => index.byId.get(id)).filter(live);
+  const cardsFor = (ids: string[]) => ids.map((id) => latest().index.byId.get(id)).filter(live);
 
   /**
    * Puts entries on the clipboard for other apps in the style the Copy setting picks, and exactly for this one, so
    * pasted back into the journal they come back whole whatever the setting.
    */
   const write = (cards: (NoteCard | TodoCard)[], style = clipboardPrefs().copy) => {
-    const tagName = (id: string) => index.tags.find((t) => t.id === id)?.title;
-    const { text, html } = entriesClipboard(cards, tagName, (id, label) => linkTitle(index, id, label), style);
+    const tagName = (id: string) => latest().index.tags.find((t) => t.id === id)?.title;
+    const { text, html } = entriesClipboard(cards, tagName, (id, label) => linkTitle(latest().index, id, label), style);
     return writeClipboard(text, encodeEntries(toEntries(cards, tagName)), html);
   };
 
@@ -86,7 +87,7 @@ export function useEntryActions() {
    * that way. With neither, it's the toast.
    */
   const copy = (ids: string[], style: CopyStyle = clipboardPrefs().copy, anchor?: Element | null) => {
-    const cards = ids.map((id) => index.byId.get(id)).filter(copyable);
+    const cards = ids.map((id) => latest().index.byId.get(id)).filter(copyable);
     if (!cards.length) return;
     void write(cards, style).then((ok) => {
       if (!ok) return toast("Couldn't copy here. Select the text instead.");
@@ -121,20 +122,20 @@ export function useEntryActions() {
    * said as "Moved to Family"; several with their count, and how many couldn't be moved.
    */
   const move = async (ids: string[], vaultId: string) => {
-    const cards = ids.map((id) => index.byId.get(id)).filter((c): c is Card => !!c && !c.deleted);
+    const cards = ids.map((id) => latest().index.byId.get(id)).filter((c): c is Card => !!c && !c.deleted);
     const allowed = cards.filter((c) => may(c).manage);
     const moving = allowed.filter((c) => c.vaultId !== vaultId);
     if (!moving.length) return;
     const skipped = cards.length - allowed.length;
     const action = repo.action();
     await Promise.all(moving.map((c) => repo.moveToVault(c.id, vaultId)));
-    const name = vaults.find((v) => v.id === vaultId)?.name ?? 'another vault';
+    const name = latest().vaults.find((v) => v.id === vaultId)?.name ?? 'another vault';
     said(`Moved ${ids.length === 1 ? '' : `${entries(moving.length)} `}to ${name}${skipped ? `; ${entries(skipped)} couldn't be moved` : ''}`, action);
   };
 
   /** Brings entries, or tags, back from the Trash, where this account may, as one action with an undo. */
   const restore = async (ids: string[]) => {
-    const cards = ids.map((id) => index.byId.get(id)).filter((c): c is Card => !!c && canRestore(c));
+    const cards = ids.map((id) => latest().index.byId.get(id)).filter((c): c is Card => !!c && canRestore(c));
     if (!cards.length) return;
     const action = repo.action();
     await Promise.all(cards.map((c) => repo.setDeleted(c.id, false)));
@@ -177,7 +178,7 @@ export function useEntryActions() {
       return null;
     });
     if (!result) return toast("Couldn't paste all of it. Check the journal before pasting again.");
-    if (result.unlock) return toast(`Unlock ${vaults.find((v) => v.id === result.unlock)?.name ?? 'the vault'} to paste into it.`);
+    if (result.unlock) return toast(`Unlock ${latest().vaults.find((v) => v.id === result.unlock)?.name ?? 'the vault'} to paste into it.`);
     if (!result.saved) return;
     const { action } = result;
     toast(`Pasted ${entries(result.saved)}`, { action: action ? undoButton(action) : undefined });

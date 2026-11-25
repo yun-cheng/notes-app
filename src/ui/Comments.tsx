@@ -1,7 +1,7 @@
 import { useEffect, useRef, useState, type FormEvent } from 'react';
 import { formatMoment } from '../domain/dates';
 import type { Card } from '../domain/types';
-import { useCards } from '../state/CardsContext';
+import { useCards, useCardsSelect } from '../state/CardsContext';
 import { usePermissions } from './viewOnly';
 import { SyncOffline } from '../sync/engine';
 import { addComment, deleteComment, fetchComments, resolveComment, type CardComment } from '../sync/http';
@@ -16,11 +16,10 @@ const when = formatMoment;
  * its owner sees, comments would be clutter). Then its bubble has a button for one, and its sheet the box.
  */
 export function useCanComment(card: Card): boolean {
-  const { vaults } = useCards();
+  const members = useCardsSelect((v) => v.vaults.find((x) => x.id === card.vaultId)?.members ?? 1);
   const may = usePermissions();
   const can = may(card);
-  const home = vaults.find((v) => v.id === card.vaultId);
-  return card.seq > 0 && can.comment && ((home?.members ?? 1) > 1 || !!can.sharedBy);
+  return card.seq > 0 && can.comment && (members > 1 || !!can.sharedBy);
 }
 
 /** Shown for a sealed comment this device can't open: its vault is locked here, or it was sealed in another. */

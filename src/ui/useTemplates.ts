@@ -2,7 +2,7 @@ import { useLocation, useNavigate } from 'react-router';
 import { cardPages, displayTitle } from '../domain/content';
 import { fromTemplate } from '../domain/templates';
 import type { NoteCard, TodoCard } from '../domain/types';
-import { useCards, useToday } from '../state/CardsContext';
+import { useCards, useServices, useToday } from '../state/CardsContext';
 import { usePermissions, useViewOnly, VIEW_ONLY_NOTE } from './viewOnly';
 import { entryPath, sheetState, TEMPLATES_PATH } from './paths';
 import { useToast } from './Toast';
@@ -21,7 +21,7 @@ function useVaultFor() {
  * sheet ready to type, where Discard trashes it again.
  */
 export function useStartFromTemplate() {
-  const { repo } = useCards();
+  const { repo } = useServices();
   const today = useToday();
   const navigate = useNavigate();
   const location = useLocation();

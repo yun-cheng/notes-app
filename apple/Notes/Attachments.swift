@@ -176,7 +176,7 @@ final class Attachments {
         guard let photo = await Task.detached(operation: { Self.prepare(raw) }).value else { throw AddError.notAPicture }
         let id = given ?? UUID().uuidString.lowercased()
         try await keep(id, photo.data, vaultId: vaultId, model: model, seal: seal, pending: Pending(id: id, vaultId: vaultId, mime: photo.mime, sealed: false, width: photo.width, height: photo.height))
-        return Doc.photoNode(id)
+        return Doc.photoNode(id, width: photo.width, height: photo.height)
     }
 
     /// Keeps a file (a video, a sound, a PDF, anything) and queues its upload. Returns the file node.
@@ -818,7 +818,7 @@ final class AttachmentKeeper {
         let still = a.mime.hasPrefix("video/") && trash.contains { $0.id == stillId } ? stillId : nil
         let node = a.isFile
             ? Doc.fileNode(id: a.id, name: a.name ?? "Untitled", mime: a.mime, size: a.size, poster: still, width: a.width, height: a.height, duration: a.duration)
-            : Doc.photoNode(a.id)
+            : Doc.photoNode(a.id, width: a.width, height: a.height)
         let from = a.trashed_from.flatMap { model.card($0) }
         model.perform { repo in
             if let from, from.isEntry, !from.deleted, await model.canEdit(from) {

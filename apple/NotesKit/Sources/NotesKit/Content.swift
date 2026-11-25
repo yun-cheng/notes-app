@@ -278,7 +278,15 @@ extension Doc {
     }
 
     /// A photo as an entry holds it.
-    public static func photoNode(_ id: String) -> JSONValue { ["type": "photo", "attrs": ["id": .string(id)]] }
+    /// A photo's block, with its size in pixels when known, so its shape is known before it loads (`photoRatios`).
+    public static func photoNode(_ id: String, width: Double? = nil, height: Double? = nil) -> JSONValue {
+        var attrs: [String: JSONValue] = ["id": .string(id)]
+        if let width, let height, width > 0, height > 0 {
+            attrs["width"] = .int(Int64(width.rounded()))
+            attrs["height"] = .int(Int64(height.rounded()))
+        }
+        return ["type": "photo", "attrs": .object(attrs)]
+    }
 
     /// A file as an entry holds it, with what else is known: a video's still and shape, a sound's length, and any
     /// `extra` attributes.
@@ -379,6 +387,18 @@ extension Doc {
             if n["type"]?.stringValue == "file", let file = files(n).first, file.isVideo { items.append(.video(file)) }
         }
         return items
+    }
+
+    /// Each photo's width over its height, by ID, where its block says (one added since 2026-11-26 keeps its size), so
+    /// it can be laid out at its shape before it loads, as the web's `mediaItems` gives `ratio`.
+    public static func photoRatios(_ content: JSONValue) -> [String: Double] {
+        var out: [String: Double] = [:]
+        walk(content) { n in
+            guard n["type"]?.stringValue == "photo", let a = n["attrs"], let id = a["id"]?.stringValue,
+                  let w = positive(a["width"]), let h = positive(a["height"]) else { return }
+            out[id] = w / h
+        }
+        return out
     }
 
     /// A video's still is kept beside it, as a photo.

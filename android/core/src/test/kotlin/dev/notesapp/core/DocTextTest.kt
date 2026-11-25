@@ -118,4 +118,10 @@ class DocTextTest {
         val toggled = next.toggle(0, 1, { it.italic }) { s, on -> s.copy(italic = on) }
         assertEquals(true, toggled.styles[0]?.italic)
     }
+
+    @Test fun photoBlocksKeepTheirSize() {
+        // As on the web (`content.test.ts`): a photo's block keeps its size, so its shape is known before it loads.
+        val page = jobj("type" to j("doc"), "content" to jarr(listOf(Doc.photoNode("p", 1800.0, 600.0), Doc.photoNode("q"), Doc.photoNode("r", 0.0, 5.0))))
+        assertEquals(listOf(Doc.Media.Photo("p", 3.0), Doc.Media.Photo("q"), Doc.Media.Photo("r")), Doc.media(page))
+    }
 }

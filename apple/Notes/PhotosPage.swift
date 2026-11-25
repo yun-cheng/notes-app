@@ -190,6 +190,17 @@ struct PhotosPage: View {
         var id: String { media.id }
     }
 
+    /// Each photo's shape as its entry says it, by ID (`Doc.photoRatios`), each entry read once.
+    static func told(_ items: [(Doc.Media, Card)]) -> [String: Double] {
+        var told: [String: Double] = [:]
+        var read: Set<String> = []
+        for (media, card) in items {
+            guard case .photo = media, told[media.id] == nil, read.insert(card.id).inserted else { continue }
+            for page in [card.content] + card.morePages { told.merge(Doc.photoRatios(page)) { a, _ in a } }
+        }
+        return told
+    }
+
     var body: some View {
         let days = HeldDay<Doc.Media>.of(model, filter, once: true) { card in
             ([card.content] + card.morePages).flatMap(Doc.media).filter { m in
@@ -201,8 +212,10 @@ struct PhotosPage: View {
         }
         let all = days.flatMap { $0.items.map { Item(media: $0.item, card: $0.card) } }
         let shapes = PhotoShapes.shared.ratios
+        // What the entries say of their photos' shapes, for those not yet seen here.
+        let told = Self.told(days.flatMap { $0.items.map { ($0.item, $0.card) } })
         let ratios = days.map { $0.items.map { pair -> Double in
-            if let r = shapes[pair.item.id] { return r }
+            if let r = shapes[pair.item.id] ?? told[pair.item.id] { return r }
             if case .video(let f) = pair.item, let w = f.width, let h = f.height, h > 0 { return w / h }
             return 1
         } }

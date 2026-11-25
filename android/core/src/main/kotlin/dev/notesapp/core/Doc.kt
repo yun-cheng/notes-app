@@ -12,7 +12,9 @@ object Doc {
     fun of(blocks: List<JsonElement>): JsonObject = jobj("type" to j("doc"), "content" to jarr(blocks.ifEmpty { listOf(jobj("type" to j("paragraph"))) }))
 
     /** A photo as an entry holds it. */
-    fun photoNode(id: String): JsonObject = jobj("type" to j("photo"), "attrs" to jobj("id" to j(id)))
+    /** A photo's block, with its size in pixels when known, so its shape is known before it loads (`photoRatios`). */
+    fun photoNode(id: String, width: Double? = null, height: Double? = null): JsonObject =
+        jobj("type" to j("photo"), "attrs" to if (width != null && height != null && width > 0 && height > 0) jobj("id" to j(id), "width" to j(Math.round(width)), "height" to j(Math.round(height))) else jobj("id" to j(id)))
 
     /**
      * A file as an entry holds it, with what else is known: a video's still and shape, a sound's length, and any
@@ -333,14 +335,19 @@ object Doc {
     }
 
     sealed class Media(open val id: String) {
-        data class Photo(override val id: String) : Media(id)
+        /** `ratio`, its width over its height, where its block says (one added since 2026-11-26 keeps its size). */
+        data class Photo(override val id: String, val ratio: Double? = null) : Media(id)
         data class Video(val file: FileInfo) : Media(file.id)
     }
 
     fun media(content: JsonElement): List<Media> {
         val items = mutableListOf<Media>()
         walk(content) { n ->
-            if (type(n) == "photo") n["attrs"]["id"].str?.let { items.add(Media.Photo(it)) }
+            if (type(n) == "photo") n["attrs"]["id"].str?.let {
+                val w = positive(n["attrs"]["width"])
+                val h = positive(n["attrs"]["height"])
+                items.add(Media.Photo(it, if (w != null && h != null) w / h else null))
+            }
             if (type(n) == "file") files(n).firstOrNull()?.takeIf { it.isVideo }?.let { items.add(Media.Video(it)) }
         }
         return items

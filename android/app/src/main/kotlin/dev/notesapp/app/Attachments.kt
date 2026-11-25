@@ -193,7 +193,7 @@ object Attachments {
         val photo = withContext(Dispatchers.Default) { prepare(raw) } ?: throw AddError("That isn't a picture this app can read.")
         val id = given ?: newId()
         keep(id, photo.data, vaultId, model, seal, Pending(id, vaultId, photo.mime, width = photo.width, height = photo.height))
-        return Doc.photoNode(id)
+        return Doc.photoNode(id, photo.width, photo.height)
     }
 
     data class VideoFacts(val poster: ByteArray?, val width: Double?, val height: Double?, val duration: Double?)
@@ -402,7 +402,7 @@ object AttachmentKeeper {
     fun putBack(a: StoredAttachment, model: AppModel) {
         val stillId = Doc.posterId(a.id)
         val still = if (a.mime.startsWith("video/") && trash.value.any { it.id == stillId }) stillId else null
-        val node = if (a.isFile) Doc.fileNode(a.id, a.name ?: "Untitled", a.mime, a.size, still, a.width, a.height, a.duration) else Doc.photoNode(a.id)
+        val node = if (a.isFile) Doc.fileNode(a.id, a.name ?: "Untitled", a.mime, a.size, still, a.width, a.height, a.duration) else Doc.photoNode(a.id, a.width, a.height)
         val from = a.trashed_from?.let { model.card(it) }
         model.perform { repo ->
             if (from != null && from.isEntry && !from.deleted && model.canEdit(from)) {

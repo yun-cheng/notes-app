@@ -351,7 +351,7 @@ fun PhotosPage(openDrawer: (() -> Unit)?) {
             Text(countLine(mediaCount(all.map { it.first }), all.map { it.second.id }.toSet().size), Modifier.padding(bottom = 4.dp), color = Theme.muted, fontSize = 14.sp)
             BoxWithConstraints(Modifier.fillMaxWidth()) {
                 val width = maxWidth.value
-                val ratios = days.map { d -> d.items.map { (m, _) -> PhotoShapes.ratios[m.id] ?: (if (m is Doc.Media.Video && (m.file.height ?: 0.0) > 0) (m.file.width ?: 1.0).toFloat() / m.file.height!!.toFloat() else 1f) } }
+                val ratios = days.map { d -> d.items.map { (m, _) -> PhotoShapes.ratios[m.id] ?: (m as? Doc.Media.Photo)?.ratio?.toFloat() ?: (if (m is Doc.Media.Video && (m.file.height ?: 0.0) > 0) (m.file.width ?: 1.0).toFloat() / m.file.height!!.toFloat() else 1f) } }
                 val (tiles, heads, height) = PhotoLayout.layout(ratios, PhotoLayout.options(width))
                 laidTiles = tiles.flatten()
                 Box(Modifier.fillMaxWidth().height(height.dp).onGloballyPositioned { box -> content?.let { boxTop = it.localPositionOf(box, androidx.compose.ui.geometry.Offset.Zero).y } }) {

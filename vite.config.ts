@@ -39,20 +39,21 @@ function demoSignIn(): Plugin {
         res.setHeader('content-type', 'application/json');
         res.end('{}');
       });
-      // The demo's photos (`demo-photo-<name>` in its entries) come from scripts/demoPhotos rather than a Google Drive,
-      // for the app and for a public link alike; every other photo goes on to the API.
+      // The demo's photos (`demo-photo-<name>` in its entries, or `demo-photo-<name>--<n>` for one of the copies its
+      // years of history hold) come from scripts/demoPhotos rather than a Google Drive, for the app and for a public link
+      // alike; every other photo goes on to the API.
       server.middlewares.use((req, res, next) => {
-        const name = /^\/api\/(?:attachments|public\/[^/]+\/photos)\/demo-photo-([a-z-]+)$/.exec(req.url?.split('?')[0] ?? '')?.[1];
+        const name = /^\/api\/(?:attachments|public\/[^/]+\/photos)\/demo-photo-([a-z-]+?)(?:--\d+)?$/.exec(req.url?.split('?')[0] ?? '')?.[1];
         const file = name && `scripts/demoPhotos/${name}.jpg`;
         if (req.method !== 'GET' || !file || !existsSync(file)) return next();
         res.setHeader('content-type', 'image/jpeg');
         res.setHeader('cache-control', 'private, max-age=31536000, immutable');
         res.end(readFileSync(file));
       });
-      // The demo's files (`demo-file-<name>`) likewise, from scripts/demoFiles, sent the way the API sends a file: a
+      // The demo's files (`demo-file-<name>`, or a copy's `demo-file-<name>--<n>`) likewise, from scripts/demoFiles, sent the way the API sends a file: a
       // video a range at a time when its player asks, and a video's still (`demo-file-<name>-poster`) as a photo.
       server.middlewares.use((req, res, next) => {
-        const name = /^\/api\/(?:attachments|public\/[^/]+\/(?:files|photos))\/demo-file-([a-z-]+)$/.exec(req.url?.split('?')[0] ?? '')?.[1];
+        const name = /^\/api\/(?:attachments|public\/[^/]+\/(?:files|photos))\/demo-file-([a-z-]+?)(?:--\d+)?$/.exec(req.url?.split('?')[0] ?? '')?.[1];
         const file = name && readdirSync('scripts/demoFiles').find((f) => f.startsWith(`${name}.`) && !f.endsWith('.mjs') && !f.endsWith('.json'));
         if (req.method !== 'GET' || !file) return next();
         const type = DEMO_FILE_TYPES[file.split('.').pop()!] ?? 'application/octet-stream';

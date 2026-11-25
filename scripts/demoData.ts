@@ -7,7 +7,8 @@
  * files attached (a PDF, a CSV, and a text file on the publicly linked recipe, from scripts/demoFiles), videos with their stills (one in the coast trip, one on the recipe, one in the Trash), voice messages (one transcribed with a quiet one just after it, one not yet, one in the Diary, which isn't sent to be), a private and encrypted Diary vault (its photo and voice message sealed with its key), a Health vault locked by the PIN but not encrypted and shared with Sam, who needs a PIN of their own to see it, Sam's Surprise party vault, which shows nothing until you set your own PIN, encrypted vaults shared both ways (Sam's Just us, which let you in, and your Gift ideas, where Sam waits to be let in), a vault shared with Sam and one Sam
  * shares to view, a card also in another vault, a note Sam shares, a public link, comments open and resolved, and
  * version history from more than one device, and entries going back three years. Two entries carry nearly all of it at once, to see how a full one looks:
- * a launch plan note and a moving todo.
+ * a launch plan note and a moving todo. Behind it all, years of history: about 10,000 entries over twelve years
+ * (`demoHistory.ts`).
  * Run with `npm run demo` while `npm run dev:api` is running. Running it again puts the demo's own cards back as they
  * were, dated around today, and keeps anything else in the accounts.
  */
@@ -19,6 +20,8 @@ import { addDays, toDateKey } from '../src/domain/dates';
 import { hashPin } from '../src/domain/pin';
 import type { CardColor, CardPayload, CardRecord, JSONNode, NoteCard, Repeat, Vault } from '../src/domain/types';
 import { PUSH_LIMIT, type SessionInfo } from '../src/sync/protocol';
+import { history } from './demoHistory';
+import { ago, at, bullets, checklist, code, doc, h, h3, lines, list, nested, p, quote, rule, steps, text } from './demoDoc';
 
 const API = 'http://localhost:8788/api';
 export const DEMO_PIN = '1234';
@@ -28,48 +31,7 @@ const DEMO = { id: 'u-demo', sub: 'demo-local-1', email: 'demo@demo.test', name:
 const SAM = { id: 'u-demo-sam', sub: 'demo-local-2', email: 'sam@demo.test', name: 'Sam', token: 'demo-local-session-sam' };
 type Person = typeof DEMO;
 
-// ---- Document helpers ----
-
-const text = (t: string, marks?: string[]): JSONNode => ({ type: 'text', text: t, ...(marks ? { marks: marks.map((type) => ({ type })) } : {}) });
-const p = (...parts: (string | JSONNode)[]): JSONNode => ({ type: 'paragraph', content: parts.map((x) => (typeof x === 'string' ? text(x) : x)) });
-const h = (t: string): JSONNode => ({ type: 'heading', attrs: { level: 2 }, content: [text(t)] });
-const items = (type: 'bulletList' | 'orderedList', lines: string[]): JSONNode => ({
-  type,
-  content: lines.map((l) => ({ type: 'listItem', content: [p(l)] })),
-});
-const bullets = (...lines: string[]) => items('bulletList', lines);
-const steps = (...lines: string[]) => items('orderedList', lines);
-/** A checklist: each item's words, and whether it's ticked. */
-const checklist = (...entries: [string, boolean][]): JSONNode => ({
-  type: 'taskList',
-  content: entries.map(([t, checked]) => ({ type: 'taskItem', attrs: { checked }, content: [p(t)] })),
-});
-const quote = (t: string): JSONNode => ({ type: 'blockquote', content: [p(t)] });
-/** A list item with a list of its own under it. */
-const nested = (t: string | JSONNode, list: JSONNode): JSONNode => ({ type: 'listItem', content: [typeof t === 'string' ? p(t) : t, list] });
-const list = (type: 'bulletList' | 'orderedList', ...entries: (string | JSONNode)[]): JSONNode => ({
-  type,
-  content: entries.map((e) => (typeof e === 'string' ? { type: 'listItem', content: [p(e)] } : e)),
-});
-const rule: JSONNode = { type: 'horizontalRule' };
-const h3 = (t: string): JSONNode => ({ type: 'heading', attrs: { level: 3 }, content: [text(t)] });
-/** A code block, colored by its language (like typing ```js). */
-const code = (language: string, ...ls: string[]): JSONNode => ({ type: 'codeBlock', attrs: { language }, content: [text(ls.join('\n'))] });
-const doc = (...blocks: JSONNode[]): JSONNode => ({ type: 'doc', content: blocks });
-const lines = (...ls: string[]) => doc(...ls.map((l) => (l ? p(l) : { type: 'paragraph' })));
-
-// ---- Time helpers ----
-
 const today = toDateKey(new Date());
-/** A moment `days` ago at the given local time. */
-function at(days: number, hour: number, minute = 0): number {
-  const d = new Date();
-  d.setDate(d.getDate() - days);
-  d.setHours(hour, minute, 0, 0);
-  return Math.min(d.getTime(), Date.now() - 60_000);
-}
-/** A moment `minutes` before now, for things written today whatever the time is. */
-const ago = (minutes: number) => Date.now() - minutes * 60_000;
 
 // ---- Local database ----
 
@@ -110,6 +72,33 @@ async function prepareAccounts(people: Person[]) {
     );
   }
   runSql(statements);
+}
+
+/** Reads rows from the local database. */
+function querySql<T>(statement: string): T[] {
+  const out = execFileSync('npx', ['wrangler', 'd1', 'execute', 'notes-app', '--local', '--json', '--command', statement], { encoding: 'utf8', maxBuffer: 64 * 1024 * 1024 });
+  return (JSON.parse(out) as { results: T[] }[])[0]?.results ?? [];
+}
+
+/**
+ * The demo's own cards the demo account can change, as they are before a rerun takes them out: any this run doesn't
+ * put back are sent as deleted afterwards (`letGo`), so a browser that synced them lets them go too, rather than
+ * keeping them for ever because the server took them out without a word.
+ */
+function seededBefore(): { id: string; vault_id: string }[] {
+  return querySql(
+    `SELECT c.id, c.vault_id FROM cards c JOIN vault_members m ON m.vault_id = c.vault_id AND m.user_id = ${sql(DEMO.id)} AND m.role != 'viewer' WHERE c.id LIKE 'demo-%' AND c.deleted = 0`,
+  );
+}
+
+/** Sends the demo's cards from before this run that it didn't put back as deleted, and blank, so the Trash doesn't list them. */
+async function letGo(before: { id: string; vault_id: string }[], keys: Map<string, CryptoKey>) {
+  const now = new Set(querySql<{ id: string }>(`SELECT id FROM cards WHERE id LIKE 'demo-%'`).map((r) => r.id));
+  const gone = before.filter((c) => !now.has(c.id));
+  if (!gone.length) return;
+  const at = Date.now();
+  await push(DEMO, gone.map((c) => ({ id: c.id, vaultId: c.vault_id, at, deleted: true, payload: { type: 'note', title: '', tags: [], content: doc(p()), createdAt: at } })), keys);
+  console.log(`${gone.length} of the demo's cards from before aren't in it any more: sent as deleted.`);
 }
 
 /** Runs SQL on the local database. */
@@ -221,6 +210,8 @@ interface Draft {
   vaultId: string;
   at: number;
   payload: CardPayload;
+  /** Sent as in the Trash. */
+  deleted?: boolean;
 }
 
 /**
@@ -236,7 +227,7 @@ async function push(who: Person, drafts: Draft[], keys: Map<string, CryptoKey>, 
       id: d.id,
       vault_id: d.vaultId,
       updated_at: d.at,
-      deleted: false,
+      deleted: d.deleted ?? false,
       seq: seqs.get(d.id) ?? 0,
       payload: key ? await encryptPayload(key, json, d.id, d.vaultId) : json,
     });
@@ -339,6 +330,7 @@ export async function seed() {
     throw new Error('The local server isn\'t running. Start it with `npm run dev:api` first.');
   });
 
+  const before = seededBefore();
   await prepareAccounts([DEMO, SAM]);
 
   const personal = `vault-${DEMO.id}`;
@@ -750,6 +742,31 @@ export async function seed() {
   // Claude and other AI apps may read the Personal vault.
   await call(DEMO, `/vaults/${personal}`, { ai_access: 'read' }, 'PATCH');
 
+  // Years of history behind all that (`demoHistory.ts`): about 10,000 entries in every vault, two more of which hold
+  // it: Work, shared with Sam to edit, and Projects.
+  const workVault = vaults.find((v) => v.name === 'Work' && v.owner_id === DEMO.id) ?? (await call<Vault>(DEMO, '/vaults', { name: 'Work' }));
+  await call(DEMO, `/vaults/${workVault.id}/members`, { email: SAM.email, role: 'editor' });
+  const projects = vaults.find((v) => v.name === 'Projects' && v.owner_id === DEMO.id) ?? (await call<Vault>(DEMO, '/vaults', { name: 'Projects' }));
+  const past = history(
+    { personal, family: family.id, work: workVault.id, projects: projects.id, diary: diaryKey ? diaryVault : null, health: health.encryption ? null : health.id },
+    { work, home, ideas, travel, reading, recipes, high, medium, low },
+    { demo: DEMO.id, sam: SAM.id },
+  );
+  const pastSeqs = new Map<string, number>();
+  // Earlier versions first, then each entry as it is, from the laptop or the phone, by you or by Sam.
+  for (const drafts of [past.earlier, past.drafts]) {
+    for (const sam of [false, true]) {
+      for (const phone of [false, true]) {
+        const these = drafts.filter((d) => d.sam === sam && d.phone === phone);
+        if (these.length) await push(sam ? SAM : DEMO, these, keys, phone ? PHONE : LAPTOP, pastSeqs);
+      }
+    }
+  }
+  for (const c of past.comments) {
+    const { comments } = await call<{ comments: { id: string; body: string }[] }>(c.sam ? SAM : DEMO, `/cards/${c.card}/comments`, { body: c.body });
+    if (c.resolved) await call(DEMO, `/cards/${c.card}/comments/${comments[0].id}`, { resolved: true }, 'PATCH');
+  }
+
   // Sam's own vault, shared with you to view: you can read and comment, not change.
   const { vaults: samVaults } = await call<SessionInfo>(SAM, '/me');
   const bookClub = samVaults.find((v) => v.name === 'Book club' && v.owner_id === SAM.id) ?? (await call<Vault>(SAM, '/vaults', { name: 'Book club' }));
@@ -812,6 +829,12 @@ export async function seed() {
 
   trashedAttachments(DEMO.id, family.id, personal);
   heldAttachments();
+  runSql(
+    past.attachments.map(
+      (a) =>
+        `INSERT OR REPLACE INTO attachments (id, owner_id, vault_id, drive_file_id, mime, size, created_at, name) VALUES (${[a.id, a.owner, a.vaultId, '', a.mime].map(sql).join(', ')}, ${a.size}, ${a.at}, ${a.name ? sql(a.name) : 'NULL'})`,
+    ),
+  );
   if (diaryKey) await sealedDiaryFiles(DEMO.id, diaryVault, diaryKey);
 
   // Drafts, left as if typed on another device: one in the journal box when it shows #travel, and a reply under
@@ -831,5 +854,7 @@ export async function seed() {
 
   const signIn = (u: Person) => ({ token: u.token, user: { id: u.id, email: u.email, name: u.name } });
   writeFileSync(SESSION_FILE, JSON.stringify({ ...signIn(DEMO), sam: signIn(SAM) }));
-  return { cards: mine.length + 3, pin: DEMO_PIN, recoveryKey, diaryOpen: !!diaryKey };
+  await letGo(before, keys);
+
+  return { cards: mine.length + 3 + past.entries, pin: DEMO_PIN, recoveryKey, diaryOpen: !!diaryKey };
 }

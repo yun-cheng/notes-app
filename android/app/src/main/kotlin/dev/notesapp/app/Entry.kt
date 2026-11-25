@@ -231,11 +231,11 @@ fun EntrySheet(id: String, dismiss: () -> Unit) {
                 }
             }
             androidx.compose.runtime.key("$id:$page") {
-                DocEditor(pages[page], edit, { doc -> savePage(model, id, page, doc) }, onTools = { tools = it }, placeholder = if (page > 0) "Page ${page + 1}" else if (isTodo) "Details" else "Note")
+                DocEditor(pages[page], edit, { doc -> savePage(model, id, page, doc) }, onTools = { tools = it }, placeholder = if (page > 0) "Page ${page + 1}" else if (isTodo) "Details" else "Note", card = card)
             }
-            // Its photos, voice messages and files as the journal shows them, where the web shows them in the text; in
-            // the text they're named, to move or take out.
-            if (page == 0) EntryAttachments(card)
+            // Its photos, voice messages and files are in the text, where they are (`DocEditor`); its links' previews
+            // under it, as the journal shows them.
+            if (page == 0) EntryLinks(card)
             SheetTags(card, edit)
             FlowRow(horizontalArrangement = Arrangement.spacedBy(6.dp), itemVerticalAlignment = Alignment.CenterVertically) { Reactions(card, large = true) }
             if (card.isStack && page == 0) StackPreview(card)

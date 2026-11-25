@@ -57,7 +57,17 @@ import androidx.compose.ui.text.input.VisualTransformation
 import androidx.compose.ui.text.style.TextDecoration
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import androidx.compose.foundation.combinedClickable
 import dev.notesapp.core.Doc
+import dev.notesapp.core.str
+import dev.notesapp.core.jobj
+import dev.notesapp.core.jarr
+import dev.notesapp.core.j
+import dev.notesapp.core.get
+import dev.notesapp.core.arr
+import dev.notesapp.core.Card
+import androidx.compose.material.icons.outlined.MoreVert
+import androidx.compose.foundation.layout.widthIn
 import dev.notesapp.core.DocText
 import dev.notesapp.core.RichText
 import dev.notesapp.core.TextStyle
@@ -100,12 +110,122 @@ fun styled(rich: RichText, c: EditorColors): AnnotatedString = buildAnnotatedStr
     }
 }
 
+/** A stretch of a page's text, or an attachment between two (a photo or a file), as the Swift app's `DocPart`. */
+private data class DocPart(val key: Int, val node: JsonElement? = null, val blocks: List<JsonElement> = emptyList())
+
+/** Whether a page's block shows as itself rather than in the text: a photo, a video, a voice message or a file. */
+private fun isAttachment(node: JsonElement) = node["type"].str in setOf("photo", "file")
+
+/** A page as stretches of text and the attachments between them, with text last, to write after them. */
+private fun splitPage(content: JsonElement, first: Int = 0): List<DocPart> {
+    val parts = mutableListOf<DocPart>()
+    val run = mutableListOf<JsonElement>()
+    var key = first
+    for (block in content["content"].arr.orEmpty()) {
+        if (isAttachment(block)) {
+            if (run.isNotEmpty()) { parts.add(DocPart(key++, blocks = run.toList())); run.clear() }
+            parts.add(DocPart(key++, node = block))
+        } else run.add(block)
+    }
+    parts.add(DocPart(key, blocks = run.toList()))
+    return parts
+}
+
+private fun pageOf(blocks: List<JsonElement>) = jobj("type" to j("doc"), "content" to jarr(blocks.ifEmpty { listOf(jobj("type" to j("paragraph"))) }))
+
 /**
- * Edits a card body as rich text, as the Swift app's `DocEditor`. Lists and checklists go on when Return is pressed,
- * and end on an empty item; a row of buttons over the keyboard marks the words picked or the line.
+ * Edits a card body as rich text, as the Swift app's `DocEditor`. With the entry it's in (`card`), its photos, videos,
+ * voice messages and files show where they are in the text, as the web's editor shows them, each with its menu (and
+ * Remove from the entry, where it can be changed); the stretches of text around them are edited as before, and the
+ * page reads back in the same order. Without it, they're named in the text ([Photo], [File: name]).
  */
 @Composable
-fun DocEditor(content: JsonElement, editable: Boolean, onSave: (JsonElement) -> Unit, modifier: Modifier = Modifier, onTools: ((@Composable () -> Unit)?) -> Unit = {}, placeholder: String = "") {
+fun DocEditor(content: JsonElement, editable: Boolean, onSave: (JsonElement) -> Unit, modifier: Modifier = Modifier, onTools: ((@Composable () -> Unit)?) -> Unit = {}, placeholder: String = "", card: Card? = null) {
+    if (card == null || content["content"].arr.orEmpty().none(::isAttachment)) {
+        TextStretch(content, editable, onSave, modifier, onTools, placeholder)
+        return
+    }
+    val save by rememberUpdatedState(onSave)
+    var parts by remember { mutableStateOf(splitPage(content)) }
+    // Each stretch's text as last saved, by its key.
+    val texts = remember { mutableMapOf<Int, JsonElement>() }
+    fun page(of: List<DocPart> = parts): JsonElement {
+        val out = mutableListOf<JsonElement>()
+        for (part in of) {
+            part.node?.let { out.add(it); continue }
+            val blocks = texts[part.key]?.get("content").arr?.toList() ?: part.blocks
+            // A stretch left empty beside an attachment adds nothing.
+            if (blocks != listOf(jobj("type" to j("paragraph")))) out += blocks
+        }
+        return pageOf(out)
+    }
+    // Changed elsewhere while open, as a voice message's transcript is written in: the attachments take it, by ID.
+    LaunchedEffect(content) {
+        val latest = content["content"].arr.orEmpty().mapNotNull { n -> n["attrs"]["id"].str?.let { it to n } }.toMap()
+        val next = parts.map { p -> p.node?.get("attrs")?.get("id").str?.let(latest::get)?.takeIf { it != p.node }?.let { p.copy(node = it) } ?: p }
+        if (next != parts) parts = next
+    }
+    val media = remember(content) { Doc.media(content) }
+    Column(modifier, verticalArrangement = Arrangement.spacedBy(6.dp)) {
+        for (part in parts) androidx.compose.runtime.key(part.key) {
+            val node = part.node
+            if (node != null) {
+                InlineAttachment(node, card, media, if (editable) ({
+                    // Out, and the text around it joined, as the web's when one is selected and deleted.
+                    val joined = page(parts.filter { it.key != part.key })
+                    texts.clear()
+                    parts = splitPage(joined, (parts.maxOf { it.key }) + 1)
+                    save(joined)
+                }) else null)
+            } else {
+                TextStretch(pageOf(part.blocks), editable, { doc -> texts[part.key] = doc; save(page()) }, Modifier, onTools, if (parts.size == 1) placeholder else "", minHeight = if (part == parts.last()) 80.dp else 0.dp)
+            }
+        }
+    }
+}
+
+/**
+ * A photo, a video, a voice message or a file where it is in an open entry's text, as the web's editor shows it: a
+ * photo or a video whole, opening full screen; a voice message's player; a file's chip. A long press on a photo gives
+ * its menu; a file or a voice message has a menu button beside it, where the entry can be changed.
+ */
+@OptIn(androidx.compose.foundation.ExperimentalFoundationApi::class)
+@Composable
+private fun InlineAttachment(node: JsonElement, card: Card, media: List<Doc.Media>, remove: (() -> Unit)?) {
+    val one = pageOf(listOf(node))
+    val m = remember(node) { Doc.media(one).firstOrNull() }
+    val file = remember(node) { Doc.files(one).firstOrNull() }
+    var menu by remember { mutableStateOf(false) }
+    var viewing by remember { mutableStateOf(false) }
+    androidx.compose.foundation.layout.Box(Modifier.widthIn(max = 560.dp)) {
+        if (m != null) {
+            ShapedThumb(m, card.vaultId, 180.dp, alone = true, modifier = Modifier.combinedClickable(onClick = { viewing = true }, onLongClick = { menu = true }))
+            androidx.compose.material3.DropdownMenu(menu, { menu = false }) {
+                PhotoMenu(m.id, card) { menu = false }
+                remove?.let { r -> androidx.compose.material3.DropdownMenuItem(text = { Text("Remove from the entry") }, onClick = { menu = false; r() }) }
+            }
+        } else if (file != null) {
+            Row(verticalAlignment = Alignment.CenterVertically) {
+                androidx.compose.foundation.layout.Box(Modifier.weight(1f, fill = false)) { if (file.isAudio) VoicePlayer(file, card.vaultId, card) else FileChip(file, card.vaultId) }
+                if (remove != null) androidx.compose.foundation.layout.Box {
+                    androidx.compose.material3.IconButton(onClick = { menu = true }) { Icon(Icons.Outlined.MoreVert, "More", tint = Theme.muted) }
+                    androidx.compose.material3.DropdownMenu(menu, { menu = false }) {
+                        androidx.compose.material3.DropdownMenuItem(text = { Text("Remove from the entry") }, onClick = { menu = false; remove() })
+                    }
+                }
+            }
+        }
+    }
+    if (viewing && m != null) MediaViewer(media, m.id, card.vaultId) { viewing = false }
+}
+
+/**
+ * Edits a stretch of a card body as rich text, as the Swift app's `DocEditor`. Lists and checklists go on when Return
+ * is pressed, and end on an empty item; a row of buttons over the keyboard marks the words picked or the line, for the
+ * stretch last typed in.
+ */
+@Composable
+private fun TextStretch(content: JsonElement, editable: Boolean, onSave: (JsonElement) -> Unit, modifier: Modifier = Modifier, onTools: ((@Composable () -> Unit)?) -> Unit = {}, placeholder: String = "", minHeight: androidx.compose.ui.unit.Dp = 200.dp) {
     val model = LocalModel.current
     val start = remember { DocText.from(content, model.index.titleOf) }
     var rich by remember { mutableStateOf(start.text) }
@@ -239,7 +359,7 @@ fun DocEditor(content: JsonElement, editable: Boolean, onSave: (JsonElement) -> 
     LaunchedEffect(showHidden) { onTools(tools) }
     Column(modifier) {
         BasicTextField(
-            value, ::changed, Modifier.fillMaxWidth().heightIn(min = 200.dp),
+            value, ::changed, Modifier.fillMaxWidth().heightIn(min = minHeight).onFocusChanged { if (it.isFocused) onTools(tools) },
             decorationBox = { inner -> androidx.compose.foundation.layout.Box { if (value.text.isEmpty() && placeholder.isNotEmpty()) Text(placeholder, color = Theme.muted.copy(alpha = 0.7f), fontSize = 17.sp); inner() } },
             textStyle = androidx.compose.ui.text.TextStyle(color = Theme.text, fontSize = 17.sp, lineHeight = 24.sp),
             cursorBrush = SolidColor(Theme.accent),

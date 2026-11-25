@@ -115,7 +115,7 @@ _Last checked 2026-11-25._
 |---|---|---|---|---|
 | Over the dimmed page, as tall as what's in it; a click outside or Esc closes it | ✅ (Esc since 2026-11-25: the journal behind kept the keys, and a second Esc closed the whole window) | ➖ | ➖ | T |
 | On a phone: a sheet from the foot as tall as what's in it, over the dimmed page; a tap above closes it; no Done | ➖ | ✅ | ✅ | T |
-| Photos, voice messages and files show in the open entry, where they are in the text | ✅ (since 2026-11-25; before, under the text, named in it; Remove from the entry in each one's menu, where the web selects it and deletes) (T) | ✅ (since 2026-11-25, the same) (T) | ⚠️ the same | T |
+| Photos, voice messages and files show in the open entry, where they are in the text | ✅ (since 2026-11-25; before, under the text, named in it; Remove from the entry in each one's menu, where the web selects it and deletes) (T) | ✅ (since 2026-11-25, the same) (T) | ✅ (since 2026-11-25; a photo's menu on a long press, a file's or voice message's from the ⋮ beside it, with Remove from the entry) (T) | T |
 | Grouped tag opens its group to switch it; "+ Priority" for a group it has none of; other tags are labels | ✅ | ✅ | ✅ | T |
 | Bar: make it a todo/note (showing what it makes it), Aa, Tags, a page, title, color, view only, template, copy, share, archive, trash, vault; Edited, Undo, Redo, Discard | ✅ | ✅ | ✅ | T |
 | Comments only where someone else can read them | ✅ | ✅ | ✅ | T |

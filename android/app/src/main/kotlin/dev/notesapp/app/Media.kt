@@ -168,6 +168,20 @@ fun EntryAttachments(card: Card) {
     viewing?.let { MediaViewer(media, it, card.vaultId) { viewing = null } }
 }
 
+/** An entry's links as cards, as under its bubble, for the open entry, whose photos and files are in its text. */
+@Composable
+fun EntryLinks(card: Card) {
+    val model = LocalModel.current
+    val links = remember(card.id, card.updatedAt) { Doc.linkUrls(card.content).filter { !Doc.isImageUrl(it) } }
+    val linkStyle = card.payload["preview"]["links"].str ?: Settings.linkStyle
+    if (links.isEmpty() || linkStyle == "off") return
+    Column(Modifier.widthIn(max = 560.dp).padding(top = 2.dp), verticalArrangement = Arrangement.spacedBy(4.dp)) {
+        val preview = model.vault(card.vaultId)?.isEncrypted == false
+        for (url in links.take(3)) LinkCard(url, linkStyle == "compact", preview)
+        if (links.size > 3) Text("and ${links.size - 3} more links", color = Theme.muted, fontSize = 12.sp, modifier = Modifier.padding(start = 4.dp))
+    }
+}
+
 const val MAX_PHOTOS = 4
 
 /** "3 photos", "1 video", "2 photos and 1 video". */

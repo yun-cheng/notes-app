@@ -92,7 +92,7 @@ _Last checked 2026-11-25._
 | Filter row: All, Notes, Todos, Stacks; Todos status; Written dates; Contains; Templates | ✅ | ✅ | ✅ | T |
 | Day badges, pinned while their day scrolls past | ✅ | ✅ | ✅ | T |
 | A round button back to the newest entries (the end the journal opens at), shown once well away from it, above the writing box | ✅ (since 2026-11-25) | ✅ (since 2026-11-25) | ✅ (since 2026-11-25; the distance is estimated from the rows drawn) | T |
-| A rail down the right of the Journal, Archive and Templates, the Trash, Photos, Links and Files, with the years (or months, or days) by where their items fall, a thumb at where the page is, to point at, press and drag | ✅ (since 2026-11-25 on all six; before, the journal's gave each month an equal share and the others had none) (T) | ✅ (since 2026-11-25 on all six, as the web's on a phone: a handle at the edge while the page scrolls, held and dragged, with the marks and the month or day shown while dragging; the journal's by how far it's scrolled) (T: the journal's handle) | ✅ (since 2026-11-25 on all six, as the web's on a phone: a handle at the edge while the page scrolls, held and dragged, with the marks and the month or day shown while dragging; before, only the journal had one, each month an equal share) (T: the Journal, Photos and the Trash) | ? |
+| A rail down the right of the Journal, Archive and Templates, the Trash, Photos, Links and Files, with the years (or months, or days) by where their items fall, a thumb at where the page is, to point at, press and drag | ✅ (since 2026-11-25 on all six; before, the journal's gave each month an equal share and the others had none) (T) | ✅ (since 2026-11-25 on all six, as the web's on a phone: a handle at the edge while the page scrolls, held and dragged, with the marks and the month or day shown while dragging; the journal's by how far it's scrolled) (T: the journal's handle) | ✅ (since 2026-11-25 on all six, as the web's on a phone: a handle at the edge while the page scrolls, held and dragged, with the marks and the month or day shown while dragging; before, only the journal had one, each month an equal share) (T: the Journal, Photos and the Trash) | T |
 
 ## Journal box
 
@@ -234,7 +234,7 @@ Reviewed 2026-11-24, after Android's sign-in turned out to send people to Chrome
 
 ## Not checked yet
 
-Rows marked **?** above, still to try in each app: the rail of years down the journal's side, a pasted picture or
+Rows marked **?** above, still to try in each app: a pasted picture or
 picture address becoming a photo, and dragging an open stack's cards into a new order. Rows marked **C** were read in
 the code, not tried, so they're next once these are done.
 

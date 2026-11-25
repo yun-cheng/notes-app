@@ -22,6 +22,7 @@ import { holdsWords, usePageSearch } from '../PageSearch';
 import { VoiceMessage } from '../voice';
 import { keptPreviews, shownPreview } from '../useLinkPreview';
 import type { LinkPreview } from '../../sync/protocol';
+import { useShownItems } from '../useShownItems';
 
 /**
  * What the journal's entries hold, by day, for the Photos, Links or Files page: the notes and todos the journal's
@@ -136,6 +137,9 @@ function HeldList<T extends { id: string }>({ title, days: held, filtered, noun,
   const all = days.flatMap((d) => d.items);
   const keys = useMemo(() => days.flatMap((d) => d.items.map(() => d.day)), [days]);
   const list = useRef<HTMLDivElement>(null);
+  // Some at a time, as the journal draws its entries: thousands of link cards or voice messages at once are slow.
+  const { first: from, shown, before, after, reveal } = useShownItems(all, false, -1, noun[1]);
+  const to = from + shown.length;
   // Each one's place among them all, for the rail.
   let place = 0;
   return (
@@ -160,12 +164,17 @@ function HeldList<T extends { id: string }>({ title, days: held, filtered, noun,
       ) : (
         <div className="held" ref={list}>
           <p className="photos__count">{countLine(all, ...noun)}</p>
-          {days.map(({ day, items }) => (
+          {before}
+          {days.map(({ day, items }) => {
+            const start = place;
+            place += items.length;
+            if (start + items.length <= from || start >= to) return null;
+            return (
             <section key={day} className="held__day" aria-label={relativeDay(day, today)}>
               <h2 className="held__head">{relativeDay(day, today)}</h2>
               <ul className="held__items">
-                {items.map((item) => (
-                  <li key={`${item.card.id} ${item.id}`} className="held__item" data-rail-at={place++} onContextMenu={menuAt((at) => setMenuFor({ item, at }))}>
+                {items.map((item, i) => start + i < from || start + i >= to ? null : (
+                  <li key={`${item.card.id} ${item.id}`} className="held__item" data-rail-at={start + i} onContextMenu={menuAt((at) => setMenuFor({ item, at }))}>
                     {render(item)}
                     <button type="button" className="held__entry" title="Open the entry" onClick={() => entry.open(item.card)}>
                       <span>{displayTitle(item.card) || 'Untitled'}</span>
@@ -175,8 +184,10 @@ function HeldList<T extends { id: string }>({ title, days: held, filtered, noun,
                 ))}
               </ul>
             </section>
-          ))}
-          <ScrollRail keys={keys} name={(day) => relativeDay(day, today)} root={list} />
+            );
+          })}
+          {after}
+          <ScrollRail keys={keys} name={(day) => relativeDay(day, today)} root={list} reveal={reveal} />
         </div>
       )}
       {menuFor && (

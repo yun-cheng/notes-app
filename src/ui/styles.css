@@ -1635,6 +1635,8 @@ body:has(.viewer) .context-menu { z-index: 70; }
 
 /* The Links and Files pages: what entries hold, listed under the day each entry was written, each with its entry. */
 .held { padding-bottom: 32px; }
+/* Drawn some at a time (`useShownItems`); the browser keeps what's on screen still as more come in above, and as link previews there load. */
+.held > .stream__more { display: block; margin: 12px auto; }
 .held__head { margin: 18px 0 8px; font-size: 15px; font-weight: 600; }
 .held__items { display: flex; flex-direction: column; gap: 12px; margin: 0; padding: 0; list-style: none; }
 .held__item { display: flex; flex-direction: column; align-items: flex-start; gap: 3px; min-width: 0; }

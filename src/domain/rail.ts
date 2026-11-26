@@ -3,8 +3,9 @@ import { formatDate, isDateKey, parseDateKey } from './dates';
 /**
  * The rail beside a long page of entries, photos or what entries hold, as a photo library has: marks for the years
  * (or months, or groups) down its length, a thumb at where the page is, and a label for the place pointed at or
- * dragged to. Each item has a key, the day it's under (or what else groups it, a tag), and an equal share of the rail,
- * in the order the page shows them, top to bottom.
+ * dragged to. Each item has a key, the day it's under (or what else groups it, a tag), and a share of the rail, in the
+ * order the page shows them, top to bottom: an equal share, or, spaced by nearness (`railSpacing`), a share of its
+ * year's, which is larger the nearer the year is to the one being read.
  */
 
 /** A mark on the rail, a fraction of the way down: a label, or a dot where there's no room or need for one. */
@@ -53,7 +54,7 @@ export function railLabel(key: string, scale: RailScale, name: (key: string) => 
  * that isn't a day. A rail of months or days names the year too where it starts ("Mar 2026"), so the year shows
  * however short the page is. Labels too near the one above are left out, then dots too near anything kept.
  */
-export function railMarks(keys: readonly string[], height: number, name: (key: string) => string, locale?: string): RailMark[] {
+export function railMarks(keys: readonly string[], height: number, name: (key: string) => string, locale?: string, spacing?: RailSpacing | null): RailMark[] {
   const n = keys.length;
   if (!n || height <= 0) return [];
   const scale = railScale(keys);
@@ -65,7 +66,7 @@ export function railMarks(keys: readonly string[], height: number, name: (key: s
   keys.forEach((key, i) => {
     if (key === last) return;
     last = key;
-    const at = i / n;
+    const at = railAtItem(i, n, spacing);
     if (scale === 'name' || !isDateKey(key)) return void labels.push({ at, label: name(key) });
     const before = day;
     day = key;
@@ -101,9 +102,74 @@ export function railMarks(keys: readonly string[], height: number, name: (key: s
   return shown.sort((a, b) => a.at - b.at);
 }
 
+/**
+ * Where each item starts on a rail spaced other than evenly: `starts[i]` for the item at `i`, from 0, and 1 after the
+ * last, `n + 1` in all. None (`null`) is an equal share each.
+ */
+export type RailSpacing = Float64Array;
+
+/** How the rail is spaced: an equal share for each item, or more for the years nearer the one being read. */
+export type RailSpacingChoice = 'entries' | 'near';
+
+/**
+ * The rail spaced by nearness: each year with items has a share of the rail by how many years it is from `year`, the
+ * one being read (1 for it, ½ the year either side, ⅓ the next, and so on), and its items share that evenly; an item
+ * with no day goes with the year above it. None on a rail that isn't of years, nor with no year to go by.
+ */
+export function railSpacing(keys: readonly string[], year: number | null): RailSpacing | null {
+  const n = keys.length;
+  if (year === null || n < 2 || railScale(keys) !== 'year') return null;
+  const years = new Float64Array(n);
+  const counts = new Map<number, number>();
+  let last = NaN;
+  for (let i = 0; i < n; i++) {
+    if (keys[i]) last = Number(keys[i].slice(0, 4));
+    years[i] = last;
+  }
+  // Items with no day above any with one go with the first year after them.
+  const first = years.find((y) => !Number.isNaN(y)) ?? year;
+  for (let i = 0; i < n && Number.isNaN(years[i]); i++) years[i] = first;
+  for (const y of years) counts.set(y, (counts.get(y) ?? 0) + 1);
+  let total = 0;
+  for (const y of counts.keys()) total += 1 / (1 + Math.abs(y - year));
+  const starts = new Float64Array(n + 1);
+  for (let i = 0; i < n; i++) starts[i + 1] = starts[i] + 1 / (1 + Math.abs(years[i] - year)) / counts.get(years[i])! / total;
+  starts[n] = 1;
+  return starts;
+}
+
+/** The year of the item at `index`, the year a rail spaced by nearness is spaced around; null when it has no day. */
+export function railYear(keys: readonly string[], index: number): number | null {
+  for (let i = Math.min(index, keys.length - 1); i >= 0; i--) if (isDateKey(keys[i])) return Number(keys[i].slice(0, 4));
+  const next = keys.find(isDateKey);
+  return next ? Number(next.slice(0, 4)) : null;
+}
+
+/** The place on the rail of a place among the items: `x` items down, part way into one when it isn't whole. */
+export function railAtItem(x: number, n: number, spacing?: RailSpacing | null): number {
+  if (n <= 0) return 0;
+  const at = Math.min(n, Math.max(0, x));
+  if (!spacing) return at / n;
+  const index = Math.min(n - 1, Math.floor(at));
+  return spacing[index] + (at - index) * (spacing[index + 1] - spacing[index]);
+}
+
 /** The item a place on the rail (0 at the top, 1 at the foot) falls in, and how far into it. */
-export function railItem(at: number, n: number): { index: number; into: number } {
-  const exact = Math.min(1, Math.max(0, at)) * n;
+export function railItem(at: number, n: number, spacing?: RailSpacing | null): { index: number; into: number } {
+  const to = Math.min(1, Math.max(0, at));
+  if (spacing && n > 0) {
+    // The last item starting at or above it.
+    let lo = 0;
+    let hi = n - 1;
+    while (lo < hi) {
+      const mid = (lo + hi + 1) >> 1;
+      if (spacing[mid] <= to) lo = mid;
+      else hi = mid - 1;
+    }
+    const size = spacing[lo + 1] - spacing[lo];
+    return { index: lo, into: size > 0 ? Math.min(1, Math.max(0, (to - spacing[lo]) / size)) : 0 };
+  }
+  const exact = to * n;
   const index = Math.min(n - 1, Math.floor(exact));
   return { index, into: Math.min(1, exact - index) };
 }
@@ -118,8 +184,8 @@ export function intoRow(index: number, into: number, first: number, count: numbe
 }
 
 /** `intoRow`, turned round: the place on a rail of `n` items that's `down` the stretch of a row. */
-export function rowRailAt(first: number, count: number, down: number, n: number): number {
-  return n > 0 ? Math.min(1, (first + Math.min(1, Math.max(0, down)) * count) / n) : 0;
+export function rowRailAt(first: number, count: number, down: number, n: number, spacing?: RailSpacing | null): number {
+  return n > 0 ? Math.min(1, railAtItem(first + Math.min(1, Math.max(0, down)) * count, n, spacing)) : 0;
 }
 
 /**

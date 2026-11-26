@@ -1,6 +1,7 @@
 import { useEffect, useMemo, useRef, useState, type PointerEvent as ReactPointerEvent, type RefObject } from 'react';
 import { Icon } from './Icon';
-import { intoRow, railItem, railLabel, railMarks, railScale, readingLine, rowRailAt, scrollFor } from '../domain/rail';
+import { intoRow, railAtItem, railItem, railLabel, railMarks, railScale, railSpacing, railYear, readingLine, scrollFor } from '../domain/rail';
+import { useDisplayPrefs } from './displayPrefs';
 
 /** The attribute on each item the rail goes by, its place in the rail's `keys`. */
 export const RAIL_AT = 'data-rail-at';
@@ -28,8 +29,8 @@ interface Place {
   /** What's in view, between the title bar and anything at the foot of the screen. */
   top: number;
   height: number;
-  /** Where the page is, 0 at the top and 1 at the end (`readingLine`). */
-  at: number;
+  /** Where the page is, in items: how many are above the reading line (`readingLine`), part way into one. */
+  x: number;
   /** How far the page scrolls. */
   scrollable: number;
 }
@@ -109,14 +110,14 @@ function measure(root: HTMLElement, n: number): Place {
       lo = mid + 1;
     } else hi = mid - 1;
   }
-  let at = 0;
+  let x = 0;
   if (found >= 0) {
     const row = rowOf(root, items[found], Number(items[found].getAttribute(RAIL_AT)));
-    at = rowRailAt(row.first, row.count, row.extent ? (line - row.top) / row.extent : 0, n);
+    x = row.first + Math.min(1, Math.max(0, row.extent ? (line - row.top) / row.extent : 0)) * row.count;
   } else if (items.length) {
-    at = Number(items[0].getAttribute(RAIL_AT)) / n;
+    x = Number(items[0].getAttribute(RAIL_AT));
   }
-  return { top, height, at: Math.min(1, at), scrollable };
+  return { top, height, x: Math.min(n, x), scrollable };
 }
 
 /**
@@ -140,8 +141,16 @@ export function ScrollRail({ keys: given, name, root, reveal }: Props) {
   const [point, setPoint] = useState<number | null>(null);
   // Scrolled lately: the thumb shows on a touch screen.
   const [awake, setAwake] = useState(false);
-  const latest = useRef({ n, name, reveal, place });
-  latest.current = { n, name, reveal, place };
+  const { rail: spacedBy } = useDisplayPrefs();
+  // Spaced by nearness, the year it's spaced around: the one being read, but kept while the rail is pointed at or
+  // dragged, so nothing on it moves under the pointer, and taken up again once it's let go.
+  const reading = place && n ? railYear(keys, Math.min(n - 1, Math.floor(place.x))) : null;
+  const [year, setYear] = useState(reading);
+  if (drag === null && point === null && reading !== year) setYear(reading);
+  const spacing = useMemo(() => (spacedBy === 'near' ? railSpacing(keys, year ?? reading) : null), [keys, spacedBy, year ?? reading]);
+  const at = place ? railAtItem(place.x, n, spacing) : 0;
+  const latest = useRef({ n, name, reveal, place, spacing, at });
+  latest.current = { n, name, reveal, place, spacing, at };
 
   useEffect(() => {
     let frame = 0;
@@ -153,7 +162,7 @@ export function ScrollRail({ keys: given, name, root, reveal }: Props) {
         const el = root.current;
         if (!el) return;
         const next = measure(el, latest.current.n);
-        setPlace((was) => (was && Math.abs(was.at - next.at) < 1e-4 && was.top === next.top && was.height === next.height && was.scrollable === next.scrollable ? was : next));
+        setPlace((was) => (was && Math.abs(was.x - next.x) < 1e-4 && was.top === next.top && was.height === next.height && was.scrollable === next.scrollable ? was : next));
       });
     };
     const onScroll = () => {
@@ -196,7 +205,7 @@ export function ScrollRail({ keys: given, name, root, reveal }: Props) {
       j.frame = 0;
       const el = root.current;
       if (j.to === null || !el) return;
-      const { index, into } = railItem(j.to, latest.current.n);
+      const { index, into } = railItem(j.to, latest.current.n, latest.current.spacing);
       const item = itemAt(el, index);
       if (!item) {
         if (j.tries++ === 0) latest.current.reveal?.(index);
@@ -220,7 +229,7 @@ export function ScrollRail({ keys: given, name, root, reveal }: Props) {
 
   const scale = useMemo(() => railScale(keys), [keys]);
   const height = place?.height ?? 0;
-  const marks = useMemo(() => railMarks(keys, height, latest.current.name), [keys, height]);
+  const marks = useMemo(() => railMarks(keys, height, latest.current.name, undefined, spacing), [keys, height, spacing]);
 
   // Held at the thumb, it moves with the pointer from where it was; pressed elsewhere, it goes there.
   const held = useRef<{ id: number; y: number; from: number } | null>(null);
@@ -234,7 +243,7 @@ export function ScrollRail({ keys: given, name, root, reveal }: Props) {
     if (e.button !== 0 || !place) return;
     e.preventDefault();
     e.stopPropagation();
-    held.current = { id: e.pointerId, y: e.clientY, from: onThumb ? place.at : (e.clientY - place.top) / place.height };
+    held.current = { id: e.pointerId, y: e.clientY, from: onThumb ? at : (e.clientY - place.top) / place.height };
     try {
       (e.currentTarget as HTMLElement).setPointerCapture(e.pointerId);
     } catch {
@@ -260,10 +269,10 @@ export function ScrollRail({ keys: given, name, root, reveal }: Props) {
   };
 
   if (!place || n < 2 || place.scrollable <= place.height / 2 || !place.height) return null;
-  const thumb = drag ?? place.at;
+  const thumb = drag ?? at;
   const told = drag ?? point;
-  const label = told === null ? null : railLabel(keys[railItem(told, n).index], scale, name);
-  const y = (at: number) => at * place.height;
+  const label = told === null ? null : railLabel(keys[railItem(told, n, spacing).index], scale, name);
+  const y = (along: number) => along * place.height;
   const edge = window.matchMedia(COMPACT).matches ? Math.min(HANDLE, place.height / 2) : 0;
   return (
     <div

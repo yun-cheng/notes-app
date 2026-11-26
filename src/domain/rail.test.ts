@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { drawnRange, intoRow, railItem, railLabel, railMarks, railScale, readingLine, rowRailAt, scrollFor, stretchFor } from './rail';
+import { drawnRange, intoRow, railAtItem, railItem, railLabel, railMarks, railScale, railSpacing, railYear, readingLine, rowRailAt, scrollFor, stretchFor } from './rail';
 
 const name = (key: string) => (key ? `#${key}` : 'None');
 const labels = (keys: string[], height = 1000) => railMarks(keys, height, name, 'en-US').filter((m) => m.label).map((m) => [m.label, m.at]);
@@ -109,5 +109,47 @@ describe('a row of items side by side, as photos are', () => {
       expect(rowRailAt(4, 3, intoRow(index, into, 4, 3), n)).toBeCloseTo((index + into) / n);
     }
     expect(rowRailAt(4, 3, 2, n)).toBeCloseTo(7 / n);
+  });
+
+  it('spaced by nearness, gives each year room by how far it is from the one being read, shared by its items', () => {
+    // 2024 has one item, 2025 two, 2026 seven.
+    const keys = ['2024-05-01', '2025-01-01', '2025-02-01', ...Array(7).fill('2026-03-01')];
+    const near = railSpacing(keys, 2024)!;
+    // 2024 1, 2025 ½, 2026 ⅓: of 11/6 in all.
+    expect(near[1]).toBeCloseTo(6 / 11);
+    expect(near[3]).toBeCloseTo(9 / 11);
+    expect(near[10]).toBe(1);
+    // Each of 2025's two shares its half.
+    expect(near[2] - near[1]).toBeCloseTo(near[3] - near[2]);
+    expect(labels(keys).map(([, at]) => at)).toEqual([0, 0.1, 0.3]);
+    expect(railMarks(keys, 1000, name, 'en-US', near).filter((m) => m.label).map((m) => m.at.toFixed(3))).toEqual(['0.000', (6 / 11).toFixed(3), (9 / 11).toFixed(3)]);
+    // Read in 2026, it's the largest.
+    const later = railSpacing(keys, 2026)!;
+    expect(1 - later[3]).toBeCloseTo(1 / (1 / 3 + 1 / 2 + 1));
+    // Not a rail of years, or no year: an equal share each.
+    expect(railSpacing(['2026-01-01', '2026-02-01'], 2026)).toBeNull();
+    expect(railSpacing(keys, null)).toBeNull();
+  });
+
+  it('goes between a place among the items and on the rail, spaced or not, the one the other turned round', () => {
+    const keys = ['2024-05-01', '2025-01-01', '2025-02-01', ...Array(7).fill('2026-03-01')];
+    const spacing = railSpacing(keys, 2024)!;
+    for (const x of [0, 0.5, 1, 2.25, 6.5, 9.99]) {
+      const at = railAtItem(x, keys.length, spacing);
+      const { index, into } = railItem(at, keys.length, spacing);
+      expect(index + into).toBeCloseTo(x);
+    }
+    expect(railAtItem(10, keys.length, spacing)).toBe(1);
+    expect(railItem(1, keys.length, spacing)).toEqual({ index: 9, into: 1 });
+    expect(railAtItem(2.5, 10)).toBe(0.25);
+    expect(rowRailAt(1, 2, 0.5, 10, spacing)).toBeCloseTo(spacing[2]);
+  });
+
+  it('spaces by the year of the item read, an item with no day going with the one above it', () => {
+    const keys = ['', '2024-05-01', '', '2026-03-01'];
+    expect(railYear(keys, 0)).toBe(2024);
+    expect(railYear(keys, 2)).toBe(2024);
+    expect(railYear(keys, 3)).toBe(2026);
+    expect(railYear(['', ''], 1)).toBeNull();
   });
 });

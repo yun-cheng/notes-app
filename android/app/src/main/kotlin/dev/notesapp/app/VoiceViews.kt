@@ -19,6 +19,7 @@ import android.media.MediaFormat
 import android.media.MediaMuxer
 import android.media.MediaPlayer
 import android.media.MediaRecorder
+import android.media.audiofx.LoudnessEnhancer
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.foundation.Canvas
@@ -106,11 +107,14 @@ import kotlinx.serialization.json.JsonElement
 import java.io.ByteArrayOutputStream
 import java.io.File
 import java.time.LocalDateTime
+import kotlin.math.pow
+import kotlin.math.roundToInt
 
 /**
  * The voice message playing, for every player and the bar along the top of the journal, as the web's: one plays at a
- * time, one that ends runs on to the next while they come one after another (in the same entry, or the next one), and
- * all play at one volume kept on this device, read as heard (half way is a quarter as loud), or muted.
+ * time, one that ends runs on to the next while they come one after another (in the same entry, or the next one), each
+ * is evened out as it plays (`Voice.nextLevel` + `LoudnessEnhancer`), and all play at one volume kept on this device,
+ * read as heard (half way is a quarter as loud), or muted.
  */
 object VoicePlayback {
     data class Item(val file: Doc.FileInfo, val cardId: String?, val vaultId: String)
@@ -121,12 +125,36 @@ object VoicePlayback {
     var total by mutableDoubleStateOf(0.0); private set
     var rate by mutableFloatStateOf(1f); private set
     private var player: MediaPlayer? = null
+    private var enhancer: LoudnessEnhancer? = null
     private var model: AppModel? = null
     private var ticking: kotlinx.coroutines.Job? = null
+    private var decoding: kotlinx.coroutines.Job? = null
+    private val levels = mutableMapOf<String, Double>()
+    private val curves = mutableMapOf<String, FloatArray>()
+    private var currentLevel: Double? = null
+    private var currentGainDb = 0.0
+    private var activeCurve: FloatArray? = null
 
     private val heard get() = if (Settings.voiceMuted) 0f else Settings.voiceVolume * Settings.voiceVolume
 
     fun isCurrent(id: String) = item?.file?.id == id
+
+    private fun applyOutputGain(p: MediaPlayer) {
+        val base = heard
+        if (Settings.voiceMuted || base <= 0f) {
+            p.setVolume(0f, 0f)
+            runCatching { enhancer?.setTargetGain(0) }
+            return
+        }
+        if (currentGainDb > 0.0) {
+            p.setVolume(base, base)
+            runCatching { enhancer?.setTargetGain((currentGainDb * 100.0).roundToInt().coerceIn(0, 1800)) }
+        } else {
+            val atten = 10.0.pow(currentGainDb / 20.0).toFloat().coerceIn(0f, 1f)
+            p.setVolume(base * atten, base * atten)
+            runCatching { enhancer?.setTargetGain(0) }
+        }
+    }
 
     /** Plays `file` from `at` seconds (or where it was), stopping any other. */
     fun play(file: Doc.FileInfo, cardId: String?, vaultId: String, model: AppModel, at: Double? = null) {
@@ -134,7 +162,7 @@ object VoicePlayback {
         val p = player
         if (item?.file?.id == file.id && p != null) {
             at?.let { p.seekTo((it * 1000).toInt()); time = it }
-            p.start(); speed(p); p.setVolume(heard, heard)
+            p.start(); speed(p); applyOutputGain(p)
             playing = true
             tick()
             return
@@ -143,11 +171,23 @@ object VoicePlayback {
         item = Item(file, cardId, vaultId)
         time = at ?: 0.0
         total = file.duration ?: 0.0
+        currentLevel = levels[file.id]
+        currentGainDb = Voice.levelGainDb(currentLevel)
+        activeCurve = curves[file.id]
         playing = true
         model.scope.launch {
             val f = Attachments.fileFor(file.id, file.name.ifEmpty { "voice.m4a" }, model)
             if (f == null) { if (isCurrent(file.id)) stop(); model.say("That voice message can't be fetched now."); return@launch }
             if (!isCurrent(file.id)) return@launch
+            if (activeCurve == null) {
+                decoding = model.scope.launch {
+                    val samples = Transcriber.samples(f) ?: return@launch
+                    val curve = Voice.windowLoudness(samples)
+                    if (curves.size >= 32) curves.keys.firstOrNull()?.let(curves::remove)
+                    curves[file.id] = curve
+                    if (isCurrent(file.id)) activeCurve = curve
+                }
+            }
             val mp = MediaPlayer()
             runCatching {
                 mp.setDataSource(f.path)
@@ -155,7 +195,8 @@ object VoicePlayback {
                 mp.setOnCompletionListener { finished() }
                 if (mp.duration > 0) total = mp.duration / 1000.0
                 at?.let { mp.seekTo((it * 1000).toInt()) }
-                mp.setVolume(heard, heard)
+                enhancer = runCatching { LoudnessEnhancer(mp.audioSessionId).apply { enabled = true } }.getOrNull()
+                applyOutputGain(mp)
                 player = mp
                 if (playing) { mp.start(); speed(mp); tick() }
             }.onFailure { mp.release(); stop(); model.say("That sound can't be played here.") }
@@ -169,15 +210,31 @@ object VoicePlayback {
         val m = model ?: return
         ticking = m.scope.launch {
             while (isActive && playing) {
-                player?.let { p -> runCatching { time = p.currentPosition / 1000.0 } }
-                delay(100)
+                player?.let { p ->
+                    runCatching {
+                        val posMs = p.currentPosition
+                        time = posMs / 1000.0
+                        val curve = activeCurve
+                        if (curve != null && curve.isNotEmpty()) {
+                            val idx = (posMs / 50).coerceIn(0, curve.lastIndex)
+                            val next = Voice.nextLevel(currentLevel, curve[idx].toDouble())
+                            if (next != null) {
+                                currentLevel = next
+                                item?.file?.id?.let { levels[it] = next }
+                            }
+                            currentGainDb = Voice.smoothGainDb(currentGainDb, Voice.levelGainDb(currentLevel), 0.05)
+                            applyOutputGain(p)
+                        }
+                    }
+                }
+                delay(50)
             }
         }
     }
 
     fun toggle() {
         val p = player ?: run { playing = !playing; return }
-        if (playing) p.pause() else { p.start(); speed(p) }
+        if (playing) p.pause() else { p.start(); speed(p); applyOutputGain(p) }
         playing = !playing
         if (playing) tick()
     }
@@ -193,16 +250,22 @@ object VoicePlayback {
     /** Stops it and closes the bar. */
     fun stop() { release(); item = null; playing = false; time = 0.0 }
 
-    fun setVolume(v: Float) { Settings.setVoice(v, false); player?.setVolume(heard, heard) }
+    fun setVolume(v: Float) { Settings.setVoice(v, false); player?.let(::applyOutputGain) }
 
     /** Mutes them, or brings them back: at half volume, from none. */
     fun toggleMute() {
         if (Settings.voiceMuted || Settings.voiceVolume == 0f) Settings.setVoice(if (Settings.voiceVolume == 0f) 0.5f else Settings.voiceVolume, false)
         else Settings.setVoice(Settings.voiceVolume, true)
-        player?.setVolume(heard, heard)
+        player?.let(::applyOutputGain)
     }
 
-    private fun release() { ticking?.cancel(); player?.release(); player = null }
+    private fun release() {
+        decoding?.cancel(); decoding = null
+        ticking?.cancel(); ticking = null
+        runCatching { enhancer?.release() }; enhancer = null
+        player?.release(); player = null
+        activeCurve = null
+    }
 
     private fun finished() {
         playing = false

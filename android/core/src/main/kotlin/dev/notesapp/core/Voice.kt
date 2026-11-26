@@ -6,7 +6,10 @@ import kotlinx.serialization.json.JsonNull
 import kotlinx.serialization.json.JsonObject
 import java.io.ByteArrayOutputStream
 import java.time.LocalDateTime
+import kotlin.math.exp
 import kotlin.math.floor
+import kotlin.math.log10
+import kotlin.math.pow
 import kotlin.math.roundToInt
 import kotlin.math.sqrt
 
@@ -21,9 +24,62 @@ object Voice {
     const val PIECE_SECONDS = 120
     /** How many bars a voice message is drawn with. */
     const val PEAK_BARS = 48
+    /** Target speech loudness in dB below full scale, as the web app's `LEVEL_TARGET`. */
+    const val LEVEL_TARGET = -18.0
+    private const val LEVEL_GATE = -50.0
+    private const val MOST_UP = 18.0
+    private const val MOST_DOWN = -6.0
 
     data class Transcript(val transcript: String, val language: String?, val cues: List<Doc.Cue>)
     data class Piece(val offset: Double, val text: String, val language: String?, val cues: List<Doc.Cue>)
+
+    /** How loud a short stretch of sound is: its RMS in dB below full scale, -Infinity for silence. */
+    fun loudness(samples: FloatArray, from: Int = 0, to: Int = samples.size): Double {
+        val start = from.coerceIn(0, samples.size)
+        val end = to.coerceIn(start, samples.size)
+        if (end <= start) return Double.NEGATIVE_INFINITY
+        var sum = 0.0
+        for (i in start until end) {
+            val s = samples[i].toDouble()
+            sum += s * s
+        }
+        val rms = sqrt(sum / (end - start))
+        return if (rms > 0.0) 20.0 * log10(rms) else Double.NEGATIVE_INFINITY
+    }
+
+    /** How loud a voice message is speaking, from what it was and the stretch just `heard`; null until it's spoken. */
+    fun nextLevel(level: Double?, heard: Double): Double? {
+        if (!(heard > LEVEL_GATE)) return level
+        if (level == null) return heard
+        return level + (heard - level) * if (heard > level) 0.5 else 0.04
+    }
+
+    /** Gain in dB to bring speech at `level` toward `LEVEL_TARGET`, clamped to `[-6, +18]` dB; 0 until spoken. */
+    fun levelGainDb(level: Double?): Double =
+        if (level == null) 0.0 else (LEVEL_TARGET - level).coerceIn(MOST_DOWN, MOST_UP)
+
+    /** What to multiply a voice message by, speaking at `level`, to be heard at `LEVEL_TARGET`: 1 until spoken. */
+    fun levelGain(level: Double?): Double =
+        if (level == null) 1.0 else 10.0.pow(levelGainDb(level) / 20.0)
+
+    /** Loudness in dBFS for every `windowMs` slice of decoded mono samples, used to follow level as a clip plays. */
+    fun windowLoudness(samples: FloatArray, rate: Int = RATE, windowMs: Int = 50): FloatArray {
+        if (samples.isEmpty() || rate <= 0 || windowMs <= 0) return FloatArray(0)
+        val step = maxOf(1, (rate * windowMs) / 1000)
+        val count = (samples.size + step - 1) / step
+        return FloatArray(count) { i ->
+            val start = i * step
+            val end = minOf(samples.size, start + step)
+            loudness(samples, start, end).toFloat()
+        }
+    }
+
+    /** Exponentially smooths `currentDb` toward `targetDb` over `dtSeconds`, matching Web Audio's 0.15s ramp. */
+    fun smoothGainDb(currentDb: Double, targetDb: Double, dtSeconds: Double, timeConstant: Double = 0.15): Double {
+        if (dtSeconds <= 0.0 || timeConstant <= 0.0) return targetDb
+        val decay = exp(-dtSeconds / timeConstant)
+        return targetDb + (currentDb - targetDb) * decay
+    }
 
     /** A recording's name, from when it was made: "Voice message 2026-11-20 14.32.m4a". */
     fun name(at: LocalDateTime, ext: String) = "Voice message %04d-%02d-%02d %02d.%02d.%s".format(at.year, at.monthValue, at.dayOfMonth, at.hour, at.minute, ext)

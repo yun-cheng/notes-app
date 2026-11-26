@@ -48,6 +48,7 @@ import dev.notesapp.core.Rail
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.flow.first
 
 /** How long the handle stays after the page stops scrolling, as the web's on a touch screen. */
 private const val AWAKE_MS = 1500L
@@ -227,5 +228,74 @@ fun LaidRail(state: ScrollState, keys: List<String>, tops: List<Float>, bottoms:
         val y = stretch.first + Rail.intoRow(index, into, first, count) * stretch.second
         job?.cancel()
         job = scope.launch { state.scrollTo(Rail.scrollFor(y, scrollable, 0.0, viewport).toInt()) }
+    }
+}
+
+/**
+ * Where each page was scrolled to, kept while the app runs, so going back to a page (or a view of the journal, a tag or
+ * a vault) finds it where it was left, as the web's `scrollPlace` and the Mac's and iPhone's `KeptPlaces`: the row at
+ * the top of the screen, by its key, and how far down it was. At the end a page opens at (the newest, at the foot of
+ * a chat), nothing is kept, so it opens there again with whatever was written meanwhile. Keys start with the account's ID.
+ */
+object KeptPlaces {
+    data class Place(val key: Any, val offset: Int)
+
+    private val places = mutableMapOf<String, Place>()
+    private val pixels = mutableMapOf<String, Int>()
+
+    fun place(key: String) = places[key]
+    fun pixels(key: String) = pixels[key]
+
+    /** Keeps where `list` is: the first row on screen whose key `counts`. None found leaves what was. */
+    fun keep(key: String, list: LazyListState, chat: Boolean, counts: (Any) -> Boolean) {
+        if (if (chat) !list.canScrollForward else list.firstVisibleItemIndex == 0 && list.firstVisibleItemScrollOffset == 0) {
+            places.remove(key)
+            return
+        }
+        val row = list.layoutInfo.visibleItemsInfo.firstOrNull { it.offset + it.size > 0 && counts(it.key) } ?: return
+        places[key] = Place(row.key, row.offset)
+    }
+
+    fun keepPixels(key: String, value: Int) {
+        if (value > 0) pixels[key] = value else pixels.remove(key)
+    }
+
+    /** Follows `list` as it's scrolled, keeping its place under `key`, until the page goes. */
+    suspend fun follow(key: String, list: LazyListState, chat: Boolean, counts: (Any) -> Boolean) {
+        androidx.compose.runtime.snapshotFlow { list.firstVisibleItemIndex to list.firstVisibleItemScrollOffset }.collect { keep(key, list, chat, counts) }
+    }
+
+    /** Scrolls `list` to a kept place, at row `row`. */
+    suspend fun goTo(list: LazyListState, row: Int, place: Place) {
+        list.scrollToItem(row)
+        list.scrollBy(-place.offset.toFloat())
+    }
+}
+
+/**
+ * Opens a list that starts at its top (the Trash, Links, Files) where it was left (`KeptPlaces`), and keeps its place
+ * as it's scrolled: `rowOf` finds the row of an item's key, null for rows that aren't items.
+ */
+@Composable
+fun KeepPlace(key: String, list: LazyListState, rowOf: (Any) -> Int?) {
+    val latestRowOf by rememberUpdatedState(rowOf)
+    LaunchedEffect(key) {
+        KeptPlaces.place(key)?.let { kept -> latestRowOf(kept.key)?.let { KeptPlaces.goTo(list, it, kept) } }
+        KeptPlaces.follow(key, list, chat = false) { latestRowOf(it) != null }
+    }
+}
+
+/**
+ * Opens a page scrolled as a whole (Photos) where it was left, once it's tall enough to (it lays itself out a moment
+ * after it shows), and keeps how far down it is.
+ */
+@Composable
+fun KeepPlace(key: String, scroll: ScrollState) {
+    LaunchedEffect(key) {
+        KeptPlaces.pixels(key)?.let { y ->
+            kotlinx.coroutines.withTimeoutOrNull(1500) { androidx.compose.runtime.snapshotFlow { scroll.maxValue }.first { it >= y } }
+            scroll.scrollTo(minOf(y, scroll.maxValue))
+        }
+        androidx.compose.runtime.snapshotFlow { scroll.value }.collect { KeptPlaces.keepPixels(key, it) }
     }
 }

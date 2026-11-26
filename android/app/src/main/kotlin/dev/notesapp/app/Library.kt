@@ -155,6 +155,7 @@ fun <T> HeldList(
                 for (d in shown) { i++; for ((t, card) in d.items) m[keyOf(t, card)] = i++ }
                 m
             }
+            KeepPlace("${model.accountId} $title", list) { rowOf[it as? String] }
             LazyColumn(Modifier.fillMaxSize(), list, contentPadding = androidx.compose.foundation.layout.PaddingValues(16.dp)) {
             item { Text(countLine(if (all.size == 1) "1 ${noun.first}" else "${all.size} ${noun.second}", all.map { it.second.id }.toSet().size), Modifier.padding(bottom = 8.dp), color = Theme.muted, fontSize = 14.sp) }
             for (day in shown) {
@@ -343,6 +344,7 @@ fun PhotosPage(openDrawer: (() -> Unit)?) {
             return@Column
         }
         val scroll = rememberScrollState()
+        KeepPlace("${model.accountId} photos", scroll)
         // Where the photos' box is in the scrolled content, and each photo there, in pixels, for the rail.
         var content by remember { mutableStateOf<androidx.compose.ui.layout.LayoutCoordinates?>(null) }
         var boxTop by remember { mutableStateOf(0f) }

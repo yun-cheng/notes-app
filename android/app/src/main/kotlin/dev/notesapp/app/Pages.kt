@@ -144,6 +144,7 @@ fun TrashPage(openDrawer: (() -> Unit)?) {
                 for ((_, cards) in days) { i++; for (c in cards) m[c.id] = i++ }
                 m
             }
+            KeepPlace("${model.accountId} trash $filter", list) { rowOf[it as? String] }
             LazyColumn(Modifier.fillMaxSize(), list, contentPadding = PaddingValues(16.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
                 if (attachmentsShown) item { TrashedAttachments(filter.vaultId) }
                 for ((day, cards) in days) {

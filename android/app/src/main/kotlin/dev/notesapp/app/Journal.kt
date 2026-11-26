@@ -172,8 +172,6 @@ fun JournalView(initial: StreamFilter, openDrawer: (() -> Unit)?, fixed: Boolean
                     m
                 }
                 val rows = (if (chat && all.size > visible.size) 1 else 0) + groups.sumOf { 1 + it.second.size }
-                // A chat opens at its newest entry, at the foot.
-                LaunchedEffect(filter, rows > 0) { if (chat && rows > 0) { list.scrollToItem(rows - 1); list.scrollBy(100_000f) } }
                 // Opening the keyboard to write keeps the newest entries in view, as a chat does.
                 val typing = androidx.compose.foundation.layout.WindowInsets.isImeVisible
                 LaunchedEffect(typing) { if (typing && chat && rows > 0) { list.scrollToItem(rows - 1); list.scrollBy(100_000f) } }
@@ -184,6 +182,21 @@ fun JournalView(initial: StreamFilter, openDrawer: (() -> Unit)?, fixed: Boolean
                 val latestRowOf by androidx.compose.runtime.rememberUpdatedState(rowOf)
                 var settled by remember(filter) { mutableStateOf(false) }
                 LaunchedEffect(filter) { kotlinx.coroutines.delay(600); settled = true }
+                // Where it was left (`KeptPlaces`), drawn far enough to reach it; else a chat opens at its newest entry,
+                // at the foot. From then on, where it is is kept.
+                val placeKey = "${model.accountId} journal $filter"
+                LaunchedEffect(filter, rows > 0) {
+                    if (rows == 0) return@LaunchedEffect
+                    val kept = KeptPlaces.place(placeKey)
+                    val at = kept?.let { k -> all.indexOfFirst { it.card.id == k.key } } ?: -1
+                    if (kept != null && at >= 0) {
+                        val need = if (chat) all.size - at else at + 1
+                        if (need > shown) shown = minOf(all.size, need + PAGE_SIZE / 2)
+                        val row = androidx.compose.runtime.snapshotFlow { latestRowOf[kept.key] }.first { it != null }!!
+                        KeptPlaces.goTo(list, row, kept)
+                    } else if (chat) { list.scrollToItem(rows - 1); list.scrollBy(100_000f) }
+                    KeptPlaces.follow(placeKey, list, chat) { it is String && latestRowOf.containsKey(it) }
+                }
                 val nearMore by remember(list) { androidx.compose.runtime.derivedStateOf { list.layoutInfo.visibleItemsInfo.any { it.key == MORE_KEY } } }
                 // Again after each is drawn and the place kept, while the button is still in view. Run apart from this
                 // effect, which drawing more starts again: cancelled midway, the place wasn't kept, the button stayed in

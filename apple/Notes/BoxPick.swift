@@ -5,13 +5,15 @@ import SwiftUI
 /// its pick circle isn't a box. Places are in the stream's own space (`space`), so scrolling doesn't move them.
 @MainActor final class StreamPlaces {
     static let space = "journalStream"
-    /// Each entry's row, the width of the stream, by entry ID.
+    /// Each entry's row, the width of the stream, by entry ID: only those laid out now. One the list lets go of (well
+    /// off screen) is forgotten, as its place goes stale when entries come in above it; the rail went by stale ones,
+    /// and its thumb jumped about while scrolling fast.
     var rows: [String: CGRect] = [:]
     /// What a drag can't start on, by entry ID and part: its bubble and what's under it.
     var solid: [String: [String: CGRect]] = [:]
 
     /// Whether a drag from here would start on something of one of `ids` (the entries shown) rather than empty space.
-    /// Entries no longer shown keep their last places, so only those shown count.
+    /// Only entries shown count.
     func isSolid(_ point: CGPoint, among ids: [String]) -> Bool {
         ids.contains { id in
             if solid[id]?.values.contains(where: { $0.contains(point) }) == true { return true }
@@ -55,6 +57,9 @@ private struct StreamPlace: ViewModifier {
         if let places {
             content.onGeometryChange(for: CGRect.self) { $0.frame(in: .named(StreamPlaces.space)) } action: { frame in
                 if let part { places.solid[id, default: [:]][part] = frame } else { places.rows[id] = frame }
+            }
+            .onDisappear {
+                if let part { places.solid[id]?[part] = nil } else { places.rows[id] = nil }
             }
         } else {
             content

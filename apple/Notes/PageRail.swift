@@ -25,6 +25,12 @@ import SwiftUI
     var shown = false
     /// Where each item is in the content, by ID, as last drawn.
     @ObservationIgnored var rows: [String: CGRect] = [:]
+    /// Until when the thumb stays put: while the page draws more above and scrolls back to where it was, it shows
+    /// the first of them for a moment, which isn't where the reader is.
+    @ObservationIgnored private var heldUntil: Date?
+
+    /// Keeps the thumb where it is a moment (`heldUntil`).
+    func hold(for seconds: Double = 0.3) { heldUntil = Date().addingTimeInterval(seconds) }
     @ObservationIgnored private var geometry: Geometry?
 
     /// The row the item at `index` of `ids` is in (items side by side share one), and the stretch of the page it
@@ -51,18 +57,31 @@ import SwiftUI
         let show = n > 1 && g.scrollable > g.height / 2
         if show != shown { shown = show }
         guard show else { return }
+        if let heldUntil, Date() < heldUntil { return }
         let rows = rows ?? self.rows
         var next = Double(min(1, max(0, g.offset / g.scrollable)))
         // The line it reads at, in the content, and the last item starting above it.
         let line = Rail.readingLine(scrolled: g.offset, scrollable: g.scrollable, top: g.offset, height: g.height)
+        // Only items on screen count: their places are as just laid out. One off screen may still be where it was
+        // before items above it were measured or drawn in, and going by it, the thumb jumped about while scrolling fast.
+        let top = g.offset, bottom = g.offset + g.height
         var found: Int?
+        var firstShown: Int?
         for (i, id) in ids.enumerated() {
-            guard let r = rows[id] else { continue }
+            guard let r = rows[id], r.maxY >= top, r.minY <= bottom else { continue }
+            if firstShown == nil { firstShown = i }
             if r.minY <= line { found = i } else { break }
         }
         if let found, let row = row(found, ids, rows) {
             let down = row.extent > 0 ? Double((line - row.top) / row.extent) : 0
             next = Rail.rowRailAt(first: first + row.first, count: row.count, down: down, n: n)
+        } else if firstShown == 0 {
+            // Above the first drawn (the button for earlier ones, at the top of a long journal drawn only in part):
+            // where that first one is, not the top of the rail, where how far it's scrolled would put it.
+            next = Rail.rowRailAt(first: first, count: 1, down: 0, n: n)
+        } else if !rows.isEmpty {
+            // What's on screen hasn't said where it is yet, a moment after a long jump: stay until it has.
+            return
         }
         if abs(next - at) > 1e-4 { at = next }
     }
@@ -82,6 +101,8 @@ extension View {
     /// Says where this item is, for the page's rail.
     func railRow(_ id: String, _ place: RailPlace) -> some View {
         onGeometryChange(for: CGRect.self) { $0.frame(in: .named(RailPlace.space)) } action: { place.rows[id] = $0 }
+            // Let go of by the list (well off screen): its place goes stale as items above it change.
+            .onDisappear { place.rows[id] = nil }
     }
 
     /// The rail beside a scroll view of items under days, as the web's Trash, Photos, Links and Files have: `keys` is

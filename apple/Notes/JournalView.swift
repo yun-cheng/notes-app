@@ -50,6 +50,7 @@ struct JournalView: View {
      * while they come in above, pushing what's being read down by a page.
      */
     private func showEarlier(_ proxy: ScrollViewProxy, keep: String?) {
+        railPlace.hold()
         shown += Self.pageSize
         if let keep { DispatchQueue.main.async { proxy.scrollTo(keep, anchor: .top) } }
     }

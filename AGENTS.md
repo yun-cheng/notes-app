@@ -39,6 +39,20 @@ TipTap JSON without losing fields they don't know.
 - **Speed:** results live in PERFORMANCE.md with how they were measured (`scripts/perf/`). Read it before measuring,
   and update it rather than measuring from scratch. Measure Android with the bench build, never the debug one.
 
+## Handing over work in progress
+
+More than one agent works here (Claude Code and Antigravity), and neither can see the other's conversation: only what's
+in files. Finished work is in the code, the commits and the docs above; what's still in progress goes in
+`.agents/rules/handoff.md`, which git ignores and both agents load at the start (Antigravity from `.agents/rules/`,
+Claude Code through `CLAUDE.local.md`).
+
+- **Before stopping with work unfinished** (the owner switches agents, a session ends or runs out of room), write in
+  it: what's being done and why, what's done so far and where (files, uncommitted changes), what's next, and what was
+  tried and didn't work. Name what the owner decided in the conversation that isn't written anywhere else.
+- **On starting,** read it, and say what it says before picking the work up.
+- **Once that work is committed,** take it out, leaving only what's still open (or "Nothing in progress"). Anything
+  lasting from it moves to its proper place: a decision to PLAN.md, a rule to AGENTS.md or `private.md`.
+
 ## Safety
 
 - Never handle credentials or secrets: don't create, enter or paste API tokens, passwords or keys, even if asked. The

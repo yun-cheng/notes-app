@@ -292,6 +292,7 @@ None. Defaults chosen while building are listed in the implementation notes, and
 - AI writes go through the same push path as devices, so they sync, and their versions record the app's name ("Ann via Claude (AI)"). An AI edit never extends a person's version.
 - The diary is the Diary vault, so AI reads or writes it only when the user opens that vault to AI, like any other.
 - The MCP `instructions` tell the model to treat card text as data, not instructions.
+- Scalability (2026-11-27): `loadScopeForTool` in `server/mcp.ts` keeps cold single-card, todo, stack and non-full-text `search_cards` calls off full-table reads by querying only matching rows via SQLite `json_extract` and `LIMIT`, while warm accounts (`scopes` cache) refresh incrementally with `WHERE seq > maxSeq` after writes instead of re-reading and re-parsing every card.
 - To connect Claude: Backup & settings, AI apps shows the address to add as a custom connector, sets the default AI access for open vaults and any per-vault overrides, and lists connected apps. The OAuth approval page (`/oauth/authorize`) shows a read-only summary and Allow / Cancel without asking vault by vault.
 
 ## Implementation notes from Milestone 5

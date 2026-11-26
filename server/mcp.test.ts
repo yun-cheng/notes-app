@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import type { CardRecord } from '../src/domain/types';
 import type { VersionsResponse } from '../src/sync/protocol';
+import { clearMcpScopeCache } from './mcp';
 import { connectAi, rec, setup } from './testHarness';
 
 const para = (text: string, extra: object[] = []) => ({ type: 'paragraph', content: [{ type: 'text', text }, ...extra] });
@@ -513,6 +514,66 @@ describe('MCP server', () => {
     await patch(secret.id, { ai_access: 'default' });
     expect((await tool('get_card', { id: 'private-1' })).error).toBe(true);
     expect(sealed.id).toBeTruthy();
+  });
+  it('avoids full-account scans on cold targeted tools and delta-syncs warm searches after writes', async () => {
+    const { tool, db, ann } = await world();
+    // Seed 400 extra notes directly into the open vault.
+    const insert = db.raw.prepare(`INSERT INTO cards (id, vault_id, updated_at, deleted, seq, payload) VALUES (?, ?, ?, 0, ?, ?)`);
+    db.raw.exec('BEGIN');
+    for (let i = 0; i < 400; i++) {
+      insert.run(`bulk-${i}`, ann.vault, 1000 + i, 100 + i, payload({ type: 'note', title: `Entry ${i}`, content: doc(para(`Body number ${i}`)), createdAt: 1000 + i }));
+    }
+    db.raw.prepare(`UPDATE seq_counter SET value = 600 WHERE id = 1`).run();
+    db.raw.exec('COMMIT');
+
+    // Count how many rows are returned from SELECT queries against `cards`.
+    let cardRowsRead = 0;
+    const origPrepare = db.prepare.bind(db);
+    db.prepare = (sql: string) => {
+      const stmt = origPrepare(sql);
+      if (!/FROM\s+cards\b/i.test(sql) || /COUNT\(\*\)/i.test(sql)) return stmt;
+      const wrap = (s: typeof stmt): typeof stmt => ({
+        bind: (...v: unknown[]) => wrap(s.bind(...v)),
+        first: () => s.first(),
+        run: () => s.run(),
+        all: async <T>() => {
+          const res = await s.all<T>();
+          cardRowsRead += res.results.length;
+          return res;
+        },
+      });
+      return wrap(stmt);
+    };
+
+    const measure = async (fn: () => Promise<unknown>) => {
+      cardRowsRead = 0;
+      await fn();
+      return cardRowsRead;
+    };
+
+    // Cold targeted fast paths should each read only a small handful of card rows, never all 400+.
+    clearMcpScopeCache();
+    expect(await measure(() => tool('get_card', { id: 'note-1' }))).toBeLessThan(20);
+    clearMcpScopeCache();
+    expect(await measure(() => tool('list_todos'))).toBeLessThan(20);
+    clearMcpScopeCache();
+    expect(await measure(() => tool('create_note', { title: 'Fast note', markdown: 'No wiki links here.' }))).toBeLessThan(20);
+    clearMcpScopeCache();
+    expect(await measure(() => tool('search_cards', { limit: 10 }))).toBeLessThan(40);
+    clearMcpScopeCache();
+    expect(await measure(() => tool('edit_card', { id: 'note-1', title: 'Tokyo plan v2' }))).toBeLessThan(20);
+
+    // Full-text search warms the cache once (reading all 400+ cards), then a write + follow-up search only delta-syncs!
+    clearMcpScopeCache();
+    const coldSearchRows = await measure(() => tool('search_cards', { query: 'Body number 399' }));
+    expect(coldSearchRows).toBeGreaterThan(400);
+    expect((await tool('create_note', { title: 'Fresh delta card', markdown: 'unique-delta-token' })).error).toBe(false);
+    let deltaSearchText = '';
+    const deltaSearchRows = await measure(async () => {
+      deltaSearchText = (await tool('search_cards', { query: 'unique-delta-token' })).text;
+    });
+    expect(deltaSearchText).toContain('Fresh delta card');
+    expect(deltaSearchRows).toBeLessThan(10);
   });
   it('validates arguments', async () => {
     const { tool } = await world();

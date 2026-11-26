@@ -2,7 +2,7 @@ import { isGroupName, isTagGroup, settleTags, withTag } from '../src/domain/tagG
 import { tagsForStatus } from '../src/domain/board';
 import { offeredIn, tagNamedIn } from '../src/domain/tagScope';
 import { buildIndex, type CardIndex } from '../src/domain/cardIndex';
-import { cardPages, displayTitle, plainText, walk } from '../src/domain/content';
+import { cardPages, displayTitle, linkedCardIds, plainText, walk } from '../src/domain/content';
 import { isStack, stackEntries, stackPlan, stacksOf } from '../src/domain/stacks';
 import { isDateKey, isTimeKey, toDateKey } from '../src/domain/dates';
 import { toMarkdown } from '../src/domain/markdown';
@@ -55,8 +55,32 @@ interface Scope {
 
 class ToolError extends Error {}
 
-/** The vaults the AI may see and, unless `withCards` is false, every card in them, read and indexed. */
-async function loadScope(db: Database, userId: string, withCards = true): Promise<Scope> {
+type RawCardRow = Omit<CardRecord, 'deleted'> & { deleted: number };
+
+interface VaultMeta {
+  vaults: Map<string, ScopeVault>;
+  all: (Pick<Vault, 'id' | 'name' | 'lock' | 'ai_access' | 'owner_id'> & { role: string })[];
+  open: string[];
+  closed: string[];
+  closedSet: Set<string>;
+}
+
+const marks = (ids: readonly unknown[]) => ids.map(() => '?').join(',');
+const jsonField = (path: string) => `CASE WHEN substr(payload, 1, 1) = '{' THEN json_extract(payload, '${path}') END`;
+const escapeLike = (s: string) => s.replace(/[\\%_]/g, '\\$&');
+
+function rowToCard(row: RawCardRow): { record: CardRecord; card: Card } {
+  const record: CardRecord = { ...row, deleted: !!row.deleted };
+  const payload = parsePayload(row.payload);
+  const card = { ...payload, id: row.id, vaultId: row.vault_id, updatedAt: row.updated_at, deleted: record.deleted, seq: row.seq } as Card;
+  return { record, card };
+}
+
+function lockedPlaceholder(id: string, vaultId: string): Card {
+  return { id, vaultId, type: 'note', title: '', content: EMPTY_DOC, tags: [], createdAt: 0, updatedAt: 0, deleted: false, seq: 0 };
+}
+
+async function loadVaultMeta(db: Database, userId: string): Promise<VaultMeta> {
   const { results: all } = await db
     .prepare(
       // End-to-end encrypted vaults are always closed to AI. Non-encrypted PIN-locked vaults default to off (never
@@ -84,15 +108,73 @@ async function loadScope(db: Database, userId: string, withCards = true): Promis
     // Shared vaults stay read-only to AI: their text may be written by someone trying to steer it.
     vaults.set(v.id, { id: v.id, name: v.name, write: v.ai_access === 'write' && v.role === 'owner', shared: v.role !== 'owner' });
   }
+  const open = [...vaults.keys()];
+  const closed = all.map((v) => v.id).filter((id) => !vaults.has(id));
+  return { vaults, all, open, closed, closedSet: new Set(closed) };
+}
 
-  const open = withCards ? [...vaults.keys()] : [];
-  const closed = withCards ? all.map((v) => v.id).filter((id) => !vaults.has(id)) : [];
-  const marks = (ids: string[]) => ids.map(() => '?').join(',');
+async function loadOpenShares(
+  db: Database,
+  open: string[],
+  closedSet: Set<string>,
+): Promise<{ sharedInto: Map<string, string[]>; sharedCardIds: string[] }> {
+  if (!open.length) return { sharedInto: new Map(), sharedCardIds: [] };
+  const { results } = await db
+    .prepare(
+      // Cards shared into an open vault: never from an encrypted vault, never from an un-opted-in private vault, and never from one of this account's closed vaults.
+      `SELECT s.card_id, s.target_id AS vault_id, c.vault_id AS home_vault_id
+       FROM card_shares s
+       JOIN cards c ON c.id = s.card_id
+       JOIN vaults v ON v.id = c.vault_id
+       WHERE s.target_type = 'vault' AND s.target_id IN (${marks(open)})
+         AND v.encryption IS NULL
+         AND (v.lock = 'none' OR v.ai_access_override IN ('read', 'write'))
+       ORDER BY s.card_id, s.target_id`,
+    )
+    .bind(...open)
+    .all<{ card_id: string; vault_id: string; home_vault_id: string }>();
+  const sharedInto = new Map<string, string[]>();
+  const sharedCardIds: string[] = [];
+  const openSet = new Set(open);
+  const seenExtra = new Set<string>();
+  for (const share of results) {
+    if (closedSet.has(share.home_vault_id)) continue;
+    const list = sharedInto.get(share.card_id);
+    if (list) list.push(share.vault_id);
+    else sharedInto.set(share.card_id, [share.vault_id]);
+    if (!openSet.has(share.home_vault_id) && !seenExtra.has(share.card_id)) {
+      seenExtra.add(share.card_id);
+      sharedCardIds.push(share.card_id);
+    }
+  }
+  return { sharedInto, sharedCardIds };
+}
+
+interface CachedScope {
+  vaultsKey: string;
+  maxSeq: number;
+  rowCount: number;
+  closedSet: Set<string>;
+  cardsById: Map<string, Card>;
+  records: Map<string, CardRecord>;
+  sharedInto: Map<string, string[]>;
+  index: CardIndex;
+}
+
+/** Each account's cards as last read for its AI apps, in this Worker's memory, incrementally updated by `seq`. */
+const scopes = new Map<string, CachedScope>();
+
+/** Clears the in-memory MCP scope cache (used by tests to verify cold-start behavior). */
+export function clearMcpScopeCache() {
+  scopes.clear();
+}
+
+/** Full scope load with incremental delta sync: after a write, only rows with `seq > maxSeq` are read and parsed. */
+async function loadScope(db: Database, userId: string, withCards = true): Promise<Scope> {
+  const meta = await loadVaultMeta(db, userId);
+  const { vaults, all, open, closed, closedSet } = meta;
   if (!withCards) return { vaults, all, index: buildIndex([], new Set()), records: new Map(), sharedInto: new Map() };
 
-  // The cards as last read for this account, while nothing in its vaults or vault shares has changed since: an AI app
-  // makes many calls in a row, and reading and parsing every card for each was most of the work. Any write raises the
-  // highest seq; a card leaving lowers the count.
   const ids = all.map((v) => v.id);
   const [latest, sharesMeta] = await Promise.all([
     ids.length
@@ -114,83 +196,397 @@ async function loadScope(db: Database, userId: string, withCards = true): Promis
           .first<{ n: number; at: number | null }>()
       : Promise.resolve(null),
   ]);
-  const key = JSON.stringify([all, latest?.seq ?? 0, latest?.n ?? 0, sharesMeta?.n ?? 0, sharesMeta?.at ?? 0]);
+  const vaultsKey = JSON.stringify([all, sharesMeta?.n ?? 0, sharesMeta?.at ?? 0]);
+  const latestSeq = latest?.seq ?? 0;
+  const latestCount = latest?.n ?? 0;
   const kept = scopes.get(userId);
-  if (kept && kept.key === key) return { vaults, all, index: kept.index, records: kept.records, sharedInto: kept.sharedInto };
+  if (kept && kept.vaultsKey === vaultsKey && kept.maxSeq === latestSeq && kept.rowCount === latestCount) {
+    return { vaults, all, index: kept.index, records: kept.records, sharedInto: kept.sharedInto };
+  }
 
-  const closedSet = new Set(closed);
-  const [{ results: rows }, { results: hidden }, { results: vaultShares }] = await Promise.all([
+  // Incremental delta refresh when the vault/share layout didn't change and no cards were hard-deleted.
+  if (kept && kept.vaultsKey === vaultsKey && latestSeq > kept.maxSeq && latestCount >= kept.rowCount) {
+    const sharedIds = [...kept.sharedInto.keys()];
+    const clauses: string[] = [];
+    const binds: unknown[] = [kept.maxSeq];
+    if (ids.length) {
+      clauses.push(`vault_id IN (${marks(ids)})`);
+      binds.push(...ids);
+    }
+    if (sharedIds.length) {
+      clauses.push(`id IN (${marks(sharedIds)})`);
+      binds.push(...sharedIds);
+    }
+    const { results: delta } = clauses.length
+      ? await db
+          .prepare(`SELECT id, vault_id, updated_at, deleted, seq, payload FROM cards WHERE seq > ? AND (${clauses.join(' OR ')})`)
+          .bind(...binds)
+          .all<RawCardRow>()
+      : { results: [] as RawCardRow[] };
+    const openSet = new Set(open);
+    for (const row of delta) {
+      if (closedSet.has(row.vault_id)) {
+        kept.records.delete(row.id);
+        kept.cardsById.set(row.id, lockedPlaceholder(row.id, row.vault_id));
+      } else if ((openSet.has(row.vault_id) || kept.sharedInto.has(row.id)) && !row.payload.startsWith('e1:')) {
+        const { record, card } = rowToCard(row);
+        kept.records.set(row.id, record);
+        kept.cardsById.set(row.id, card);
+      }
+    }
+    kept.maxSeq = latestSeq;
+    kept.rowCount = latestCount;
+    kept.index = buildIndex([...kept.cardsById.values()], closedSet);
+    scopes.delete(userId);
+    scopes.set(userId, kept);
+    return { vaults, all, index: kept.index, records: kept.records, sharedInto: kept.sharedInto };
+  }
+
+  const [{ results: rows }, { results: hidden }, { sharedInto, sharedCardIds }] = await Promise.all([
     open.length
-      ? db.prepare(`SELECT id, vault_id, updated_at, deleted, seq, payload FROM cards WHERE vault_id IN (${marks(open)})`).bind(...open).all<Omit<CardRecord, 'deleted'> & { deleted: number }>()
-      : Promise.resolve({ results: [] as (Omit<CardRecord, 'deleted'> & { deleted: number })[] }),
+      ? db.prepare(`SELECT id, vault_id, updated_at, deleted, seq, payload FROM cards WHERE vault_id IN (${marks(open)})`).bind(...open).all<RawCardRow>()
+      : Promise.resolve({ results: [] as RawCardRow[] }),
     closed.length
       ? db.prepare(`SELECT id, vault_id FROM cards WHERE vault_id IN (${marks(closed)})`).bind(...closed).all<{ id: string; vault_id: string }>()
       : Promise.resolve({ results: [] as { id: string; vault_id: string }[] }),
-    open.length
-      ? db
-          .prepare(
-            // Cards shared into an open vault: never from an encrypted vault, never from an un-opted-in private vault, and never from one of this account's closed vaults.
-            `SELECT s.card_id, s.target_id AS vault_id, c.vault_id AS home_vault_id
-             FROM card_shares s
-             JOIN cards c ON c.id = s.card_id
-             JOIN vaults v ON v.id = c.vault_id
-             WHERE s.target_type = 'vault' AND s.target_id IN (${marks(open)})
-               AND v.encryption IS NULL
-               AND (v.lock = 'none' OR v.ai_access_override IN ('read', 'write'))
-             ORDER BY s.card_id, s.target_id`,
-          )
-          .bind(...open)
-          .all<{ card_id: string; vault_id: string; home_vault_id: string }>()
-      : Promise.resolve({ results: [] as { card_id: string; vault_id: string; home_vault_id: string }[] }),
+    loadOpenShares(db, open, closedSet),
   ]);
 
-  const sharedInto = new Map<string, string[]>();
-  const extraCardIds: string[] = [];
-  const seenHome = new Set(rows.map((r) => r.id));
-  const seenExtra = new Set<string>();
-  for (const share of vaultShares) {
-    if (closedSet.has(share.home_vault_id)) continue;
-    const list = sharedInto.get(share.card_id);
-    if (list) list.push(share.vault_id);
-    else sharedInto.set(share.card_id, [share.vault_id]);
-    if (!seenHome.has(share.card_id) && !seenExtra.has(share.card_id)) {
-      seenExtra.add(share.card_id);
-      extraCardIds.push(share.card_id);
-    }
-  }
-
-  const extraRows = extraCardIds.length
+  const extraRows = sharedCardIds.length
     ? (
         await db
-          .prepare(`SELECT id, vault_id, updated_at, deleted, seq, payload FROM cards WHERE id IN (${marks(extraCardIds)}) AND payload NOT LIKE 'e1:%'`)
-          .bind(...extraCardIds)
-          .all<Omit<CardRecord, 'deleted'> & { deleted: number }>()
+          .prepare(`SELECT id, vault_id, updated_at, deleted, seq, payload FROM cards WHERE id IN (${marks(sharedCardIds)}) AND payload NOT LIKE 'e1:%'`)
+          .bind(...sharedCardIds)
+          .all<RawCardRow>()
       ).results
     : [];
 
   const records = new Map<string, CardRecord>();
-  const cards: Card[] = [];
+  const cardsById = new Map<string, Card>();
   for (const row of [...rows, ...extraRows]) {
-    const record = { ...row, deleted: !!row.deleted };
+    const { record, card } = rowToCard(row);
     records.set(row.id, record);
-    const payload = parsePayload(row.payload);
-    cards.push({ ...payload, id: row.id, vaultId: row.vault_id, updatedAt: row.updated_at, deleted: record.deleted, seq: row.seq } as Card);
+    cardsById.set(row.id, card);
   }
   // Cards outside the AI's vaults go in as locked placeholders, so links to them read "Locked" and nothing of them leaks.
   for (const { id, vault_id } of hidden) {
     if (records.has(id)) continue;
-    cards.push({ id, vaultId: vault_id, type: 'note', title: '', content: EMPTY_DOC, tags: [], createdAt: 0, updatedAt: 0, deleted: false, seq: 0 });
+    cardsById.set(id, lockedPlaceholder(id, vault_id));
   }
-  const index = buildIndex(cards, closedSet);
+  const index = buildIndex([...cardsById.values()], closedSet);
   scopes.delete(userId);
-  scopes.set(userId, { key, index, records, sharedInto });
+  scopes.set(userId, { vaultsKey, maxSeq: latestSeq, rowCount: latestCount, closedSet, cardsById, records, sharedInto, index });
   // A few accounts' at most, the least recently used let go.
   while (scopes.size > 20) scopes.delete(scopes.keys().next().value!);
   return { vaults, all, index, records, sharedInto };
 }
 
-/** Each account's cards as last read for its AI apps, in this Worker's memory, while they stay as they were. */
-const scopes = new Map<string, { key: string; index: CardIndex; records: Map<string, CardRecord>; sharedInto: Map<string, string[]> }>();
+/** Builds a lightweight Scope from a targeted subset of rows (for cold-start fast paths without reading every card). */
+function buildTargetedScope(
+  meta: VaultMeta,
+  sharedInto: Map<string, string[]>,
+  visibleRows: RawCardRow[],
+  lockedRows: { id: string; vault_id: string }[] = [],
+): Scope {
+  const records = new Map<string, CardRecord>();
+  const cardsById = new Map<string, Card>();
+  for (const row of visibleRows) {
+    if (records.has(row.id) || row.payload.startsWith('e1:')) continue;
+    const { record, card } = rowToCard(row);
+    records.set(row.id, record);
+    cardsById.set(row.id, card);
+  }
+  for (const { id, vault_id } of lockedRows) {
+    if (!cardsById.has(id)) cardsById.set(id, lockedPlaceholder(id, vault_id));
+  }
+  return { vaults: meta.vaults, all: meta.all, index: buildIndex([...cardsById.values()], meta.closedSet), records, sharedInto };
+}
+
+/** SQL condition matching cards visible in `open` vaults or explicitly shared into them (`sharedCardIds`). */
+function visibleWhere(open: string[], sharedCardIds: string[]): { sql: string; binds: unknown[] } {
+  const clauses: string[] = [];
+  const binds: unknown[] = [];
+  if (open.length) {
+    clauses.push(`vault_id IN (${marks(open)})`);
+    binds.push(...open);
+  }
+  if (sharedCardIds.length) {
+    clauses.push(`id IN (${marks(sharedCardIds)})`);
+    binds.push(...sharedCardIds);
+  }
+  return clauses.length ? { sql: `(${clauses.join(' OR ')}) AND payload NOT LIKE 'e1:%'`, binds } : { sql: '0', binds: [] };
+}
+
+function extractWikiTitles(texts: (string | undefined)[]): string[] {
+  const titles = new Set<string>();
+  for (const text of texts) {
+    if (!text || !text.includes('[[')) continue;
+    for (const m of text.matchAll(/\[\[([^\]\n]+?)\]\]/g)) {
+      const t = m[1].trim().toLowerCase();
+      if (t) titles.add(t);
+    }
+  }
+  return [...titles];
+}
+
+async function fetchVisibleByIds(db: Database, ids: string[], open: string[], sharedCardIds: string[]): Promise<RawCardRow[]> {
+  const unique = [...new Set(ids.filter(Boolean))];
+  if (!unique.length || (!open.length && !sharedCardIds.length)) return [];
+  const vis = visibleWhere(open, sharedCardIds);
+  const { results } = await db
+    .prepare(`SELECT id, vault_id, updated_at, deleted, seq, payload FROM cards WHERE id IN (${marks(unique)}) AND ${vis.sql}`)
+    .bind(...unique, ...vis.binds)
+    .all<RawCardRow>();
+  return results;
+}
+
+async function fetchLockedByIds(db: Database, ids: string[], closed: string[]): Promise<{ id: string; vault_id: string }[]> {
+  const unique = [...new Set(ids.filter(Boolean))];
+  if (!unique.length || !closed.length) return [];
+  const { results } = await db
+    .prepare(`SELECT id, vault_id FROM cards WHERE id IN (${marks(unique)}) AND vault_id IN (${marks(closed)})`)
+    .bind(...unique, ...closed)
+    .all<{ id: string; vault_id: string }>();
+  return results;
+}
+
+async function fetchVisibleTags(db: Database, open: string[], sharedCardIds: string[]): Promise<RawCardRow[]> {
+  if (!open.length && !sharedCardIds.length) return [];
+  const vis = visibleWhere(open, sharedCardIds);
+  const { results } = await db
+    .prepare(`SELECT id, vault_id, updated_at, deleted, seq, payload FROM cards WHERE deleted = 0 AND ${jsonField('$.type')} = 'tag' AND ${vis.sql}`)
+    .bind(...vis.binds)
+    .all<RawCardRow>();
+  return results;
+}
+
+async function fetchWikiTargets(db: Database, titles: string[], open: string[], sharedCardIds: string[]): Promise<RawCardRow[]> {
+  if (!titles.length || (!open.length && !sharedCardIds.length)) return [];
+  const vis = visibleWhere(open, sharedCardIds);
+  const { results } = await db
+    .prepare(
+      `SELECT id, vault_id, updated_at, deleted, seq, payload FROM cards
+       WHERE deleted = 0 AND LOWER(TRIM(COALESCE(${jsonField('$.title')}, ''))) IN (${marks(titles)}) AND ${vis.sql}`,
+    )
+    .bind(...titles, ...vis.binds)
+    .all<RawCardRow>();
+  return results;
+}
+
+/**
+ * Loads the smallest Scope needed for a tool call.
+ * Warm accounts reuse the incremental delta cache (`loadScope`); cold calls to single-card, todo, stack, or
+ * non-full-text listing tools query only the matching rows from D1 instead of parsing the whole account.
+ */
+async function loadScopeForTool(db: Database, userId: string, tool: Tool, args: Json): Promise<Scope> {
+  if (tool.cards === false) return loadScope(db, userId, false);
+  // Warm in-memory cache already has this account: delta sync is O(changed rows).
+  if (scopes.has(userId)) return loadScope(db, userId, true);
+
+  // Full-text search and list_tags (which counts backlinks across all cards) warm the incremental cache.
+  if (tool.name === 'list_tags') return loadScope(db, userId, true);
+  if (tool.name === 'search_cards' && typeof args.query === 'string' && args.query.trim()) return loadScope(db, userId, true);
+
+  const meta = await loadVaultMeta(db, userId);
+  const { open, closed, closedSet } = meta;
+  if (!open.length) return buildTargetedScope(meta, new Map(), []);
+  const { sharedInto, sharedCardIds } = await loadOpenShares(db, open, closedSet);
+
+  if (tool.name === 'get_card') {
+    const id = typeof args.id === 'string' ? args.id : '';
+    if (!id) return buildTargetedScope(meta, sharedInto, []);
+    const primary = await fetchVisibleByIds(db, [id], open, sharedCardIds);
+    if (!primary.length) return buildTargetedScope(meta, sharedInto, []);
+    const { card } = rowToCard(primary[0]);
+    const outgoing = [
+      ...card.tags,
+      ...linkedCardIds(card.content),
+      ...cardPages(card).flatMap(linkedCardIds),
+      ...(card.type === 'note' && Array.isArray(card.stack) ? card.stack : []),
+      ...(card.type === 'tag' && Array.isArray(card.members) ? card.members : []),
+    ];
+    const vis = visibleWhere(open, sharedCardIds);
+    const refPattern = `%"${escapeLike(id)}"%`;
+    const [related, lockedRefs, backlinkRows] = await Promise.all([
+      fetchVisibleByIds(db, outgoing, open, sharedCardIds),
+      fetchLockedByIds(db, outgoing, closed),
+      db
+        .prepare(`SELECT id, vault_id, updated_at, deleted, seq, payload FROM cards WHERE deleted = 0 AND payload LIKE ? ESCAPE '\\' AND ${vis.sql}`)
+        .bind(refPattern, ...vis.binds)
+        .all<RawCardRow>()
+        .then((r) => r.results),
+    ]);
+    return buildTargetedScope(meta, sharedInto, [...primary, ...related, ...backlinkRows], lockedRefs);
+  }
+
+  if (tool.name === 'complete_todo') {
+    const id = typeof args.id === 'string' ? args.id : '';
+    const [target, tags] = await Promise.all([fetchVisibleByIds(db, id ? [id] : [], open, sharedCardIds), fetchVisibleTags(db, open, sharedCardIds)]);
+    return buildTargetedScope(meta, sharedInto, [...target, ...tags]);
+  }
+
+  if (tool.name === 'create_note' || tool.name === 'add_todo') {
+    const needTags = Array.isArray(args.tags) && args.tags.length > 0;
+    const tplId = typeof args.from_template === 'string' ? args.from_template : '';
+    const mdTexts = [
+      typeof args.markdown === 'string' ? args.markdown : undefined,
+      ...(Array.isArray(args.pages) ? args.pages.filter((p): p is string => typeof p === 'string') : []),
+    ];
+    const wikiTitles = extractWikiTitles(mdTexts);
+    const [tags, tpl, links] = await Promise.all([
+      needTags || tplId ? fetchVisibleTags(db, open, sharedCardIds) : Promise.resolve([]),
+      tplId ? fetchVisibleByIds(db, [tplId], open, sharedCardIds) : Promise.resolve([]),
+      fetchWikiTargets(db, wikiTitles, open, sharedCardIds),
+    ]);
+    return buildTargetedScope(meta, sharedInto, [...tags, ...tpl, ...links]);
+  }
+
+  if (tool.name === 'edit_card') {
+    const id = typeof args.id === 'string' ? args.id : '';
+    const needTags =
+      (Array.isArray(args.tags) && args.tags.length > 0) ||
+      (Array.isArray(args.add_tags) && args.add_tags.length > 0) ||
+      (Array.isArray(args.remove_tags) && args.remove_tags.length > 0);
+    const wikiTitles = extractWikiTitles([
+      typeof args.markdown === 'string' ? args.markdown : undefined,
+      typeof args.append_markdown === 'string' ? args.append_markdown : undefined,
+      typeof args.add_page === 'string' ? args.add_page : undefined,
+    ]);
+    const [target, tags, links] = await Promise.all([
+      fetchVisibleByIds(db, id ? [id] : [], open, sharedCardIds),
+      needTags ? fetchVisibleTags(db, open, sharedCardIds) : Promise.resolve([]),
+      fetchWikiTargets(db, wikiTitles, open, sharedCardIds),
+    ]);
+    return buildTargetedScope(meta, sharedInto, [...target, ...tags, ...links]);
+  }
+
+  if (tool.name === 'manage_stack') {
+    const vis = visibleWhere(open, sharedCardIds);
+    const ids = [
+      typeof args.stack_id === 'string' ? args.stack_id : '',
+      ...(Array.isArray(args.card_ids) ? args.card_ids.filter((x): x is string => typeof x === 'string') : []),
+      ...(Array.isArray(args.add_card_ids) ? args.add_card_ids.filter((x): x is string => typeof x === 'string') : []),
+      ...(Array.isArray(args.remove_card_ids) ? args.remove_card_ids.filter((x): x is string => typeof x === 'string') : []),
+    ];
+    const wikiTitles = extractWikiTitles([typeof args.markdown === 'string' ? args.markdown : undefined]);
+    const [stacks, targets, links] = await Promise.all([
+      db
+        .prepare(`SELECT id, vault_id, updated_at, deleted, seq, payload FROM cards WHERE deleted = 0 AND ${jsonField('$.stack')} IS NOT NULL AND ${vis.sql}`)
+        .bind(...vis.binds)
+        .all<RawCardRow>()
+        .then((r) => r.results),
+      fetchVisibleByIds(db, ids, open, sharedCardIds),
+      fetchWikiTargets(db, wikiTitles, open, sharedCardIds),
+    ]);
+    return buildTargetedScope(meta, sharedInto, [...stacks, ...targets, ...links]);
+  }
+
+  if (tool.name === 'list_todos') {
+    const vis = visibleWhere(open, sharedCardIds);
+    const needTags = typeof args.tag === 'string' && args.tag.trim().length > 0;
+    const [todos, tags] = await Promise.all([
+      db
+        .prepare(
+          `SELECT id, vault_id, updated_at, deleted, seq, payload FROM cards
+           WHERE deleted = 0 AND ${jsonField('$.type')} = 'todo'
+             AND COALESCE(${jsonField('$.archived')}, 0) = 0
+             AND COALESCE(${jsonField('$.template')}, 0) = 0
+             AND ${vis.sql}`,
+        )
+        .bind(...vis.binds)
+        .all<RawCardRow>()
+        .then((r) => r.results),
+      needTags ? fetchVisibleTags(db, open, sharedCardIds) : Promise.resolve([]),
+    ]);
+    return buildTargetedScope(meta, sharedInto, [...todos, ...tags]);
+  }
+
+  if (tool.name === 'search_cards') {
+    // Empty query: push structural filters + sort + LIMIT into SQL so only the requested slice is read from D1.
+    const vis = visibleWhere(open, sharedCardIds);
+    const where: string[] = ['deleted = 0', vis.sql];
+    const binds: unknown[] = [...vis.binds];
+
+    const type = typeof args.type === 'string' ? args.type : undefined;
+    if (type === 'stack') where.push(`${jsonField('$.type')} = 'note' AND ${jsonField('$.stack')} IS NOT NULL`);
+    else if (type === 'note') where.push(`${jsonField('$.type')} IN ('note', 'diary') AND ${jsonField('$.stack')} IS NULL`);
+    else if (type === 'todo' || type === 'tag') {
+      where.push(`${jsonField('$.type')} = ?`);
+      binds.push(type);
+    }
+
+    const archived = typeof args.archived === 'string' ? args.archived : 'exclude';
+    if (archived === 'exclude') where.push(`COALESCE(${jsonField('$.archived')}, 0) = 0`);
+    else if (archived === 'only') where.push(`COALESCE(${jsonField('$.archived')}, 0) = 1`);
+
+    const templates = typeof args.templates === 'string' ? args.templates : 'exclude';
+    if (templates === 'exclude') where.push(`COALESCE(${jsonField('$.template')}, 0) = 0`);
+    else if (templates === 'only') where.push(`COALESCE(${jsonField('$.template')}, 0) = 1`);
+
+    const createdAfter = typeof args.created_after === 'string' && isDateKey(args.created_after) ? Date.parse(`${args.created_after}T00:00:00.000Z`) : null;
+    if (createdAfter !== null) {
+      where.push(`COALESCE(${jsonField('$.createdAt')}, 0) >= ?`);
+      binds.push(createdAfter);
+    }
+    const createdBefore = typeof args.created_before === 'string' && isDateKey(args.created_before) ? Date.parse(`${args.created_before}T23:59:59.999Z`) : null;
+    if (createdBefore !== null) {
+      where.push(`COALESCE(${jsonField('$.createdAt')}, 0) <= ?`);
+      binds.push(createdBefore);
+    }
+
+    // Narrow to vault when valid (let search_cards handle invalid/ambiguous vault errors cleanly).
+    const vaultRef = typeof args.vault === 'string' && args.vault.trim() ? args.vault.trim() : '';
+    let matchedVault: ScopeVault | undefined;
+    if (vaultRef) {
+      const byId = meta.vaults.get(vaultRef);
+      const byName = !byId ? [...meta.vaults.values()].filter((v) => v.name.toLowerCase() === vaultRef.toLowerCase()) : [];
+      matchedVault = byId ?? (byName.length === 1 ? byName[0] : undefined);
+      if (matchedVault) {
+        const sharedHere = [...sharedInto.entries()].filter(([, vs]) => vs.includes(matchedVault!.id)).map(([cid]) => cid);
+        if (sharedHere.length) {
+          where.push(`(vault_id = ? OR id IN (${marks(sharedHere)}))`);
+          binds.push(matchedVault.id, ...sharedHere);
+        } else {
+          where.push(`vault_id = ?`);
+          binds.push(matchedVault.id);
+        }
+      }
+    }
+
+    const tagRef = typeof args.tag === 'string' && args.tag.trim() ? args.tag.trim() : '';
+    const tagRows = tagRef ? await fetchVisibleTags(db, open, sharedCardIds) : [];
+    if (tagRef && tagRows.length) {
+      const tempScope = buildTargetedScope(meta, sharedInto, tagRows);
+      try {
+        const wanted = [...filterTagIds(tempScope, tagRef, matchedVault)];
+        where.push(`(${wanted.map(() => `payload LIKE ? ESCAPE '\\'`).join(' OR ')})`);
+        binds.push(...wanted.map((id) => `%"${escapeLike(id)}"%`));
+      } catch {
+        // Let search_cards throw its normal ToolError.
+        return tempScope;
+      }
+    }
+
+    const sort = args.sort === 'created' ? `COALESCE(${jsonField('$.createdAt')}, 0) DESC` : 'updated_at DESC';
+    const max = typeof args.limit === 'number' && Number.isInteger(args.limit) && args.limit >= 1 ? Math.min(args.limit, 50) : 20;
+    const { results: listed } = await db
+      .prepare(`SELECT id, vault_id, updated_at, deleted, seq, payload FROM cards WHERE ${where.join(' AND ')} ORDER BY ${sort} LIMIT ?`)
+      .bind(...binds, max * 2 + 10)
+      .all<RawCardRow>();
+    // Resolve any [[cardLink]] titles shown in snippets.
+    const linkIds = listed.flatMap((r) => {
+      const { card } = rowToCard(r);
+      return linkedCardIds(card.content);
+    });
+    const [linked, lockedRefs] = await Promise.all([
+      fetchVisibleByIds(db, linkIds, open, sharedCardIds),
+      fetchLockedByIds(db, linkIds, closed),
+    ]);
+    return buildTargetedScope(meta, sharedInto, [...listed, ...tagRows, ...linked], lockedRefs);
+  }
+
+  return loadScope(db, userId, true);
+}
 
 // Reading
 
@@ -1330,7 +1726,7 @@ export async function handleMcp(db: Database, caller: AiCaller, message: unknown
       const args = (params.arguments ?? {}) as Json;
       if (typeof args !== 'object' || Array.isArray(args)) return rpcError(msg.id, -32602, 'Arguments must be an object');
       try {
-        const scope = await loadScope(db, caller.user.id, tool.cards !== false);
+        const scope = await loadScopeForTool(db, caller.user.id, tool, args);
         const text = await tool.run(args, { scope, db, caller, now });
         return reply({ content: [{ type: 'text', text }] });
       } catch (err) {

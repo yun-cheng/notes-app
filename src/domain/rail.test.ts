@@ -36,10 +36,12 @@ describe('the rail beside a long page', () => {
     expect(labels(['2026-11-18', '2026-11-19', '2026-11-20'])).toEqual([['Nov 2026', 0]]);
   });
 
-  it('leaves out labels too near the one above, and dots too near anything', () => {
+  it('of labels too near each other keeps the one with more under it, and leaves out dots too near anything', () => {
     const keys = ['2020-01-01', '2021-01-01', ...Array(8).fill('2025-06-01'), ...Array(90).fill('2026-01-01')];
-    // 1% of 1000 pixels is 10, and 2%, 20: less than a label needs.
-    expect(labels(keys).map(([l]) => l)).toEqual(['2020', '2026']);
+    // 1% of 1000 pixels is 10, and 2%, 20: less than a label needs. 2025 has more under it than 2020 or 2021.
+    expect(labels(keys).map(([l]) => l)).toEqual(['2025', '2026']);
+    // A few weeks of 2014 at the top don't hide the year under them, as the demo's did.
+    expect(labels(['2014-12-01', ...Array(50).fill('2015-06-01'), ...Array(49).fill('2016-06-01')]).map(([l]) => l)).toEqual(['2015', '2016']);
     expect(labels(keys, 5000).map(([l]) => l)).toEqual(['2020', '2021', '2025', '2026']);
     expect(railMarks([], 1000, name)).toEqual([]);
   });

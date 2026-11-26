@@ -46,7 +46,8 @@ object Rail {
     /**
      * The marks for a rail `height` pixels tall: a label where each year starts (on a rail of years), each month (of
      * months) or each group, with a dot for each month among years and each day among a month's; `name` names a key
-     * that isn't a day. Labels too near the one above are left out, then dots too near anything kept.
+     * that isn't a day. Of two labels too near each other, the one with more of the rail under it is kept (a busy
+     * year over a few weeks of the one above it), then dots too near anything kept are left out.
      */
     fun marks(keys: List<String>, height: Double, name: (String) -> String, locale: Locale = Locale.getDefault(), spacing: DoubleArray? = null): List<Mark> {
         val n = keys.size
@@ -78,11 +79,16 @@ object Rail {
                 else -> if (before == null) labels.add(Mark(at, format(key, "MMM yyyy", locale))) else dots.add(at)
             }
         }
-        val kept = mutableListOf<Mark>()
-        for (mark in labels) {
-            val above = kept.lastOrNull()
-            if (above == null || (mark.at - above.at) * height >= LABEL_GAP) kept.add(mark)
+        // How much of the rail each label has under it, to the next.
+        fun room(i: Int) = (labels.getOrNull(i + 1)?.at ?: 1.0) - labels[i].at
+        val keptAt = mutableListOf<Int>()
+        for (i in labels.indices) {
+            val above = keptAt.lastOrNull()
+            if (above == null || (labels[i].at - labels[above].at) * height >= LABEL_GAP) keptAt.add(i)
+            // In its place: further from the one before it than it was, so as clear of it.
+            else if (room(i) > room(above)) keptAt[keptAt.size - 1] = i
         }
+        val kept = keptAt.map { labels[it] }
         val labelled = kept.map { it.at * height }
         val taken = mutableListOf<Double>()
         val shown = kept.toMutableList()

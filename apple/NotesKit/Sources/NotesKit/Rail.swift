@@ -46,7 +46,8 @@ public enum Rail {
 
     /// The marks for a rail `height` points tall: a label where each year starts (on a rail of years), each month (of
     /// months) or each group, with a dot for each month among years and each day among a month's; `name` names a key
-    /// that isn't a day. Labels too near the one above are left out, then dots too near anything kept.
+    /// that isn't a day. Of two labels too near each other, the one with more of the rail under it is kept (a busy
+    /// year over a few weeks of the one above it), then dots too near anything kept are left out.
     public static func marks(_ keys: [String], height: Double, name: (String) -> String, locale: Locale = .current, spacing: [Double]? = nil) -> [Mark] {
         let n = keys.count
         guard n > 0, height > 0 else { return [] }
@@ -83,8 +84,18 @@ public enum Rail {
                 } else { dots.append(at) }
             }
         }
-        var kept: [Mark] = []
-        for mark in labels where kept.last.map({ (mark.at - $0.at) * height >= labelGap }) ?? true { kept.append(mark) }
+        // How much of the rail each label has under it, to the next.
+        let room = { (i: Int) in (i + 1 < labels.count ? labels[i + 1].at : 1) - labels[i].at }
+        var keptAt: [Int] = []
+        for i in labels.indices {
+            if let above = keptAt.last, (labels[i].at - labels[above].at) * height < labelGap {
+                // In its place: further from the one before it than it was, so as clear of it.
+                if room(i) > room(above) { keptAt[keptAt.count - 1] = i }
+            } else {
+                keptAt.append(i)
+            }
+        }
+        let kept = keptAt.map { labels[$0] }
         let labelled = kept.map { $0.at * height }
         var taken: [Double] = []
         var shown = kept

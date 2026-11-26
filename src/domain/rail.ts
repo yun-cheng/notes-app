@@ -52,7 +52,8 @@ export function railLabel(key: string, scale: RailScale, name: (key: string) => 
  * The marks for a rail `height` pixels tall: a label where each year starts (on a rail of years), each month (of
  * months) or each group, with a dot for each month among years and each day among a month's; `name` names a key
  * that isn't a day. A rail of months or days names the year too where it starts ("Mar 2026"), so the year shows
- * however short the page is. Labels too near the one above are left out, then dots too near anything kept.
+ * however short the page is. Of two labels too near each other, the one with more of the rail under it is kept (a
+ * busy year over a few weeks of the one above it), then dots too near anything kept are left out.
  */
 export function railMarks(keys: readonly string[], height: number, name: (key: string) => string, locale?: string, spacing?: RailSpacing | null): RailMark[] {
   const n = keys.length;
@@ -83,11 +84,16 @@ export function railMarks(keys: readonly string[], height: number, name: (key: s
       dots.push(at);
     }
   });
-  const kept: RailMark[] = [];
-  for (const mark of labels) {
-    const above = kept.at(-1);
-    if (!above || (mark.at - above.at) * height >= LABEL_GAP) kept.push(mark);
-  }
+  // How much of the rail each label has under it, to the next.
+  const room = (i: number) => (labels[i + 1]?.at ?? 1) - labels[i].at;
+  const keptAt: number[] = [];
+  labels.forEach((mark, i) => {
+    const above = keptAt.at(-1);
+    if (above === undefined || (mark.at - labels[above].at) * height >= LABEL_GAP) keptAt.push(i);
+    // In its place: further from the one before it than it was, so as clear of it.
+    else if (room(i) > room(above)) keptAt[keptAt.length - 1] = i;
+  });
+  const kept = keptAt.map((i) => labels[i]);
   const labelled = kept.map((m) => m.at * height);
   const taken: number[] = [];
   const shown = [...kept];

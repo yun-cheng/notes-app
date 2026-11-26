@@ -48,7 +48,8 @@ import Testing
 
     @Test func crowdedLabelsLeftOut() {
         let keys = ["2020-01-01", "2021-01-01"] + Array(repeating: "2025-06-01", count: 8) + Array(repeating: "2026-01-01", count: 90)
-        #expect(Self.labels(keys) == ["2020", "2026"])
+        #expect(Self.labels(keys) == ["2025", "2026"])
+        #expect(Self.labels(["2014-12-01"] + Array(repeating: "2015-06-01", count: 50) + Array(repeating: "2016-06-01", count: 49)) == ["2015", "2016"])
         #expect(Self.labels(keys, 5000) == ["2020", "2021", "2025", "2026"])
         #expect(Rail.marks([], height: 1000, name: Self.name).isEmpty)
     }

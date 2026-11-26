@@ -35,7 +35,8 @@ class RailTest {
 
     @Test fun crowdedLabelsLeftOut() {
         val keys = listOf("2020-01-01", "2021-01-01") + List(8) { "2025-06-01" } + List(90) { "2026-01-01" }
-        assertEquals(listOf("2020", "2026"), labels(keys).map { it.label })
+        assertEquals(listOf("2025", "2026"), labels(keys).map { it.label })
+        assertEquals(listOf("2015", "2016"), labels(listOf("2014-12-01") + List(50) { "2015-06-01" } + List(49) { "2016-06-01" }).map { it.label })
         assertEquals(listOf("2020", "2021", "2025", "2026"), labels(keys, 5000.0).map { it.label })
         assertEquals(emptyList(), Rail.marks(emptyList(), 1000.0, name))
     }

@@ -29,15 +29,18 @@ import dev.notesapp.core.CardColor
 data class Palette(
     val bg: Color, val surface: Color, val sunken: Color, val raised: Color, val line: Color, val text: Color, val muted: Color,
     val accent: Color, val accentSoft: Color, val onAccent: Color, val alert: Color, val added: Color, val removed: Color,
+    val codeKeyword: Color, val codeString: Color, val codeNumber: Color, val codeComment: Color, val codeTitle: Color, val codeType: Color, val codeMeta: Color,
 )
 
 private fun c(hex: Long) = Color(0xFF000000 or hex)
 
 val LightPalette = Palette(
     c(0xF5F2EA), c(0xFFFEFB), c(0xE8E3D8), c(0xFFFFFF), c(0xD6CFC1), c(0x22262A), c(0x5F6563), c(0x1F5C57), c(0xC6E1D7), c(0xFBFAF6), c(0xB23A2E), c(0xD6ECD2), c(0xF5D9D3),
+    c(0x8A3F9E), c(0x3D7A35), c(0xA35A12), c(0x7D837F), c(0x2160A8), c(0x1F6F74), c(0xA3434F),
 )
 val DarkPalette = Palette(
     c(0x151817), c(0x232927), c(0x313835), c(0x48514D), c(0x454E4A), c(0xECE9E2), c(0xA7AEAA), c(0x84C9BC), c(0x2E5B53), c(0x12211E), c(0xF0907F), c(0x24452C), c(0x4D2A25),
+    c(0xD19AE0), c(0xA6D189), c(0xEFB37A), c(0x8B938F), c(0x8CB8F0), c(0x7FD0C8), c(0xF19AA5),
 )
 
 val LocalPalette = staticCompositionLocalOf { LightPalette }

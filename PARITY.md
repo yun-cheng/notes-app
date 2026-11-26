@@ -54,7 +54,7 @@ _Last checked 2026-11-25._
 | Ticking a todo's box finishes it (a repeating one moves on) | ✅ | ✅ | ✅ | C |
 | Hidden words as dots until pressed; each press shows or hides that stretch | ⚠️ the dots don't drift | ⚠️ the dots don't drift; shown words take the link color | ⚠️ the dots don't drift | T |
 | Links in the text open | ✅ | ✅ | ✅ | T |
-| Code: indents kept, the language named, a copy button | ✅ | ✅ | ⚠️ not colored | C |
+| Code: indents kept, the language named, a copy button | ✅ | ✅ | ✅ | C |
 | A template shows Use it | ✅ | ✅ | ✅ | C |
 | Photos under the bubble, whole, in rows; the last of five says +N | ✅ | ✅ | ✅ | T |
 | Files as chips with size and type; open, share and download | ✅ | ✅ | ✅ | C |

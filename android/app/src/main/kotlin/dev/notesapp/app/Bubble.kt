@@ -289,15 +289,34 @@ fun attributed(
     flush()
 }
 
-/** A code block in a bubble: in a code font, kept as typed, its language named over it, with a copy button. */
+/** A code block in a bubble: in a code font, kept as typed, colored by its language, its language named over it, with a copy button. */
 @Composable
 fun CodeSnippet(text: String, language: String?) {
     val clipboard = LocalClipboardManager.current
+    val palette = Theme.p
+    val label = remember(language) { dev.notesapp.core.CodeHighlight.languageLabel(language) }
+    val styled = remember(text, language, palette) {
+        buildAnnotatedString {
+            for (token in dev.notesapp.core.CodeHighlight.tokenize(text, language)) {
+                val style = when (token.role) {
+                    dev.notesapp.core.CodeHighlight.Role.KEYWORD -> SpanStyle(color = palette.codeKeyword)
+                    dev.notesapp.core.CodeHighlight.Role.STRING -> SpanStyle(color = palette.codeString)
+                    dev.notesapp.core.CodeHighlight.Role.NUMBER -> SpanStyle(color = palette.codeNumber)
+                    dev.notesapp.core.CodeHighlight.Role.COMMENT -> SpanStyle(color = palette.codeComment, fontStyle = androidx.compose.ui.text.font.FontStyle.Italic)
+                    dev.notesapp.core.CodeHighlight.Role.TITLE -> SpanStyle(color = palette.codeTitle)
+                    dev.notesapp.core.CodeHighlight.Role.TYPE -> SpanStyle(color = palette.codeType)
+                    dev.notesapp.core.CodeHighlight.Role.META -> SpanStyle(color = palette.codeMeta)
+                    dev.notesapp.core.CodeHighlight.Role.PLAIN -> SpanStyle(color = palette.text)
+                }
+                withStyle(style) { append(token.text) }
+            }
+        }
+    }
     Box(Modifier.fillMaxWidth().clip(RoundedCornerShape(8.dp)).background(Theme.sunken)) {
         Column(Modifier.padding(horizontal = 10.dp, vertical = 8.dp)) {
-            if (language != null) Text(language, fontSize = 11.sp, color = Theme.muted)
+            if (label != null) Text(label, fontSize = 11.sp, color = Theme.muted)
             SelectionContainer {
-                Text(text, Modifier.horizontalScroll(rememberScrollState()), fontFamily = Theme.mono, fontSize = 13.sp, color = Theme.text, softWrap = false)
+                Text(styled, Modifier.horizontalScroll(rememberScrollState()), fontFamily = Theme.mono, fontSize = 13.sp, softWrap = false)
             }
         }
         Icon(

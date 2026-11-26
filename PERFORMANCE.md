@@ -93,6 +93,8 @@ a jump on the rail settles in under 0.2 s; typing in the journal box takes 17 ms
 | Main thread's share of a first sync (debug) | 56%, mostly the attachment sweep and parsing replies | 10% | Replies parsed and the sweep planned off the main thread |
 | Launch with 10,000 cards, CPU | 5–6 s, 28% of it making regular expressions | 4 s | Patterns made once (`DateKey`, `TimeKey`, `Doc`) |
 | Launch with 10,000 cards, until the journal shows | 7.0–8.3 s (one 12 s), timed by screenshots 0.4 s apart | 6.0–7.6 s | Cards read on every core at once when there are many (`allCards`) |
+| Launch, until entries show, by Android's own count (`reportFullyDrawn`, "Fully drawn" in `adb logcat`) | | 3.4–4.0 s fresh from install; 1.7–2.1 s once Android has compiled the app | The newest 300 entries and the tags read first, by an index on `updated_at` and the tags' IDs kept from the last launch, and shown while the rest is read (`AppModel.preview`); one refresh at a time, where two ran together and read every card twice |
+| Launch, until the first frame ("Displayed") | | 2.3–3.0 s fresh; 1.3–1.5 s compiled | Starting the app: mostly how much of it Android has compiled ahead of time, which a store install gets at once and a downloaded APK in time |
 | First sync | | about 21 s of CPU (debug: 41 s, over a minute) | Pages put away 2,000 at a time; each card parsed once |
 | An empty journal while loading | "Nothing yet" for several seconds | blank until read | `loaded` |
 
@@ -100,10 +102,10 @@ a jump on the rail settles in under 0.2 s; typing in the journal box takes 17 ms
 
 - **Web: an edit still takes 70–110 ms in production.** Bubbles are no longer drawn again (2026-11-26), but the journal
   page around them is (`Stream`, the sidebar's `FilterPanel` counts), and the save waits about 30 ms on IndexedDB.
-- **Android: launching with 10,000 cards takes 6–7.5 s** before the journal shows. A profile counting time spent
-  waiting (`--trace-offcpu`) puts it off the main thread, which is idle half the launch: about 3 s parsing every card's
-  payload (now on every core), 1.3 s building the index, and 2–3 s starting the app and drawing. Keeping the parsed
-  cards between launches, or building the index on more than one core, would be next.
+- **Android: the first frame takes 1.3–3 s,** most of it the app starting before Android has compiled it. A baseline
+  profile of our own launch (made with a Macrobenchmark module) would compile it at install. Reading every card still
+  takes about 3 s more after the first entries show; meanwhile a search, a filter, the board and the pages that need
+  every card say "Loading your notes…"
 - **Checked by hand after the bubbles' change (2026-11-26):** a tag renamed on another device shows under every bubble
   within 90 ms, as does a linked entry's new title; picking, Escape and a bubble's menu work.
 - **Not yet measured:** ticking a todo or typing on the Mac, iPhone and Android; scrolling the journal for a long time

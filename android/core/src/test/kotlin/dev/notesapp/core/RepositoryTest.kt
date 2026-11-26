@@ -50,6 +50,25 @@ class RepositoryTest {
         assertEquals(9, all.first { it.id == b.id }.seq)
     }
 
+    @Test fun theNewestAndTheTagsAreReadFirst() = runBlocking {
+        val clock = Clock()
+        val repo = makeRepo(clock)
+        val home = repo.createTag(title = "Home")
+        val old = repo.createNote(title = "Old")
+        repeat(3) { repo.createNote(title = "New $it") }
+        // Before every card has been read once, no tag is known to look up: just the newest.
+        assertEquals(listOf("New 0", "New 1", "New 2"), repo.recentCards(3).map { it.title }.sorted())
+        repo.keepTagIds(repo.allCards().filter { it.type == CardType.tag }.map { it.id })
+        val first = repo.recentCards(3)
+        assertEquals(listOf("Home", "New 0", "New 1", "New 2"), first.map { it.title }.sorted())
+        assertTrue(first.none { it.id == old.id })
+        // A link to a card not among them keeps the name it was written with, rather than "Not shared".
+        val preview = CardIndex(first, partial = true)
+        assertEquals("Old", preview.linkTitle(old.id, "Old"))
+        assertEquals("Home", preview.linkTitle(home.id, "x"))
+        assertEquals(CardIndex(first).linkTitle(old.id, "Old") == "Old", false)
+    }
+
     @Test fun blankNewCardsStayLocal() = runBlocking {
         val repo = makeRepo()
         repo.createNote()

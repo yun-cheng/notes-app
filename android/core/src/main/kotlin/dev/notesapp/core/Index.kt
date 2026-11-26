@@ -97,7 +97,11 @@ fun tagsForAll(tags: List<Card>, vaultIds: List<String>, sharedInto: SharedInto)
 data class Backlink(val from: Card, val kind: Kind) { enum class Kind { link, tag } }
 
 /** Everything derived on the device and never synced. Cards in locked vaults go no further than this. */
-class CardIndex(all: List<Card> = emptyList(), locked: Set<String> = emptySet()) {
+/**
+ * `partial`: only some of the cards, as the journal's preview at launch (`AppModel.preview`): a link to one not among
+ * them is named as the link was written, not taken for one this account can't see.
+ */
+class CardIndex(all: List<Card> = emptyList(), locked: Set<String> = emptySet(), private val partial: Boolean = false) {
     val lockedCards = mutableMapOf<String, String>()
     val byId: Map<String, Card>
     val live: List<Card>
@@ -136,7 +140,7 @@ class CardIndex(all: List<Card> = emptyList(), locked: Set<String> = emptySet())
 
     fun linkTitle(id: String, fallback: String): String {
         if (lockedCards.containsKey(id)) return LOCKED_TITLE
-        val target = byId[id] ?: return UNSHARED_TITLE
+        val target = byId[id] ?: return if (partial) fallback else UNSHARED_TITLE
         return if (target.deleted) fallback else target.displayTitle
     }
 

@@ -27,6 +27,9 @@ class SqliteStore(context: Context, name: String) : CardStore {
         override fun onUpgrade(db: SQLiteDatabase, oldVersion: Int, newVersion: Int) {}
 
         override fun onConfigure(db: SQLiteDatabase) { db.enableWriteAheadLogging() }
+
+        // The newest cards found without reading them all (`recentCards`); made the first time a database opens.
+        override fun onOpen(db: SQLiteDatabase) { db.execSQL("CREATE INDEX IF NOT EXISTS cards_by_change ON cards (updated_at)") }
     }
     private val db get() = helper.writableDatabase
 
@@ -64,6 +67,12 @@ class SqliteStore(context: Context, name: String) : CardStore {
     }
 
     override fun listCards() = query("SELECT $columns FROM cards").map(::record)
+    // The newest found by their rows first, so only theirs of thousands of payloads are read and sorted; the rest by ID.
+    override fun recentCards(n: Int, also: Collection<String>) = query(
+        "SELECT $columns FROM cards WHERE rowid IN (SELECT rowid FROM cards WHERE deleted = 0 ORDER BY updated_at DESC LIMIT $n)" +
+            if (also.isEmpty()) "" else " OR (deleted = 0 AND id IN (${also.joinToString(",") { "?" }}))",
+        *also.toTypedArray(),
+    ).map(::record)
     override fun getCard(id: String) = query("SELECT $columns FROM cards WHERE id = ?", id).firstOrNull()?.let(::record)
 
     override fun putCards(records: List<CardRecord>) = tx {

@@ -9,6 +9,18 @@ import java.util.concurrent.ConcurrentHashMap
  */
 interface CardStore {
     fun listCards(): List<CardRecord>
+    /**
+     * The newest `n` cards not deleted, by when they last changed, and those named in `also` (the tags, whose names
+     * entries show): what the journal shows first at launch, read in a moment where reading every card takes seconds
+     * (`AppModel.refresh`).
+     */
+    fun recentCards(n: Int, also: Collection<String> = emptyList()): List<CardRecord> {
+        val all = listCards()
+        val recent = all.filter { !it.deleted }.sortedByDescending { it.updated_at }.take(n)
+        val ids = recent.mapTo(HashSet()) { it.id }
+        val wanted = also.toSet()
+        return recent + all.filter { it.id !in ids && !it.deleted && it.id in wanted }
+    }
     fun getCard(id: String): CardRecord?
     /** A local write: stored, and marked to be pushed. */
     fun putCards(records: List<CardRecord>)

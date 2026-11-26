@@ -40,6 +40,7 @@ import kotlinx.coroutines.flow.collectLatest
 import kotlinx.coroutines.isActive
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.sync.withLock
 import java.util.UUID
 
 /** What the main column shows. */
@@ -70,6 +71,9 @@ sealed class EntryPanel(open val id: String) {
 data class Toast(val message: String, val undo: Boolean, val id: String = UUID.randomUUID().toString())
 
 /** Everything the app's screens read: the account, its vaults and cards, and sync. As the web app's `CardsContext`. */
+/** How many of the newest entries the journal shows at launch while every card is read (`AppModel.preview`). */
+private const val PREVIEW_SIZE = 300
+
 class AppModel(private val context: Context, val site: String) {
     enum class Phase { loading, signedOut, signedIn }
 
@@ -101,6 +105,15 @@ class AppModel(private val context: Context, val site: String) {
     var index by mutableStateOf(CardIndex()); private set
     /** The cards have been read once: until then the journal is empty because it hasn't been read, not because it is. */
     var loaded by mutableStateOf(false); private set
+    /**
+     * The newest entries and every tag, read first at launch (`refresh`), so the journal shows them in a moment while
+     * every card is read, which takes seconds with thousands. Only for drawing the journal and its bubbles
+     * (`shown`): everything else, and above all what changes cards or acts on all of them (the Trash's sweep,
+     * reminders, tag edits), waits for `index`, as it did before.
+     */
+    var preview by mutableStateOf<CardIndex?>(null); private set
+    /** What the journal and its bubbles draw from: every card once read, the preview until then. */
+    val shown: CardIndex get() = if (loaded) index else preview ?: index
     /** The vaults each card is shared into besides its own. */
     var sharedInto by mutableStateOf<SharedInto>(emptyMap()); private set
     var commentCounts by mutableStateOf<Map<String, Int>>(emptyMap()); private set
@@ -314,9 +327,14 @@ class AppModel(private val context: Context, val site: String) {
      * nothing, and the index is built off the main thread only when a card or what's locked changed. An older refresh
      * never overwrites a newer one.
      */
-    suspend fun refresh() {
+    /** One refresh at a time: one asked for while another runs waits for it (reading every card twice took seconds). */
+    private val refreshLock = kotlinx.coroutines.sync.Mutex()
+
+    suspend fun refresh() = refreshLock.withLock { refreshNow() }
+
+    private suspend fun refreshNow() {
         val run = ++refreshes
-        val all = runCatching { repo.allCards() }.getOrNull() ?: return
+        // What the cards are shown with, quick to read, first: the preview's bubbles name their vaults with them.
         val vs = repo.vaults()
         val sharedNow = repo.sharedCards()
         val into = mutableMapOf<String, MutableList<String>>()
@@ -330,16 +348,27 @@ class AppModel(private val context: Context, val site: String) {
         sharedInto = into
         commentCounts = counts
         if (unsynced != waiting) unsynced = waiting
+        if (!loaded && preview == null) {
+            val first = runCatching { repo.recentCards(PREVIEW_SIZE) }.getOrNull()
+            if (!first.isNullOrEmpty() && !loaded) {
+                val locked = lockedVaults
+                preview = kotlinx.coroutines.withContext(Dispatchers.Default) { CardIndex(first, locked, partial = true) }
+            }
+        }
+        val all = runCatching { repo.allCards() }.getOrNull() ?: return
+        if (run != refreshes) return
         val marks = all.map { CardMark(it.id, it.vaultId, it.updatedAt, it.seq, it.deleted, it.sealed) }
         val locked = lockedVaults
-        if (marks == indexed?.first && locked == indexed?.second) { loaded = true; return }
+        if (marks == indexed?.first && locked == indexed?.second) { loaded = true; preview = null; return }
         val next = kotlinx.coroutines.withContext(Dispatchers.Default) { CardIndex(all, locked) }
         if (run != refreshes) return
         indexed = marks to locked
         cards = all
         cardsVersion++
         index = next
+        runCatching { repo.keepTagIds(all.filter { it.type == dev.notesapp.core.CardType.tag && !it.deleted }.map { it.id }) }
         loaded = true
+        preview = null
         Reminders.reschedule(context, next)
         Transcriber.apply(this)
     }
@@ -374,7 +403,8 @@ class AppModel(private val context: Context, val site: String) {
     /** Vaults with a PIN that this device hasn't opened. Their cards never reach a screen. */
     val lockedVaults: Set<String> get() = vaults.filter { it.isPrivate && it.id !in openVaults }.map { it.id }.toSet()
 
-    fun card(id: String) = index.byId[id]
+    // While every card is read, an entry the journal shows from the preview still opens.
+    fun card(id: String) = index.byId[id] ?: if (!loaded) preview?.byId?.get(id) else null
     fun vault(id: String) = vaults.firstOrNull { it.id == id }
     val mainVault get() = vaults.firstOrNull { it.isDefault(accountId) } ?: vaults.firstOrNull()
     val diaryVault get() = vaults.firstOrNull { it.isDiary(accountId) }

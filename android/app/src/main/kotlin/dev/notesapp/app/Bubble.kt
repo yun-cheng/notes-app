@@ -198,7 +198,7 @@ fun TodoCheck(card: Card) {
 fun BubbleText(doc: JsonElement, folded: Boolean = true, revealed: Boolean = false, memo: String? = null) {
     val model = LocalModel.current
     // `memo` names the card version and page shown, a cheaper key than the document; links show under the index's titles.
-    val parts = remember(memo ?: doc, model.index) { Doc.previewParts(doc, model.index.titleOf, markCode = true, hidden = Doc.Hidden.mark) }
+    val parts = remember(memo ?: doc, model.shown) { Doc.previewParts(doc, model.shown.titleOf, markCode = true, hidden = Doc.Hidden.mark) }
     val limited = if (folded) fold(parts, 6) else parts
     val sunken = Theme.sunken
     val muted = Theme.muted
@@ -310,7 +310,7 @@ fun CodeSnippet(text: String, language: String?) {
 @Composable
 fun StackPreview(stack: Card) {
     val model = LocalModel.current
-    val entries = model.index.stackEntries(stack)
+    val entries = model.shown.stackEntries(stack)
     Column(Modifier.padding(vertical = 2.dp), verticalArrangement = Arrangement.spacedBy(3.dp)) {
         for (entry in entries.take(5)) {
             Row(
@@ -330,7 +330,7 @@ fun StackPreview(stack: Card) {
 @Composable
 fun BubbleTags(card: Card, dates: Boolean = true) {
     val model = LocalModel.current
-    val tags = model.index.resolveTags(model.index.tagGroups.order(card.tags))
+    val tags = model.shown.resolveTags(model.shown.tagGroups.order(card.tags))
     val dated = dates && card.type == CardType.todo && (card.due != null || card.start != null)
     if (tags.isEmpty() && !dated) return
     FlowRow(Modifier.fillMaxWidth().padding(top = 4.dp, bottom = 2.dp), horizontalArrangement = Arrangement.spacedBy(6.dp), verticalArrangement = Arrangement.spacedBy(4.dp), itemVerticalAlignment = Alignment.CenterVertically) {
@@ -350,7 +350,7 @@ fun BubbleTags(card: Card, dates: Boolean = true) {
 @Composable
 fun TagChip(tag: Card, modifier: Modifier = Modifier, large: Boolean = false) {
     val model = LocalModel.current
-    val grouped = model.index.tagGroups.groupOf[tag.id] != null
+    val grouped = model.shown.tagGroups.groupOf[tag.id] != null
     val tint = tag.color?.let { Theme.tint(it) }
     Text(
         tag.displayTitle,

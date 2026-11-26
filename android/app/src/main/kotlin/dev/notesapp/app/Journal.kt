@@ -122,11 +122,13 @@ fun JournalView(initial: StreamFilter, openDrawer: (() -> Unit)?, fixed: Boolean
         else -> "Journal"
     }
     // Worked out again only when the cards, the filter or the day change, not on every redraw (a pick, a keystroke).
-    var all = remember(model.index, filter, model.today, model.sharedInto) { Stream.items(model.index, filter, model.today, model.sharedInto) }
+    // Until every card is read, the newest few hundred (`AppModel.preview`); what needs them all waits for the rest.
+    val partial = !model.loaded
+    var all = remember(model.shown, filter, model.today, model.sharedInto) { Stream.items(model.shown, filter, model.today, model.sharedInto) }
     all = if (searching && query.isNotBlank()) {
         val hits = remember(model.index, query) { model.search.search(query).map { it.card.id }.toSet() }
         all.filter { it.card.id in hits }
-    } else Stream.foldStacks(all, model.index.stackOf)
+    } else Stream.foldStacks(all, model.shown.stackOf)
     // Whether the stream reads like a chat, newest at the bottom.
     val chat = filter.sort == StreamFilter.Sort.Written || filter.sort == StreamFilter.Sort.Edited
     val visible = if (chat) all.takeLast(shown) else all.take(shown)
@@ -134,7 +136,7 @@ fun JournalView(initial: StreamFilter, openDrawer: (() -> Unit)?, fixed: Boolean
 
     Column(Modifier.fillMaxSize().background(Theme.bg)) {
         // The count sits beside the title on a wide screen, as on the web; a phone's bar has no room for it.
-        TopBar(title, openDrawer, status = false, subtitle = if (openDrawer == null) (if (picked.isEmpty()) "${all.size}" else "of ${all.size}") else null) {
+        TopBar(title, openDrawer, status = false, subtitle = if (openDrawer == null && !partial) (if (picked.isEmpty()) "${all.size}" else "of ${all.size}") else null) {
             // Picking, as the web's: Select all and Done in place of the page's buttons.
             if (picked.isNotEmpty()) {
                 TextButton(onClick = { picked = all.map { it.card.id }.toSet() }) { Text("Select all") }
@@ -154,6 +156,8 @@ fun JournalView(initial: StreamFilter, openDrawer: (() -> Unit)?, fixed: Boolean
         if (searching) PageSearchField(query, { query = it }) { searching = false; query = "" }
         when {
             locked != null -> UnlockView(locked, Modifier.weight(1f))
+            // A search, a filter or a board needs every card: it waits for them, rather than showing too few.
+            partial && (searching || filter.isFiltered || filter.board != null) -> LoadingNotes(Modifier.weight(1f))
             filter.board != null -> Box(Modifier.weight(1f)) { BoardView(filter, filter.board!!) }
             else -> {
                 val list = rememberLazyListState()
@@ -176,6 +180,7 @@ fun JournalView(initial: StreamFilter, openDrawer: (() -> Unit)?, fixed: Boolean
                 BoxWithConstraints(Modifier.weight(1f).fillMaxWidth()) {
                     val bubbleWidth = minOf(560.dp, (minOf(maxWidth, 720.dp) - 32.dp) * 0.85f)
                     LazyColumn(Modifier.fillMaxHeight().widthIn(max = 720.dp).fillMaxWidth().align(Alignment.TopCenter), state = list, contentPadding = PaddingValues(start = 16.dp, end = 16.dp, bottom = 10.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                        if (chat && partial) item { LoadingLine(if (all.isEmpty()) "Loading your notes…" else "Loading earlier entries…") }
                         if (chat && all.size > visible.size) item { TextButton(onClick = { shown += PAGE_SIZE }, Modifier.fillMaxWidth()) { Text("Show earlier entries") } }
                         for ((day, items) in groups) {
                             stickyHeader(key = "day:$day:${items.first().id}") {
@@ -191,9 +196,10 @@ fun JournalView(initial: StreamFilter, openDrawer: (() -> Unit)?, fixed: Boolean
                             }
                         }
                         if (!chat && all.size > visible.size) item { TextButton(onClick = { shown += PAGE_SIZE }, Modifier.fillMaxWidth()) { Text("Show more entries") } }
+                        if (!chat && partial) item { LoadingLine(if (all.isEmpty()) "Loading your notes…" else "Loading more entries…") }
                         if (all.isEmpty() && model.loaded) item { EmptyJournal(filter, searching) }
                     }
-                    LazyRail(list, all.map { it.day }, all.map { it.card.id }, { dayLabel(it, filter.sort, model) }, { rowOf[it] }, Modifier.align(Alignment.CenterEnd)) { index ->
+                    if (!partial) LazyRail(list, all.map { it.day }, all.map { it.card.id }, { dayLabel(it, filter.sort, model) }, { rowOf[it] }, Modifier.align(Alignment.CenterEnd)) { index ->
                         // Past those drawn: draw on to it, as the web's.
                         val need = if (chat) all.size - index else index + 1
                         if (need > shown) shown = minOf(all.size, need + PAGE_SIZE / 2)
@@ -375,6 +381,20 @@ fun DayBadge(day: String, sort: StreamFilter.Sort, pick: (String) -> Unit) {
             Modifier.shadow(2.dp, RoundedCornerShape(50)).clip(RoundedCornerShape(50)).background(Theme.sunken).clickable { pick(day) }.padding(horizontal = 10.dp, vertical = 2.dp),
             fontSize = 12.sp, fontWeight = FontWeight.SemiBold, color = Theme.muted,
         )
+    }
+}
+
+/** A quiet line in a list, saying what's still being read. */
+@Composable
+fun LoadingLine(text: String) {
+    Text(text, Modifier.fillMaxWidth().padding(vertical = 10.dp), color = Theme.muted, fontSize = 13.sp, textAlign = androidx.compose.ui.text.style.TextAlign.Center)
+}
+
+/** In place of what needs every card, while they're read at launch. */
+@Composable
+fun LoadingNotes(modifier: Modifier = Modifier) {
+    Box(modifier.fillMaxWidth().padding(top = 60.dp), contentAlignment = Alignment.TopCenter) {
+        Text("Loading your notes…", color = Theme.muted)
     }
 }
 

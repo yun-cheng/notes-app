@@ -188,6 +188,15 @@ fun WideFrame() {
 /** The page the main column shows. */
 @Composable
 fun PageView(page: Page, openDrawer: (() -> Unit)?) {
+    val model = LocalModel.current
+    // Pages that need every card wait while they're read at launch: the journal shows the newest meanwhile.
+    if (!model.loaded && page !is Page.Journal && page != Page.Settings && page != Page.Vaults && page != Page.History) {
+        Column(Modifier.fillMaxSize().background(Theme.bg)) {
+            TopBar(destinations.firstOrNull { it.page == page }?.title ?: "", openDrawer)
+            LoadingNotes()
+        }
+        return
+    }
     when (page) {
         is Page.Journal -> androidx.compose.runtime.key(page.filter) { JournalView(page.filter, openDrawer) }
         Page.Trash -> TrashPage(openDrawer)

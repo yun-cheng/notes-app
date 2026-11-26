@@ -43,6 +43,10 @@ class MainActivity : FragmentActivity() {
             NotesTheme {
                 CompositionLocalProvider(LocalModel provides model) { Root() }
             }
+            // Tells Android when the journal first shows entries (the preview, or all of them), as its measure of a
+            // launch: `adb logcat` says "Fully drawn" with the time since the app was opened.
+            val drawn = model.preview != null || model.loaded
+            androidx.compose.runtime.LaunchedEffect(drawn) { if (drawn) reportFullyDrawn() }
         }
     }
 

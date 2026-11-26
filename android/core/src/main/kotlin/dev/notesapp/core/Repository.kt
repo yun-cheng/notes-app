@@ -50,6 +50,19 @@ class Repository(
      */
     private var parsed = HashMap<String, Pair<String, JsonObject>>()
 
+    /** `CardStore.recentCards`, read: the newest entries and the tags, to show while every card is read (`allCards`). */
+    suspend fun recentCards(n: Int) = locked {
+        // The tags as last read in full (`keepTagIds`): looked up by ID, as finding them among thousands reads them all.
+        val tags = store.getMeta(TAG_IDS)?.split(',')?.filter { it.isNotEmpty() } ?: emptyList()
+        store.recentCards(n, tags).map(::decode)
+    }
+
+    /** Keeps which cards are tags, for `recentCards` to read with the newest at the next launch. */
+    suspend fun keepTagIds(ids: List<String>) = locked {
+        val text = ids.sorted().joinToString(",")
+        if (store.getMeta(TAG_IDS) != text) store.setMeta(TAG_IDS, text)
+    }
+
     suspend fun allCards() = locked {
         val records = store.listCards()
         val next = HashMap<String, Pair<String, JsonObject>>()
@@ -412,3 +425,6 @@ class Repository(
 /** How many cards to read before `allCards` reads them on every core at once, and on how many. */
 private const val PARALLEL_FROM = 500
 private val CORES = Runtime.getRuntime().availableProcessors().coerceIn(1, 8)
+
+/** Where `keepTagIds` keeps the tags' IDs. */
+private const val TAG_IDS = "tagIds"

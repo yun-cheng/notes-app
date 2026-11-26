@@ -373,7 +373,8 @@ struct BubbleText: View {
     }
 }
 
-/// A code block in a bubble: in a code font, kept as typed, its language named over it, with a copy button.
+/// A code block in a bubble: in a code font, kept as typed, colored by its language, its language named over it, with a
+/// copy button.
 struct CodeSnippet: View {
     let text: String
     let language: String?
@@ -381,9 +382,9 @@ struct CodeSnippet: View {
 
     var body: some View {
         VStack(alignment: .leading, spacing: 2) {
-            if let language { Text(language).font(.caption2).foregroundStyle(Theme.muted) }
+            if let label = CodeHighlight.languageLabel(language) { Text(label).font(.caption2).foregroundStyle(Theme.muted) }
             ScrollView(.horizontal, showsIndicators: false) {
-                Text(text).font(.system(size: 13, design: .monospaced)).textSelection(.enabled).fixedSize()
+                Text(Self.highlighted(text, language: language)).font(.system(size: 13, design: .monospaced)).textSelection(.enabled).fixedSize()
             }
         }
         .padding(.horizontal, 10)
@@ -395,6 +396,27 @@ struct CodeSnippet: View {
                 .buttonStyle(.plain).foregroundStyle(Theme.muted).padding(6)
                 .accessibilityLabel("Copy code")
         }
+    }
+
+    private static func highlighted(_ code: String, language: String?) -> AttributedString {
+        var out = AttributedString()
+        for token in CodeHighlight.tokenize(code, language: language) {
+            var part = AttributedString(token.text)
+            switch token.role {
+            case .keyword: part.foregroundColor = Theme.codeKeyword
+            case .string: part.foregroundColor = Theme.codeString
+            case .number: part.foregroundColor = Theme.codeNumber
+            case .comment:
+                part.foregroundColor = Theme.codeComment
+                part.font = .system(size: 13, design: .monospaced).italic()
+            case .title: part.foregroundColor = Theme.codeTitle
+            case .type: part.foregroundColor = Theme.codeType
+            case .meta: part.foregroundColor = Theme.codeMeta
+            case .plain: part.foregroundColor = Theme.text
+            }
+            out += part
+        }
+        return out
     }
 }
 

@@ -38,6 +38,13 @@ enum Theme {
     static let alert = color(0xB23A2E, 0xF0907F)
     static let added = color(0xD6ECD2, 0x24452C)
     static let removed = color(0xF5D9D3, 0x4D2A25)
+    static let codeKeyword = color(0x8A3F9E, 0xD19AE0)
+    static let codeString = color(0x3D7A35, 0xA6D189)
+    static let codeNumber = color(0xA35A12, 0xEFB37A)
+    static let codeComment = color(0x7D837F, 0x8B938F)
+    static let codeTitle = color(0x2160A8, 0x8CB8F0)
+    static let codeType = color(0x1F6F74, 0x7FD0C8)
+    static let codeMeta = color(0xA3434F, 0xF19AA5)
 
     /// An entry's tint (`.tint--red` and the rest).
     static func tint(_ color: CardColor) -> Color {

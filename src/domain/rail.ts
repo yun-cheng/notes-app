@@ -19,6 +19,12 @@ export type RailScale = 'year' | 'month' | 'day' | 'name';
 /** The labels' least room between them, and the dots', in pixels. */
 const LABEL_GAP = 22;
 const DOT_GAP = 9;
+/**
+ * How far down from where it's placed a label reaches (its year or month starts at its top; on a phone it's a pill),
+ * and the room a dot keeps from it, so no dot sits on a label's words.
+ */
+const LABEL_HEIGHT = 16;
+const DOT_ROOM = 3;
 
 export function railScale(keys: readonly string[]): RailScale {
   const years = new Set<string>();
@@ -77,11 +83,13 @@ export function railMarks(keys: readonly string[], height: number, name: (key: s
     const above = kept.at(-1);
     if (!above || (mark.at - above.at) * height >= LABEL_GAP) kept.push(mark);
   }
-  const taken = kept.map((m) => m.at * height);
+  const labelled = kept.map((m) => m.at * height);
+  const taken: number[] = [];
   const shown = [...kept];
   for (const at of dots) {
     const y = at * height;
-    if (taken.every((t) => Math.abs(t - y) >= DOT_GAP)) {
+    const clear = labelled.every((l) => y < l - DOT_ROOM || y > l + LABEL_HEIGHT + DOT_ROOM);
+    if (clear && taken.every((t) => Math.abs(t - y) >= DOT_GAP)) {
       taken.push(y);
       shown.push({ at, label: null });
     }

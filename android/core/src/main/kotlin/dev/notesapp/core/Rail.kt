@@ -19,6 +19,9 @@ object Rail {
     /** The labels' least room between them, and the dots', in pixels (or points). */
     private const val LABEL_GAP = 22.0
     private const val DOT_GAP = 9.0
+    /** How far down from where it's placed a label reaches (it starts at its top), and the room a dot keeps from it, as the web's. */
+    private const val LABEL_HEIGHT = 16.0
+    private const val DOT_ROOM = 3.0
 
     fun scale(keys: List<String>): Scale {
         val years = mutableSetOf<String>()
@@ -77,11 +80,13 @@ object Rail {
             val above = kept.lastOrNull()
             if (above == null || (mark.at - above.at) * height >= LABEL_GAP) kept.add(mark)
         }
-        val taken = kept.map { it.at * height }.toMutableList()
+        val labelled = kept.map { it.at * height }
+        val taken = mutableListOf<Double>()
         val shown = kept.toMutableList()
         for (at in dots) {
             val y = at * height
-            if (taken.all { kotlin.math.abs(it - y) >= DOT_GAP }) {
+            val clear = labelled.all { y < it - DOT_ROOM || y > it + LABEL_HEIGHT + DOT_ROOM }
+            if (clear && taken.all { kotlin.math.abs(it - y) >= DOT_GAP }) {
                 taken.add(y)
                 shown.add(Mark(at, null))
             }

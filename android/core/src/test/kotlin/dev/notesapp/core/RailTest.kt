@@ -38,6 +38,14 @@ class RailTest {
         assertEquals(emptyList(), Rail.marks(emptyList(), 1000.0, name))
     }
 
+    @Test fun dotsKeepOffLabels() {
+        // As the web's: a hundred items on a 1000-pixel rail; months begin at 10, 50, 490, 510 and 520, years at 0 and 500.
+        val at = mapOf(0 to "2025-01-01", 1 to "2025-02-01", 5 to "2025-03-01", 49 to "2025-12-01", 50 to "2026-01-01", 51 to "2026-02-01", 52 to "2026-03-01")
+        var last = ""
+        val keys = List(100) { i -> (at[i] ?: last).also { last = it } }
+        assertEquals(listOf(50L, 490L, 520L), Rail.marks(keys, 1000.0, name).filter { it.label == null }.map { Math.round(it.at * 1000) })
+    }
+
     @Test fun label() {
         assertEquals("Mar 2025", Rail.label("2025-03-04", Rail.Scale.Year, name, us))
         assertEquals("#2025-03-04", Rail.label("2025-03-04", Rail.Scale.Month, name))

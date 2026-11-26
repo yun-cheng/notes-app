@@ -42,6 +42,14 @@ describe('the rail beside a long page', () => {
     expect(railMarks([], 1000, name)).toEqual([]);
   });
 
+  it("keeps dots off a label's words: it hangs down from its place, so a dot just under it goes, one just above stays", () => {
+    // A hundred items on a 1000-pixel rail, 10 pixels each: months begin at 10, 50, 490, 510 and 520; years at 0 and 500.
+    const at: Record<number, string> = { 0: '2025-01-01', 1: '2025-02-01', 5: '2025-03-01', 49: '2025-12-01', 50: '2026-01-01', 51: '2026-02-01', 52: '2026-03-01' };
+    let last = '';
+    const keys = Array.from({ length: 100 }, (_, i) => (last = at[i] ?? last));
+    expect(railMarks(keys, 1000, name).filter((m) => !m.label).map((m) => Math.round(m.at * 1000))).toEqual([50, 490, 520]);
+  });
+
   it('names a place by its month among years, else as the page does', () => {
     expect(railLabel('2025-03-04', 'year', name, 'en-US')).toBe('Mar 2025');
     expect(railLabel('2025-03-04', 'month', name)).toBe('#2025-03-04');

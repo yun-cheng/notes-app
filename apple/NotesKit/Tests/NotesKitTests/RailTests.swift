@@ -18,6 +18,18 @@ import Testing
         #expect(Rail.scale(["2026-11-19", "tag-1"]) == .name)
     }
 
+    @Test func dotsKeepOffLabels() {
+        // As the web's: a hundred items on a 1000-point rail; months begin at 10, 50, 490, 510 and 520, years at 0 and 500.
+        let at = [0: "2025-01-01", 1: "2025-02-01", 5: "2025-03-01", 49: "2025-12-01", 50: "2026-01-01", 51: "2026-02-01", 52: "2026-03-01"]
+        var last = ""
+        let keys: [String] = (0..<100).map { i in
+            if let k = at[i] { last = k }
+            return last
+        }
+        let dots = Rail.marks(keys, height: 1000, name: Self.name, locale: Self.us).filter { $0.label == nil }.map { Int(($0.at * 1000).rounded()) }
+        #expect(dots == [50, 490, 520])
+    }
+
     @Test func yearsWithDotsForMonths() {
         let keys = ["2024-12-30", "2025-01-02", "2025-01-03", "2025-03-01", "2026-11-19"]
         let marks = Rail.marks(keys, height: 1000, name: Self.name, locale: Self.us)

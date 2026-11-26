@@ -17,6 +17,9 @@ public enum Rail {
     /// The labels' least room between them, and the dots', in points.
     static let labelGap = 22.0
     static let dotGap = 9.0
+    /// How far down from where it's placed a label reaches (it starts at its top), and the room a dot keeps from it, as the web's.
+    static let labelHeight = 16.0
+    static let dotRoom = 3.0
 
     public static func scale(_ keys: [String]) -> Scale {
         var years = Set<Substring>()
@@ -76,11 +79,13 @@ public enum Rail {
         }
         var kept: [Mark] = []
         for mark in labels where kept.last.map({ (mark.at - $0.at) * height >= labelGap }) ?? true { kept.append(mark) }
-        var taken = kept.map { $0.at * height }
+        let labelled = kept.map { $0.at * height }
+        var taken: [Double] = []
         var shown = kept
         for at in dots {
             let y = at * height
-            if taken.allSatisfy({ abs($0 - y) >= dotGap }) {
+            let clear = labelled.allSatisfy { y < $0 - dotRoom || y > $0 + labelHeight + dotRoom }
+            if clear && taken.allSatisfy({ abs($0 - y) >= dotGap }) {
                 taken.append(y)
                 shown.append(Mark(at: at, label: nil))
             }

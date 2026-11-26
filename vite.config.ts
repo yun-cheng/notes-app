@@ -1,3 +1,5 @@
+import { execFileSync } from 'node:child_process';
+import { createHash } from 'node:crypto';
 import { existsSync, readdirSync, readFileSync } from 'node:fs';
 import type { Plugin } from 'vite';
 import { defineConfig } from 'vitest/config';
@@ -7,7 +9,7 @@ import { VitePWA } from 'vite-plugin-pwa';
 /**
  * Only in `npm run dev`, never in a build: /demo signs this browser in to the demo account that
  * `npm run demo` made on the local server, alongside any accounts it is already signed in to (/demo/sam to Sam's, the
- * other side of what it shares), and the demo's photos and files are served from scripts/demoPhotos and
+ * other side of what it shares), and /api/demo-session/app signs in a native dev build, and the demo's photos and files are served from scripts/demoPhotos and
  * scripts/demoFiles.
  */
 const DEMO_FILE_TYPES: Record<string, string> = { pdf: 'application/pdf', csv: 'text/csv', txt: 'text/plain', mp4: 'video/mp4', m4a: 'audio/mp4', jpg: 'image/jpeg' };
@@ -24,6 +26,34 @@ function demoSignIn(): Plugin {
         return who === 'sam' ? (kept?.sam ?? null) : kept;
       };
       const who = (url: string | undefined) => (/(?:^\/sam\b|[?&]as=sam\b)/.test(url ?? '') ? 'sam' : undefined);
+      // A dev build of a native app signs in to the demo here (Use the demo account, on its sign-in screen, against a
+      // local server): its own session, not the browser's, so signing out there leaves the browser signed in. Signing
+      // out deletes it; it's made again the next time it's asked for.
+      server.middlewares.use('/api/demo-session/app', async (req, res) => {
+        const as = who(req.url);
+        const demo = session(as);
+        if (!demo || req.method !== 'POST') {
+          res.statusCode = 404;
+          res.end();
+          return;
+        }
+        const token = `${demo.token}-app`;
+        const me = () => fetch('http://localhost:8788/api/me', { headers: { authorization: `Bearer ${token}` } });
+        let reply = await me().catch(() => null);
+        if (reply?.status === 401) {
+          const hash = createHash('sha256').update(token).digest('base64url');
+          const expires = Date.now() + 30 * 86_400_000;
+          execFileSync('npx', ['wrangler', 'd1', 'execute', 'notes-app', '--local', '--command', `INSERT OR REPLACE INTO sessions (token_hash, user_id, expires_at) VALUES ('${hash}', '${demo.user.id}', ${expires})`], { stdio: 'ignore' });
+          reply = await me().catch(() => null);
+        }
+        res.setHeader('content-type', 'application/json');
+        if (!reply?.ok) {
+          res.statusCode = 502;
+          res.end(JSON.stringify({ error: 'Start the API (npm run dev:api) and run npm run demo first.' }));
+          return;
+        }
+        res.end(JSON.stringify({ ...(await reply.json()), token }));
+      });
       // Adds the demo account to the accounts this browser is signed in to, the way the API adds a sign-in, keeping
       // the others. Under /api, since the session cookie is only sent there.
       server.middlewares.use('/api/demo-session', (req, res) => {

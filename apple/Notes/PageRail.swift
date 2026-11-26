@@ -112,20 +112,35 @@ import SwiftUI
     }
 
     private static var places: [String: Place] = [:]
+    /// How far each page was scrolled when its place was last kept, and when last heard from while scrolling.
+    private static var offsets: [String: CGFloat] = [:]
+    private static var seen: [String: CGFloat] = [:]
 
     static func place(_ key: String) -> Place? { places[key] }
 
     /// Keeps the first of `ids` whose top is on screen, by where each is in the content (`rows`); none at the end it
-    /// opens at (`chat`: the foot).
-    static func keep(_ key: String, ids: [String], rows: [String: CGRect], offset: CGFloat, scrollable: CGFloat, chat: Bool) {
+    /// opens at (`chat`: the foot). Only once it's been scrolled: as a page goes, what's in it changes under the same
+    /// offset, and the place found then was another entry. While it scrolls fast, the rows coming in haven't said where
+    /// they are yet: none found on screen leaves what was, to be kept again when it comes to rest.
+    static func keep(_ key: String, ids: [String], rows: [String: CGRect], offset: CGFloat, height: CGFloat, scrollable: CGFloat, chat: Bool, atRest: Bool = false) {
+        if atRest {
+            // Come to rest far from where it last was, with no scrolling between: the page going, not the reader.
+            if let was = seen[key], abs(was - offset) > height { return }
+        } else {
+            if let was = offsets[key], abs(was - offset) < 0.5 { return }
+            seen[key] = offset
+        }
         if chat ? scrollable - offset < 40 : offset < 4 {
             places[key] = nil
+            offsets[key] = offset
             return
         }
-        // None found leaves what was: as a page goes, its rows are let go before it's last measured.
+        // Come to rest: measured again, whatever was kept while it moved.
         for id in ids {
             guard let r = rows[id], r.minY >= offset - 0.5 else { continue }
+            guard r.minY < offset + height else { return }
             places[key] = Place(id: id, top: r.minY - offset, height: r.height)
+            offsets[key] = offset
             return
         }
     }
@@ -156,7 +171,12 @@ private struct KeepsPlace: ViewModifier {
         content
             .onScrollGeometryChange(for: RailPlace.Geometry.self) { RailPlace.Geometry($0) } action: { _, g in
                 guard settled else { return }
-                KeptPlaces.keep(key, ids: ids, rows: place.rows, offset: g.offset, scrollable: g.scrollable, chat: false)
+                KeptPlaces.keep(key, ids: ids, rows: place.rows, offset: g.offset, height: g.height, scrollable: g.scrollable, chat: false)
+            }
+            .onScrollPhaseChange { _, phase, context in
+                guard settled, phase == .idle else { return }
+                let g = RailPlace.Geometry(context.geometry)
+                KeptPlaces.keep(key, ids: ids, rows: place.rows, offset: g.offset, height: g.height, scrollable: g.scrollable, chat: false, atRest: true)
             }
             .task {
                 if let kept = KeptPlaces.place(key), ids.contains(kept.id) {

@@ -48,6 +48,15 @@ struct SignInView: View {
                 .disabled(busy)
                 .padding(.top, 8)
                 if offerBrowser { Button("Sign in with the browser") { start() }.buttonStyle(.borderless) }
+                // A dev build on a server on this computer goes straight into the demo, as the web's /demo does.
+                if AppBuild.isDev && model.api.isLocal {
+                    HStack(spacing: 16) {
+                        Button("Use the demo account") { useDemo() }
+                        Button("Sam's") { useDemo(sam: true) }
+                    }
+                    .buttonStyle(.borderless)
+                    .disabled(busy)
+                }
             }
             if let problem {
                 Text(problem).foregroundStyle(.red).multilineTextAlignment(.center)
@@ -92,6 +101,21 @@ struct SignInView: View {
         } catch {
             problem = "Google sign-in didn't work. Try again, or sign in with the browser."
             offerBrowser = true
+        }
+    }
+
+    private func useDemo(sam: Bool = false) {
+        attempt?.cancel()
+        problem = nil
+        attempt = Task {
+            busy = true
+            defer { busy = false }
+            do {
+                let (info, token) = try await model.api.demoSession(sam: sam)
+                await model.signedIn(info, token: token)
+            } catch {
+                problem = "No demo here. Run npm run dev and npm run dev:api, then npm run demo."
+            }
         }
     }
 

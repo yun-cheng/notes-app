@@ -205,7 +205,13 @@ struct JournalView: View {
                         railPlace.update(g, ids: ids, first: chat ? all.count - visible.count : 0, count: all.count, rows: [:])
                         #endif
                         // Once it's opened where it was, where it is now, for coming back to.
-                        if settled { KeptPlaces.keep(placeKey, ids: ids, rows: places.rows, offset: g.offset, scrollable: g.scrollable, chat: chat) }
+                        if settled { KeptPlaces.keep(placeKey, ids: ids, rows: places.rows, offset: g.offset, height: g.height, scrollable: g.scrollable, chat: chat) }
+                    }
+                    // Again once it comes to rest, when the rows that came in while it scrolled have said where they are.
+                    .onScrollPhaseChange { _, phase, context in
+                        guard settled, phase == .idle else { return }
+                        let g = RailPlace.Geometry(context.geometry)
+                        KeptPlaces.keep(placeKey, ids: visible.map(\.card.id), rows: places.rows, offset: g.offset, height: g.height, scrollable: g.scrollable, chat: chat, atRest: true)
                     }
                     #if os(macOS)
                     // With a mouse the rail stands in for the scroll bar, as on the web.

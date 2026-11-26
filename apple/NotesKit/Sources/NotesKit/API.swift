@@ -202,6 +202,24 @@ public struct ServerAPI: SyncAPI {
         }
     }
 
+    // MARK: The demo, on a server on this computer
+
+    /// Whether the server is on this computer (`npm run dev`), where a dev build can sign in to the demo.
+    public var isLocal: Bool {
+        let host = site.host() ?? ""
+        return host == "localhost" || host == "127.0.0.1" || host.hasSuffix(".local")
+    }
+
+    /// Signs in to the demo account `npm run demo` made (or Sam's, the other side of what it shares), as the web's
+    /// /demo does: only the dev server answers, with a session of the app's own.
+    public func demoSession(sam: Bool = false) async throws -> (SessionInfo, token: String) {
+        let (data, status) = try await send("/demo-session/app" + (sam ? "?as=sam" : ""), method: "POST")
+        guard status == 200 else { throw APIError.status(status) }
+        let info = try JSONDecoder().decode(SessionInfo.self, from: data)
+        guard let token = info.token else { throw APIError.status(status) }
+        return (info, token)
+    }
+
     public func signOut() async {
         _ = try? await send("/auth/logout", method: "POST", body: [String: String]())
     }

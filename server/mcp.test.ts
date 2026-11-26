@@ -388,6 +388,77 @@ describe('MCP server', () => {
     expect(grpCard).toContain('Tag group: one-choice, ordered');
     expect(grpCard).toContain('- High (id: p-high)');
   });
+  it('creates untitled notes, starts entries from templates, adds tagged/waiting todos, and edits pages, tags, archive, type and vault', async () => {
+    const { tool, call, patch, push, pull, ann } = await world();
+    const work = (await (await call('/api/vaults', { method: 'POST', body: JSON.stringify({ name: 'Work' }) }, ann.cookie)).json()) as { id: string };
+    await patch(work.id, { ai_access: 'write' });
+    await push(ann.cookie, [
+      rec(ann.vault, 'p-high', { payload: payload({ type: 'tag', title: 'High', pinned: false }) }),
+      rec(ann.vault, 'p-low', { payload: payload({ type: 'tag', title: 'Low', pinned: false }) }),
+      rec(ann.vault, 'grp-pri', { payload: payload({ type: 'tag', title: 'Priority', pinned: false, choice: 'one', ordered: true, members: ['p-high', 'p-low'] }) }),
+      rec(ann.vault, 'tpl-pack', {
+        payload: payload({
+          type: 'note',
+          title: 'Packing {date}',
+          template: true,
+          tags: ['tag-1'],
+          color: 'green',
+          content: {
+            type: 'doc',
+            content: [{ type: 'taskList', content: [{ type: 'taskItem', attrs: { checked: true }, content: [para('Passport')] }] }],
+          },
+          pages: [doc(para('Checklist back'))],
+        }),
+      }),
+    ]);
+
+    // Untitled journal note with pages.
+    const quick = await tool('create_note', { markdown: 'Walked by the river today.', pages: ['Second page thoughts'], color: 'yellow' });
+    expect(quick.error).toBe(false);
+    const quickId = quick.text.match(/id: ([\w-]+)/)![1];
+    const quickRead = (await tool('get_card', { id: quickId })).text;
+    expect(quickRead).toContain('# Walked by the river today.');
+    expect(quickRead).toContain('Color: yellow');
+    expect(quickRead).toContain('## Page 2\n\nSecond page thoughts');
+
+    // Start from a template: fills {date}, unticks checklist items, copies pages & color, merges extra tags.
+    const fromTpl = await tool('create_note', { from_template: 'tpl-pack', tags: ['High'] });
+    expect(fromTpl.error).toBe(false);
+    const tplCopyId = fromTpl.text.match(/id: ([\w-]+)/)![1];
+    const tplCopyRead = (await tool('get_card', { id: tplCopyId })).text;
+    expect(tplCopyRead).toContain('- [ ] Passport');
+    expect(tplCopyRead).toContain('Tags: Travel, High');
+    expect(tplCopyRead).toContain('Color: green');
+    expect(tplCopyRead).toContain('## Page 2\n\nChecklist back');
+
+    // Add a todo with tags and waiting.
+    const added = await tool('add_todo', { title: 'Chase invoice', tags: ['High', 'Finance'], waiting: true, vault: 'Work' });
+    expect(added.error).toBe(false);
+    const todoId = added.text.match(/id: ([\w-]+)/)![1];
+    const todoRead = (await tool('get_card', { id: todoId })).text;
+    expect(todoRead).toContain('Status: open, waiting');
+    expect(todoRead).toContain('Tags: High, Finance');
+
+    // Incremental tag edit (one-choice swap High -> Low, remove Finance), resume waiting, archive, edit Page 2, add Page 3.
+    expect((await tool('edit_card', { id: todoId, add_tags: ['Low'], remove_tags: ['Finance'], waiting: false, archived: true, add_page: 'Invoice details' })).error).toBe(false);
+    const editedTodo = (await tool('get_card', { id: todoId })).text;
+    expect(editedTodo).toContain('Tags: Low');
+    expect(editedTodo).not.toContain('High');
+    expect(editedTodo).not.toContain('Finance');
+    expect(editedTodo).toContain('Status: open\n');
+    expect(editedTodo).toContain('This card is archived.');
+    expect(editedTodo).toContain('## Page 2\n\nInvoice details');
+
+    // Convert untitled note into a todo, set due date, edit Page 2, and move it to Work in one call.
+    expect((await tool('edit_card', { id: quickId, type: 'todo', due: '2026-12-01', page: 2, append_markdown: 'More back text', vault: work.id })).error).toBe(false);
+    const moved = (await tool('get_card', { id: quickId })).text;
+    expect(moved).toContain('Type: todo');
+    expect(moved).toContain('Vault: Work (you can edit)');
+    expect(moved).toContain('Due: 2026-12-01');
+    expect(moved).toContain('Second page thoughts\n\nMore back text');
+    // Confirm the move persisted to the new vault record.
+    expect((await pull(ann.cookie)).records.find((r: CardRecord) => r.id === quickId)?.vault_id).toBe(work.id);
+  });
   it('validates arguments', async () => {
     const { tool } = await world();
     expect(await tool('list_todos', { due_after: 'yesterday' })).toEqual({ text: '"due_after" must be a date like 2026-11-10.', error: true });

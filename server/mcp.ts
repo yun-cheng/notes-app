@@ -1,4 +1,4 @@
-import { isGroupName, isTagGroup, settleTags } from '../src/domain/tagGroups';
+import { isGroupName, isTagGroup, settleTags, withTag } from '../src/domain/tagGroups';
 import { tagsForStatus } from '../src/domain/board';
 import { offeredIn, tagNamedIn } from '../src/domain/tagScope';
 import { buildIndex, type CardIndex } from '../src/domain/cardIndex';
@@ -9,9 +9,11 @@ import { toMarkdown } from '../src/domain/markdown';
 import { parsePayload } from '../src/domain/payload';
 import { fromMarkdown } from '../src/domain/markdownIn';
 import { parseRepeat, repeatWord } from '../src/domain/repeat';
+import { changeType, retypePatch } from '../src/domain/retype';
+import { fromTemplate, isTemplate } from '../src/domain/templates';
 import { completeTodo } from '../src/domain/todos';
 import { buildSearch } from '../src/domain/search';
-import { EMPTY_DOC, type Card, type CardRecord, type JSONNode, type Repeat, type TagCard, type TodoCard, type Vault } from '../src/domain/types';
+import { CARD_COLORS, EMPTY_DOC, isCardColor, type Card, type CardColor, type CardRecord, type JSONNode, type NoteCard, type Repeat, type TagCard, type TodoCard, type Vault } from '../src/domain/types';
 import type { Database } from './db';
 import type { AiCaller } from './oauth';
 import { pushRecords } from './sync';
@@ -539,6 +541,43 @@ interface Tool {
   run: (args: Json, w: Writer) => Promise<string>;
 }
 
+function bool(args: Json, key: string): boolean | undefined {
+  const v = args[key];
+  if (v === undefined) return undefined;
+  if (typeof v !== 'boolean') throw new ToolError(`"${key}" must be true or false.`);
+  return v;
+}
+
+function colorArg(args: Json, key: string, allowNull = false): CardColor | null | undefined {
+  const v = args[key];
+  if (v === undefined) return undefined;
+  if (v === null) {
+    if (allowNull) return null;
+    throw new ToolError(`"${key}" must be one of ${CARD_COLORS.join(', ')}.`);
+  }
+  if (!isCardColor(v)) throw new ToolError(`"${key}" must be one of ${CARD_COLORS.join(', ')}.`);
+  return v;
+}
+
+function pagesArg(args: Json, key: string): string[] | undefined {
+  const v = args[key];
+  if (v === undefined || v === null) return undefined;
+  if (!Array.isArray(v) || v.length > 20 || !v.every((p) => typeof p === 'string' && p.length <= 200_000)) {
+    throw new ToolError(`"${key}" must be a list of up to 20 Markdown strings.`);
+  }
+  return v as string[];
+}
+
+function pageNumber(args: Json, key: string): number | undefined {
+  const v = args[key];
+  if (v === undefined) return undefined;
+  if (typeof v !== 'number' || !Number.isInteger(v) || v < 1 || v > 50) throw new ToolError(`"${key}" must be a whole number starting at 1.`);
+  return v;
+}
+
+const colorSchema = { type: 'string', enum: [...CARD_COLORS], description: `Bubble tint: ${CARD_COLORS.join(', ')}` };
+const nullableColorSchema = { type: ['string', 'null'], description: `Bubble tint (${CARD_COLORS.join(', ')}), or null for none` };
+
 const dateSchema = { type: 'string', pattern: '^\\d{4}-\\d{2}-\\d{2}$', description: 'A date like 2026-11-10' };
 const timeSchema = { type: ['string', 'null'], description: 'Todos only: a 24-hour time on the due date, like 15:00, or null for any time that day' };
 const repeatSchema = {
@@ -776,41 +815,88 @@ export const TOOLS: Tool[] = [
   {
     name: 'create_note',
     title: 'Create a note',
-    description: 'Creates a note from Markdown. Tags are given by name; missing tags are created.',
+    description:
+      'Creates a note from Markdown (or starts a new entry from a template with from_template). Title is optional when markdown or from_template is given. Tags are given by name; missing tags are created in the target vault.',
     write: true,
     inputSchema: {
       type: 'object',
       properties: {
-        title: { type: 'string' },
+        title: { type: 'string', description: 'Optional title (journal entries can be untitled when markdown is given)' },
         markdown: { type: 'string', description: 'The body. [[Exact title]] links to an existing card.' },
+        pages: { type: 'array', items: { type: 'string' }, description: 'Optional additional pages after Page 1, each as Markdown' },
         tags: { type: 'array', items: { type: 'string' } },
         vault: { type: 'string', description: 'Vault name or ID (from list_vaults). Defaults to the main vault.' },
+        from_template: { type: 'string', description: 'ID of a template card to start from (fills {date}/{today} and unticks checklists)' },
+        template: { type: 'boolean', description: 'Mark the new note as a reusable template' },
+        color: colorSchema,
       },
-      required: ['title'],
     },
     run: async (args, w) => {
       const vault = writableVault(w.scope, str(args, 'vault', { optional: true }));
+      const rawTitle = str(args, 'title', { optional: true, max: 300 });
+      const rawMarkdown = str(args, 'markdown', { optional: true, max: 200_000 });
+      const rawPages = pagesArg(args, 'pages');
+      const templateId = str(args, 'from_template', { optional: true });
+      const asTemplate = bool(args, 'template');
+      const color = colorArg(args, 'color');
       const created: Card[] = [];
-      const note: Card = {
+      const extraTagIds = tagIds(w, names(args, 'tags') ?? [], vault, created);
+
+      if (templateId) {
+        const tpl = visibleCard(w.scope, templateId);
+        if (!isTemplate(tpl)) throw new ToolError(`"${displayTitle(tpl)}" is not a template.`);
+        const copy = fromTemplate(tpl, serverToday(w));
+        const mergedTags = settleTags([...copy.tags, ...extraTagIds], w.scope.index.tagGroups.groupOf);
+        const content = rawMarkdown !== undefined ? fromMarkdown(rawMarkdown, resolver(w.scope)) : copy.content;
+        const pages = rawPages ? rawPages.map((p) => fromMarkdown(p, resolver(w.scope))) : copy.pages;
+        const base = {
+          id: crypto.randomUUID(),
+          vaultId: vault.id,
+          title: rawTitle !== undefined ? rawTitle.trim() : copy.title,
+          content,
+          ...(pages?.length ? { pages } : {}),
+          tags: mergedTags,
+          ...(color ? { color } : copy.color ? { color: copy.color } : {}),
+          ...(copy.preview ? { preview: copy.preview } : {}),
+          ...(asTemplate ? { template: true } : {}),
+          createdAt: w.now(),
+          updatedAt: 0,
+          deleted: false,
+          seq: 0,
+        };
+        const entry: Card =
+          copy.type === 'todo'
+            ? ({ ...base, type: 'todo', status: 'open', due: null, completedAt: null } satisfies TodoCard)
+            : ({ ...base, type: 'note' } satisfies NoteCard);
+        await save(w, [...created, entry]);
+        return `Created "${displayTitle(entry)}" from template "${displayTitle(tpl)}" (id: ${entry.id}) in ${vault.name}.`;
+      }
+
+      const title = rawTitle?.trim() ?? '';
+      if (!title && !rawMarkdown?.trim()) throw new ToolError('Give at least "title", "markdown", or "from_template".');
+      const note: NoteCard = {
         id: crypto.randomUUID(),
         vaultId: vault.id,
         type: 'note',
-        title: str(args, 'title', { max: 300 })!.trim(),
-        content: fromMarkdown(str(args, 'markdown', { optional: true, max: 200_000 }) ?? '', resolver(w.scope)),
-        tags: tagIds(w, names(args, 'tags') ?? [], vault, created),
+        title,
+        content: fromMarkdown(rawMarkdown ?? '', resolver(w.scope)),
+        ...(rawPages?.length ? { pages: rawPages.map((p) => fromMarkdown(p, resolver(w.scope))) } : {}),
+        tags: extraTagIds,
+        ...(asTemplate ? { template: true } : {}),
+        ...(color ? { color } : {}),
         createdAt: w.now(),
         updatedAt: 0,
         deleted: false,
         seq: 0,
       };
       await save(w, [...created, note]);
-      return `Created "${note.title}" (id: ${note.id}) in ${vault.name}.`;
+      return `Created "${displayTitle(note)}" (id: ${note.id}) in ${vault.name}.`;
     },
   },
   {
     name: 'add_todo',
     title: 'Add a todo',
-    description: 'Adds a todo, optionally with a due date, a time, a repeat and notes. A time or repeat with no date starts today.',
+    description: 'Adds a todo, optionally with a due date, start date, time, repeat, waiting status, tags, color and notes. A time or repeat with no date starts today.',
     write: true,
     inputSchema: {
       type: 'object',
@@ -820,6 +906,9 @@ export const TOOLS: Tool[] = [
         start: { ...dateSchema, description: 'The day work on it starts, on or before its due date, like 2026-11-10' },
         time: timeSchema,
         repeat: repeatSchema,
+        waiting: { type: 'boolean', description: 'Mark the todo as waiting/on hold (left out of what is due)' },
+        tags: { type: 'array', items: { type: 'string' }, description: 'Tag names to apply; missing tags are created in the target vault' },
+        color: colorSchema,
         markdown: { type: 'string', description: 'Notes for the todo' },
         vault: { type: 'string', description: 'Vault name or ID (from list_vaults). Defaults to the main vault.' },
       },
@@ -831,26 +920,31 @@ export const TOOLS: Tool[] = [
       const repeats = repeat(args, 'repeat');
       const due = date(args, 'due', true) ?? (dueTime || repeats ? serverToday(w) : null);
       const start = date(args, 'start', true);
+      const waiting = bool(args, 'waiting');
+      const color = colorArg(args, 'color');
+      const created: Card[] = [];
       const todo: TodoCard = {
         id: crypto.randomUUID(),
         vaultId: vault.id,
         type: 'todo',
         title: str(args, 'title', { max: 300 })!.trim(),
         content: fromMarkdown(str(args, 'markdown', { optional: true, max: 200_000 }) ?? '', resolver(w.scope)),
-        tags: [],
+        tags: tagIds(w, names(args, 'tags') ?? [], vault, created),
         status: 'open',
         due,
         ...(start ? { start } : {}),
         ...(dueTime ? { dueTime } : {}),
         ...(repeats ? { repeat: repeats } : {}),
+        ...(waiting ? { waiting: true } : {}),
+        ...(color ? { color } : {}),
         completedAt: null,
         createdAt: w.now(),
         updatedAt: 0,
         deleted: false,
         seq: 0,
       };
-      await save(w, [todo]);
-      return `Added "${todo.title}"${todo.due ? ` due ${dueText(todo)}` : ''} (id: ${todo.id}).`;
+      await save(w, [...created, todo]);
+      return `Added "${todo.title}"${todo.due ? ` due ${dueText(todo)}` : ''}${todo.waiting ? ' (waiting)' : ''} (id: ${todo.id}).`;
     },
   },
   {
@@ -885,16 +979,26 @@ export const TOOLS: Tool[] = [
     name: 'edit_card',
     title: 'Edit a card',
     description:
-      'Changes a note, todo or tag: rename it, replace or append to its body, set its tags, or change a todo\'s due date, start date, time or repeat. Read it with get_card first. Replacing the body discards what was there, though the user can restore it from history.',
+      'Changes a note, todo or tag: rename it, replace or append to a page (or add a page), replace/add/remove tags, switch note ↔ todo, archive/unarchive, move to another writable vault, set color/template, or change a todo\'s due date, start date, time, repeat or waiting status. Read it with get_card first.',
     write: true,
     inputSchema: {
       type: 'object',
       properties: {
         id: { type: 'string' },
         title: { type: 'string' },
-        markdown: { type: 'string', description: 'New body, replacing the old one' },
-        append_markdown: { type: 'string', description: 'Added after the current body' },
-        tags: { type: 'array', items: { type: 'string' }, description: 'Replaces the tags, by name' },
+        markdown: { type: 'string', description: 'New body for the target page (default Page 1), replacing what was there' },
+        append_markdown: { type: 'string', description: 'Added after the current body of the target page (default Page 1)' },
+        page: { type: 'integer', minimum: 1, description: '1-based page number for markdown / append_markdown (default 1; pass pages+1 to create a new page)' },
+        add_page: { type: 'string', description: 'Markdown for a new page appended after the card\'s existing pages' },
+        tags: { type: 'array', items: { type: 'string' }, description: 'Replaces all tags, by name (cannot combine with add_tags or remove_tags)' },
+        add_tags: { type: 'array', items: { type: 'string' }, description: 'Adds tags by name (in a one-choice group like Priority, swaps to the new tag)' },
+        remove_tags: { type: 'array', items: { type: 'string' }, description: 'Removes tags by name or tag ID' },
+        type: { type: 'string', enum: ['note', 'todo'], description: 'Convert a note to a todo or a todo to a note' },
+        vault: { type: 'string', description: 'Move the card to another writable vault (by name or vault ID)' },
+        archived: { type: 'boolean', description: 'Archive (true) or unarchive (false) the card' },
+        waiting: { type: 'boolean', description: 'Todos only: mark waiting/on hold (true) or resume (false)' },
+        template: { type: 'boolean', description: 'Notes and todos only: mark or unmark as a reusable template' },
+        color: nullableColorSchema,
         due: { type: ['string', 'null'], description: 'Todos only: a date like 2026-11-10, or null for none (which also clears the time and repeat)' },
         start: { type: ['string', 'null'], description: 'Todos only: the day work on it starts, like 2026-11-10, or null for none' },
         time: timeSchema,
@@ -909,27 +1013,122 @@ export const TOOLS: Tool[] = [
       const title = str(args, 'title', { optional: true, max: 300 });
       const replace = str(args, 'markdown', { optional: true, max: 200_000 });
       const append = str(args, 'append_markdown', { optional: true, max: 200_000 });
+      const page = pageNumber(args, 'page') ?? 1;
+      const addPage = str(args, 'add_page', { optional: true, max: 200_000 });
       const tags = names(args, 'tags');
+      const addTags = names(args, 'add_tags');
+      const removeTags = names(args, 'remove_tags');
+      const newType = str(args, 'type', { optional: true });
+      const moveVaultRef = str(args, 'vault', { optional: true });
+      const archived = bool(args, 'archived');
+      const waiting = bool(args, 'waiting');
+      const template = bool(args, 'template');
+      const color = colorArg(args, 'color', true);
+
       if (replace !== undefined && append !== undefined) throw new ToolError('Give "markdown" or "append_markdown", not both.');
-      const next = { ...card } as Card;
+      if (args.page !== undefined && replace === undefined && append === undefined) throw new ToolError('"page" requires "markdown" or "append_markdown".');
+      if (tags !== undefined && (addTags !== undefined || removeTags !== undefined)) throw new ToolError('Give "tags" or "add_tags"/"remove_tags", not both.');
+      if (newType !== undefined && newType !== 'note' && newType !== 'todo') throw new ToolError('"type" must be note or todo.');
+
+      let next = { ...card } as Card;
       const changes: string[] = [];
       const created: Card[] = [];
+
+      if (newType !== undefined && newType !== next.type) {
+        if (next.type === 'tag' || isStack(next)) throw new ToolError(`"${displayTitle(next)}" cannot be converted to a ${newType}.`);
+        const patch = retypePatch(next, newType);
+        next = changeType(next, newType);
+        if (patch) {
+          next.title = patch.patch.title;
+          next.content = patch.patch.content;
+        }
+        changes.push('type');
+      }
+
+      if (moveVaultRef !== undefined) {
+        const dest = writableVault(w.scope, moveVaultRef);
+        if (dest.id !== next.vaultId) {
+          next.vaultId = dest.id;
+          changes.push('vault');
+        }
+      }
+
+      const targetVault = w.scope.vaults.get(next.vaultId)!;
+      const existingDocs = [card.content, ...cardPages(card)];
+
       if (title !== undefined) {
         next.title = title.trim();
         changes.push('title');
       }
-      if (replace !== undefined) {
-        next.content = preserveAttachments(fromMarkdown(replace, resolver(w.scope)), [card.content, ...cardPages(card)]);
-        changes.push('body');
+
+      if (replace !== undefined || append !== undefined) {
+        const parsed = fromMarkdown(replace ?? append!, resolver(w.scope));
+        if (page === 1) {
+          next.content = replace !== undefined ? preserveAttachments(parsed, existingDocs) : appendDoc(next.content, parsed);
+          changes.push('body');
+        } else {
+          const pages = [...cardPages(next)];
+          const idx = page - 2;
+          if (idx > pages.length) throw new ToolError(`This card has ${pages.length + 1} pages; pass page ${pages.length + 2} or add_page to add one.`);
+          if (idx === pages.length) {
+            pages.push(parsed);
+          } else {
+            pages[idx] = replace !== undefined ? preserveAttachments(parsed, existingDocs) : appendDoc(pages[idx], parsed);
+          }
+          next.pages = pages;
+          if ('back' in next) next.back = null;
+          changes.push(`page ${page}`);
+        }
       }
-      if (append !== undefined) {
-        next.content = appendDoc(card.content, fromMarkdown(append, resolver(w.scope)));
-        changes.push('body');
+
+      if (addPage !== undefined) {
+        const pages = [...cardPages(next), fromMarkdown(addPage, resolver(w.scope))];
+        next.pages = pages;
+        if ('back' in next) next.back = null;
+        changes.push(`page ${pages.length + 1}`);
       }
+
       if (tags !== undefined) {
-        if (card.type === 'tag') throw new ToolError('A tag card has no tags.');
-        next.tags = tagIds(w, tags, w.scope.vaults.get(card.vaultId)!, created);
+        if (next.type === 'tag') throw new ToolError('A tag card has no tags.');
+        next.tags = tagIds(w, tags, targetVault, created);
         changes.push('tags');
+      }
+      if (addTags !== undefined || removeTags !== undefined) {
+        if (next.type === 'tag') throw new ToolError('A tag card has no tags.');
+        let currentTags = [...next.tags];
+        if (removeTags?.length) {
+          const removeLower = new Set(removeTags.map((t) => t.toLowerCase()));
+          currentTags = currentTags.filter((id) => {
+            if (removeTags.includes(id)) return false;
+            const tagCard = w.scope.index.byId.get(id);
+            return !(tagCard && removeLower.has(tagCard.title.trim().toLowerCase()));
+          });
+        }
+        if (addTags?.length) {
+          const added = tagIds(w, addTags, targetVault, created);
+          for (const id of added) currentTags = withTag(currentTags, id, w.scope.index.tagGroups.groupOf);
+        }
+        next.tags = currentTags;
+        changes.push('tags');
+      }
+
+      if (archived !== undefined) {
+        next.archived = archived;
+        changes.push(archived ? 'archived' : 'unarchived');
+      }
+      if (template !== undefined) {
+        if (next.type === 'tag') throw new ToolError('A tag card cannot be a template.');
+        next.template = template;
+        changes.push('template');
+      }
+      if (color !== undefined) {
+        next.color = color;
+        changes.push('color');
+      }
+      if (waiting !== undefined) {
+        if (next.type !== 'todo') throw new ToolError('Only todos can be marked waiting.');
+        next.waiting = waiting;
+        changes.push('waiting');
       }
       if (args.due !== undefined) {
         if (next.type !== 'todo') throw new ToolError('Only todos have a due date.');

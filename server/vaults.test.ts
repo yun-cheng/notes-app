@@ -68,16 +68,24 @@ describe('vaults', () => {
     db.raw.prepare(`UPDATE vaults SET ai_access = 'write' WHERE id = ?`).run(vault.id);
     expect((await patch(cookie, vault.id, { pin })).vault.ai_access).toBe('off');
   });
-  it('sets AI access on an open vault only', async () => {
+  it('sets AI access on open and non-encrypted private vaults, never encrypted ones', async () => {
     const { signIn, create, patch } = vaultApi();
     const { cookie, vault: personal } = await signIn('ann');
     expect((await patch(cookie, personal, { ai_access: 'read' })).vault).toMatchObject({ ai_access: 'read', ai_access_override: 'read' });
     expect((await patch(cookie, personal, { ai_access: 'everything' })).status).toBe(400);
+
+    // A PIN-locked non-encrypted vault starts off and can be opted in explicitly.
     const { vault: diary } = await create(cookie, { name: 'Diary', pin });
-    expect((await patch(cookie, diary.id, { ai_access: 'write' })).status).toBe(400);
-    expect((await patch(cookie, diary.id, { pin: null, ai_access: 'write' })).vault).toMatchObject({ ai_access: 'write', ai_access_override: 'write' });
-    expect((await patch(cookie, diary.id, { ai_access: 'off' })).vault).toMatchObject({ ai_access: 'off', ai_access_override: 'off' });
-    expect((await patch(cookie, diary.id, { ai_access: 'default' })).vault).toMatchObject({ ai_access: 'off', ai_access_override: null });
+    expect(diary).toMatchObject({ lock: 'pin', ai_access: 'off', ai_access_override: null });
+    expect((await patch(cookie, diary.id, { ai_access: 'write' })).vault).toMatchObject({ lock: 'pin', ai_access: 'write', ai_access_override: 'write' });
+    expect((await patch(cookie, diary.id, { ai_access: 'default' })).vault).toMatchObject({ lock: 'pin', ai_access: 'off', ai_access_override: null });
+
+    // An end-to-end encrypted vault refuses AI access.
+    const encryption = { version: 1, kdf: { alg: 'argon2id' }, wrapped: 'w', recovery: 'r' };
+    const { vault: sealed } = await create(cookie, { name: 'Sealed', pin, encryption });
+    expect(sealed).toMatchObject({ lock: 'pin', ai_access: 'off', ai_access_override: null });
+    expect((await patch(cookie, sealed.id, { ai_access: 'read' })).status).toBe(400);
+    expect((await patch(cookie, sealed.id, { ai_access: 'write' })).status).toBe(400);
   });
   it('applies the account default AI access to open vaults unless overridden', async () => {
     const { signIn, create, patch, call } = vaultApi();

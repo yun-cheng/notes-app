@@ -59,14 +59,16 @@ class ToolError extends Error {}
 async function loadScope(db: Database, userId: string, withCards = true): Promise<Scope> {
   const { results: all } = await db
     .prepare(
-      // Each member's own lock: the owner's is on the vault, anyone else's on their membership (withheld members stay locked).
-      // AI access follows the owner's per-vault override, or the owner's account default; private/encrypted vaults are always off.
+      // End-to-end encrypted vaults are always closed to AI. Non-encrypted PIN-locked vaults default to off (never
+      // inheriting the account default) and open to AI only when their owner explicitly opts them in; a member's own
+      // PIN or withheld status keeps a shared vault closed for that member.
       `SELECT v.id, v.name,
-         CASE WHEN m.role = 'owner' THEN v.lock
+         CASE WHEN m.role = 'owner' THEN CASE WHEN v.encryption IS NOT NULL THEN 'pin' ELSE 'none' END
               WHEN (v.members_need_pin = 1 AND m.pin_hash IS NULL) OR (v.encryption IS NOT NULL AND m.key_grant IS NULL) THEN 'pin'
               WHEN m.pin_hash IS NOT NULL THEN 'pin'
               ELSE 'none' END AS lock,
-         CASE WHEN v.lock != 'none' OR v.encryption IS NOT NULL THEN 'off'
+         CASE WHEN v.encryption IS NOT NULL THEN 'off'
+              WHEN v.lock != 'none' THEN COALESCE(v.ai_access_override, 'off')
               ELSE COALESCE(v.ai_access_override, o.ai_default_access) END AS ai_access,
          v.owner_id, m.role
        FROM vaults v
@@ -127,13 +129,14 @@ async function loadScope(db: Database, userId: string, withCards = true): Promis
     open.length
       ? db
           .prepare(
-            // Cards shared into an open vault: never from a private/encrypted vault, and never from one of this account's closed vaults.
+            // Cards shared into an open vault: never from an encrypted vault, never from an un-opted-in private vault, and never from one of this account's closed vaults.
             `SELECT s.card_id, s.target_id AS vault_id, c.vault_id AS home_vault_id
              FROM card_shares s
              JOIN cards c ON c.id = s.card_id
              JOIN vaults v ON v.id = c.vault_id
              WHERE s.target_type = 'vault' AND s.target_id IN (${marks(open)})
-               AND v.lock = 'none' AND v.encryption IS NULL
+               AND v.encryption IS NULL
+               AND (v.lock = 'none' OR v.ai_access_override IN ('read', 'write'))
              ORDER BY s.card_id, s.target_id`,
           )
           .bind(...open)

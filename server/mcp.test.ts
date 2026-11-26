@@ -491,6 +491,29 @@ describe('MCP server', () => {
     expect((await tool('manage_stack', { title: 'Bad', card_ids: ['tag-1'] })).error).toBe(true);
     expect((await tool('manage_stack', { stack_id: stackId, add_card_ids: [stack2Id] })).error).toBe(true);
   });
+  it('keeps private vaults off by default, lets non-encrypted ones opt in explicitly, and never opens encrypted ones', async () => {
+    const { tool, call, patch, secret, ann } = await world('off');
+    const encryption = { version: 1, kdf: { alg: 'argon2id' }, wrapped: 'w', recovery: 'r' };
+    const sealed = (await (await call('/api/vaults', { method: 'POST', body: JSON.stringify({ name: 'Vault E2EE', pin, encryption }) }, ann.cookie)).json()) as { id: string };
+    // Even with account default set to write, both PIN-locked vaults stay off by default.
+    await call('/api/ai/settings', { method: 'PATCH', body: JSON.stringify({ default_access: 'write' }) }, ann.cookie);
+    expect((await tool('list_vaults')).text).not.toContain('Secret diary');
+    expect((await tool('list_vaults')).text).not.toContain('Vault E2EE');
+    expect((await tool('get_card', { id: 'private-1' })).error).toBe(true);
+
+    // Explicitly opting the non-encrypted PIN-locked vault into read opens it to AI (read only).
+    await patch(secret.id, { ai_access: 'read' });
+    expect((await tool('list_vaults')).text).toContain(`Secret diary (id: ${secret.id}, read only)`);
+    expect((await tool('get_card', { id: 'private-1' })).text).toContain('Hidden crush');
+    expect((await tool('edit_card', { id: 'private-1', title: 'Changed' })).error).toBe(true);
+
+    // Opting it into write allows edits; resetting to default closes it again.
+    await patch(secret.id, { ai_access: 'write' });
+    expect((await tool('edit_card', { id: 'private-1', title: 'Revealed' })).error).toBe(false);
+    await patch(secret.id, { ai_access: 'default' });
+    expect((await tool('get_card', { id: 'private-1' })).error).toBe(true);
+    expect(sealed.id).toBeTruthy();
+  });
   it('validates arguments', async () => {
     const { tool } = await world();
     expect(await tool('list_todos', { due_after: 'yesterday' })).toEqual({ text: '"due_after" must be a date like 2026-11-10.', error: true });

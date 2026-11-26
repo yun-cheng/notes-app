@@ -164,24 +164,36 @@ const AI_HINT: Record<AiAccess, string> = {
   write: 'Connected AI apps can also add and edit cards here. Every change is kept in history and can be undone.',
 };
 
-/** What connected AI apps may do in an open vault. Private vaults are always off. */
+/** What connected AI apps may do in a non-encrypted vault. Private vaults default to off; encrypted vaults are always off. */
 export function AiAccessField({ vault, defaultAccess, compact }: { vault: Vault; defaultAccess?: AiAccess; compact?: boolean }) {
   const save = useVaultSaver();
-  const value: AiAccessSetting = vault.ai_access_override ?? 'default';
+  const isPrivate = vault.lock === 'pin';
+  const value: AiAccessSetting = isPrivate ? vault.ai_access : (vault.ai_access_override ?? 'default');
   const defaultLabel = defaultAccess ? `Default (${AI_ACCESS_LABEL[defaultAccess]})` : value === 'default' ? `Default (${AI_ACCESS_LABEL[vault.ai_access]})` : 'Default';
-  const set = (ai_access: AiAccessSetting) => void save(() => updateVault(vault.id, { ai_access }));
+  const set = (next: AiAccessSetting) => void save(() => updateVault(vault.id, { ai_access: isPrivate && next === 'off' ? 'default' : next }));
   if (compact) {
+    const sub = isPrivate ? (vault.ai_access !== 'off' ? 'Private · Custom' : 'Private') : value !== 'default' ? 'Custom' : null;
     return (
       <div className="row ai-vault-row">
         <span className="row__body">
           <span className="row__title">{vault.name}</span>
-          {value !== 'default' && <span className="row__preview">Custom</span>}
+          {sub && <span className="row__preview">{sub}</span>}
         </span>
         <select value={value} aria-label={`AI access for ${vault.name}`} onChange={(e) => set(e.target.value as AiAccessSetting)}>
-          <option value="default">{defaultLabel}</option>
-          <option value="off">Off</option>
-          <option value="read">Read</option>
-          <option value="write">Read and write</option>
+          {isPrivate ? (
+            <>
+              <option value="off">Off (default)</option>
+              <option value="read">Read</option>
+              <option value="write">Read and write</option>
+            </>
+          ) : (
+            <>
+              <option value="default">{defaultLabel}</option>
+              <option value="off">Off</option>
+              <option value="read">Read</option>
+              <option value="write">Read and write</option>
+            </>
+          )}
         </select>
       </div>
     );
@@ -191,14 +203,28 @@ export function AiAccessField({ vault, defaultAccess, compact }: { vault: Vault;
       <label className="field-row">
         AI access
         <select value={value} aria-label={`AI access for ${vault.name}`} onChange={(e) => set(e.target.value as AiAccessSetting)}>
-          <option value="default">{defaultLabel}</option>
-          <option value="off">Off</option>
-          <option value="read">Read</option>
-          <option value="write">Read and write</option>
+          {isPrivate ? (
+            <>
+              <option value="off">Off (default)</option>
+              <option value="read">Read</option>
+              <option value="write">Read and write</option>
+            </>
+          ) : (
+            <>
+              <option value="default">{defaultLabel}</option>
+              <option value="off">Off</option>
+              <option value="read">Read</option>
+              <option value="write">Read and write</option>
+            </>
+          )}
         </select>
       </label>
       <p className="prose-note">
-        {value === 'default' ? `Following your account default in Backup & settings. ${AI_HINT[vault.ai_access]}` : AI_HINT[vault.ai_access]}
+        {isPrivate
+          ? `Private vaults default to off and don't follow your account default. ${AI_HINT[vault.ai_access]}`
+          : value === 'default'
+            ? `Following your account default in Backup & settings. ${AI_HINT[vault.ai_access]}`
+            : AI_HINT[vault.ai_access]}
       </p>
     </div>
   );
@@ -397,7 +423,7 @@ function VaultSettings({ vault }: { vault: Vault }) {
       {busy && <p className="prose-note vault-gap" role="status">{busy}</p>}
       {recoveryKey && <RecoveryKeyDialog recoveryKey={recoveryKey} onClose={() => setRecoveryKey(null)} />}
 
-      {!isPrivate && owner && (
+      {!encrypted && owner && (
         <div className="vault-gap">
           <AiAccessField vault={vault} />
         </div>

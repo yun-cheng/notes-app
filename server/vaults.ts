@@ -32,8 +32,12 @@ const mine = (column: string) => `CASE WHEN m.role = 'owner' THEN v.${column} EL
  */
 const WITHHELD = `(m.role != 'owner' AND ((v.members_need_pin = 1 AND m.pin_hash IS NULL) OR (v.encryption IS NOT NULL AND m.key_grant IS NULL)))`;
 const COLUMNS = `v.id, v.name, v.owner_id,
-  CASE WHEN v.lock != 'none' OR v.encryption IS NOT NULL THEN 'off' ELSE COALESCE(v.ai_access_override, o.ai_default_access) END AS ai_access,
-  CASE WHEN v.lock != 'none' OR v.encryption IS NOT NULL THEN NULL ELSE v.ai_access_override END AS ai_access_override,
+  CASE
+    WHEN v.encryption IS NOT NULL THEN 'off'
+    WHEN v.lock != 'none' THEN COALESCE(v.ai_access_override, 'off')
+    ELSE COALESCE(v.ai_access_override, o.ai_default_access)
+  END AS ai_access,
+  CASE WHEN v.encryption IS NOT NULL THEN NULL ELSE v.ai_access_override END AS ai_access_override,
   v.created_at, v.encryption, v.members_need_pin, m.role,
   m.encryption AS member_key, m.key_grant,
   CASE WHEN m.role = 'owner' THEN v.lock WHEN ${WITHHELD} THEN 'none' WHEN m.pin_hash IS NOT NULL THEN 'pin' ELSE 'none' END AS lock,
@@ -171,19 +175,25 @@ export async function updateVault(db: Database, userId: string, id: string, upda
   if (update.encryption && 'member' in update.encryption) return { error: 'not_owner' };
 
   const pin = update.pin === undefined ? current.pin : update.pin;
-  if (pin && update.ai_access && update.ai_access !== 'off' && update.ai_access !== 'default') return { error: 'private_ai' };
-  const hidden = !!pin && (update.hidden ?? current.hidden);
-  const aiOverride: AiAccess | null = pin
-    ? null
-    : update.ai_access === undefined
-      ? (current.ai_access_override ?? null)
-      : update.ai_access === 'default'
-        ? null
-        : update.ai_access;
-  const aiAccess: AiAccess = pin ? 'off' : (aiOverride ?? (await getAiDefaultAccess(db, userId)));
   const encryption = update.encryption === undefined ? (current.encryption ?? null) : update.encryption;
   // Dropping the PIN of an encrypted vault must say the encryption goes too, after the device decrypted its cards.
   if (!pin && encryption) return { error: 'encrypted_open' };
+  // End-to-end encrypted vaults are unreadable by the server and can never give AI access.
+  if (encryption && update.ai_access && update.ai_access !== 'off' && update.ai_access !== 'default') return { error: 'private_ai' };
+  const hidden = !!pin && (update.hidden ?? current.hidden);
+  const becamePrivate = !current.pin && !!pin;
+  // Private (PIN-locked, non-encrypted) vaults default to off and do not inherit the account default,
+  // but their owner may opt them into AI access explicitly. Turning a vault private resets AI access to off unless explicitly set.
+  const aiOverride: AiAccess | null = encryption
+    ? null
+    : update.ai_access === undefined
+      ? becamePrivate
+        ? null
+        : (current.ai_access_override ?? null)
+      : update.ai_access === 'default'
+        ? null
+        : update.ai_access;
+  const aiAccess: AiAccess = encryption ? 'off' : pin ? (aiOverride ?? 'off') : (aiOverride ?? (await getAiDefaultAccess(db, userId)));
   // Asking members for a PIN of their own comes with the owner's; in an encrypted vault, each has one to hold their key.
   const needPin = !!pin && !encryption && (update.members_need_pin ?? current.members_need_pin ?? false);
   const save = db
@@ -292,7 +302,7 @@ export function vaultRoutes(app: Hono<AppEnv>, now: () => number) {
     if (result.error === 'not_found') return c.json({ error: 'Vault not found' }, 404);
     const messages = {
       default_vault: 'The default vault cannot be locked',
-      private_ai: 'A private vault cannot give AI access',
+      private_ai: 'An encrypted vault cannot give AI access',
       needs_key: 'A PIN on an encrypted vault comes with a key of your own',
       not_owner: 'Only the owner can change that',
       encrypted_open: 'Remove the encryption along with the PIN',

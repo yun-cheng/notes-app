@@ -189,7 +189,7 @@ _Last checked 2026-11-25._
 | Web behavior | Mac | iPhone | Android | How |
 |---|---|---|---|---|
 | Vaults page: each vault with its count and its state (Locked, Encrypted, Needs your PIN, waiting to be let in); Create vault; Hidden vaults: Unlock | ✅ | ✅ | ✅ | C |
-| A vault's page: its entries with New note here, then Settings: Rename, Make private, Encrypt end to end, AI access on open vaults (Default, Off, Read, Read and write), People with their roles (Can edit, Can view and comment), Remove, Share | ✅ | ✅ | ✅ | C |
+| A vault's page: its entries with New note here, then Settings: Rename, Make private, Encrypt end to end, AI access on non-encrypted vaults (Default/Off/Read/Read and write on open vaults; Off by default/Read/Read and write on PIN-locked non-encrypted vaults), People with their roles (Can edit, Can view and comment), Remove, Share | ⚠️ hidden on all private vaults instead of only encrypted ones | ⚠️ same as Mac | ⚠️ hidden on all private vaults instead of only encrypted ones | C |
 | A private vault: a PIN lock, Change PIN, Remove PIN, Hide this vault until it is unlocked | ✅ | ✅ | ✅ | C |
 | Encrypt end to end: a recovery key shown once, which recovers a forgotten PIN; its photos and files sealed on the device too | ✅ | ✅ | ✅ | C |
 | In a shared vault each member can lock it with a PIN of their own, and an owner can require one of everyone; in an encrypted one a member sets a PIN and asks, and the owner lets them in; everyone sees a code made from its key to compare | ✅ | ✅ | ✅ | C |
@@ -219,7 +219,7 @@ _Last checked 2026-11-25._
 |---|---|---|---|---|
 | Several accounts signed in at once, switched from the account's picture; Add another account | ✅ | ✅ | ✅ | C |
 | Backup: Download backup, Restore from backup, Export as Markdown; Import Markdown files or a zip | ✅ | ✅ | ✅ | C |
-| AI apps: the connector address to add in Claude and other AI apps; default AI access for open vaults and per-vault overrides (filterable when > 6); the apps connected, each to disconnect | ✅ | ✅ | ✅ | C |
+| AI apps: the connector address to add in Claude and other AI apps; default AI access for open vaults and per-vault overrides including unlocked non-encrypted private vaults (filterable when > 6); the apps connected, each to disconnect | ⚠️ lists open vaults only, not unlocked non-encrypted private vaults | ⚠️ same as Mac | ⚠️ lists open vaults only, not unlocked non-encrypted private vaults | C |
 | Reminders: the web's words; This device with Turn on reminders, Turn off and Send a test; Todos with a time; Todos with only a date | ✅ | ✅ | ✅ | C |
 | Storage: whether the browser has agreed to keep the notes | ➖ | ➖ | ➖ | C |
 | A new version is looked for every half hour and on coming back, and offered with Reload | ➖ the apps update as releases | ➖ | ➖ | C |

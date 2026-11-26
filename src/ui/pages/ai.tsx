@@ -25,7 +25,7 @@ const vaultSummary = (vaults: Vault[]) => {
  */
 export function ConnectPage() {
   const query = new URLSearchParams(useLocation().search);
-  const { vaults } = useCards();
+  const { vaults, locked } = useCards();
   const { account, signOut } = useAccount();
   const [client, setClient] = useState<{ name: string; redirect_host: string } | null>(null);
   const [problem, setProblem] = useState<string | null>(null);
@@ -56,7 +56,9 @@ export function ConnectPage() {
     }
   };
 
-  const reachable = vaults.filter((v) => v.lock === 'none' && !v.withheld && v.ai_access !== 'off');
+  const reachable = vaults.filter(
+    (v) => !v.encryption && !v.withheld && v.ai_access !== 'off' && ((v.role ?? 'owner') === 'owner' || v.lock === 'none') && !(v.hidden && locked.has(v.id)),
+  );
 
   return (
     <main className="connect">
@@ -93,8 +95,8 @@ export function ConnectPage() {
             )}
             <p className="prose-note">
               You can set a default for all open vaults or change individual vaults any time in{' '}
-              <Link to="/settings">Backup &amp; settings</Link>. Private vaults are never visible to AI. Every change it makes is kept in history, marked as
-              made by {client.name}, and can be undone.
+              <Link to="/settings">Backup &amp; settings</Link>. Private vaults default to off, and end-to-end encrypted vaults are never visible to AI. Every
+              change it makes is kept in history, marked as made by {client.name}, and can be undone.
             </p>
 
             <div className="button-row">
@@ -171,11 +173,15 @@ export function AiAppsSection() {
   };
 
   const ownedOpen = vaults.filter((v) => (v.role ?? 'owner') === 'owner' && v.lock === 'none');
+  const ownedConfigurable = vaults.filter((v) => (v.role ?? 'owner') === 'owner' && !v.encryption && (v.lock === 'none' || !locked.has(v.id)));
   const shownDefault: AiAccess = defaultAccess ?? ownedOpen.find((v) => !v.ai_access_override)?.ai_access ?? 'off';
-  const privateCount = vaults.filter((v) => v.lock === 'pin' && !(v.hidden && locked.has(v.id))).length;
+  const lockedPrivateCount = vaults.filter(
+    (v) => (v.role ?? 'owner') === 'owner' && v.lock === 'pin' && !v.encryption && locked.has(v.id) && !v.hidden,
+  ).length;
+  const encryptedCount = vaults.filter((v) => !!v.encryption && !(v.hidden && locked.has(v.id))).length;
   const sharedOpen = vaults.filter((v) => v.role && v.role !== 'owner' && v.lock === 'none' && !v.withheld && v.ai_access !== 'off');
   const query = filter.trim().toLowerCase();
-  const shownVaults = query ? ownedOpen.filter((v) => v.name.toLowerCase().includes(query)) : ownedOpen;
+  const shownVaults = query ? ownedConfigurable.filter((v) => v.name.toLowerCase().includes(query)) : ownedConfigurable;
 
   return (
     <Section title="AI apps">
@@ -204,13 +210,13 @@ export function AiAppsSection() {
           </select>
         </label>
         <p className="prose-note">
-          Applies to every unlocked vault you own, including new ones, unless you choose otherwise below. Private vaults are always off.
+          Applies to every unlocked vault you own, including new ones, unless you choose otherwise below. Private vaults default to off; end-to-end encrypted vaults are always off.
         </p>
       </div>
 
-      {ownedOpen.length > 0 && (
+      {ownedConfigurable.length > 0 && (
         <div className="ai-vaults vault-gap">
-          {ownedOpen.length > 6 && (
+          {ownedConfigurable.length > 6 && (
             <input
               className="text-input ai-vaults__filter"
               value={filter}
@@ -224,12 +230,19 @@ export function AiAppsSection() {
               <AiAccessField key={v.id} vault={v} defaultAccess={shownDefault} compact />
             ))}
           </div>
-          {query && !shownVaults.length && <p className="prose-note">No open vault matches "{filter}".</p>}
+          {query && !shownVaults.length && <p className="prose-note">No vault matches "{filter}".</p>}
         </div>
       )}
 
-      {privateCount > 0 && (
-        <p className="prose-note vault-gap">{plural(privateCount, 'private vault')} {privateCount === 1 ? 'is' : 'are'} always off.</p>
+      {lockedPrivateCount > 0 && (
+        <p className="prose-note vault-gap">
+          {plural(lockedPrivateCount, 'locked private vault')} — unlock {lockedPrivateCount === 1 ? 'it' : 'them'} first to change AI access (off by default).
+        </p>
+      )}
+      {encryptedCount > 0 && (
+        <p className="prose-note vault-gap">
+          {plural(encryptedCount, 'encrypted vault')} {encryptedCount === 1 ? 'is' : 'are'} always off.
+        </p>
       )}
       {sharedOpen.length > 0 && (
         <p className="prose-note vault-gap">

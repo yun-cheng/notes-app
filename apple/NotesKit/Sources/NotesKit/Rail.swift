@@ -3,8 +3,8 @@ import Foundation
 /// The rail beside a long page of entries, as a photo library has, as the web's `rail.ts`: marks for the years (or
 /// months, or groups) down its length, a thumb at where the page is, and a label for the place pointed at or dragged
 /// to. Each item has a key, the day it's under (or what else groups it, a tag), and a share of the rail, in the order
-/// the page shows them, top to bottom: an equal share, or, spaced by nearness (`spacing`), a share of its year's, which
-/// is larger the nearer the year is to the one being read.
+/// the page shows them, top to bottom: an equal share, or, spaced by nearness (`spacing`), a share that's larger the
+/// nearer its year is to the one being read.
 public enum Rail {
     /// A mark on the rail, a fraction of the way down: a label, or a dot where there's no room or need for one.
     public struct Mark: Equatable, Sendable {
@@ -99,9 +99,9 @@ public enum Rail {
         return shown.sorted { $0.at < $1.at }
     }
 
-    /// The rail spaced by nearness: where each item starts, from 0, and 1 after the last (`n + 1` in all). Each year
-    /// with items has a share by how many years it is from `year`, the one being read (1 for it, ½ the year either
-    /// side, ⅓ the next, and so on), and its items share that evenly; an item with no day goes with the year above it.
+    /// The rail spaced by nearness: where each item starts, from 0, and 1 after the last (`n + 1` in all). Each item
+    /// counts by how many years it is from `year`, the one being read (1 in it, ½ in the year either side, ⅓ the next,
+    /// and so on), so a year with few items still takes little of it; an item with no day goes with the year above it.
     /// Nil, an equal share each, on a rail that isn't of years or with no year to go by. As the web's `railSpacing`.
     public static func spacing(_ keys: [String], year: Int?) -> [Double]? {
         let n = keys.count
@@ -115,13 +115,11 @@ public enum Rail {
         // Items with no day above any with one go with the first year after them.
         let first = years.first(where: { $0 != nil }).flatMap { $0 } ?? year
         let resolved = years.map { $0 ?? first }
-        var counts: [Int: Int] = [:]
-        for y in resolved { counts[y, default: 0] += 1 }
-        let total = counts.keys.reduce(0.0) { $0 + 1 / Double(1 + abs($1 - year)) }
+        let weight = { (y: Int) in 1 / Double(1 + abs(y - year)) }
+        let total = resolved.reduce(0.0) { $0 + weight($1) }
         var starts = [Double](repeating: 0, count: n + 1)
         for i in 0..<n {
-            let y = resolved[i]
-            starts[i + 1] = starts[i] + 1 / Double(1 + abs(y - year)) / Double(counts[y]!) / total
+            starts[i + 1] = starts[i] + weight(resolved[i]) / total
         }
         starts[n] = 1
         return starts

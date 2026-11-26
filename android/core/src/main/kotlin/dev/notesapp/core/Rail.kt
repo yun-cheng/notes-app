@@ -7,8 +7,8 @@ import java.util.Locale
  * The rail beside a long page of entries, as a photo library has, as the web's `rail.ts`: marks for the years (or
  * months, or groups) down its length, a thumb at where the page is, and a label for the place pointed at or dragged
  * to. Each item has a key, the day it's under (or what else groups it, a tag), and a share of the rail, in the order
- * the page shows them, top to bottom: an equal share, or, spaced by nearness (`spacing`), a share of its year's, which
- * is larger the nearer the year is to the one being read.
+ * the page shows them, top to bottom: an equal share, or, spaced by nearness (`spacing`), a share that's larger the
+ * nearer its year is to the one being read.
  */
 object Rail {
     /** A mark on the rail, a fraction of the way down: a label, or a dot where there's no room or need for one. */
@@ -98,10 +98,10 @@ object Rail {
     }
 
     /**
-     * The rail spaced by nearness: where each item starts, from 0, and 1 after the last (`n + 1` in all). Each year with
-     * items has a share by how many years it is from `year`, the one being read (1 for it, ½ the year either side, ⅓
-     * the next, and so on), and its items share that evenly; an item with no day goes with the year above it. Null, an
-     * equal share each, on a rail that isn't of years or with no year to go by. As the web's `railSpacing`.
+     * The rail spaced by nearness: where each item starts, from 0, and 1 after the last (`n + 1` in all). Each item
+     * counts by how many years it is from `year`, the one being read (1 in it, ½ in the year either side, ⅓ the next,
+     * and so on), so a year with few items still takes little of it; an item with no day goes with the year above it.
+     * Null, an equal share each, on a rail that isn't of years or with no year to go by. As the web's `railSpacing`.
      */
     fun spacing(keys: List<String>, year: Int?): DoubleArray? {
         val n = keys.size
@@ -115,13 +115,11 @@ object Rail {
         // Items with no day above any with one go with the first year after them.
         val first = years.firstOrNull { it != null } ?: year
         val resolved = IntArray(n) { years[it] ?: first }
-        val counts = HashMap<Int, Int>()
-        for (y in resolved) counts[y] = (counts[y] ?: 0) + 1
-        val total = counts.keys.sumOf { 1.0 / (1 + kotlin.math.abs(it - year)) }
+        fun weight(y: Int) = 1.0 / (1 + kotlin.math.abs(y - year))
+        val total = resolved.sumOf { weight(it) }
         val starts = DoubleArray(n + 1)
         for (i in 0 until n) {
-            val y = resolved[i]
-            starts[i + 1] = starts[i] + 1.0 / (1 + kotlin.math.abs(y - year)) / counts.getValue(y) / total
+            starts[i + 1] = starts[i] + weight(resolved[i]) / total
         }
         starts[n] = 1.0
         return starts

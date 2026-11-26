@@ -4,8 +4,8 @@ import { formatDate, isDateKey, parseDateKey } from './dates';
  * The rail beside a long page of entries, photos or what entries hold, as a photo library has: marks for the years
  * (or months, or groups) down its length, a thumb at where the page is, and a label for the place pointed at or
  * dragged to. Each item has a key, the day it's under (or what else groups it, a tag), and a share of the rail, in the
- * order the page shows them, top to bottom: an equal share, or, spaced by nearness (`railSpacing`), a share of its
- * year's, which is larger the nearer the year is to the one being read.
+ * order the page shows them, top to bottom: an equal share, or, spaced by nearness (`railSpacing`), a share that's
+ * larger the nearer its year is to the one being read.
  */
 
 /** A mark on the rail, a fraction of the way down: a label, or a dot where there's no room or need for one. */
@@ -112,15 +112,15 @@ export type RailSpacing = Float64Array;
 export type RailSpacingChoice = 'entries' | 'near';
 
 /**
- * The rail spaced by nearness: each year with items has a share of the rail by how many years it is from `year`, the
- * one being read (1 for it, ½ the year either side, ⅓ the next, and so on), and its items share that evenly; an item
- * with no day goes with the year above it. None on a rail that isn't of years, nor with no year to go by.
+ * The rail spaced by nearness: each item counts by how many years it is from `year`, the one being read (1 in it, ½ in
+ * the year either side, ⅓ the next, and so on), so the year being read is larger and those far off smaller, and a
+ * year with few items still takes little of it; an item with no day goes with the year above it. None on a rail that
+ * isn't of years, nor with no year to go by.
  */
 export function railSpacing(keys: readonly string[], year: number | null): RailSpacing | null {
   const n = keys.length;
   if (year === null || n < 2 || railScale(keys) !== 'year') return null;
   const years = new Float64Array(n);
-  const counts = new Map<number, number>();
   let last = NaN;
   for (let i = 0; i < n; i++) {
     if (keys[i]) last = Number(keys[i].slice(0, 4));
@@ -129,11 +129,11 @@ export function railSpacing(keys: readonly string[], year: number | null): RailS
   // Items with no day above any with one go with the first year after them.
   const first = years.find((y) => !Number.isNaN(y)) ?? year;
   for (let i = 0; i < n && Number.isNaN(years[i]); i++) years[i] = first;
-  for (const y of years) counts.set(y, (counts.get(y) ?? 0) + 1);
+  const weight = (y: number) => 1 / (1 + Math.abs(y - year));
   let total = 0;
-  for (const y of counts.keys()) total += 1 / (1 + Math.abs(y - year));
+  for (const y of years) total += weight(y);
   const starts = new Float64Array(n + 1);
-  for (let i = 0; i < n; i++) starts[i + 1] = starts[i] + 1 / (1 + Math.abs(years[i] - year)) / counts.get(years[i])! / total;
+  for (let i = 0; i < n; i++) starts[i + 1] = starts[i] + weight(years[i]) / total;
   starts[n] = 1;
   return starts;
 }

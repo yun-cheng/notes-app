@@ -99,13 +99,14 @@ import Testing
         // As the web's: 2024 has one item, 2025 two, 2026 seven.
         let keys = ["2024-05-01", "2025-01-01", "2025-02-01"] + Array(repeating: "2026-03-01", count: 7)
         let near = Rail.spacing(keys, year: 2024)!
-        #expect(abs(near[1] - 6.0 / 11) < 1e-9)
-        #expect(abs(near[3] - 9.0 / 11) < 1e-9)
+        #expect(abs(near[1] - 3.0 / 13) < 1e-9)
+        #expect(abs(near[3] - 6.0 / 13) < 1e-9)
         #expect(near[10] == 1)
         let at = Rail.marks(keys, height: 1000, name: Self.name, locale: Self.us, spacing: near).filter { $0.label != nil }.map(\.at)
-        #expect(at.count == 3 && abs(at[1] - 6.0 / 11) < 1e-9)
+        #expect(at.count == 3 && abs(at[1] - 3.0 / 13) < 1e-9)
         let later = Rail.spacing(keys, year: 2026)!
-        #expect(abs((1 - later[3]) - 1 / (1.0 / 3 + 1.0 / 2 + 1)) < 1e-9)
+        #expect(abs((1 - later[3]) - 21.0 / 25) < 1e-9)
+        #expect(abs(Rail.spacing(keys, year: 2025)![1] - 1.0 / 12) < 1e-9)
         #expect(Rail.spacing(["2026-01-01", "2026-02-01"], year: 2026) == nil)
         #expect(Rail.spacing(keys, year: nil) == nil)
         for x in [0, 0.5, 1, 2.25, 6.5, 9.99] {

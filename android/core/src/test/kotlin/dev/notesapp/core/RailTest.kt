@@ -88,14 +88,15 @@ class RailTest {
         // As the web's: 2024 has one item, 2025 two, 2026 seven.
         val keys = listOf("2024-05-01", "2025-01-01", "2025-02-01") + List(7) { "2026-03-01" }
         val near = Rail.spacing(keys, 2024)!!
-        assertTrue(abs(near[1] - 6.0 / 11) < 1e-9)
-        assertTrue(abs(near[3] - 9.0 / 11) < 1e-9)
+        assertTrue(abs(near[1] - 3.0 / 13) < 1e-9)
+        assertTrue(abs(near[3] - 6.0 / 13) < 1e-9)
         assertEquals(1.0, near[10])
         val at = Rail.marks(keys, 1000.0, name, us, near).filter { it.label != null }.map { it.at }
         assertEquals(3, at.size)
-        assertTrue(abs(at[1] - 6.0 / 11) < 1e-9)
+        assertTrue(abs(at[1] - 3.0 / 13) < 1e-9)
         val later = Rail.spacing(keys, 2026)!!
-        assertTrue(abs((1 - later[3]) - 1 / (1.0 / 3 + 1.0 / 2 + 1)) < 1e-9)
+        assertTrue(abs((1 - later[3]) - 21.0 / 25) < 1e-9)
+        assertTrue(abs(Rail.spacing(keys, 2025)!![1] - 1.0 / 12) < 1e-9)
         assertEquals(null, Rail.spacing(listOf("2026-01-01", "2026-02-01"), 2026))
         assertEquals(null, Rail.spacing(keys, null))
         for (x in listOf(0.0, 0.5, 1.0, 2.25, 6.5, 9.99)) {

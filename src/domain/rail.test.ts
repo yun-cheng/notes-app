@@ -111,21 +111,23 @@ describe('a row of items side by side, as photos are', () => {
     expect(rowRailAt(4, 3, 2, n)).toBeCloseTo(7 / n);
   });
 
-  it('spaced by nearness, gives each year room by how far it is from the one being read, shared by its items', () => {
+  it('spaced by nearness, counts each item by how far its year is from the one being read', () => {
     // 2024 has one item, 2025 two, 2026 seven.
     const keys = ['2024-05-01', '2025-01-01', '2025-02-01', ...Array(7).fill('2026-03-01')];
     const near = railSpacing(keys, 2024)!;
-    // 2024 1, 2025 ½, 2026 ⅓: of 11/6 in all.
-    expect(near[1]).toBeCloseTo(6 / 11);
-    expect(near[3]).toBeCloseTo(9 / 11);
+    // Each item in 2024 counts 1, in 2025 ½, in 2026 ⅓: 1 + 1 + 7/3 = 13/3 in all.
+    expect(near[1]).toBeCloseTo(3 / 13);
+    expect(near[3]).toBeCloseTo(6 / 13);
     expect(near[10]).toBe(1);
     // Each of 2025's two shares its half.
     expect(near[2] - near[1]).toBeCloseTo(near[3] - near[2]);
     expect(labels(keys).map(([, at]) => at)).toEqual([0, 0.1, 0.3]);
-    expect(railMarks(keys, 1000, name, 'en-US', near).filter((m) => m.label).map((m) => m.at.toFixed(3))).toEqual(['0.000', (6 / 11).toFixed(3), (9 / 11).toFixed(3)]);
-    // Read in 2026, it's the largest.
+    expect(railMarks(keys, 1000, name, 'en-US', near).filter((m) => m.label).map((m) => m.at.toFixed(3))).toEqual(['0.000', (3 / 13).toFixed(3), (6 / 13).toFixed(3)]);
+    // Read in 2026, its seven are 7 of 1/3 + 1 + 7.
     const later = railSpacing(keys, 2026)!;
-    expect(1 - later[3]).toBeCloseTo(1 / (1 / 3 + 1 / 2 + 1));
+    expect(1 - later[3]).toBeCloseTo(21 / 25);
+    // A year of few items stays small, however near: one item in 2024, read in 2025, is 1/2 of 1/2 + 2 + 7/2.
+    expect(railSpacing(keys, 2025)![1]).toBeCloseTo(1 / 12);
     // Not a rail of years, or no year: an equal share each.
     expect(railSpacing(['2026-01-01', '2026-02-01'], 2026)).toBeNull();
     expect(railSpacing(keys, null)).toBeNull();

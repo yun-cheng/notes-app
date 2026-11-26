@@ -290,7 +290,7 @@ struct PhotosPage: View {
                 }
                 // Each photo by the day its entry was written, as the web's.
                 .pageRail(keys: days.flatMap { d in d.items.map { _ in d.day } }, ids: all.map(\.id),
-                    name: { DateKey.relativeDay($0, today: model.today) }, place: rail, position: $position, proxy: proxy)
+                    name: { DateKey.relativeDay($0, today: model.today) }, place: rail, position: $position, proxy: proxy, keep: "\(model.accountId) photos")
                 }
             }
         }

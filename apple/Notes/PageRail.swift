@@ -32,6 +32,8 @@ import SwiftUI
     /// Keeps the thumb where it is a moment (`heldUntil`).
     func hold(for seconds: Double = 0.3) { heldUntil = Date().addingTimeInterval(seconds) }
     @ObservationIgnored private var geometry: Geometry?
+    /// How tall the screen's view of the page is, as last measured.
+    var height: CGFloat { geometry?.height ?? 0 }
 
     /// The row the item at `index` of `ids` is in (items side by side share one), and the stretch of the page it
     /// covers: from its top to the next row's, or its own foot when that isn't known.
@@ -97,6 +99,82 @@ import SwiftUI
     }
 }
 
+/// Where each page was scrolled to, kept while the app runs, so going back to a page (or a view of the journal, a tag
+/// or a vault) finds it where it was left, as the web's `scrollPlace`: the item at the top of the screen and how far
+/// down it was. At the end a page opens at (the newest, at the foot of a chat), nothing is kept, so it opens there
+/// again with whatever was written meanwhile. Keys start with the account's ID.
+@MainActor enum KeptPlaces {
+    struct Place {
+        let id: String
+        /// How far below the top of the screen the item's top was, and how tall it was.
+        let top: CGFloat
+        let height: CGFloat
+    }
+
+    private static var places: [String: Place] = [:]
+
+    static func place(_ key: String) -> Place? { places[key] }
+
+    /// Keeps the first of `ids` whose top is on screen, by where each is in the content (`rows`); none at the end it
+    /// opens at (`chat`: the foot).
+    static func keep(_ key: String, ids: [String], rows: [String: CGRect], offset: CGFloat, scrollable: CGFloat, chat: Bool) {
+        if chat ? scrollable - offset < 40 : offset < 4 {
+            places[key] = nil
+            return
+        }
+        // None found leaves what was: as a page goes, its rows are let go before it's last measured.
+        for id in ids {
+            guard let r = rows[id], r.minY >= offset - 0.5 else { continue }
+            places[key] = Place(id: id, top: r.minY - offset, height: r.height)
+            return
+        }
+    }
+
+    /// The anchor that puts the item back as far down a screen `height` tall: its point at a fraction of it lines up
+    /// with the screen's at the same fraction. Its top, where it wouldn't fit.
+    static func anchor(_ p: Place, height: CGFloat) -> UnitPoint {
+        let room = height - p.height
+        guard room > 1 else { return .top }
+        let y = p.top / room
+        return y >= 0 && y <= 1 ? UnitPoint(x: 0, y: y) : .top
+    }
+}
+
+/// Keeps a page's place as it's scrolled, and goes back to it when the page opens again (`KeptPlaces`), for the pages
+/// with a rail: its items are `ids`, where they are `place.rows`. Going by where it is when that's known (Photos lays
+/// out every tile), else by the item's ID.
+private struct KeepsPlace: ViewModifier {
+    let key: String
+    let ids: [String]
+    let place: RailPlace
+    let position: Binding<ScrollPosition>
+    let proxy: ScrollViewProxy
+    /// Opened where it was: from then on, where it is is kept.
+    @State private var settled = false
+
+    func body(content: Content) -> some View {
+        content
+            .onScrollGeometryChange(for: RailPlace.Geometry.self) { RailPlace.Geometry($0) } action: { _, g in
+                guard settled else { return }
+                KeptPlaces.keep(key, ids: ids, rows: place.rows, offset: g.offset, scrollable: g.scrollable, chat: false)
+            }
+            .task {
+                if let kept = KeptPlaces.place(key), ids.contains(kept.id) {
+                    // Once laid out, and again as the items around it are measured.
+                    for wait in [60, 150] {
+                        try? await Task.sleep(for: .milliseconds(wait))
+                        if let r = place.rows[kept.id] {
+                            position.wrappedValue.scrollTo(y: max(0, r.minY - kept.top))
+                        } else {
+                            withAnimation(nil) { proxy.scrollTo(kept.id, anchor: KeptPlaces.anchor(kept, height: place.height)) }
+                        }
+                    }
+                }
+                if !Task.isCancelled { settled = true }
+            }
+    }
+}
+
 extension View {
     /// Says where this item is, for the page's rail.
     func railRow(_ id: String, _ place: RailPlace) -> some View {
@@ -108,8 +186,10 @@ extension View {
     /// The rail beside a scroll view of items under days, as the web's Trash, Photos, Links and Files have: `keys` is
     /// each item's day, `ids` each one's ID, in the order shown; a place on it goes through what's drawn and, past
     /// that, to the item by its ID. The scroll view's content is `RailPlace.space`.
-    func pageRail(keys: [String], ids: [String], name: @escaping (String) -> String, place: RailPlace, position: Binding<ScrollPosition>, proxy: ScrollViewProxy) -> some View {
-        overlay(alignment: .trailing) {
+    /// `keep` names the page, to open it where it was left (`KeptPlaces`).
+    func pageRail(keys: [String], ids: [String], name: @escaping (String) -> String, place: RailPlace, position: Binding<ScrollPosition>, proxy: ScrollViewProxy, keep: String) -> some View {
+        modifier(KeepsPlace(key: keep, ids: ids, place: place, position: position, proxy: proxy))
+        .overlay(alignment: .trailing) {
             if place.shown {
                 RailView(keys: keys, name: name, place: place) { to in
                     if let y = place.offset(for: to, ids: ids) {

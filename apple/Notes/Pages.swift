@@ -30,7 +30,7 @@ struct TrashPage: View {
             ScrollViewReader { proxy in
                 ScrollView { list(days, items.isEmpty, tags) }
                     .pageRail(keys: days.flatMap { d in d.value.map { _ in d.key } }, ids: days.flatMap { $0.value.map(\.id) },
-                        name: { DateKey.relativeDay($0, today: model.today) }, place: rail, position: $position, proxy: proxy)
+                        name: { DateKey.relativeDay($0, today: model.today) }, place: rail, position: $position, proxy: proxy, keep: "\(model.accountId) trash")
             }
             if !picked.isEmpty { pickBar }
         }
@@ -216,7 +216,7 @@ struct HeldList<T: Identifiable, Row: View, Lead: View>: View where T.ID == Stri
                 }
                 // Each one by the day its entry was written, as the web's.
                 .pageRail(keys: shown.flatMap { d in d.items.map { _ in d.day } }, ids: all.map(\.item.id),
-                    name: { DateKey.relativeDay($0, today: model.today) }, place: rail, position: $position, proxy: proxy)
+                    name: { DateKey.relativeDay($0, today: model.today) }, place: rail, position: $position, proxy: proxy, keep: "\(model.accountId) \(title)")
                 }
             }
         }

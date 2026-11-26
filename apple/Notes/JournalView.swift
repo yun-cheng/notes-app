@@ -80,6 +80,9 @@ struct JournalView: View {
         return items
     }
 
+    /// The view it shows, for the place kept when it's left (`KeptPlaces`).
+    private var placeKey: String { "\(model.accountId) journal \(filter)" }
+
     /// Whether the stream reads like a chat, newest at the bottom.
     private var chat: Bool { filter.sort == .written || filter.sort == .edited }
 
@@ -142,9 +145,11 @@ struct JournalView: View {
                         .padding(.bottom, 10)
                         .frame(maxWidth: 720)
                         .frame(maxWidth: .infinity)
-                        #if os(macOS)
+                        // Where each entry is: for picking with a box on a Mac, and everywhere for the place kept as
+                        // the page is left (`KeptPlaces`).
                         .coordinateSpace(.named(StreamPlaces.space))
                         .environment(\.streamPlaces, places)
+                        #if os(macOS)
                         .overlay(alignment: .topLeading) {
                             if let box, box.rect.width + box.rect.height > 6 { PickBoxShape(rect: box.rect) }
                         }
@@ -193,7 +198,14 @@ struct JournalView: View {
                     // Where the page is: on a Mac by the entry at its reading line, as the web's; elsewhere by how far
                     // it's scrolled.
                     .onScrollGeometryChange(for: RailPlace.Geometry.self) { RailPlace.Geometry($0) } action: { _, g in
-                        railPlace.update(g, ids: visible.map(\.card.id), first: chat ? all.count - visible.count : 0, count: all.count, rows: places.rows)
+                        let ids = visible.map(\.card.id)
+                        #if os(macOS)
+                        railPlace.update(g, ids: ids, first: chat ? all.count - visible.count : 0, count: all.count, rows: places.rows)
+                        #else
+                        railPlace.update(g, ids: ids, first: chat ? all.count - visible.count : 0, count: all.count, rows: [:])
+                        #endif
+                        // Once it's opened where it was, where it is now, for coming back to.
+                        if settled { KeptPlaces.keep(placeKey, ids: ids, rows: places.rows, offset: g.offset, scrollable: g.scrollable, chat: chat) }
                     }
                     #if os(macOS)
                     // With a mouse the rail stands in for the scroll bar, as on the web.
@@ -220,7 +232,16 @@ struct JournalView: View {
                     // real, or a list opened at the bottom can sit past its end, blank.
                     .task(id: "\(all.isEmpty)|\(filter.sort)") {
                         settled = false
-                        if chat, let last = visible.last?.card.id {
+                        if let kept = KeptPlaces.place(placeKey), let at = all.firstIndex(where: { $0.card.id == kept.id }) {
+                            // Where it was left: drawn far enough to reach it, put back as far down the screen, and
+                            // again once the entries around it are measured.
+                            let need = chat ? all.count - at : at + 1
+                            if need > shown { shown = min(all.count, need + Self.pageSize / 2) }
+                            for wait in [60, 150] {
+                                try? await Task.sleep(for: .milliseconds(wait))
+                                withAnimation(nil) { proxy.scrollTo(kept.id, anchor: KeptPlaces.anchor(kept, height: railPlace.height)) }
+                            }
+                        } else if chat, let last = visible.last?.card.id {
                             try? await Task.sleep(for: .milliseconds(60))
                             withAnimation(nil) { proxy.scrollTo(last, anchor: .bottom) }
                         }

@@ -84,6 +84,7 @@ a jump on the rail settles in under 0.2 s; typing in the journal box takes 17 ms
 | Mac Photos, CPU in its first 8 s | | 2.2 s | The same |
 | Other pages, CPU in their first 8 s | | iPhone 2.2–3.0 s, Mac 1.5–2.5 s | |
 | An empty journal while loading | "Nothing yet" until the cards were read | blank until read | `loaded` |
+| iPhone launch, every card read and indexed (Debug build, Simulator) | | 1.4–1.7 s after the process starts, 0.9 s of it reading the cards | Fast enough that showing the newest first, as Android does, would save under a second: not done |
 
 ### Android (bench build unless said)
 

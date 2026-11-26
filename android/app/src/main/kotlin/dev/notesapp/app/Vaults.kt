@@ -345,14 +345,23 @@ fun VaultDetail(id: String, back: () -> Unit) {
                     }
                 }
             }
-            if (owner && !vault.isPrivate) FormSection("AI apps") {
+            if (owner && !vault.isEncrypted) FormSection("AI apps") {
                 val label = mapOf("off" to "Off", "read" to "Read", "write" to "Read and write")
-                val current = vault.aiAccessSetting
-                val defaultLabel = if (vault.ai_access_override == null) "Default (${label[vault.ai_access] ?: "Off"})" else "Default"
-                val shown = if (current == "default") defaultLabel else (label[current] ?: "Off")
-                ChoiceRow("AI access", shown) { close ->
-                    MenuCheck(defaultLabel, current == "default") { close(); change(VaultChanges(ai_access = "default"), "AI access changed") }
-                    for ((k, l) in label) MenuCheck(l, current == k) { close(); change(VaultChanges(ai_access = k), "AI access changed") }
+                if (vault.isPrivate) {
+                    val shown = if (vault.ai_access == "off") "Off (default)" else (label[vault.ai_access] ?: "Off (default)")
+                    ChoiceRow("AI access", shown) { close ->
+                        MenuCheck("Off (default)", vault.ai_access == "off") { close(); change(VaultChanges(ai_access = "default"), "AI access changed") }
+                        for (k in listOf("read", "write")) MenuCheck(label[k]!!, vault.ai_access == k) { close(); change(VaultChanges(ai_access = k), "AI access changed") }
+                    }
+                    FormText("Private vaults default to off and don't follow your account default.")
+                } else {
+                    val current = vault.aiAccessSetting
+                    val defaultLabel = if (vault.ai_access_override == null) "Default (${label[vault.ai_access] ?: "Off"})" else "Default"
+                    val shown = if (current == "default") defaultLabel else (label[current] ?: "Off")
+                    ChoiceRow("AI access", shown) { close ->
+                        MenuCheck(defaultLabel, current == "default") { close(); change(VaultChanges(ai_access = "default"), "AI access changed") }
+                        for ((k, l) in label) MenuCheck(l, current == k) { close(); change(VaultChanges(ai_access = k), "AI access changed") }
+                    }
                 }
             }
             VaultPeopleSection(vault)

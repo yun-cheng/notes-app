@@ -227,6 +227,7 @@ fun SettingsPage(openDrawer: (() -> Unit)?) {
                 FormButton("Copy address") { clipboard.setText(AnnotatedString(model.api.mcpUrl)); model.say("Copied") }
                 val aiLabels = mapOf("off" to "Off", "read" to "Read", "write" to "Read and write")
                 val ownedOpen = model.vaults.filter { it.isOwner && !it.isPrivate }
+                val ownedConfigurable = model.vaults.filter { it.isOwner && !it.isEncrypted && (!it.isPrivate || it.id !in model.lockedVaults) }
                 val shownDefault = defaultAiAccess ?: ownedOpen.firstOrNull { it.ai_access_override == null }?.ai_access ?: "off"
                 ChoiceRow("Default for open vaults", aiLabels[shownDefault] ?: "Off") { close ->
                     for ((k, l) in aiLabels) MenuCheck(l, shownDefault == k) {
@@ -246,36 +247,60 @@ fun SettingsPage(openDrawer: (() -> Unit)?) {
                         }
                     }
                 }
-                FormText("Applies to every unlocked vault you own, including new ones, unless you choose otherwise below. Private vaults are always off.")
-                if (ownedOpen.size > 6) FormField(aiVaultFilter, { aiVaultFilter = it }, "Filter vaults…")
+                FormText("Applies to every unlocked vault you own, including new ones, unless you choose otherwise below. Private vaults default to off; end-to-end encrypted vaults are always off.")
+                if (ownedConfigurable.size > 6) FormField(aiVaultFilter, { aiVaultFilter = it }, "Filter vaults…")
                 val q = aiVaultFilter.trim().lowercase()
-                val shownVaults = if (q.isEmpty()) ownedOpen else ownedOpen.filter { it.name.lowercase().contains(q) }
+                val shownVaults = if (q.isEmpty()) ownedConfigurable else ownedConfigurable.filter { it.name.lowercase().contains(q) }
                 val defaultLabel = "Default (${aiLabels[shownDefault] ?: "Off"})"
                 for (v in shownVaults) {
-                    val current = v.aiAccessSetting
-                    val currentLabel = if (current == "default") defaultLabel else (aiLabels[current] ?: "Off")
-                    ChoiceRow(v.name, currentLabel) { close ->
-                        MenuCheck(defaultLabel, current == "default") {
-                            close()
-                            model.scope.launch {
-                                runCatching { VaultEncryption(model).save(v, dev.notesapp.core.VaultChanges(ai_access = "default")) }
-                                    .onSuccess { model.say("AI access changed") }
-                                    .onFailure { model.say("That change couldn't be saved.") }
+                    if (v.isPrivate) {
+                        val currentLabel = if (v.ai_access == "off") "Off (default)" else (aiLabels[v.ai_access] ?: "Off (default)")
+                        ChoiceRow("${v.name} (Private)", currentLabel) { close ->
+                            MenuCheck("Off (default)", v.ai_access == "off") {
+                                close()
+                                model.scope.launch {
+                                    runCatching { VaultEncryption(model).save(v, dev.notesapp.core.VaultChanges(ai_access = "default")) }
+                                        .onSuccess { model.say("AI access changed") }
+                                        .onFailure { model.say("That change couldn't be saved.") }
+                                }
+                            }
+                            for (k in listOf("read", "write")) MenuCheck(aiLabels[k]!!, v.ai_access == k) {
+                                close()
+                                model.scope.launch {
+                                    runCatching { VaultEncryption(model).save(v, dev.notesapp.core.VaultChanges(ai_access = k)) }
+                                        .onSuccess { model.say("AI access changed") }
+                                        .onFailure { model.say("That change couldn't be saved.") }
+                                }
                             }
                         }
-                        for ((k, l) in aiLabels) MenuCheck(l, current == k) {
-                            close()
-                            model.scope.launch {
-                                runCatching { VaultEncryption(model).save(v, dev.notesapp.core.VaultChanges(ai_access = k)) }
-                                    .onSuccess { model.say("AI access changed") }
-                                    .onFailure { model.say("That change couldn't be saved.") }
+                    } else {
+                        val current = v.aiAccessSetting
+                        val currentLabel = if (current == "default") defaultLabel else (aiLabels[current] ?: "Off")
+                        ChoiceRow(v.name, currentLabel) { close ->
+                            MenuCheck(defaultLabel, current == "default") {
+                                close()
+                                model.scope.launch {
+                                    runCatching { VaultEncryption(model).save(v, dev.notesapp.core.VaultChanges(ai_access = "default")) }
+                                        .onSuccess { model.say("AI access changed") }
+                                        .onFailure { model.say("That change couldn't be saved.") }
+                                }
+                            }
+                            for ((k, l) in aiLabels) MenuCheck(l, current == k) {
+                                close()
+                                model.scope.launch {
+                                    runCatching { VaultEncryption(model).save(v, dev.notesapp.core.VaultChanges(ai_access = k)) }
+                                        .onSuccess { model.say("AI access changed") }
+                                        .onFailure { model.say("That change couldn't be saved.") }
+                                }
                             }
                         }
                     }
                 }
-                if (q.isNotEmpty() && shownVaults.isEmpty()) FormText("No open vault matches \"$aiVaultFilter\".")
-                val privateCount = model.vaults.count { it.isPrivate && !(it.hidden && it.id in model.lockedVaults) }
-                if (privateCount > 0) FormText("$privateCount ${if (privateCount == 1) "private vault is" else "private vaults are"} always off.")
+                if (q.isNotEmpty() && shownVaults.isEmpty()) FormText("No vault matches \"$aiVaultFilter\".")
+                val lockedPrivateCount = model.vaults.count { it.isOwner && it.isPrivate && !it.isEncrypted && it.id in model.lockedVaults && !it.hidden }
+                if (lockedPrivateCount > 0) FormText("$lockedPrivateCount ${if (lockedPrivateCount == 1) "locked private vault" else "locked private vaults"} — unlock ${if (lockedPrivateCount == 1) "it" else "them"} first to change AI access (off by default).")
+                val encryptedCount = model.vaults.count { it.isEncrypted && !(it.hidden && it.id in model.lockedVaults) }
+                if (encryptedCount > 0) FormText("$encryptedCount ${if (encryptedCount == 1) "encrypted vault is" else "encrypted vaults are"} always off.")
                 val sharedOpen = model.vaults.filter { !it.isOwner && !it.isPrivate && !it.isWithheld && it.ai_access != "off" }
                 if (sharedOpen.isNotEmpty()) FormText("Shared vaults open to AI (read only): " + sharedOpen.joinToString(", ") { it.name } + ".")
                 for (app in apps ?: emptyList()) FormRow(app.name, app.last_used_at?.let { "Last used " + formatMillis(it) } ?: "Not used yet") {

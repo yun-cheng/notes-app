@@ -70,9 +70,11 @@ object Rail {
                 Scale.Year ->
                     if (before == null || before.take(4) != key.take(4)) labels.add(Mark(at, key.take(4)))
                     else if (before.take(7) != key.take(7)) dots.add(at)
+                // A rail of months or days names the year where it starts ("Mar 2026"), as the web's.
                 Scale.Month ->
-                    if (before == null || before.take(7) != key.take(7)) labels.add(Mark(at, format(key, "MMM", locale))) else dots.add(at)
-                else -> dots.add(at)
+                    if (before == null) labels.add(Mark(at, format(key, "MMM yyyy", locale)))
+                    else if (before.take(7) != key.take(7)) labels.add(Mark(at, format(key, "MMM", locale))) else dots.add(at)
+                else -> if (before == null) labels.add(Mark(at, format(key, "MMM yyyy", locale))) else dots.add(at)
             }
         }
         val kept = mutableListOf<Mark>()

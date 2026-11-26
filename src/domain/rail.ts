@@ -50,7 +50,8 @@ export function railLabel(key: string, scale: RailScale, name: (key: string) => 
 /**
  * The marks for a rail `height` pixels tall: a label where each year starts (on a rail of years), each month (of
  * months) or each group, with a dot for each month among years and each day among a month's; `name` names a key
- * that isn't a day. Labels too near the one above are left out, then dots too near anything kept.
+ * that isn't a day. A rail of months or days names the year too where it starts ("Mar 2026"), so the year shows
+ * however short the page is. Labels too near the one above are left out, then dots too near anything kept.
  */
 export function railMarks(keys: readonly string[], height: number, name: (key: string) => string, locale?: string): RailMark[] {
   const n = keys.length;
@@ -72,8 +73,11 @@ export function railMarks(keys: readonly string[], height: number, name: (key: s
       if (before === null || before.slice(0, 4) !== key.slice(0, 4)) labels.push({ at, label: key.slice(0, 4) });
       else if (before.slice(0, 7) !== key.slice(0, 7)) dots.push(at);
     } else if (scale === 'month') {
-      if (before === null || before.slice(0, 7) !== key.slice(0, 7)) labels.push({ at, label: month(key, locale) });
+      if (before === null) labels.push({ at, label: monthYear(key, locale) });
+      else if (before.slice(0, 7) !== key.slice(0, 7)) labels.push({ at, label: month(key, locale) });
       else dots.push(at);
+    } else if (before === null) {
+      labels.push({ at, label: monthYear(key, locale) });
     } else {
       dots.push(at);
     }

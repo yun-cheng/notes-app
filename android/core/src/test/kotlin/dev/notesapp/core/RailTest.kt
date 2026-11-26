@@ -27,8 +27,10 @@ class RailTest {
     }
 
     @Test fun monthsAndStretchesWithNoDay() {
-        assertEquals(listOf(Rail.Mark(0.0, "Oct"), Rail.Mark(0.25, "Nov"), Rail.Mark(0.5, "None")), labels(listOf("2026-10-30", "2026-11-01", "", "")))
-        assertEquals(listOf("Oct", "None", "Nov"), labels(listOf("2026-10-30", "", "2026-10-31", "2026-11-02")).map { it.label })
+        assertEquals(listOf(Rail.Mark(0.0, "Oct 2026"), Rail.Mark(0.25, "Nov"), Rail.Mark(0.5, "None")), labels(listOf("2026-10-30", "2026-11-01", "", "")))
+        assertEquals(listOf("Oct 2026", "None", "Nov"), labels(listOf("2026-10-30", "", "2026-10-31", "2026-11-02")).map { it.label })
+        // Days within one month: the year shows too, where they start.
+        assertEquals(listOf(Rail.Mark(0.0, "Nov 2026")), labels(listOf("2026-11-18", "2026-11-19", "2026-11-20")))
     }
 
     @Test fun crowdedLabelsLeftOut() {

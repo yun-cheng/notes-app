@@ -26,12 +26,14 @@ describe('the rail beside a long page', () => {
 
   it('labels months within a year, and a stretch with no day by name', () => {
     expect(labels(['2026-10-30', '2026-11-01', '', ''])).toEqual([
-      ['Oct', 0],
+      ['Oct 2026', 0],
       ['Nov', 0.25],
       ['None', 0.5],
     ]);
     // Days after the stretch with none go on from the last day.
-    expect(labels(['2026-10-30', '', '2026-10-31', '2026-11-02']).map(([l]) => l)).toEqual(['Oct', 'None', 'Nov']);
+    expect(labels(['2026-10-30', '', '2026-10-31', '2026-11-02']).map(([l]) => l)).toEqual(['Oct 2026', 'None', 'Nov']);
+    // Days within one month: the year shows too, where they start.
+    expect(labels(['2026-11-18', '2026-11-19', '2026-11-20'])).toEqual([['Nov 2026', 0]]);
   });
 
   it('leaves out labels too near the one above, and dots too near anything', () => {

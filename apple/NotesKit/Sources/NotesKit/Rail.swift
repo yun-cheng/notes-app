@@ -69,12 +69,17 @@ public enum Rail {
             case .year:
                 if before == nil || before!.prefix(4) != key.prefix(4) { labels.append(Mark(at: at, label: String(key.prefix(4)))) }
                 else if before!.prefix(7) != key.prefix(7) { dots.append(at) }
+            // A rail of months or days names the year where it starts ("Mar 2026"), as the web's.
             case .month:
-                if before == nil || before!.prefix(7) != key.prefix(7) {
+                if before == nil {
+                    labels.append(Mark(at: at, label: formatted(key, Date.FormatStyle(locale: locale).month(.abbreviated).year())))
+                } else if before!.prefix(7) != key.prefix(7) {
                     labels.append(Mark(at: at, label: formatted(key, Date.FormatStyle(locale: locale).month(.abbreviated))))
                 } else { dots.append(at) }
             default:
-                dots.append(at)
+                if before == nil {
+                    labels.append(Mark(at: at, label: formatted(key, Date.FormatStyle(locale: locale).month(.abbreviated).year())))
+                } else { dots.append(at) }
             }
         }
         var kept: [Mark] = []

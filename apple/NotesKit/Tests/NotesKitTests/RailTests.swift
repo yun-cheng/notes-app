@@ -40,8 +40,10 @@ import Testing
 
     @Test func monthsAndStretchesWithNoDay() {
         let marks = Rail.marks(["2026-10-30", "2026-11-01", "", ""], height: 1000, name: Self.name, locale: Self.us).filter { $0.label != nil }
-        #expect(marks == [Rail.Mark(at: 0, label: "Oct"), Rail.Mark(at: 0.25, label: "Nov"), Rail.Mark(at: 0.5, label: "None")])
-        #expect(Self.labels(["2026-10-30", "", "2026-10-31", "2026-11-02"]) == ["Oct", "None", "Nov"])
+        #expect(marks == [Rail.Mark(at: 0, label: "Oct 2026"), Rail.Mark(at: 0.25, label: "Nov"), Rail.Mark(at: 0.5, label: "None")])
+        #expect(Self.labels(["2026-10-30", "", "2026-10-31", "2026-11-02"]) == ["Oct 2026", "None", "Nov"])
+        // Days within one month: the year shows too, where they start.
+        #expect(Self.labels(["2026-11-18", "2026-11-19", "2026-11-20"]) == ["Nov 2026"])
     }
 
     @Test func crowdedLabelsLeftOut() {

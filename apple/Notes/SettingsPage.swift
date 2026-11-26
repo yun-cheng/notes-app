@@ -17,6 +17,9 @@ struct SettingsPage: View {
     @State private var importing = false
     @State private var drive: DriveStatus?
     @State private var apps: [ConnectedApp]?
+    @State private var defaultAiAccess: Vault.AIAccess?
+    @State private var savingAiDefault = false
+    @State private var aiVaultFilter = ""
     @State private var offline = false
     @State private var deleting = false
 
@@ -145,9 +148,41 @@ struct SettingsPage: View {
                     Text(model.api.mcpURL.absoluteString).textSelection(.enabled)
                 }
                 Button("Copy address") { Clipboard.copy(model.api.mcpURL.absoluteString); model.say("Copied") }
-                let open = model.vaults.filter { $0.lock == .none && $0.ai_access != .off }
-                Text(open.isEmpty ? "No vault is open to AI yet. Turn it on for a vault under Vaults." : "Open to AI: " + open.map { "\($0.name) (\($0.ai_access == .write ? "read and write" : "read"))" }.joined(separator: ", ") + ".")
-                    .foregroundStyle(Theme.muted)
+                let ownedOpen = model.vaults.filter { $0.isOwner && !$0.isPrivate }
+                let shownDefault = defaultAiAccess ?? ownedOpen.first(where: { $0.ai_access_override == nil })?.ai_access ?? .off
+                Picker("Default for open vaults", selection: Binding(get: { shownDefault }, set: { next in Task { await changeAiDefault(next) } })) {
+                    ForEach(Vault.AIAccess.allCases, id: \.self) { a in Text(a.label).tag(a) }
+                }
+                .disabled(offline || savingAiDefault || defaultAiAccess == nil)
+                Text("Applies to every unlocked vault you own, including new ones, unless you choose otherwise below. Private vaults are always off.")
+                    .font(.caption).foregroundStyle(Theme.muted)
+                if ownedOpen.count > 6 {
+                    TextField("Filter vaults…", text: $aiVaultFilter)
+                }
+                let q = aiVaultFilter.trimmingCharacters(in: .whitespaces).lowercased()
+                let shownVaults = q.isEmpty ? ownedOpen : ownedOpen.filter { $0.name.lowercased().contains(q) }
+                ForEach(shownVaults) { vault in
+                    Picker(vault.name, selection: Binding(get: { vault.aiAccessSetting }, set: { next in Task { await changeVaultAi(vault, next) } })) {
+                        Text("Default (\(shownDefault.label))").tag(Vault.AIAccessSetting.default)
+                        Text("Off").tag(Vault.AIAccessSetting.off)
+                        Text("Read").tag(Vault.AIAccessSetting.read)
+                        Text("Read and write").tag(Vault.AIAccessSetting.write)
+                    }
+                    .disabled(offline)
+                }
+                if !q.isEmpty && shownVaults.isEmpty {
+                    Text("No open vault matches “\(aiVaultFilter)”.").foregroundStyle(Theme.muted)
+                }
+                let privateCount = model.vaults.filter { $0.isPrivate && !($0.hidden && model.lockedVaults.contains($0.id)) }.count
+                if privateCount > 0 {
+                    Text("\(privateCount) \(privateCount == 1 ? "private vault is" : "private vaults are") always off.")
+                        .font(.caption).foregroundStyle(Theme.muted)
+                }
+                let sharedOpen = model.vaults.filter { !$0.isOwner && !$0.isPrivate && !$0.isWithheld && $0.ai_access != .off }
+                if !sharedOpen.isEmpty {
+                    Text("Shared vaults open to AI (read only): " + sharedOpen.map(\.name).joined(separator: ", ") + ".")
+                        .font(.caption).foregroundStyle(Theme.muted)
+                }
                 ForEach(apps ?? []) { app in
                     HStack {
                         VStack(alignment: .leading) {
@@ -193,10 +228,35 @@ struct SettingsPage: View {
     private func load() async {
         do {
             drive = try await model.api.driveStatus()
-            apps = try await model.api.aiApps()
+            let info = try await model.api.aiAppsInfo()
+            apps = info.apps
+            defaultAiAccess = info.default_access ?? .off
             offline = false
         } catch {
             offline = true
+        }
+    }
+
+    private func changeAiDefault(_ next: Vault.AIAccess) async {
+        savingAiDefault = true
+        defer { savingAiDefault = false }
+        do {
+            let res = try await model.api.setAiDefaultAccess(next)
+            defaultAiAccess = res.default_access
+            try await model.repo.putVaults(res.vaults)
+            await model.refresh()
+            model.say("Default AI access updated")
+        } catch {
+            model.say((error as? APIError == .offline) ? "Connect to the internet to change AI access." : "That change couldn't be saved.")
+        }
+    }
+
+    private func changeVaultAi(_ vault: Vault, _ next: Vault.AIAccessSetting) async {
+        do {
+            try await VaultEncryption(model: model).save(vault, VaultChanges(ai_access: next))
+            model.say("AI access changed")
+        } catch {
+            model.say((error as? APIError == .offline) ? "Connect to the internet to change a vault." : "That change couldn't be saved.")
         }
     }
 

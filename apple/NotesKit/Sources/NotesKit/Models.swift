@@ -21,7 +21,19 @@ public struct CardRecord: Codable, Sendable, Hashable {
 
 public struct Vault: Codable, Sendable, Hashable, Identifiable {
     public enum Lock: String, Codable, Sendable { case none, pin }
-    public enum AIAccess: String, Codable, Sendable { case off, read, write }
+    public enum AIAccess: String, Codable, Sendable, CaseIterable {
+        case off, read, write
+        public var label: String {
+            switch self {
+            case .off: "Off"
+            case .read: "Read"
+            case .write: "Read and write"
+            }
+        }
+    }
+    public enum AIAccessSetting: String, Codable, Sendable, CaseIterable {
+        case `default`, off, read, write
+    }
     public enum Role: String, Codable, Sendable { case owner, editor, viewer }
 
     public var id: String
@@ -46,6 +58,17 @@ public struct Vault: Codable, Sendable, Hashable, Identifiable {
     /// True while this account is a member who hasn't yet set the PIN the owner asks for, or hasn't been let in to an
     /// encrypted vault: the server sends none of its cards.
     public var withheld: Bool?
+    /// Explicit per-vault override, or nil when following the owner's default AI access.
+    public var ai_access_override: AIAccess? = nil
+
+    public var aiAccessSetting: AIAccessSetting {
+        switch ai_access_override {
+        case nil: .default
+        case .off: .off
+        case .read: .read
+        case .write: .write
+        }
+    }
 
     public var isPrivate: Bool { lock == .pin }
     public var isEncrypted: Bool { encryption.map { !$0.isNull } ?? false }

@@ -164,12 +164,14 @@ struct VaultDetail: View {
                     }
                 }
                 Section(owner ? "Lock" : "Your lock") { lock(vault) }
-                if owner {
+                if owner && !vault.isPrivate {
                     Section("AI apps") {
-                        Picker("AI access", selection: Binding(get: { vault.ai_access }, set: { a in change(vault, VaultChanges(ai_access: a), done: "AI access changed") })) {
-                            Text("Off").tag(Vault.AIAccess.off)
-                            Text("Read").tag(Vault.AIAccess.read)
-                            Text("Read and write").tag(Vault.AIAccess.write)
+                        let defaultLabel = vault.ai_access_override == nil ? "Default (\(vault.ai_access.label))" : "Default"
+                        Picker("AI access", selection: Binding(get: { vault.aiAccessSetting }, set: { a in change(vault, VaultChanges(ai_access: a), done: "AI access changed") })) {
+                            Text(defaultLabel).tag(Vault.AIAccessSetting.default)
+                            Text("Off").tag(Vault.AIAccessSetting.off)
+                            Text("Read").tag(Vault.AIAccessSetting.read)
+                            Text("Read and write").tag(Vault.AIAccessSetting.write)
                         }
                     }
                 }

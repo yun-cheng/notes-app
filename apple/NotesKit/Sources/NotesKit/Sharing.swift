@@ -89,11 +89,11 @@ public struct VaultChanges: Encodable, Sendable {
     public var name: String?
     public var pin: JSONValue??
     public var hidden: Bool?
-    public var ai_access: Vault.AIAccess?
+    public var ai_access: Vault.AIAccessSetting?
     public var encryption: JSONValue??
     public var members_need_pin: Bool?
 
-    public init(name: String? = nil, pin: JSONValue?? = nil, hidden: Bool? = nil, ai_access: Vault.AIAccess? = nil, encryption: JSONValue?? = nil, members_need_pin: Bool? = nil) {
+    public init(name: String? = nil, pin: JSONValue?? = nil, hidden: Bool? = nil, ai_access: Vault.AIAccessSetting? = nil, encryption: JSONValue?? = nil, members_need_pin: Bool? = nil) {
         self.name = name
         self.pin = pin
         self.hidden = hidden
@@ -410,9 +410,27 @@ extension ServerAPI {
         guard (200..<300).contains(status) else { throw APIError.status(status) }
     }
 
+    public struct AiAppsInfo: Decodable, Sendable {
+        public let apps: [ConnectedApp]
+        public let default_access: Vault.AIAccess?
+    }
+
+    public struct AiSettingsUpdate: Decodable, Sendable {
+        public let default_access: Vault.AIAccess
+        public let vaults: [Vault]
+    }
+
+    public func aiAppsInfo() async throws -> AiAppsInfo {
+        try await json(AiAppsInfo.self, "/ai/apps")
+    }
+
     public func aiApps() async throws -> [ConnectedApp] {
-        struct R: Decodable { let apps: [ConnectedApp] }
-        return try await json(R.self, "/ai/apps").apps
+        try await aiAppsInfo().apps
+    }
+
+    public func setAiDefaultAccess(_ access: Vault.AIAccess) async throws -> AiSettingsUpdate {
+        struct Body: Encodable { let default_access: Vault.AIAccess }
+        return try await json(AiSettingsUpdate.self, "/ai/settings", method: "PATCH", body: Body(default_access: access))
     }
 
     public func disconnectAiApp(_ id: String) async throws {

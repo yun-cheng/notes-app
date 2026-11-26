@@ -69,7 +69,7 @@ _Last checked 2026-11-25._
 | Play and pause; the waveform fills as it plays and seeks where it's pressed | ✅ | ✅ | ✅ | T |
 | Speed 1×, 1.5×, 2× | ✅ | ✅ | ✅ | T |
 | One volume for all of them, from a speaker button: a click mutes on a computer, the slider shows on hover; a tap shows it on a phone | ✅ | ✅ | ✅ | T |
-| Each evened out to the same loudness | ❌ | ❌ | ❌ | C |
+| Each evened out to the same loudness | ✅ (`Voice.Leveler` on `MTAudioProcessingTap`) | ✅ (`Voice.Leveler` on `MTAudioProcessingTap`) | ❌ | C |
 | One plays at a time, and runs on to the next in the same entry or the next one | ✅ | ✅ | ✅ | C |
 | A bar along the top of the journal while one plays: previous, play, next, what's said, time, speed, volume, close, a line to seek | ✅ | ✅ | ✅ | T |
 | Transcript: each sentence plays from there, the one being said marked; hidden or shown from the player, kept on the device | ✅ | ✅ | ✅ | T |

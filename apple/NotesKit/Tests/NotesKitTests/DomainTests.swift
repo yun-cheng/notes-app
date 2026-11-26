@@ -302,6 +302,46 @@ import Testing
         #expect(Doc.files(next!).first?.transcript == "你好世界")
         #expect(Voice.withTranscript(doc, fileId: "f2", joined) == Optional<JSONValue>.none)
     }
+
+    @Test func loudnessLeveling() {
+        #expect(abs(Voice.loudness([Float](repeating: 0.5, count: 100)) - (-6.0206)) < 0.05)
+        #expect(Voice.loudness([Float](repeating: 0, count: 100)) == -.infinity)
+        #expect(Voice.loudness([]) == -.infinity)
+        // Nothing said yet: as it is.
+        #expect(Voice.nextLevel(nil, heard: -70) == nil)
+        #expect(Voice.levelGain(nil) == 1)
+        // A quiet recording, at -32 dB: turned up to target (-18 dB -> +14 dB).
+        var level = Voice.nextLevel(nil, heard: -32)
+        #expect(level == -32)
+        #expect(abs(20 * log10(Voice.levelGain(level)) - (Voice.levelTarget + 32)) < 0.001)
+        // A pause says nothing of how loud it speaks.
+        #expect(Voice.nextLevel(level, heard: -65) == level)
+        // Louder speech is followed fast, quieter slowly.
+        level = Voice.nextLevel(-32, heard: -12)
+        #expect(level == -22)
+        #expect(abs((Voice.nextLevel(-22, heard: -32) ?? 0) - (-22.4)) < 0.0001)
+        // Within limits: a whisper is turned up 18 dB at most, a shout down 6.
+        #expect(abs(20 * log10(Voice.levelGain(-45)) - 18) < 0.001)
+        #expect(abs(20 * log10(Voice.levelGain(-3)) - (-6)) < 0.001)
+
+        // Real-time Leveler boosts a quiet recording toward -18 dBFS and limits loud spikes under 1.0.
+        let quiet = Voice.Leveler()
+        var samples = [Float](repeating: 0.025, count: 16_000) // ~ -32 dBFS for 1 second at 16 kHz
+        samples.withUnsafeMutableBufferPointer { buf in
+            quiet.process(channels: [buf], frames: buf.count, sampleRate: 16_000)
+        }
+        #expect(quiet.level != nil)
+        #expect(quiet.gain > 4.0 && quiet.gain < 5.2) // +14 dB ≈ 5.01x
+        #expect(Voice.loudness(Array(samples.suffix(1600))) > -20) // boosted near -18 dBFS
+
+        // Soft limiter prevents digital clipping even on a huge transient after boosting.
+        var spike: [Float] = [0.9, -0.9, 5.0, -5.0]
+        let boosted = Voice.Leveler(initialLevel: -45)
+        spike.withUnsafeMutableBufferPointer { buf in
+            boosted.process(channels: [buf], frames: buf.count, sampleRate: 16_000)
+        }
+        #expect(spike.allSatisfy { abs($0) < 0.99 })
+    }
 }
 
 @Suite struct MarkdownImportTests {

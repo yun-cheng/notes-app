@@ -1,10 +1,12 @@
 import AVFoundation
+import MediaToolbox
 import NotesKit
 import SwiftUI
 
 /// The voice message playing, for every player and the bar along the top of the journal, as the web's: one plays at a
-/// time, one that ends runs on to the next while they come one after another (in the same entry, or the next one), and
-/// all play at one volume kept on this device, read as heard (half way is a quarter as loud), or muted.
+/// time, one that ends runs on to the next while they come one after another (in the same entry, or the next one), each
+/// is evened out as it plays (`Voice.Leveler`), and all play at one volume kept on this device, read as heard (half
+/// way is a quarter as loud), or muted.
 @MainActor
 @Observable
 final class VoicePlayback {
@@ -26,6 +28,8 @@ final class VoicePlayback {
     @ObservationIgnored private var player: AVPlayer?
     @ObservationIgnored private var observer: Any?
     @ObservationIgnored private var ended: NSObjectProtocol?
+    @ObservationIgnored private var levels: [String: Double] = [:]
+    @ObservationIgnored private var activeLeveler: Voice.Leveler?
     @ObservationIgnored private weak var model: AppModel?
 
     private var heard: Float { muted ? 0 : Float(volume * volume) }
@@ -54,7 +58,15 @@ final class VoicePlayback {
                 return
             }
             guard item?.file.id == file.id else { return }
-            let p = AVPlayer(url: url)
+            let asset = AVURLAsset(url: url)
+            let playerItem = AVPlayerItem(asset: asset)
+            let leveler = Voice.Leveler(initialLevel: levels[file.id])
+            if let mix = await makeLevelingMix(for: asset, leveler: leveler) {
+                playerItem.audioMix = mix
+            }
+            guard item?.file.id == file.id else { return }
+            activeLeveler = leveler
+            let p = AVPlayer(playerItem: playerItem)
             p.volume = heard
             observer = p.addPeriodicTimeObserver(forInterval: CMTime(seconds: 0.1, preferredTimescale: 600), queue: .main) { [weak self] t in
                 MainActor.assumeIsolated {
@@ -126,6 +138,10 @@ final class VoicePlayback {
     }
 
     private func stopPlayer() {
+        if let id = item?.file.id, let level = activeLeveler?.level {
+            levels[id] = level
+        }
+        activeLeveler = nil
         player?.pause()
         if let observer, let player { player.removeTimeObserver(observer) }
         if let ended { NotificationCenter.default.removeObserver(ended) }
@@ -173,6 +189,77 @@ final class VoicePlayback {
         play(next.file, cardId: next.cardId, vaultId: next.vaultId, model: model, at: 0)
         return true
     }
+}
+
+/// Real-time audio tap attached to an `AVPlayerItem` to apply `Voice.Leveler` on every rendered buffer.
+private final class LevelTapContext: @unchecked Sendable {
+    let leveler: Voice.Leveler
+    var sampleRate: Double = 44_100
+    var isFloat = true
+    var isInterleaved = false
+    var channelCount = 1
+
+    init(leveler: Voice.Leveler) {
+        self.leveler = leveler
+    }
+}
+
+private func makeLevelingMix(for asset: AVAsset, leveler: Voice.Leveler) async -> AVAudioMix? {
+    guard let track = try? await asset.loadTracks(withMediaType: .audio).first else { return nil }
+    let context = LevelTapContext(leveler: leveler)
+    let created: MTAudioProcessingTap? = withExtendedLifetime(context) {
+        var callbacks = MTAudioProcessingTapCallbacks(
+            version: kMTAudioProcessingTapCallbacksVersion_0,
+            clientInfo: Unmanaged.passUnretained(context).toOpaque(),
+            init: { _, clientInfo, tapStorageOut in
+                guard let clientInfo else { return }
+                tapStorageOut.pointee = Unmanaged<LevelTapContext>.fromOpaque(clientInfo).retain().toOpaque()
+            },
+            finalize: { tap in
+                Unmanaged<LevelTapContext>.fromOpaque(MTAudioProcessingTapGetStorage(tap)).release()
+            },
+            prepare: { tap, _, processingFormat in
+                let ctx = Unmanaged<LevelTapContext>.fromOpaque(MTAudioProcessingTapGetStorage(tap)).takeUnretainedValue()
+                let fmt = processingFormat.pointee
+                ctx.sampleRate = fmt.mSampleRate
+                ctx.isFloat = fmt.mFormatID == kAudioFormatLinearPCM && (fmt.mFormatFlags & kAudioFormatFlagIsFloat) != 0
+                ctx.isInterleaved = (fmt.mFormatFlags & kAudioFormatFlagIsNonInterleaved) == 0
+                ctx.channelCount = max(1, Int(fmt.mChannelsPerFrame))
+            },
+            unprepare: nil,
+            process: { tap, numberFrames, _, bufferListInOut, numberFramesOut, flagsOut in
+                let status = MTAudioProcessingTapGetSourceAudio(tap, numberFrames, bufferListInOut, flagsOut, nil, numberFramesOut)
+                guard status == noErr, numberFramesOut.pointee > 0 else { return }
+                let ctx = Unmanaged<LevelTapContext>.fromOpaque(MTAudioProcessingTapGetStorage(tap)).takeUnretainedValue()
+                guard ctx.isFloat else { return }
+                let buffers = UnsafeMutableAudioBufferListPointer(bufferListInOut)
+                var channels: [UnsafeMutableBufferPointer<Float>] = []
+                channels.reserveCapacity(buffers.count)
+                for b in buffers {
+                    guard let raw = b.mData else { continue }
+                    let count = Int(b.mDataByteSize) / MemoryLayout<Float>.size
+                    channels.append(UnsafeMutableBufferPointer(start: raw.assumingMemoryBound(to: Float.self), count: count))
+                }
+                ctx.leveler.process(
+                    channels: channels,
+                    frames: Int(numberFramesOut.pointee),
+                    sampleRate: ctx.sampleRate,
+                    interleavedChannels: ctx.isInterleaved ? ctx.channelCount : 1
+                )
+            }
+        )
+        var tap: MTAudioProcessingTap?
+        guard MTAudioProcessingTapCreate(kCFAllocatorDefault, &callbacks, kMTAudioProcessingTapCreationFlag_PostEffects, &tap) == noErr else {
+            return nil
+        }
+        return tap
+    }
+    guard let tap = created else { return nil }
+    let params = AVMutableAudioMixInputParameters(track: track)
+    params.audioTapProcessor = tap
+    let mix = AVMutableAudioMix()
+    mix.inputParameters = [params]
+    return mix
 }
 
 /// A voice message (any sound) where it is, as the web app's player: play and pause, its loudness drawn along it to

@@ -9,6 +9,130 @@ public enum Voice {
     public static let pieceSeconds = 120
     /// How many bars a voice message is drawn with.
     public static let peakBars = 48
+    /// Target speech loudness in dB below full scale, as the web app's `LEVEL_TARGET`.
+    public static let levelTarget = -18.0
+    private static let levelGate = -50.0
+    private static let mostUp = 18.0
+    private static let mostDown = -6.0
+
+    /// How loud a short stretch of sound is: its RMS in dB below full scale, -infinity for silence.
+    public static func loudness(_ samples: [Float]) -> Double {
+        samples.withUnsafeBufferPointer(loudness)
+    }
+
+    public static func loudness(_ samples: UnsafeBufferPointer<Float>) -> Double {
+        guard !samples.isEmpty else { return -.infinity }
+        var sum = 0.0
+        for s in samples { sum += Double(s) * Double(s) }
+        let rms = (sum / Double(samples.count)).squareRoot()
+        return rms > 0 ? 20 * log10(rms) : -.infinity
+    }
+
+    /// How loud a voice message is speaking, from what it was and the stretch just `heard`; nil until it's spoken.
+    public static func nextLevel(_ level: Double?, heard: Double) -> Double? {
+        guard heard > levelGate else { return level }
+        guard let level else { return heard }
+        return level + (heard - level) * (heard > level ? 0.5 : 0.04)
+    }
+
+    /// What to multiply a voice message by, speaking at `level`, to be heard at `levelTarget`: as it is until it's spoken.
+    public static func levelGain(_ level: Double?) -> Double {
+        guard let level else { return 1 }
+        return pow(10, min(mostUp, max(mostDown, levelTarget - level)) / 20)
+    }
+
+    /// Soft limiter above -4 dBFS so a boosted quiet recording never digitally clips, matching Web Audio's compressor.
+    public static func limit(_ x: Float) -> Float {
+        let a = abs(x)
+        let threshold: Float = 0.63095734 // -4 dBFS
+        guard a > threshold else { return x }
+        let ceiling: Float = 0.99
+        let headroom = ceiling - threshold
+        let over = a - threshold
+        let compressed = threshold + (over * headroom) / (headroom + over)
+        return x < 0 ? -compressed : compressed
+    }
+
+    /// Real-time loudness leveler used while a voice message plays: measures 50 ms stretches, follows speech with
+    /// `nextLevel`, ramps gain toward `levelGain` with a 0.15 s time constant, and soft-limits peaks under full scale.
+    public final class Leveler: @unchecked Sendable {
+        public private(set) var level: Double?
+        public private(set) var gain: Double
+        private var targetGain: Double
+        private var sumSquares = 0.0
+        private var windowSamples = 0
+
+        public init(initialLevel: Double? = nil) {
+            self.level = initialLevel
+            let g = Voice.levelGain(initialLevel)
+            self.gain = g
+            self.targetGain = g
+        }
+
+        /// Levels one audio render buffer in place (non-interleaved channels, or interleaved channels).
+        public func process(channels: [UnsafeMutableBufferPointer<Float>], frames: Int, sampleRate: Double, interleavedChannels: Int = 1) {
+            guard frames > 0, !channels.isEmpty else { return }
+            let rate = sampleRate > 0 ? sampleRate : 44_100
+            let windowSize = max(1, Int((rate * 0.05).rounded()))
+            let decay = exp(-1.0 / (rate * 0.15))
+
+            if interleavedChannels > 1, let buf = channels.first {
+                let ch = interleavedChannels
+                let total = min(buf.count, frames * ch)
+                let frameCount = total / ch
+                for f in 0..<frameCount {
+                    var frameEnergy = 0.0
+                    let base = f * ch
+                    for c in 0..<ch {
+                        let s = Double(buf[base + c])
+                        frameEnergy += s * s
+                    }
+                    sumSquares += frameEnergy / Double(ch)
+                    windowSamples += 1
+                    if windowSamples >= windowSize {
+                        finishWindow()
+                    }
+                    gain = targetGain + (gain - targetGain) * decay
+                    let g = Float(gain)
+                    for c in 0..<ch {
+                        buf[base + c] = Voice.limit(buf[base + c] * g)
+                    }
+                }
+                return
+            }
+
+            let ch = channels.count
+            let frameCount = min(frames, channels.map(\.count).min() ?? 0)
+            for f in 0..<frameCount {
+                var frameEnergy = 0.0
+                for c in 0..<ch {
+                    let s = Double(channels[c][f])
+                    frameEnergy += s * s
+                }
+                sumSquares += frameEnergy / Double(ch)
+                windowSamples += 1
+                if windowSamples >= windowSize {
+                    finishWindow()
+                }
+                gain = targetGain + (gain - targetGain) * decay
+                let g = Float(gain)
+                for c in 0..<ch {
+                    channels[c][f] = Voice.limit(channels[c][f] * g)
+                }
+            }
+        }
+
+        private func finishWindow() {
+            let rms = windowSamples > 0 ? (sumSquares / Double(windowSamples)).squareRoot() : 0
+            let heard = rms > 0 ? 20 * log10(rms) : -.infinity
+            if let next = Voice.nextLevel(level, heard: heard), next != level {
+                level = next
+                targetGain = Voice.levelGain(next)
+            }
+            sumSquares = 0
+            windowSamples = 0
+        }
+    }
 
     /// A voice message's words as an entry keeps them.
     public struct Transcript: Sendable, Hashable {

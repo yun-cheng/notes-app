@@ -53,9 +53,24 @@ import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
+import androidx.compose.animation.core.LinearEasing
+import androidx.compose.animation.core.RepeatMode
+import androidx.compose.animation.core.animateFloat
+import androidx.compose.animation.core.infiniteRepeatable
+import androidx.compose.animation.core.rememberInfiniteTransition
+import androidx.compose.animation.core.tween
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.draw.drawWithContent
+import androidx.compose.ui.geometry.CornerRadius
+import androidx.compose.ui.geometry.Offset
+import androidx.compose.ui.geometry.Rect
+import androidx.compose.ui.geometry.RoundRect
+import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.Path
+import androidx.compose.ui.graphics.drawscope.DrawScope
+import androidx.compose.ui.graphics.drawscope.clipPath
 import androidx.compose.ui.input.pointer.isSecondaryPressed
 import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.platform.LocalClipboardManager
@@ -63,7 +78,9 @@ import androidx.compose.ui.platform.LocalUriHandler
 import androidx.compose.ui.text.AnnotatedString
 import androidx.compose.ui.text.LinkAnnotation
 import androidx.compose.ui.text.SpanStyle
+import androidx.compose.ui.text.TextLayoutResult
 import androidx.compose.ui.text.TextLinkStyles
+import kotlin.math.floor
 import androidx.compose.ui.text.buildAnnotatedString
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextDecoration
@@ -213,8 +230,14 @@ fun BubbleText(doc: JsonElement, folded: Boolean = true, revealed: Boolean = fal
                     val text = part.lines.joinToString("\n")
                     val from = start
                     start += text.count { it.toString() == Doc.HIDE_OPEN }
+                    val styled = attributed(text, revealed, sunken, muted, accent, shown, from) { n -> shown = if (n in shown) shown - n else shown + n }
+                    val covered = styled.getStringAnnotations("hidden-cover", 0, styled.length)
                     SelectionContainer {
-                        Text(attributed(text, revealed, sunken, muted, accent, shown, from) { n -> shown = if (n in shown) shown - n else shown + n }, color = Theme.text, fontSize = 16.sp, lineHeight = 22.sp)
+                        if (covered.isEmpty()) {
+                            Text(styled, color = Theme.text, fontSize = 16.sp, lineHeight = 22.sp)
+                        } else {
+                            DriftingHiddenText(styled, covered)
+                        }
                     }
                 }
                 is Doc.PreviewPart.Code -> CodeSnippet(part.text, part.language)
@@ -260,11 +283,18 @@ fun attributed(
         if (inHidden && toggle != null) {
             val n = hiddenAt
             withLink(LinkAnnotation.Clickable("hidden$n", linkInteractionListener = { toggle(n) })) {
-                if (open) withStyle(SpanStyle(background = sunken)) { append(s) }
-                else withStyle(SpanStyle(color = muted, background = sunken)) { append("•".repeat(minOf(12, maxOf(3, s.length / 2)))) }
+                if (open) {
+                    withStyle(SpanStyle(background = sunken)) { append(s) }
+                } else {
+                    pushStringAnnotation("hidden-cover", "$n")
+                    withStyle(SpanStyle(color = Color.Transparent)) { append(s) }
+                    pop()
+                }
             }
         } else if (inHidden && !open) {
-            withStyle(SpanStyle(color = muted, background = sunken)) { append("•".repeat(minOf(12, maxOf(3, s.length / 2)))) }
+            pushStringAnnotation("hidden-cover", "$hiddenAt")
+            withStyle(SpanStyle(color = Color.Transparent)) { append(s) }
+            pop()
         } else if (inCode) {
             withStyle(SpanStyle(fontFamily = Theme.mono, background = sunken, fontSize = 14.sp)) { append(s) }
         } else {
@@ -287,6 +317,106 @@ fun attributed(
         }
     }
     flush()
+}
+
+private data class DustDot(val x: Float, val y: Float, val r: Float, val a: Float)
+
+private val dustLayer1 = listOf(
+    DustDot(1.2f, 3.1f, 0.8f, 0.7f), DustDot(7.8f, 2.4f, 0.65f, 0.9f), DustDot(12.4f, 2.4f, 0.8f, 0.8f),
+    DustDot(17.2f, 1.1f, 0.7f, 0.8f), DustDot(21.1f, 0.8f, 0.8f, 0.7f), DustDot(26.7f, 3.6f, 0.65f, 0.7f),
+    DustDot(4.1f, 8.6f, 0.7f, 0.6f), DustDot(10.9f, 5.8f, 0.9f, 0.7f), DustDot(16.8f, 8.5f, 0.55f, 0.6f),
+    DustDot(22.2f, 10.8f, 0.8f, 0.6f), DustDot(28.5f, 8.7f, 0.7f, 0.55f), DustDot(1.8f, 13.5f, 0.7f, 0.7f),
+    DustDot(9.0f, 14.5f, 0.8f, 0.55f), DustDot(13.1f, 11.1f, 0.9f, 0.8f), DustDot(17.5f, 17.5f, 0.9f, 0.9f),
+    DustDot(25.1f, 14.2f, 0.65f, 0.6f), DustDot(4.0f, 19.1f, 0.7f, 0.9f), DustDot(11.9f, 22.1f, 0.6f, 0.9f),
+    DustDot(19.2f, 19.0f, 0.65f, 0.7f), DustDot(22.7f, 21.5f, 0.8f, 0.8f), DustDot(28.2f, 19.8f, 0.6f, 0.95f),
+)
+
+private val dustLayer2 = listOf(
+    DustDot(3.8f, 5.2f, 0.9f, 0.5f), DustDot(9.9f, 0.8f, 0.7f, 0.7f), DustDot(16.6f, 5.7f, 0.7f, 0.5f),
+    DustDot(20.1f, 1.4f, 0.8f, 0.7f), DustDot(3.4f, 9.0f, 0.8f, 0.6f), DustDot(10.5f, 6.2f, 0.65f, 0.7f),
+    DustDot(13.2f, 10.3f, 0.65f, 0.5f), DustDot(1.2f, 13.2f, 0.6f, 0.85f), DustDot(6.9f, 16.2f, 0.85f, 0.8f),
+    DustDot(11.8f, 12.2f, 0.8f, 0.8f), DustDot(16.3f, 16.8f, 0.6f, 0.55f), DustDot(18.5f, 12.6f, 0.55f, 0.45f),
+)
+
+/** Text with covered hidden stretches drawn under two opposing layers of drifting dust dots, matching the web app. */
+@Composable
+private fun DriftingHiddenText(styled: AnnotatedString, covered: List<AnnotatedString.Range<String>>) {
+    var layout by remember { mutableStateOf<TextLayoutResult?>(null) }
+    val textColor = Theme.text
+    val transition = rememberInfiniteTransition(label = "hiddenDust")
+    val phase by transition.animateFloat(
+        initialValue = 0f,
+        targetValue = 1f,
+        animationSpec = infiniteRepeatable(tween(7000, easing = LinearEasing), RepeatMode.Restart),
+        label = "hiddenDustPhase",
+    )
+    Text(
+        styled,
+        Modifier.drawWithContent {
+            drawContent()
+            layout?.let { drawHiddenDust(it, covered, textColor, phase) }
+        },
+        color = textColor,
+        fontSize = 16.sp,
+        lineHeight = 22.sp,
+        onTextLayout = { layout = it },
+    )
+}
+
+private fun DrawScope.drawHiddenDust(layout: TextLayoutResult, ranges: List<AnnotatedString.Range<String>>, color: Color, phase: Float) {
+    val textLen = layout.layoutInput.text.length
+    val padX = 1.dp.toPx()
+    val corner = CornerRadius(3.dp.toPx())
+    val t1W = 30.dp.toPx()
+    val t1H = 24.dp.toPx()
+    val t2W = 21.dp.toPx()
+    val t2H = 18.dp.toPx()
+    for (range in ranges) {
+        if (range.start >= range.end || range.end > textLen) continue
+        val firstLine = layout.getLineForOffset(range.start)
+        val lastLine = layout.getLineForOffset(range.end - 1)
+        for (line in firstLine..lastLine) {
+            val lineStart = if (line == firstLine) range.start else layout.getLineStart(line)
+            val lineEnd = if (line == lastLine) range.end else layout.getLineEnd(line, visibleEnd = true)
+            if (lineEnd <= lineStart) continue
+            val startBox = layout.getBoundingBox(lineStart)
+            val endBox = layout.getBoundingBox(lineEnd - 1)
+            val left = minOf(startBox.left, endBox.left) - padX
+            val right = maxOf(startBox.right, endBox.right) + padX
+            val top = layout.getLineTop(line)
+            val bottom = layout.getLineBottom(line)
+            if (right <= left || bottom <= top) continue
+            val rect = Rect(left, top, right, bottom)
+            val clip = Path().apply { addRoundRect(RoundRect(rect, corner)) }
+            clipPath(clip) {
+                drawDustLayer(rect, t1W, t1H, dustLayer1, phase * t1W, -phase * t1H, color)
+                drawDustLayer(rect, t2W, t2H, dustLayer2, -phase * t2W, phase * t2H, color)
+            }
+        }
+    }
+}
+
+private fun DrawScope.drawDustLayer(rect: Rect, tileW: Float, tileH: Float, dots: List<DustDot>, dx: Float, dy: Float, color: Color) {
+    val ox = dx % tileW
+    val oy = dy % tileH
+    val startX = floor((rect.left - ox) / tileW) * tileW + ox - tileW
+    val startY = floor((rect.top - oy) / tileH) * tileH + oy - tileH
+    val dpPx = 1.dp.toPx()
+    var ty = startY
+    while (ty < rect.bottom + tileH) {
+        var tx = startX
+        while (tx < rect.right + tileW) {
+            for (d in dots) {
+                val cx = tx + d.x * dpPx
+                val cy = ty + d.y * dpPx
+                val r = d.r * dpPx
+                if (cx + r < rect.left || cx - r > rect.right || cy + r < rect.top || cy - r > rect.bottom) continue
+                drawCircle(color.copy(alpha = d.a), radius = r, center = Offset(cx, cy))
+            }
+            tx += tileW
+        }
+        ty += tileH
+    }
 }
 
 /** A code block in a bubble: in a code font, kept as typed, colored by its language, its language named over it, with a copy button. */

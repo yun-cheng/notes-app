@@ -14,6 +14,7 @@ object Settings {
         copyStyle = prefs?.getString("copyStyle", null) ?: "rich"
         photoStyle = prefs?.getString("photoStyle", null) ?: "large"
         linkStyle = prefs?.getString("linkStyle", null) ?: "card"
+        railYears = prefs?.getString("railYears", null) ?: "entries"
         voiceVolume = prefs?.getFloat("voiceVolume", 1f) ?: 1f
         voiceMuted = prefs?.getBoolean("voiceMuted", false) ?: false
         folded = prefs?.getStringSet("sidebarFolded", null)?.toSet() ?: emptySet()
@@ -41,6 +42,9 @@ object Settings {
     /** `card`, `compact` or `off`. */
     var linkStyle by mutableStateOf("card")
         private set
+    /** How the rail spaces its years: `entries`, an equal share for each item, or `near`, more for the years nearer the one being read. */
+    var railYears by mutableStateOf("entries")
+        private set
 
     /** The volume all voice messages play at, 0 to 1, and whether they're muted, as the web keeps them. */
     var voiceVolume by mutableStateOf(1f)
@@ -57,4 +61,5 @@ object Settings {
     fun copyAs(v: String) { copyStyle = v; save("copyStyle", v) }
     fun photosAs(v: String) { photoStyle = v; save("photoStyle", v) }
     fun linksAs(v: String) { linkStyle = v; save("linkStyle", v) }
+    fun railYearsAs(v: String) { railYears = v; save("railYears", v) }
 }

@@ -56,13 +56,25 @@ private const val AWAKE_MS = 1500L
 /**
  * The rail beside a long page, as the web's `ScrollRail` on a touch screen: a handle at the right edge while the page
  * scrolls, held and dragged to go anywhere in it, with the years (or months, or days) down the side and the month or
- * day there shown while it's dragged. Each item is an equal share of the rail, in the order the page shows them; `at`
- * is where the page is, 0 at the top and 1 at the end. Screen readers skip it: the page scrolls as ever.
+ * day there shown while it's dragged. Each item is an equal share of the rail, in the order the page shows them, or
+ * spaced by nearness (`Settings.railYears`, `Rail.spacing`); `x` is where the page is, in items: how many are above its
+ * reading line, part way into one. `go` goes to a place on the rail (0 at the top, 1 at the foot) and the place among
+ * the items it falls at. Screen readers skip it: the page scrolls as ever.
  */
 @Composable
-fun RailView(keys: List<String>, name: (String) -> String, at: Float, modifier: Modifier, go: (Float) -> Unit) {
+fun RailView(keys: List<String>, name: (String) -> String, x: Double, modifier: Modifier, go: (Float, Double) -> Unit) {
     var height by remember { mutableIntStateOf(0) }
     var drag by remember { mutableStateOf<Float?>(null) }
+    // Spaced by nearness, the year it's spaced around: the one being read, but kept while the handle is held, so
+    // nothing moves under the finger, and taken up again once it's let go.
+    val reading = if (keys.isEmpty()) null else Rail.year(keys, minOf(keys.size - 1, x.toInt()))
+    var heldYear by remember { mutableStateOf<Int?>(null) }
+    val year = if (drag != null) heldYear else reading
+    val latestYear by rememberUpdatedState(year)
+    val near = Settings.railYears == "near"
+    val spacing = remember(keys, year, near) { if (near) Rail.spacing(keys, year) else null }
+    val at = Rail.railAt(x, keys.size, spacing).toFloat()
+    val latestSpacing by rememberUpdatedState(spacing)
     var awake by remember { mutableStateOf(false) }
     var heldFrom by remember { mutableFloatStateOf(0f) }
     var moved by remember { mutableFloatStateOf(0f) }
@@ -74,7 +86,11 @@ fun RailView(keys: List<String>, name: (String) -> String, at: Float, modifier: 
         delay(AWAKE_MS)
         awake = false
     }
-    val marks = remember(keys, height) { Rail.marks(keys, height.toDouble(), name) }
+    val marks = remember(keys, height, spacing) { Rail.marks(keys, height.toDouble(), name, spacing = spacing) }
+    fun goTo(to: Float) {
+        val (index, into) = Rail.item(to.toDouble(), keys.size, latestSpacing)
+        go(to, index + into)
+    }
     val scale = remember(keys) { Rail.scale(keys) }
     fun y(f: Float) = with(density) { (f * height).toDp() }
     Box(modifier.fillMaxHeight().width(44.dp).padding(vertical = 8.dp).onSizeChanged { height = it.height }) {
@@ -104,7 +120,7 @@ fun RailView(keys: List<String>, name: (String) -> String, at: Float, modifier: 
                 .systemGestureExclusion()
                 .pointerInput(Unit) {
                     detectVerticalDragGestures(
-                        onDragStart = { heldFrom = latestAt; moved = 0f; drag = latestAt; go(latestAt) },
+                        onDragStart = { heldYear = latestYear; heldFrom = latestAt; moved = 0f; drag = latestAt; goTo(latestAt) },
                         onDragEnd = { drag = null },
                         onDragCancel = { drag = null },
                     ) { change, dy ->
@@ -113,7 +129,7 @@ fun RailView(keys: List<String>, name: (String) -> String, at: Float, modifier: 
                         // Held, it moves with the finger from where it was, as the web's.
                         val to = (heldFrom + moved / height).coerceIn(0f, 1f)
                         drag = to
-                        go(to)
+                        goTo(to)
                     }
                 },
             horizontalAlignment = Alignment.CenterHorizontally, verticalArrangement = androidx.compose.foundation.layout.Arrangement.Center,
@@ -123,7 +139,7 @@ fun RailView(keys: List<String>, name: (String) -> String, at: Float, modifier: 
         }
         drag?.let { told ->
             if (keys.isNotEmpty()) Text(
-                Rail.label(keys[Rail.item(told.toDouble(), keys.size).first], scale, name),
+                Rail.label(keys[Rail.item(told.toDouble(), keys.size, spacing).first], scale, name),
                 Modifier.align(Alignment.TopEnd).wrapContentWidth(Alignment.End, unbounded = true).offset(x = (-40).dp, y = y(told).coerceIn(14.dp, with(density) { height.toDp() } - 14.dp) - 12.dp)
                     .shadow(4.dp, RoundedCornerShape(50)).background(Theme.text, RoundedCornerShape(50)).padding(horizontal = 10.dp, vertical = 4.dp),
                 fontSize = 12.sp, fontWeight = FontWeight.SemiBold, color = Theme.bg, maxLines = 1,
@@ -159,21 +175,22 @@ fun LazyRail(state: LazyListState, keys: List<String>, ids: List<String>, name: 
             }
             val line = info.viewportStartOffset + viewport * fraction
             val entries = rows.filter { it.key in indexOf }
-            val found = entries.lastOrNull { it.offset <= line } ?: return@derivedStateOf fraction.toFloat()
+            val found = entries.lastOrNull { it.offset <= line } ?: return@derivedStateOf fraction * n
             val next = entries.getOrNull(entries.indexOf(found) + 1)
             val extent = (next?.let { it.offset - found.offset } ?: found.size).toDouble()
             val down = if (extent > 0) (line - found.offset) / extent else 0.0
-            Rail.rowRailAt(indexOf.getValue(found.key as String), 1, down, n).toFloat()
+            indexOf.getValue(found.key as String) + down.coerceIn(0.0, 1.0)
         }
     }
-    val at = place ?: return
+    val x = place ?: return
     val scope = rememberCoroutineScope()
     val latestRowOf by rememberUpdatedState(rowOf)
     var job by remember { mutableStateOf<Job?>(null) }
-    RailView(keys, name, at, modifier) { to ->
+    RailView(keys, name, x, modifier) { to, at ->
         job?.cancel()
         job = scope.launch {
-            val (index, into) = Rail.item(to.toDouble(), n)
+            val index = minOf(n - 1, at.toInt())
+            val into = (at - index).coerceIn(0.0, 1.0)
             val id = ids[index]
             var row = latestRowOf(id)
             if (row == null) {
@@ -215,15 +232,16 @@ fun LaidRail(state: ScrollState, keys: List<String>, tops: List<Float>, bottoms:
     val scrolled = state.value.toDouble()
     val line = Rail.readingLine(scrolled, scrollable, scrolled, viewport)
     val found = tops.indexOfLast { it <= line }
-    val at = if (found < 0) 0f else {
+    val x = if (found < 0) 0.0 else {
         val (first, count, stretch) = row(found)
         val down = if (stretch.second > 0) (line - stretch.first) / stretch.second else 0.0
-        Rail.rowRailAt(first, count, down, n).toFloat()
+        first + down.coerceIn(0.0, 1.0) * count
     }
     val scope = rememberCoroutineScope()
     var job by remember { mutableStateOf<Job?>(null) }
-    RailView(keys, name, at, modifier) { to ->
-        val (index, into) = Rail.item(to.toDouble(), n)
+    RailView(keys, name, x, modifier) { _, at ->
+        val index = minOf(n - 1, at.toInt())
+        val into = (at - index).coerceIn(0.0, 1.0)
         val (first, count, stretch) = row(index)
         val y = stretch.first + Rail.intoRow(index, into, first, count) * stretch.second
         job?.cancel()

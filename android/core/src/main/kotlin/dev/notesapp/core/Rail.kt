@@ -6,8 +6,9 @@ import java.util.Locale
 /**
  * The rail beside a long page of entries, as a photo library has, as the web's `rail.ts`: marks for the years (or
  * months, or groups) down its length, a thumb at where the page is, and a label for the place pointed at or dragged
- * to. Each item has a key, the day it's under (or what else groups it, a tag), and an equal share of the rail, in the
- * order the page shows them, top to bottom.
+ * to. Each item has a key, the day it's under (or what else groups it, a tag), and a share of the rail, in the order
+ * the page shows them, top to bottom: an equal share, or, spaced by nearness (`spacing`), a share of its year's, which
+ * is larger the nearer the year is to the one being read.
  */
 object Rail {
     /** A mark on the rail, a fraction of the way down: a label, or a dot where there's no room or need for one. */
@@ -47,7 +48,7 @@ object Rail {
      * months) or each group, with a dot for each month among years and each day among a month's; `name` names a key
      * that isn't a day. Labels too near the one above are left out, then dots too near anything kept.
      */
-    fun marks(keys: List<String>, height: Double, name: (String) -> String, locale: Locale = Locale.getDefault()): List<Mark> {
+    fun marks(keys: List<String>, height: Double, name: (String) -> String, locale: Locale = Locale.getDefault(), spacing: DoubleArray? = null): List<Mark> {
         val n = keys.size
         if (n == 0 || height <= 0) return emptyList()
         val scale = scale(keys)
@@ -59,7 +60,7 @@ object Rail {
         keys.forEachIndexed { i, key ->
             if (key == last) return@forEachIndexed
             last = key
-            val at = i.toDouble() / n
+            val at = railAt(i.toDouble(), n, spacing)
             if (scale == Scale.Name || !DateKey.isKey(key)) {
                 labels.add(Mark(at, name(key)))
                 return@forEachIndexed
@@ -96,8 +97,65 @@ object Rail {
         return shown.sortedBy { it.at }
     }
 
+    /**
+     * The rail spaced by nearness: where each item starts, from 0, and 1 after the last (`n + 1` in all). Each year with
+     * items has a share by how many years it is from `year`, the one being read (1 for it, ½ the year either side, ⅓
+     * the next, and so on), and its items share that evenly; an item with no day goes with the year above it. Null, an
+     * equal share each, on a rail that isn't of years or with no year to go by. As the web's `railSpacing`.
+     */
+    fun spacing(keys: List<String>, year: Int?): DoubleArray? {
+        val n = keys.size
+        if (year == null || n < 2 || scale(keys) != Scale.Year) return null
+        val years = arrayOfNulls<Int>(n)
+        var last: Int? = null
+        keys.forEachIndexed { i, key ->
+            if (key.isNotEmpty()) last = key.take(4).toIntOrNull()
+            years[i] = last
+        }
+        // Items with no day above any with one go with the first year after them.
+        val first = years.firstOrNull { it != null } ?: year
+        val resolved = IntArray(n) { years[it] ?: first }
+        val counts = HashMap<Int, Int>()
+        for (y in resolved) counts[y] = (counts[y] ?: 0) + 1
+        val total = counts.keys.sumOf { 1.0 / (1 + kotlin.math.abs(it - year)) }
+        val starts = DoubleArray(n + 1)
+        for (i in 0 until n) {
+            val y = resolved[i]
+            starts[i + 1] = starts[i] + 1.0 / (1 + kotlin.math.abs(y - year)) / counts.getValue(y) / total
+        }
+        starts[n] = 1.0
+        return starts
+    }
+
+    /** The year of the item at `index`, the year a rail spaced by nearness is spaced around; null when it has no day. */
+    fun year(keys: List<String>, index: Int): Int? {
+        for (i in minOf(index, keys.size - 1) downTo 0) if (DateKey.isKey(keys[i])) return keys[i].take(4).toIntOrNull()
+        return keys.firstOrNull { DateKey.isKey(it) }?.take(4)?.toIntOrNull()
+    }
+
+    /** The place on the rail of a place among the items: `x` items down, part way into one when it isn't whole. */
+    fun railAt(x: Double, n: Int, spacing: DoubleArray? = null): Double {
+        if (n <= 0) return 0.0
+        val at = x.coerceIn(0.0, n.toDouble())
+        if (spacing == null) return at / n
+        val index = minOf(n - 1, kotlin.math.floor(at).toInt())
+        return spacing[index] + (at - index) * (spacing[index + 1] - spacing[index])
+    }
+
     /** The item a place on the rail (0 at the top, 1 at the foot) falls in, and how far into it. */
-    fun item(at: Double, n: Int): Pair<Int, Double> {
+    fun item(at: Double, n: Int, spacing: DoubleArray? = null): Pair<Int, Double> {
+        if (spacing != null && n > 0) {
+            val to = at.coerceIn(0.0, 1.0)
+            // The last item starting at or above it.
+            var lo = 0
+            var hi = n - 1
+            while (lo < hi) {
+                val mid = (lo + hi + 1) / 2
+                if (spacing[mid] <= to) lo = mid else hi = mid - 1
+            }
+            val size = spacing[lo + 1] - spacing[lo]
+            return lo to (if (size > 0) ((to - spacing[lo]) / size).coerceIn(0.0, 1.0) else 0.0)
+        }
         val exact = at.coerceIn(0.0, 1.0) * n
         val index = minOf(n - 1, kotlin.math.floor(exact).toInt())
         return index to minOf(1.0, exact - index)
@@ -112,8 +170,8 @@ object Rail {
         if (count > 0) ((index - first + into) / count).coerceIn(0.0, 1.0) else 0.0
 
     /** `intoRow`, turned round: the place on a rail of `n` items that's `down` the stretch of a row. */
-    fun rowRailAt(first: Int, count: Int, down: Double, n: Int): Double =
-        if (n > 0) minOf(1.0, (first + down.coerceIn(0.0, 1.0) * count) / n) else 0.0
+    fun rowRailAt(first: Int, count: Int, down: Double, n: Int, spacing: DoubleArray? = null): Double =
+        if (n > 0) minOf(1.0, railAt(first + down.coerceIn(0.0, 1.0) * count, n, spacing)) else 0.0
 
     /**
      * Where the page is, as the rail tells it: the line it reads at runs from the top of what's in view, scrolled to

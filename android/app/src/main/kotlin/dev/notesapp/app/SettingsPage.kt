@@ -169,11 +169,13 @@ fun SettingsPage(openDrawer: (() -> Unit)?) {
                     TimePickerDialog(context, { _, h, m -> remindAt = "%02d:%02d".format(h, m); Reminders.set(context, at = remindAt); Reminders.reschedule(context, model.index) }, p[0], p[1], android.text.format.DateFormat.is24HourFormat(context)).show()
                 })
             }
-            FormSection("Journal display", "How web links and photos show under entries on this device. Links in the text can always be opened.") {
+            FormSection("Journal display", "How web links and photos show under entries on this device. Links in the text can always be opened. The rail beside a long page gives each year room for its entries, or, nearer years larger, more room to the years nearest the one you're reading, less the further off. It changes once the rail is let go.") {
                 val links = mapOf("card" to "Cards", "compact" to "One line", "off" to "Off")
                 ChoiceRow("Link previews", links[Settings.linkStyle] ?: "Cards") { close -> for ((k, l) in links) MenuCheck(l, Settings.linkStyle == k) { Settings.linksAs(k); close() } }
                 val photos = mapOf("large" to "Large", "thumbs" to "Thumbnails", "off" to "Off")
                 ChoiceRow("Photos", photos[Settings.photoStyle] ?: "Large") { close -> for ((k, l) in photos) MenuCheck(l, Settings.photoStyle == k) { Settings.photosAs(k); close() } }
+                val years = mapOf("entries" to "By entries", "near" to "Nearer years larger")
+                ChoiceRow("Rail years", years[Settings.railYears] ?: "By entries") { close -> for ((k, l) in years) MenuCheck(l, Settings.railYears == k) { Settings.railYearsAs(k); close() } }
             }
             val copyNote = when (Settings.copyStyle) {
                 "markdown" -> "Copied text is Markdown, with **bold**, - lists and [links](…), and copied todos read [ ] Title @date #tag."

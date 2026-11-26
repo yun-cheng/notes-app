@@ -11,3 +11,6 @@ coverage
 *.jks
 *.keystore
 scripts/perf/.profile*
+# Private notes for coding agents: about the owner and this computer, never pushed (see AGENTS.md).
+.agents/rules/private.md
+CLAUDE.local.md

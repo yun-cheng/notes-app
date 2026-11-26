@@ -10,6 +10,8 @@ Decisions, the data model and the milestones are in [PLAN.md](PLAN.md).
 
 ## Run it
 
+Coding agents working here (Claude Code, Antigravity and others) follow `AGENTS.md`: how to work, what not to do, and how to build and test. Notes about the owner and their computer go in `.agents/rules/private.md`, which git ignores.
+
 Needs Node 22 or later.
 
 ```bash

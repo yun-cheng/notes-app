@@ -459,6 +459,38 @@ describe('MCP server', () => {
     // Confirm the move persisted to the new vault record.
     expect((await pull(ann.cookie)).records.find((r: CardRecord) => r.id === quickId)?.vault_id).toBe(work.id);
   });
+  it('creates, updates, reorders and moves entries between stacks with manage_stack', async () => {
+    const { tool } = await world();
+    // Create a stack with note-1 and note-2.
+    const created = await tool('manage_stack', { title: 'Japan trip', markdown: 'Everything for Tokyo.', card_ids: ['note-1', 'note-2'] });
+    expect(created.error).toBe(false);
+    const stackId = created.text.match(/id: ([\w-]+)/)![1];
+    let stackText = (await tool('get_card', { id: stackId })).text;
+    expect(stackText).toMatch(/Tokyo plan[\s\S]*Packing/);
+
+    // Add todo-1 and remove note-2.
+    expect((await tool('manage_stack', { stack_id: stackId, add_card_ids: ['todo-1'], remove_card_ids: ['note-2'] })).error).toBe(false);
+    stackText = (await tool('get_card', { id: stackId })).text;
+    expect(stackText).toContain('Book hotel');
+    expect(stackText).not.toContain('Packing');
+
+    // Reorder: todo-1 before note-1.
+    expect((await tool('manage_stack', { stack_id: stackId, card_ids: ['todo-1', 'note-1'] })).error).toBe(false);
+    stackText = (await tool('get_card', { id: stackId })).text;
+    expect(stackText).toMatch(/Book hotel[\s\S]*Tokyo plan/);
+
+    // Moving note-1 into a second stack takes it out of the first stack.
+    const stack2 = await tool('manage_stack', { title: 'Flights', card_ids: ['note-1'] });
+    expect(stack2.error).toBe(false);
+    const stack2Id = stack2.text.match(/id: ([\w-]+)/)![1];
+    expect((await tool('get_card', { id: stackId })).text).not.toContain('Tokyo plan');
+    expect((await tool('get_card', { id: stack2Id })).text).toContain('Tokyo plan');
+    expect((await tool('get_card', { id: 'note-1' })).text).toContain(`In stack: Flights (id: ${stack2Id})`);
+
+    // Refuses tags and stacks as members.
+    expect((await tool('manage_stack', { title: 'Bad', card_ids: ['tag-1'] })).error).toBe(true);
+    expect((await tool('manage_stack', { stack_id: stackId, add_card_ids: [stack2Id] })).error).toBe(true);
+  });
   it('validates arguments', async () => {
     const { tool } = await world();
     expect(await tool('list_todos', { due_after: 'yesterday' })).toEqual({ text: '"due_after" must be a date like 2026-11-10.', error: true });

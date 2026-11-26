@@ -26,6 +26,9 @@ TipTap JSON without losing fields they don't know.
   Update README.md and PLAN.md in the same commit as what they describe, and PARITY.md with every feature or behavior
   change, web or native (a web change rewrites its row; a native change updates that app's cell). Fold a fix to an
   unpushed commit into that commit. End with a list of the commits: hash, title, and a line on what each changes.
+- **Co-author trailer:** commits made by Antigravity / Gemini end with
+  `Co-Authored-By: Gemini <200291788+gemini-code-assist@users.noreply.github.com>` so GitHub lists Google's Gemini user
+  account in the Contributors sidebar.
 - **Never push, deploy, apply remote migrations or change Google or Cloudflare settings until the user says so.** A
   push to `main` deploys (Cloudflare Workers Builds) and applies new D1 migrations. "Push" covers only the commits that
   exist when it's said, never later ones, not even a fix for what was just pushed.

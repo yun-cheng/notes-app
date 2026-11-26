@@ -98,6 +98,21 @@ fun SignInView() {
         }
     }
 
+    fun useDemo(sam: Boolean) = scope.launch {
+        busy = true
+        problem = null
+        try {
+            val signedIn = ServerApi(model.site, null).demoSession(sam)
+            model.signedIn(signedIn.info, signedIn.token)
+        } catch (e: CancellationException) {
+            throw e
+        } catch (_: Exception) {
+            problem = "No demo here. Run npm run dev and npm run dev:api, then npm run demo."
+        } finally {
+            busy = false
+        }
+    }
+
     LaunchedEffect(attempt) {
         if (attempt == 0) return@LaunchedEffect
         problem = null
@@ -138,6 +153,13 @@ fun SignInView() {
                 if (busy) CircularProgressIndicator(Modifier.size(18.dp), strokeWidth = 2.dp) else Text("Sign in with Google")
             }
             if (offerBrowser) TextButton(onClick = { attempt++ }) { Text("Sign in with the browser") }
+            // A dev (or bench) build on a server on this computer goes straight into the demo, as the web's /demo does.
+            if ((BuildConfig.DEBUG || BuildConfig.BUILD_TYPE == "bench") && ServerApi(model.site, null).isLocal) {
+                androidx.compose.foundation.layout.Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                    TextButton(onClick = { useDemo(false) }, enabled = !busy) { Text("Use the demo account") }
+                    TextButton(onClick = { useDemo(true) }, enabled = !busy) { Text("Sam's") }
+                }
+            }
         }
         problem?.let { Text(it, color = Theme.alert, textAlign = TextAlign.Center) }
         if (model.addingAccount) TextButton(onClick = { model.addingAccount = false }) { Text("Cancel") }

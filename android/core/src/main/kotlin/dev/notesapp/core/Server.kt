@@ -215,6 +215,19 @@ class ServerApi(
         }
     }
 
+    /** Whether the server is on this computer (`npm run dev`; the emulator's 10.0.2.2 too), where a dev build can sign in to the demo. */
+    val isLocal: Boolean
+        get() = runCatching { java.net.URI(site).host }.getOrNull()?.let { it == "localhost" || it == "127.0.0.1" || it == "10.0.2.2" || it.endsWith(".local") } == true
+
+    /**
+     * Signs in to the demo account `npm run demo` made (or Sam's, the other side of what it shares), as the web's /demo
+     * does: only the dev server answers, with a session of the app's own.
+     */
+    suspend fun demoSession(sam: Boolean = false): Claim.SignedIn {
+        val info = json(SessionInfo.serializer(), "/demo-session/app" + if (sam) "?as=sam" else "", "POST", jobj())
+        return Claim.SignedIn(info, info.token ?: throw ApiError.Status(200))
+    }
+
     suspend fun signOut() { runCatching { send("/auth/logout", "POST", jobj()) } }
 
     // Vaults

@@ -45,9 +45,8 @@ photos`. The app's sandbox folder can't be read from the shell, so a first sync 
 
 **Android** (emulator `Medium_Phone_API_35`): measure the **bench** build, `./gradlew installBench
 -Pserver=http://localhost:5191` (`Notes Bench`, a release build that isn't debuggable but can be profiled). A debug
-build runs most code in the interpreter and is several times slower, so its numbers mislead. Sign it in through the
-browser: tap Sign in with Google, press Back to close the picker, tap Sign in with the browser, and approve its code
-with `UPDATE device_pairings SET user_id='u-demo' WHERE code='XXXX'`. Time a launch with screenshots
+build runs most code in the interpreter and is several times slower, so its numbers mislead. Sign it in with Use the
+demo account on its sign-in screen (with `adb reverse tcp:5191 tcp:5191`). Time a launch with screenshots
 (`adb exec-out screencap`) rather than `uiautomator dump`, which takes a second or two itself. Profile with the NDK's
 simpleperf, `python3 $ANDROID_SDK/ndk/<version>/simpleperf/app_profiler.py -p dev.notesapp.notes.bench -r "-e
 cpu-clock -f 1000 -g --duration 15"`; the bench build's names are shrunk, so look them up in

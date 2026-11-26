@@ -634,6 +634,9 @@ export function useVoiceRecorder(onRecorded: (recording: Recording) => void) {
       analyser = context.createAnalyser();
       analyser.fftSize = 1024;
       context.createMediaStreamSource(stream).connect(analyser);
+      // Made after the microphone was asked for, so maybe no longer in the press that started it: a phone's browser
+      // may hold it suspended, the levels flat, until it's resumed.
+      void context.resume().catch(() => undefined);
     } catch {
       analyser = null;
     }

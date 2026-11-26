@@ -272,14 +272,13 @@ struct BubbleText: View {
                     #if os(macOS)
                     BubbleWords(text: text, toggleHidden: toggle)
                     #else
-                    Text(text)
-                        .environment(\.openURL, OpenURLAction { url in
-                            guard url.scheme == "notes-hidden", let n = Int(url.absoluteString.dropFirst("notes-hidden:".count)) else { return .systemAction }
-                            toggle(n)
-                            return .handled
-                        })
-                        .fixedSize(horizontal: false, vertical: true)
-                        .textSelection(.enabled)
+                    if Self.hiddenCount(part) > 0 {
+                        IOSBubbleWords(text: text, toggleHidden: toggle)
+                    } else {
+                        Text(text)
+                            .fixedSize(horizontal: false, vertical: true)
+                            .textSelection(.enabled)
+                    }
                     #endif
                 case .code(let text, let language, _):
                     CodeSnippet(text: text, language: language)
@@ -329,13 +328,13 @@ struct BubbleText: View {
             guard !run.isEmpty else { return }
             let open = revealed || shown.contains(hiddenAt)
             if inHidden && !open {
-                var a = AttributedString(String(repeating: "•", count: min(12, max(3, run.count / 2))))
-                a.foregroundColor = Theme.muted
-                a.backgroundColor = Theme.sunken
-                a.link = URL(string: "notes-hidden:\(hiddenAt)")
+                var a = AttributedString(run)
+                a.foregroundColor = .clear
+                a.link = URL(string: "notes-hidden-covered:\(hiddenAt)")
                 out += a
             } else if inHidden {
                 var a = AttributedString(run)
+                a.foregroundColor = Theme.text
                 a.backgroundColor = Theme.sunken
                 a.link = URL(string: "notes-hidden:\(hiddenAt)")
                 out += a

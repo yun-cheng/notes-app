@@ -2,10 +2,10 @@ import type { ReminderBrowser } from '../reminders/sealed';
 import { deviceName } from '../domain/device';
 import type { VaultPin } from '../domain/pin';
 import type { StoredAttachment } from '../domain/attachments';
-import type { CardRecord, JSONNode, Vault } from '../domain/types';
+import type { AiAccess, AiAccessSetting, CardRecord, JSONNode, Vault } from '../domain/types';
 import type { PhotoRecord, PhotoTransport, UploadResult } from '../photos/types';
 import { SyncAuthExpired, SyncOffline, type SyncTransport } from './engine';
-import type { Account, AccountSummary, ConfigResponse, DraftChange, DraftsResponse, ConnectedApp, LinkPreview, PullResponse, PushResponse, RecentVersionsResponse, ServerTranscript, ServerTranslation, SessionInfo, SharedResponse, SignedInAccounts, VersionResponse, VersionsResponse } from './protocol';
+import type { Account, AccountSummary, AiAppsResponse, ConfigResponse, DraftChange, DraftsResponse, LinkPreview, PullResponse, PushResponse, RecentVersionsResponse, ServerTranscript, ServerTranslation, SessionInfo, SharedResponse, SignedInAccounts, VersionResponse, VersionsResponse } from './protocol';
 
 let requestAccount: string | null = null;
 
@@ -105,7 +105,7 @@ export interface VaultChanges {
   name?: string;
   pin?: VaultPin | null;
   hidden?: boolean;
-  ai_access?: Vault['ai_access'];
+  ai_access?: AiAccessSetting;
   encryption?: Vault['encryption'];
   members_need_pin?: boolean;
 }
@@ -135,7 +135,13 @@ export const fetchOAuthClient = (clientId: string, redirectUri: string) =>
 export const answerOAuth = async (params: Record<string, string>, approve: boolean) =>
   (await request<{ redirect: string }>('/oauth/authorize', { method: 'POST', body: JSON.stringify({ ...params, approve }) })).redirect;
 
-export const listAiApps = async () => (await request<{ apps: ConnectedApp[] }>('/ai/apps')).apps;
+export const fetchAiApps = async (): Promise<{ apps: AiAppsResponse['apps']; default_access: AiAccess }> => {
+  const res = await request<AiAppsResponse>('/ai/apps');
+  return { apps: res.apps, default_access: res.default_access ?? 'off' };
+};
+
+export const updateAiDefaultAccess = (default_access: AiAccess) =>
+  request<{ default_access: AiAccess; vaults: Vault[] }>('/ai/settings', { method: 'PATCH', body: JSON.stringify({ default_access }) });
 
 export const disconnectAiApp = (id: string) => request<unknown>(`/ai/apps/${encodeURIComponent(id)}`, { method: 'DELETE' });
 

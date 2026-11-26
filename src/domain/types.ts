@@ -148,12 +148,18 @@ export interface CardRecord {
   payload: string;
 }
 
+export type AiAccess = 'off' | 'read' | 'write';
+export type AiAccessSetting = AiAccess | 'default';
+
 export interface Vault {
   id: string;
   name: string;
   owner_id: string;
   lock: 'none' | 'pin';
-  ai_access: 'off' | 'read' | 'write';
+  /** Effective AI access for this vault. Private vaults are always 'off'. */
+  ai_access: AiAccess;
+  /** Explicit per-vault override, or null when following the owner's default AI access. */
+  ai_access_override?: AiAccess | null;
   created_at: number;
   /** Set when `lock` is 'pin'. */
   pin: VaultPin | null;

@@ -50,9 +50,19 @@ class ToolError extends Error {}
 async function loadScope(db: Database, userId: string, withCards = true): Promise<Scope> {
   const { results: all } = await db
     .prepare(
-      // Each member's own lock: the owner's is on the vault, anyone else's on their membership.
-      `SELECT v.id, v.name, CASE WHEN m.role = 'owner' THEN v.lock WHEN m.pin_hash IS NOT NULL THEN 'pin' ELSE 'none' END AS lock, v.ai_access, v.owner_id, m.role
-       FROM vaults v JOIN vault_members m ON m.vault_id = v.id
+      // Each member's own lock: the owner's is on the vault, anyone else's on their membership (withheld members stay locked).
+      // AI access follows the owner's per-vault override, or the owner's account default; private/encrypted vaults are always off.
+      `SELECT v.id, v.name,
+         CASE WHEN m.role = 'owner' THEN v.lock
+              WHEN (v.members_need_pin = 1 AND m.pin_hash IS NULL) OR (v.encryption IS NOT NULL AND m.key_grant IS NULL) THEN 'pin'
+              WHEN m.pin_hash IS NOT NULL THEN 'pin'
+              ELSE 'none' END AS lock,
+         CASE WHEN v.lock != 'none' OR v.encryption IS NOT NULL THEN 'off'
+              ELSE COALESCE(v.ai_access_override, o.ai_default_access) END AS ai_access,
+         v.owner_id, m.role
+       FROM vaults v
+       JOIN vault_members m ON m.vault_id = v.id
+       JOIN users o ON o.id = v.owner_id
        WHERE m.user_id = ? ORDER BY v.created_at, v.id`,
     )
     .bind(userId)

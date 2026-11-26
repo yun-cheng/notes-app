@@ -1,5 +1,6 @@
 import { Hono, type Context } from 'hono';
 import { cors } from 'hono/cors';
+import type { AiAccess } from '../src/domain/types';
 import type { AppEnv } from './db';
 import { handleMcp } from './mcp';
 import {
@@ -14,6 +15,7 @@ import {
   resolveAccessToken,
   revokeGrant,
 } from './oauth';
+import { getAiDefaultAccess, setAiDefaultAccess } from './vaults';
 
 const origin = (c: Context) => new URL(c.req.url).origin;
 
@@ -166,7 +168,19 @@ export function aiSessionRoutes(app: Hono<AppEnv>, now: () => number) {
     return back({ code });
   });
 
-  app.get('/ai/apps', async (c) => c.json({ apps: await listGrants(c.env.DB, c.get('user').id) }));
+  app.get('/ai/apps', async (c) => {
+    const userId = c.get('user').id;
+    const [apps, default_access] = await Promise.all([listGrants(c.env.DB, userId), getAiDefaultAccess(c.env.DB, userId)]);
+    return c.json({ apps, default_access });
+  });
+
+  app.patch('/ai/settings', async (c) => {
+    const body = await c.req.json<{ default_access?: unknown }>().catch(() => null);
+    const access = body?.default_access;
+    if (access !== 'off' && access !== 'read' && access !== 'write') return c.json({ error: 'Choose off, read or write' }, 400);
+    const vaults = await setAiDefaultAccess(c.env.DB, c.get('user').id, access as AiAccess);
+    return c.json({ default_access: access, vaults });
+  });
 
   app.delete('/ai/apps/:id', async (c) =>
     (await revokeGrant(c.env.DB, c.get('user').id, c.req.param('id'))) ? c.json({ ok: true }) : c.json({ error: 'Not found' }, 404),

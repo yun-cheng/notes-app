@@ -8,7 +8,7 @@ const doc = (...content: object[]) => ({ type: 'doc', content });
 const payload = (fields: Record<string, unknown>) => JSON.stringify({ tags: [], content: doc(), createdAt: 1, ...fields });
 const pin = { salt: 'c2FsdA==', hash: 'aGFzaA==', iterations: 300_000 };
 
-async function world(access: 'read' | 'write' = 'write') {
+async function world(access: 'off' | 'read' | 'write' = 'write') {
   const t = setup();
   const ann = await t.signIn('ann');
   const patch = (id: string, body: object) => t.call(`/api/vaults/${id}`, { method: 'PATCH', body: JSON.stringify(body) }, ann.cookie);
@@ -160,6 +160,23 @@ describe('MCP server', () => {
     const text = ((await res.json()) as { result: { content: { text: string }[] } }).result.content[0].text;
     expect(text).toContain('Type: note');
     expect(text).toContain('Rainy walk');
+  });
+  it('follows the account default AI access with per-vault overrides, keeping private vaults closed', async () => {
+    const { tool, call, patch, ann } = await world('off');
+    await patch(ann.vault, { ai_access: 'default' });
+    const work = (await (await call('/api/vaults', { method: 'POST', body: JSON.stringify({ name: 'Work' }) }, ann.cookie)).json()) as { id: string };
+    await patch(work.id, { ai_access: 'off' });
+    await call('/api/ai/settings', { method: 'PATCH', body: JSON.stringify({ default_access: 'read' }) }, ann.cookie);
+    const listed = (await tool('list_vaults')).text;
+    expect(listed).toContain('Personal (read only)');
+    expect(listed).toContain('Diary (read only)');
+    expect(listed).not.toContain('Work');
+    expect(listed).not.toContain('Secret diary');
+    expect(listed).toContain('2 other vaults are closed to AI.');
+    // Overriding one vault to write allows edits there while the default stays read only.
+    await patch(ann.vault, { ai_access: 'write' });
+    expect((await tool('create_note', { title: 'Allowed' })).error).toBe(false);
+    expect((await tool('create_note', { title: 'Blocked', vault: 'Diary' })).error).toBe(true);
   });
   it('validates arguments', async () => {
     const { tool } = await world();

@@ -1,4 +1,4 @@
-import type { CardRecord, Vault } from '../domain/types';
+import type { AiAccess, CardRecord, Vault } from '../domain/types';
 
 export const PUSH_LIMIT = 40;
 export const PULL_LIMIT = 200;
@@ -86,6 +86,12 @@ export interface ConnectedApp {
   name: string;
   created_at: number;
   last_used_at: number | null;
+}
+
+export interface AiAppsResponse {
+  apps: ConnectedApp[];
+  /** Default AI access for open vaults owned by this account. Missing on older servers. */
+  default_access?: AiAccess;
 }
 
 export interface PullResponse {

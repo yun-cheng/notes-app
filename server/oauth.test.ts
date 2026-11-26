@@ -79,8 +79,9 @@ describe('OAuth for AI apps', () => {
     expect(next.access_token).toBeTruthy();
     expect((await refresh(ai.refresh_token)).status).toBe(400);
 
-    const { apps } = (await (await call('/api/ai/apps', {}, cookie)).json()) as { apps: { id: string; name: string }[] };
+    const { apps, default_access } = (await (await call('/api/ai/apps', {}, cookie)).json()) as { apps: { id: string; name: string }[]; default_access: string };
     expect(apps.map((a) => a.name)).toEqual(['Claude']);
+    expect(default_access).toBe('off');
     expect((await call(`/api/ai/apps/${apps[0].id}`, { method: 'DELETE' }, cookie)).status).toBe(200);
     const after = await call('/api/mcp', { method: 'POST', body: JSON.stringify({ jsonrpc: '2.0', id: 1, method: 'ping' }), headers: { authorization: `Bearer ${next.access_token}` } });
     expect(after.status).toBe(401);

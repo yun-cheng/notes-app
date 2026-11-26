@@ -1,20 +1,28 @@
 import { useEffect, useState } from 'react';
 import { formatMoment } from '../../domain/dates';
+import { count as plural } from '../../domain/plural';
+import type { AiAccess, Vault } from '../../domain/types';
 import { Link, useLocation } from 'react-router';
 import { useAccount } from '../../auth/AuthContext';
 import { useCards } from '../../state/CardsContext';
 import { SyncAuthExpired, SyncOffline } from '../../sync/engine';
-import { answerOAuth, disconnectAiApp, fetchOAuthClient, listAiApps } from '../../sync/http';
+import { answerOAuth, disconnectAiApp, fetchAiApps, fetchOAuthClient, updateAiDefaultAccess } from '../../sync/http';
 import type { ConnectedApp } from '../../sync/protocol';
 import { Empty, Section } from '../components';
 import { useToast } from '../Toast';
-import { AiAccessField } from './vaults';
-
-const ACCESS_LABEL = { off: 'Off', read: 'Read', write: 'Read and write' } as const;
+import { AI_ACCESS_LABEL, AiAccessField } from './vaults';
 
 export const mcpUrl = () => `${location.origin}/api/mcp`;
 
-/** The page an AI app sends the person to, to approve it once. What it may do is set per vault. */
+const vaultSummary = (vaults: Vault[]) => {
+  const shown = vaults.slice(0, 5).map((v) => `${v.name} (${AI_ACCESS_LABEL[v.ai_access].toLowerCase()}${v.role && v.role !== 'owner' ? ', shared' : ''})`);
+  return vaults.length > 5 ? `${shown.join(', ')} and ${vaults.length - 5} more` : shown.join(', ');
+};
+
+/**
+ * The page an AI app sends the person to, to approve it once. Which vaults AI apps may reach is managed in the app
+ * under Backup & settings → AI apps (default for open vaults, plus per-vault overrides).
+ */
 export function ConnectPage() {
   const query = new URLSearchParams(useLocation().search);
   const { vaults } = useCards();
@@ -48,8 +56,7 @@ export function ConnectPage() {
     }
   };
 
-  const open = vaults.filter((v) => v.lock === 'none');
-  const reachable = open.filter((v) => v.ai_access !== 'off');
+  const reachable = vaults.filter((v) => v.lock === 'none' && !v.withheld && v.ai_access !== 'off');
 
   return (
     <main className="connect">
@@ -77,16 +84,17 @@ export function ConnectPage() {
             </p>
 
             <h2>What it can reach</h2>
-            <p className="prose-note">Choose for each vault. You can change this any time under Vaults.</p>
-            <div className="connect__vaults">
-              {open.map((v) => (
-                <AiAccessField key={v.id} vault={v} labelled />
-              ))}
-            </div>
-            {!reachable.length && <p className="connect__warn">No vault is open to AI yet, so {client.name} will see nothing.</p>}
+            {reachable.length ? (
+              <p className="prose-note">
+                Currently open to AI: {vaultSummary(reachable)}.
+              </p>
+            ) : (
+              <p className="connect__warn">No vault is open to AI yet, so {client.name} will see nothing until you turn it on.</p>
+            )}
             <p className="prose-note">
-              Private vaults are never visible to AI. Every change it makes is kept in history, marked as made by {client.name}, and can be undone.
-              Disconnect it any time in Backup & settings.
+              You can set a default for all open vaults or change individual vaults any time in{' '}
+              <Link to="/settings">Backup &amp; settings</Link>. Private vaults are never visible to AI. Every change it makes is kept in history, marked as
+              made by {client.name}, and can be undone.
             </p>
 
             <div className="button-row">
@@ -109,16 +117,39 @@ function lastUsed(app: ConnectedApp): string {
   return `Last used ${formatMoment(app.last_used_at)}`;
 }
 
-/** Settings: how to connect an AI app, and the apps already connected. */
+/** Settings: how to connect an AI app, default & per-vault AI access, and the apps already connected. */
 export function AiAppsSection() {
-  const { vaults } = useCards();
+  const { vaults, locked, repo } = useCards();
   const toast = useToast();
   const [apps, setApps] = useState<ConnectedApp[] | null>(null);
+  const [defaultAccess, setDefaultAccess] = useState<AiAccess | null>(null);
+  const [savingDefault, setSavingDefault] = useState(false);
+  const [filter, setFilter] = useState('');
   const [offline, setOffline] = useState(false);
 
   useEffect(() => {
-    listAiApps().then(setApps, () => setOffline(true));
+    fetchAiApps().then(
+      (res) => {
+        setApps(res.apps);
+        setDefaultAccess(res.default_access);
+      },
+      () => setOffline(true),
+    );
   }, []);
+
+  const changeDefault = async (next: AiAccess) => {
+    setSavingDefault(true);
+    try {
+      const res = await updateAiDefaultAccess(next);
+      setDefaultAccess(res.default_access);
+      await repo.putVaults(res.vaults);
+      toast('Default AI access updated');
+    } catch (err) {
+      toast(err instanceof SyncOffline ? 'Connect to the internet to change AI access.' : "That change couldn't be saved.");
+    } finally {
+      setSavingDefault(false);
+    }
+  };
 
   const disconnect = async (app: ConnectedApp) => {
     try {
@@ -139,7 +170,12 @@ export function AiAppsSection() {
     }
   };
 
-  const open = vaults.filter((v) => v.lock === 'none' && v.ai_access !== 'off');
+  const ownedOpen = vaults.filter((v) => (v.role ?? 'owner') === 'owner' && v.lock === 'none');
+  const shownDefault: AiAccess = defaultAccess ?? ownedOpen.find((v) => !v.ai_access_override)?.ai_access ?? 'off';
+  const privateCount = vaults.filter((v) => v.lock === 'pin' && !(v.hidden && locked.has(v.id))).length;
+  const sharedOpen = vaults.filter((v) => v.role && v.role !== 'owner' && v.lock === 'none' && !v.withheld && v.ai_access !== 'off');
+  const query = filter.trim().toLowerCase();
+  const shownVaults = query ? ownedOpen.filter((v) => v.name.toLowerCase().includes(query)) : ownedOpen;
 
   return (
     <Section title="AI apps">
@@ -152,11 +188,55 @@ export function AiAppsSection() {
           Copy
         </button>
       </div>
-      <p className="prose-note vault-gap">
-        {open.length
-          ? `Open to AI: ${open.map((v) => `${v.name} (${ACCESS_LABEL[v.ai_access].toLowerCase()})`).join(', ')}.`
-          : 'No vault is open to AI yet. Turn it on for a vault under Vaults.'}
-      </p>
+
+      <div className="ai-field vault-gap">
+        <label className="field-row">
+          Default for open vaults
+          <select
+            value={shownDefault}
+            disabled={offline || savingDefault || defaultAccess === null}
+            aria-label="Default AI access for open vaults"
+            onChange={(e) => void changeDefault(e.target.value as AiAccess)}
+          >
+            <option value="off">Off</option>
+            <option value="read">Read</option>
+            <option value="write">Read and write</option>
+          </select>
+        </label>
+        <p className="prose-note">
+          Applies to every unlocked vault you own, including new ones, unless you choose otherwise below. Private vaults are always off.
+        </p>
+      </div>
+
+      {ownedOpen.length > 0 && (
+        <div className="ai-vaults vault-gap">
+          {ownedOpen.length > 6 && (
+            <input
+              className="text-input ai-vaults__filter"
+              value={filter}
+              placeholder="Filter vaults…"
+              aria-label="Filter vaults"
+              onChange={(e) => setFilter(e.target.value)}
+            />
+          )}
+          <div className="list">
+            {shownVaults.map((v) => (
+              <AiAccessField key={v.id} vault={v} defaultAccess={shownDefault} compact />
+            ))}
+          </div>
+          {query && !shownVaults.length && <p className="prose-note">No open vault matches "{filter}".</p>}
+        </div>
+      )}
+
+      {privateCount > 0 && (
+        <p className="prose-note vault-gap">{plural(privateCount, 'private vault')} {privateCount === 1 ? 'is' : 'are'} always off.</p>
+      )}
+      {sharedOpen.length > 0 && (
+        <p className="prose-note vault-gap">
+          Shared vaults open to AI (read only): {sharedOpen.map((v) => v.name).join(', ')}.
+        </p>
+      )}
+
       {offline ? (
         <Empty>Connect to the internet to see connected apps.</Empty>
       ) : apps === null ? null : apps.length ? (

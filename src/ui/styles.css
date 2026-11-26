@@ -584,6 +584,9 @@ a.change__title:hover { color: var(--accent); }
 .connect__warn { color: var(--alert); }
 .ai-field .field-row { margin: 0; }
 .ai-field .prose-note { font-size: 14px; margin-top: 2px; }
+.ai-vaults { display: flex; flex-direction: column; gap: 8px; }
+.ai-vaults__filter { max-width: 280px; }
+.ai-vault-row select { min-height: 34px; padding: 0 8px; background: var(--surface); border: 1px solid var(--line); border-radius: 8px; color: var(--text); }
 
 /* Photos */
 .photo { margin: 0.8em 0; border-radius: 10px; overflow: hidden; line-height: 0; }

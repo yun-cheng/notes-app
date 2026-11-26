@@ -71,12 +71,37 @@ describe('vaults', () => {
   it('sets AI access on an open vault only', async () => {
     const { signIn, create, patch } = vaultApi();
     const { cookie, vault: personal } = await signIn('ann');
-    expect((await patch(cookie, personal, { ai_access: 'read' })).vault.ai_access).toBe('read');
+    expect((await patch(cookie, personal, { ai_access: 'read' })).vault).toMatchObject({ ai_access: 'read', ai_access_override: 'read' });
     expect((await patch(cookie, personal, { ai_access: 'everything' })).status).toBe(400);
     const { vault: diary } = await create(cookie, { name: 'Diary', pin });
     expect((await patch(cookie, diary.id, { ai_access: 'write' })).status).toBe(400);
-    expect((await patch(cookie, diary.id, { pin: null, ai_access: 'write' })).vault.ai_access).toBe('write');
-    expect((await patch(cookie, diary.id, { ai_access: 'off' })).vault.ai_access).toBe('off');
+    expect((await patch(cookie, diary.id, { pin: null, ai_access: 'write' })).vault).toMatchObject({ ai_access: 'write', ai_access_override: 'write' });
+    expect((await patch(cookie, diary.id, { ai_access: 'off' })).vault).toMatchObject({ ai_access: 'off', ai_access_override: 'off' });
+    expect((await patch(cookie, diary.id, { ai_access: 'default' })).vault).toMatchObject({ ai_access: 'off', ai_access_override: null });
+  });
+  it('applies the account default AI access to open vaults unless overridden', async () => {
+    const { signIn, create, patch, call } = vaultApi();
+    const { cookie, vault: personal } = await signIn('ann');
+    const { vault: locked } = await create(cookie, { name: 'Secret', pin });
+    await patch(cookie, personal, { ai_access: 'off' });
+
+    const res = await call('/api/ai/settings', { method: 'PATCH', body: JSON.stringify({ default_access: 'write' }) }, cookie);
+    expect(res.status).toBe(200);
+    const updated = (await res.json()) as { default_access: string; vaults: Vault[] };
+    expect(updated.default_access).toBe('write');
+    expect(updated.vaults.find((v) => v.id === personal)).toMatchObject({ ai_access: 'off', ai_access_override: 'off' });
+    expect(updated.vaults.find((v) => v.name === 'Diary')).toMatchObject({ ai_access: 'write', ai_access_override: null });
+    expect(updated.vaults.find((v) => v.id === locked.id)).toMatchObject({ ai_access: 'off', ai_access_override: null });
+
+    // A new open vault inherits the default; a new private one stays off.
+    const { vault: work } = await create(cookie, { name: 'Work' });
+    expect(work).toMatchObject({ ai_access: 'write', ai_access_override: null });
+    const { vault: secret2 } = await create(cookie, { name: 'Secret 2', pin });
+    expect(secret2).toMatchObject({ ai_access: 'off', ai_access_override: null });
+
+    // Resetting an override falls back to the current account default.
+    expect((await patch(cookie, personal, { ai_access: 'default' })).vault).toMatchObject({ ai_access: 'write', ai_access_override: null });
+    expect((await call('/api/ai/settings', { method: 'PATCH', body: JSON.stringify({ default_access: 'bad' }) }, cookie)).status).toBe(400);
   });
   it('refuses to lock the default vault, but allows renaming it', async () => {
     const { signIn, patch } = vaultApi();

@@ -1,11 +1,12 @@
 import type { VaultPin } from '../src/domain/pin';
 import type { AnyEncryption, MemberKey, VaultEncryption } from '../src/crypto/vaultKeys';
-import type { Vault } from '../src/domain/types';
+import type { AiAccess, AiAccessSetting, Vault } from '../src/domain/types';
 import type { Hono } from 'hono';
 import type { AppEnv, Database } from './db';
 import { unshare } from './shares';
 
-interface VaultRow extends Omit<Vault, 'pin' | 'hidden' | 'encryption' | 'members_need_pin' | 'withheld' | 'waiting'> {
+interface VaultRow extends Omit<Vault, 'pin' | 'hidden' | 'encryption' | 'members_need_pin' | 'withheld' | 'waiting' | 'ai_access_override'> {
+  ai_access_override: AiAccess | null;
   encryption: string | null;
   member_key: string | null;
   key_grant: string | null;
@@ -30,7 +31,10 @@ const mine = (column: string) => `CASE WHEN m.role = 'owner' THEN v.${column} EL
  * for, or, in an encrypted vault, not let in by the owner.
  */
 const WITHHELD = `(m.role != 'owner' AND ((v.members_need_pin = 1 AND m.pin_hash IS NULL) OR (v.encryption IS NOT NULL AND m.key_grant IS NULL)))`;
-const COLUMNS = `v.id, v.name, v.owner_id, v.ai_access, v.created_at, v.encryption, v.members_need_pin, m.role,
+const COLUMNS = `v.id, v.name, v.owner_id,
+  CASE WHEN v.lock != 'none' OR v.encryption IS NOT NULL THEN 'off' ELSE COALESCE(v.ai_access_override, o.ai_default_access) END AS ai_access,
+  CASE WHEN v.lock != 'none' OR v.encryption IS NOT NULL THEN NULL ELSE v.ai_access_override END AS ai_access_override,
+  v.created_at, v.encryption, v.members_need_pin, m.role,
   m.encryption AS member_key, m.key_grant,
   CASE WHEN m.role = 'owner' THEN v.lock WHEN ${WITHHELD} THEN 'none' WHEN m.pin_hash IS NOT NULL THEN 'pin' ELSE 'none' END AS lock,
   ${['pin_salt', 'pin_hash', 'pin_iterations', 'hidden'].map(mine).join(', ')},
@@ -68,10 +72,26 @@ export const diaryVaultId = (userId: string) => `diary-${userId}`;
 
 export async function listVaults(db: Database, userId: string): Promise<Vault[]> {
   const { results } = await db
-    .prepare(`SELECT ${COLUMNS} FROM vaults v JOIN vault_members m ON m.vault_id = v.id WHERE m.user_id = ? ORDER BY v.created_at, v.id`)
+    .prepare(`SELECT ${COLUMNS} FROM vaults v JOIN vault_members m ON m.vault_id = v.id JOIN users o ON o.id = v.owner_id WHERE m.user_id = ? ORDER BY v.created_at, v.id`)
     .bind(userId)
     .all<VaultRow>();
   return results.map(toVault);
+}
+
+export async function getAiDefaultAccess(db: Database, userId: string): Promise<AiAccess> {
+  const row = await db.prepare(`SELECT ai_default_access FROM users WHERE id = ?`).bind(userId).first<{ ai_default_access: AiAccess }>();
+  return row?.ai_default_access ?? 'off';
+}
+
+/** Updates the account's default AI access for all open vaults without an explicit override, and returns the updated vaults. */
+export async function setAiDefaultAccess(db: Database, userId: string, access: AiAccess): Promise<Vault[]> {
+  await db.batch([
+    db.prepare(`UPDATE users SET ai_default_access = ? WHERE id = ?`).bind(access, userId),
+    db
+      .prepare(`UPDATE vaults SET ai_access = ? WHERE owner_id = ? AND lock = 'none' AND encryption IS NULL AND ai_access_override IS NULL`)
+      .bind(access, userId),
+  ]);
+  return listVaults(db, userId);
 }
 
 export interface VaultInput {
@@ -87,18 +107,19 @@ export async function createVault(db: Database, userId: string, input: VaultInpu
   const { pin, name } = input;
   // A new vault is its maker's: only the owner's kind of encryption makes sense in it.
   const encryption = pin && input.encryption && !('member' in input.encryption) ? JSON.stringify(input.encryption) : null;
+  const aiAccess = pin ? 'off' : await getAiDefaultAccess(db, userId);
   await db.batch([
     db
       .prepare(
-        `INSERT INTO vaults (id, owner_id, name, lock, created_at, pin_salt, pin_hash, pin_iterations, hidden, encryption) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+        `INSERT INTO vaults (id, owner_id, name, lock, ai_access, ai_access_override, created_at, pin_salt, pin_hash, pin_iterations, hidden, encryption) VALUES (?, ?, ?, ?, ?, NULL, ?, ?, ?, ?, ?, ?)`,
       )
-      .bind(id, userId, name, pin ? 'pin' : 'none', now, pin?.salt ?? null, pin?.hash ?? null, pin?.iterations ?? null, pin && input.hidden ? 1 : 0, encryption),
+      .bind(id, userId, name, pin ? 'pin' : 'none', aiAccess, now, pin?.salt ?? null, pin?.hash ?? null, pin?.iterations ?? null, pin && input.hidden ? 1 : 0, encryption),
     db.prepare(`INSERT INTO vault_members (vault_id, user_id, role) VALUES (?, ?, 'owner')`).bind(id, userId),
   ]);
   return (await listVaults(db, userId)).find((v) => v.id === id)!;
 }
 
-export type VaultUpdate = Partial<VaultInput> & { ai_access?: Vault['ai_access']; members_need_pin?: boolean };
+export type VaultUpdate = Partial<VaultInput> & { ai_access?: AiAccessSetting; members_need_pin?: boolean };
 
 export type UpdateResult = { vault: Vault } | { error: 'not_found' | 'default_vault' | 'private_ai' | 'needs_key' | 'encrypted_open' | 'not_owner' };
 
@@ -150,9 +171,16 @@ export async function updateVault(db: Database, userId: string, id: string, upda
   if (update.encryption && 'member' in update.encryption) return { error: 'not_owner' };
 
   const pin = update.pin === undefined ? current.pin : update.pin;
-  if (pin && update.ai_access && update.ai_access !== 'off') return { error: 'private_ai' };
+  if (pin && update.ai_access && update.ai_access !== 'off' && update.ai_access !== 'default') return { error: 'private_ai' };
   const hidden = !!pin && (update.hidden ?? current.hidden);
-  const aiAccess = pin ? 'off' : (update.ai_access ?? current.ai_access);
+  const aiOverride: AiAccess | null = pin
+    ? null
+    : update.ai_access === undefined
+      ? (current.ai_access_override ?? null)
+      : update.ai_access === 'default'
+        ? null
+        : update.ai_access;
+  const aiAccess: AiAccess = pin ? 'off' : (aiOverride ?? (await getAiDefaultAccess(db, userId)));
   const encryption = update.encryption === undefined ? (current.encryption ?? null) : update.encryption;
   // Dropping the PIN of an encrypted vault must say the encryption goes too, after the device decrypted its cards.
   if (!pin && encryption) return { error: 'encrypted_open' };
@@ -160,12 +188,13 @@ export async function updateVault(db: Database, userId: string, id: string, upda
   const needPin = !!pin && !encryption && (update.members_need_pin ?? current.members_need_pin ?? false);
   const save = db
     .prepare(
-      `UPDATE vaults SET name = ?, lock = ?, ai_access = ?, pin_salt = ?, pin_hash = ?, pin_iterations = ?, hidden = ?, encryption = ?, members_need_pin = ? WHERE id = ?`,
+      `UPDATE vaults SET name = ?, lock = ?, ai_access = ?, ai_access_override = ?, pin_salt = ?, pin_hash = ?, pin_iterations = ?, hidden = ?, encryption = ?, members_need_pin = ? WHERE id = ?`,
     )
     .bind(
       update.name ?? current.name,
       pin ? 'pin' : 'none',
       aiAccess,
+      aiOverride,
       pin?.salt ?? null,
       pin?.hash ?? null,
       pin?.iterations ?? null,
@@ -223,7 +252,7 @@ function parseVaultBody(body: Record<string, unknown> | null): VaultUpdate | nul
     out.pin = body.pin;
   }
   if (body.ai_access !== undefined) {
-    if (body.ai_access !== 'off' && body.ai_access !== 'read' && body.ai_access !== 'write') return null;
+    if (body.ai_access !== 'default' && body.ai_access !== 'off' && body.ai_access !== 'read' && body.ai_access !== 'write') return null;
     out.ai_access = body.ai_access;
   }
   if (body.encryption !== undefined) {

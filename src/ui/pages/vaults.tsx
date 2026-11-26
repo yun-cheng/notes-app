@@ -5,7 +5,7 @@ import { biometricAvailable, biometricKey, enrollBiometric } from '../../auth/bi
 import { isDefaultVault } from '../../domain/locks';
 import { createVaultKey, isMemberCopy } from '../../crypto/vaultKeys';
 import { hashPin, MIN_PIN_LENGTH, verifyPin } from '../../domain/pin';
-import type { Vault } from '../../domain/types';
+import type { AiAccess, AiAccessSetting, Vault } from '../../domain/types';
 import { useCards } from '../../state/CardsContext';
 import { SyncOffline } from '../../sync/engine';
 import { createVault, updateVault, type VaultChanges } from '../../sync/http';
@@ -156,27 +156,50 @@ export function VaultsPage() {
   );
 }
 
-const AI_HINT: Record<Vault['ai_access'], string> = {
+export const AI_ACCESS_LABEL: Record<AiAccess, string> = { off: 'Off', read: 'Read', write: 'Read and write' };
+
+const AI_HINT: Record<AiAccess, string> = {
   off: 'AI apps see nothing in this vault.',
   read: 'Connected AI apps can search and read this vault.',
   write: 'Connected AI apps can also add and edit cards here. Every change is kept in history and can be undone.',
 };
 
 /** What connected AI apps may do in an open vault. Private vaults are always off. */
-export function AiAccessField({ vault, labelled }: { vault: Vault; labelled?: boolean }) {
+export function AiAccessField({ vault, defaultAccess, compact }: { vault: Vault; defaultAccess?: AiAccess; compact?: boolean }) {
   const save = useVaultSaver();
-  const set = (ai_access: Vault['ai_access']) => void save(() => updateVault(vault.id, { ai_access }));
+  const value: AiAccessSetting = vault.ai_access_override ?? 'default';
+  const defaultLabel = defaultAccess ? `Default (${AI_ACCESS_LABEL[defaultAccess]})` : value === 'default' ? `Default (${AI_ACCESS_LABEL[vault.ai_access]})` : 'Default';
+  const set = (ai_access: AiAccessSetting) => void save(() => updateVault(vault.id, { ai_access }));
+  if (compact) {
+    return (
+      <div className="row ai-vault-row">
+        <span className="row__body">
+          <span className="row__title">{vault.name}</span>
+          {value !== 'default' && <span className="row__preview">Custom</span>}
+        </span>
+        <select value={value} aria-label={`AI access for ${vault.name}`} onChange={(e) => set(e.target.value as AiAccessSetting)}>
+          <option value="default">{defaultLabel}</option>
+          <option value="off">Off</option>
+          <option value="read">Read</option>
+          <option value="write">Read and write</option>
+        </select>
+      </div>
+    );
+  }
   return (
     <div className="ai-field">
       <label className="field-row">
-        {labelled ? vault.name : 'AI access'}
-        <select value={vault.ai_access} aria-label={`AI access for ${vault.name}`} onChange={(e) => set(e.target.value as Vault['ai_access'])}>
+        AI access
+        <select value={value} aria-label={`AI access for ${vault.name}`} onChange={(e) => set(e.target.value as AiAccessSetting)}>
+          <option value="default">{defaultLabel}</option>
           <option value="off">Off</option>
           <option value="read">Read</option>
           <option value="write">Read and write</option>
         </select>
       </label>
-      <p className="prose-note">{AI_HINT[vault.ai_access]}</p>
+      <p className="prose-note">
+        {value === 'default' ? `Following your account default in Backup & settings. ${AI_HINT[vault.ai_access]}` : AI_HINT[vault.ai_access]}
+      </p>
     </div>
   );
 }

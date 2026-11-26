@@ -128,9 +128,9 @@ Rules:
 ### MCP server (so Claude and other AI subscriptions can access data)
 Runs beside the sync server on the same database, using Cloudflare's MCP setup for Workers and its OAuth library.
 
-- Per-vault AI access: off (default), read, read + write. Private vaults can never have AI access.
+- Account-level default AI access for open vaults (`off` by default, `read`, `read + write`), with optional per-vault overrides (2026-11-27, migration `0024`). Private vaults can never have AI access.
 - The server enforces this, not the AI.
-- Write access is approved by the owner, once per vault (decided 2026-11-10): the AI access setting is the approval, with no per-change prompts. Every AI edit can be undone from history.
+- Write access is approved by the owner in the app (decided 2026-11-10; moved to account default + per-vault overrides under Backup & settings → AI apps on 2026-11-27 so connecting an app doesn't ask vault by vault): the AI access setting is the approval, with no per-change prompts. Every AI edit can be undone from history.
 - Tools, read: `search_cards` (by type and vault), `get_card` (with backlinks), `list_todos(due, status)`.
 - Tools, write: `create_note`, `add_todo` (with a time and repeat), `complete_todo`, plus editing existing notes.
 - Every AI edit creates a version labeled as AI-authored, undoable in one click.
@@ -286,13 +286,13 @@ None. Defaults chosen while building are listed in the implementation notes, and
 - The MCP server is `/api/mcp` on the app's own address, using Streamable HTTP with plain JSON replies (no streaming, no sessions), so it runs in the Worker without Durable Objects. No MCP SDK: the server handles `initialize`, `ping`, `tools/list` and `tools/call` itself.
 - Sign-in for AI apps is OAuth 2.1, built in rather than through Cloudflare's OAuth library, so it needs no KV namespace: dynamic client registration, codes with PKCE (S256), one-hour access tokens and rotating 90-day refresh tokens. Discovery documents are under `/.well-known` at the site root. Only token hashes are stored.
 - Approval happens in the app at `/oauth/authorize`, which uses the normal session. The session cookie stays SameSite=Strict, because the page calls the API from the app's own origin.
-- What an app can reach is set per vault (off, read, read and write) and enforced on the server. Private vaults are always off. Writes also need the user to own the vault, so shared vaults stay read only to AI.
+- What an app can reach is controlled in the app (2026-11-27, migration `0024`): an account-level default for open vaults (`users.ai_default_access`: off, read, read and write) plus optional per-vault overrides (`vaults.ai_access_override`), enforced on the server (`PATCH /api/ai/settings` and `PATCH /api/vaults/:id` with `ai_access: 'default' | 'off' | 'read' | 'write'`). Private and encrypted vaults are always off. Writes also need the user to own the vault, so shared vaults stay read only to AI.
 - Every vault closed to AI goes into the AI's index as locked, so links into it read "Locked" and its text never reaches search, through the same code that hides locked vaults in the app.
 - Tools: `list_vaults`, `search_cards`, `get_card`, `list_todos`, `create_note`, `add_todo`, `complete_todo`, `edit_card`. There is no delete. AI writes Markdown, which becomes the card's TipTap document; `[[Exact title]]` links to an existing card.
 - AI writes go through the same push path as devices, so they sync, and their versions record the app's name ("Ann via Claude (AI)"). An AI edit never extends a person's version.
 - The diary is the Diary vault, so AI reads or writes it only when the user opens that vault to AI, like any other.
 - The MCP `instructions` tell the model to treat card text as data, not instructions.
-- To connect Claude: Backup & settings, AI apps shows the address to add as a custom connector. Turn on AI access for a vault, under Vaults or on the approval page.
+- To connect Claude: Backup & settings, AI apps shows the address to add as a custom connector, sets the default AI access for open vaults and any per-vault overrides, and lists connected apps. The OAuth approval page (`/oauth/authorize`) shows a read-only summary and Allow / Cancel without asking vault by vault.
 
 ## Implementation notes from Milestone 5
 

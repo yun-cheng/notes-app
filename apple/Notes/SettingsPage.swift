@@ -149,33 +149,51 @@ struct SettingsPage: View {
                 }
                 Button("Copy address") { Clipboard.copy(model.api.mcpURL.absoluteString); model.say("Copied") }
                 let ownedOpen = model.vaults.filter { $0.isOwner && !$0.isPrivate }
+                let ownedConfigurable = model.vaults.filter { $0.isOwner && !$0.isEncrypted && (!$0.isPrivate || !model.lockedVaults.contains($0.id)) }
                 let shownDefault = defaultAiAccess ?? ownedOpen.first(where: { $0.ai_access_override == nil })?.ai_access ?? .off
                 Picker("Default for open vaults", selection: Binding(get: { shownDefault }, set: { next in Task { await changeAiDefault(next) } })) {
                     ForEach(Vault.AIAccess.allCases, id: \.self) { a in Text(a.label).tag(a) }
                 }
                 .disabled(offline || savingAiDefault || defaultAiAccess == nil)
-                Text("Applies to every unlocked vault you own, including new ones, unless you choose otherwise below. Private vaults are always off.")
+                Text("Applies to every unlocked vault you own, including new ones, unless you choose otherwise below. Private vaults default to off; end-to-end encrypted vaults are always off.")
                     .font(.caption).foregroundStyle(Theme.muted)
-                if ownedOpen.count > 6 {
+                if ownedConfigurable.count > 6 {
                     TextField("Filter vaults…", text: $aiVaultFilter)
                 }
                 let q = aiVaultFilter.trimmingCharacters(in: .whitespaces).lowercased()
-                let shownVaults = q.isEmpty ? ownedOpen : ownedOpen.filter { $0.name.lowercased().contains(q) }
+                let shownVaults = q.isEmpty ? ownedConfigurable : ownedConfigurable.filter { $0.name.lowercased().contains(q) }
                 ForEach(shownVaults) { vault in
-                    Picker(vault.name, selection: Binding(get: { vault.aiAccessSetting }, set: { next in Task { await changeVaultAi(vault, next) } })) {
-                        Text("Default (\(shownDefault.label))").tag(Vault.AIAccessSetting.default)
-                        Text("Off").tag(Vault.AIAccessSetting.off)
-                        Text("Read").tag(Vault.AIAccessSetting.read)
-                        Text("Read and write").tag(Vault.AIAccessSetting.write)
+                    if vault.isPrivate {
+                        Picker("\(vault.name) (Private)", selection: Binding(
+                            get: { vault.ai_access },
+                            set: { next in Task { await changeVaultAi(vault, next == .off ? .default : Vault.AIAccessSetting(rawValue: next.rawValue) ?? .default) } }
+                        )) {
+                            Text("Off (default)").tag(Vault.AIAccess.off)
+                            Text("Read").tag(Vault.AIAccess.read)
+                            Text("Read and write").tag(Vault.AIAccess.write)
+                        }
+                        .disabled(offline)
+                    } else {
+                        Picker(vault.name, selection: Binding(get: { vault.aiAccessSetting }, set: { next in Task { await changeVaultAi(vault, next) } })) {
+                            Text("Default (\(shownDefault.label))").tag(Vault.AIAccessSetting.default)
+                            Text("Off").tag(Vault.AIAccessSetting.off)
+                            Text("Read").tag(Vault.AIAccessSetting.read)
+                            Text("Read and write").tag(Vault.AIAccessSetting.write)
+                        }
+                        .disabled(offline)
                     }
-                    .disabled(offline)
                 }
                 if !q.isEmpty && shownVaults.isEmpty {
-                    Text("No open vault matches “\(aiVaultFilter)”.").foregroundStyle(Theme.muted)
+                    Text("No vault matches “\(aiVaultFilter)”.").foregroundStyle(Theme.muted)
                 }
-                let privateCount = model.vaults.filter { $0.isPrivate && !($0.hidden && model.lockedVaults.contains($0.id)) }.count
-                if privateCount > 0 {
-                    Text("\(privateCount) \(privateCount == 1 ? "private vault is" : "private vaults are") always off.")
+                let lockedPrivateCount = model.vaults.filter { $0.isOwner && $0.isPrivate && !$0.isEncrypted && model.lockedVaults.contains($0.id) && !$0.hidden }.count
+                if lockedPrivateCount > 0 {
+                    Text("\(lockedPrivateCount) \(lockedPrivateCount == 1 ? "locked private vault" : "locked private vaults") — unlock \(lockedPrivateCount == 1 ? "it" : "them") first to change AI access (off by default).")
+                        .font(.caption).foregroundStyle(Theme.muted)
+                }
+                let encryptedCount = model.vaults.filter { $0.isEncrypted && !($0.hidden && model.lockedVaults.contains($0.id)) }.count
+                if encryptedCount > 0 {
+                    Text("\(encryptedCount) \(encryptedCount == 1 ? "encrypted vault is" : "encrypted vaults are") always off.")
                         .font(.caption).foregroundStyle(Theme.muted)
                 }
                 let sharedOpen = model.vaults.filter { !$0.isOwner && !$0.isPrivate && !$0.isWithheld && $0.ai_access != .off }

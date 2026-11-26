@@ -1,6 +1,9 @@
 package dev.notesapp.core
 
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.async
+import kotlinx.coroutines.awaitAll
+import kotlinx.coroutines.coroutineScope
 import kotlinx.coroutines.sync.Mutex
 import kotlinx.coroutines.withContext
 import kotlin.coroutines.CoroutineContext
@@ -48,18 +51,37 @@ class Repository(
     private var parsed = HashMap<String, Pair<String, JsonObject>>()
 
     suspend fun allCards() = locked {
+        val records = store.listCards()
         val next = HashMap<String, Pair<String, JsonObject>>()
-        val cards = store.listCards().map { r ->
+        val cards = arrayOfNulls<Card>(records.size)
+        val misses = ArrayList<Int>()
+        records.forEachIndexed { i, r ->
             val hit = parsed[r.id]
             if (hit != null && hit.first == r.payload) {
                 next[r.id] = hit
-                Card(r.id, r.vault_id, r.updated_at, r.deleted, r.seq, hit.second)
+                cards[i] = Card(r.id, r.vault_id, r.updated_at, r.deleted, r.seq, hit.second)
             } else {
-                decode(r).also { c -> if (!c.sealed && !VaultCrypto.isEncrypted(r.payload)) next[r.id] = r.payload to c.payload }
+                misses.add(i)
             }
         }
+        // Thousands to read (at launch, or after a first sync) are read on every core at once: one by one they took
+        // seconds before the journal showed.
+        if (misses.size < PARALLEL_FROM) {
+            for (i in misses) cards[i] = decode(records[i])
+        } else {
+            coroutineScope {
+                misses.chunked((misses.size + CORES - 1) / CORES).map { part ->
+                    async(Dispatchers.Default) { for (i in part) cards[i] = decode(records[i]) }
+                }.awaitAll()
+            }
+        }
+        for (i in misses) {
+            val r = records[i]
+            val c = cards[i]!!
+            if (!c.sealed && !VaultCrypto.isEncrypted(r.payload)) next[r.id] = r.payload to c.payload
+        }
         parsed = next
-        cards
+        cards.map { it!! }
     }
     suspend fun card(id: String) = locked { store.getCard(id)?.let(::decode) }
     private fun read(id: String) = store.getCard(id)?.let(::decode)
@@ -386,3 +408,7 @@ class Repository(
 
     @Suppress("unused") private val keepSerializers = MapSerializer(String.serializer(), String.serializer())
 }
+
+/** How many cards to read before `allCards` reads them on every core at once, and on how many. */
+private const val PARALLEL_FROM = 500
+private val CORES = Runtime.getRuntime().availableProcessors().coerceIn(1, 8)

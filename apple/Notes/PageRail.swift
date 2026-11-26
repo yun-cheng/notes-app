@@ -120,6 +120,36 @@ extension View {
 /// the month or day there. On a Mac a press goes there, a drag goes through the page, and the thumb held moves from
 /// where it was. On a phone, as the web's on a touch screen, only a handle shows, at the edge while the page scrolls,
 /// held and dragged, with the marks and the month or day showing while it's dragged; the rest of it takes no touches.
+/**
+ * The rail's marks and how it tells its items apart, worked out again only when its items or its height change. The
+ * rail is drawn again on every frame of scrolling, as its thumb moves; working them out from thousands of days each
+ * time was nearly all a scroll's work, and made it stutter. The same list of days passed again compares at once.
+ */
+private final class RailMarks {
+    private var keys: [String] = []
+    private var height = -1.0
+    private var marks: [Rail.Mark] = []
+    private var scaleKeys: [String]?
+    private var scale: Rail.Scale = .day
+
+    func marks(_ keys: [String], height: Double, name: (String) -> String) -> [Rail.Mark] {
+        if keys != self.keys || height != self.height {
+            self.keys = keys
+            self.height = height
+            marks = Rail.marks(keys, height: height, name: name)
+        }
+        return marks
+    }
+
+    func scale(_ keys: [String]) -> Rail.Scale {
+        if keys != scaleKeys {
+            scaleKeys = keys
+            scale = Rail.scale(keys)
+        }
+        return scale
+    }
+}
+
 struct RailView: View {
     /// Each item's key, top to bottom: the day it's under, or the tag that groups it.
     let keys: [String]
@@ -130,6 +160,7 @@ struct RailView: View {
     @State private var point: Double?
     /// Held at the thumb: where it was, to move from.
     @State private var heldFrom: Double?
+    @State private var cached = RailMarks()
     #if os(iOS)
     /// Scrolled lately: the handle shows, for a second and a half after.
     @State private var awake = false
@@ -140,7 +171,7 @@ struct RailView: View {
     var body: some View {
         GeometryReader { geo in
             let height = geo.size.height
-            let marks = drag == nil ? [] : Rail.marks(keys, height: height, name: name)
+            let marks = drag == nil ? [] : cached.marks(keys, height: height, name: name)
             let thumb = drag ?? place.at
             ZStack(alignment: .topLeading) {
                 Color.clear.allowsHitTesting(false)
@@ -178,7 +209,7 @@ struct RailView: View {
                     }.onEnded { _ in drag = nil; heldFrom = nil; wakes += 1 })
                 }
                 if let told = drag, !keys.isEmpty {
-                    Text(Rail.label(keys[Rail.item(at: told, count: keys.count).index], scale: Rail.scale(keys), name: name))
+                    Text(Rail.label(keys[Rail.item(at: told, count: keys.count).index], scale: cached.scale(keys), name: name))
                         .font(.system(size: 12, weight: .semibold)).foregroundStyle(Theme.bg).lineLimit(1).fixedSize()
                         .padding(.horizontal, 10).padding(.vertical, 4)
                         .background(Capsule().fill(Theme.text).shadow(color: .black.opacity(0.18), radius: 4, y: 2))
@@ -205,7 +236,7 @@ struct RailView: View {
     var body: some View {
         GeometryReader { geo in
             let height = geo.size.height
-            let marks = Rail.marks(keys, height: height, name: name)
+            let marks = cached.marks(keys, height: height, name: name)
             let thumb = drag ?? place.at
             let told = drag ?? point
             ZStack(alignment: .topLeading) {
@@ -224,7 +255,7 @@ struct RailView: View {
                 }
                 Capsule().fill(Theme.accent).frame(width: 32, height: 3).position(x: 24, y: thumb * height)
                 if let told, !keys.isEmpty {
-                    Text(Rail.label(keys[Rail.item(at: told, count: keys.count).index], scale: Rail.scale(keys), name: name))
+                    Text(Rail.label(keys[Rail.item(at: told, count: keys.count).index], scale: cached.scale(keys), name: name))
                         .font(.system(size: 12, weight: .semibold)).foregroundStyle(Theme.bg).lineLimit(1).fixedSize()
                         .padding(.horizontal, 10).padding(.vertical, 4)
                         .background(Capsule().fill(Theme.text).shadow(color: .black.opacity(0.18), radius: 4, y: 2))

@@ -34,13 +34,22 @@ interface Place {
   scrollable: number;
 }
 
-/** What's in view, below the title bar and above the writing box, the button to jump to its end, or the tab bar. */
+/**
+ * Room kept under the rail above the writing box on a phone, where the button back to the newest entries comes and goes
+ * over the rail's edge (`ScrollJump`): kept always, so the rail doesn't shrink and every mark move as it shows. With a
+ * mouse the button sits in the page's column, beside the rail, and needs none.
+ */
+const JUMP_ROOM = 48;
+
+/** What's in view, below the title bar and above the writing box (and the room for its button on a phone), or the tab bar. */
 function viewBounds(): { top: number; height: number } {
   const top = Math.max(0, document.querySelector('.main .page__head')?.getBoundingClientRect().bottom ?? 0);
   let bottom = window.innerHeight;
-  for (const el of document.querySelectorAll('.journal-dock:not(.is-idle), .tabbar, .scroll-jump')) {
+  const compact = window.matchMedia(COMPACT).matches;
+  for (const el of document.querySelectorAll('.journal-dock:not(.is-idle), .tabbar')) {
     const r = el.getBoundingClientRect();
-    if (r.height && r.top > top && r.top < bottom) bottom = r.top;
+    const edge = r.top - (compact && el.classList.contains('journal-dock') ? JUMP_ROOM : 0);
+    if (r.height && r.top > top && edge < bottom) bottom = Math.max(top, edge);
   }
   return { top, height: Math.max(0, bottom - top) };
 }

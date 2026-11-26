@@ -168,8 +168,11 @@ struct JournalView: View {
                                 railGo(to, all: all, visible: visible, proxy: proxy)
                             }
                             .padding(.vertical, 8)
-                            // Clear of the button back to the newest entries, as the web's.
-                            .padding(.bottom, awayFromEnd ? 52 : 0)
+                            #if os(iOS)
+                            // Clear of where the button back to the newest entries comes and goes, kept always so the
+                            // rail doesn't shrink and every mark move as it shows, as the web's on a phone.
+                            .padding(.bottom, 52)
+                            #endif
                         }
                     }
                     // Where the page is: on a Mac by the entry at its reading line, as the web's; elsewhere by how far
@@ -189,7 +192,12 @@ struct JournalView: View {
                     .overlay(alignment: .bottomTrailing) {
                         if awayFromEnd, let end = chat ? visible.last : visible.first {
                             ScrollJump(down: chat) { withAnimation(nil) { proxy.scrollTo(end.card.id, anchor: chat ? .bottom : .top) } }
+                                // On a Mac, beside the rail rather than over it, as the web's sits in the page's column.
+                                #if os(macOS)
+                                .padding(.trailing, 46)
+                                #else
                                 .padding(.trailing, 14)
+                                #endif
                                 .padding(.bottom, 10)
                         }
                     }

@@ -11,11 +11,16 @@ const STREAM_PAGE = 150;
  * `before` and `after` are buttons for the ones above and below what's drawn, which also ask for them themselves when
  * they come near the screen. `reach` is the index of one that must be drawn from the start. `noun` names them on those buttons. `reveal` draws a stretch
  * around one far off instead, for the rail (`ScrollRail`); going to the stream's end (`toEnd`) draws that again.
+ * `around` is one to draw a stretch around from the start, where the list was left (`scrollPlace`).
  */
-export function useShownItems<T>(items: readonly T[], chat: boolean, reach = -1, noun = 'entries') {
+export function useShownItems<T>(items: readonly T[], chat: boolean, reach = -1, noun = 'entries', around = -1) {
   const n = items.length;
-  // Far enough to draw the one at `reach`, an entry gone to.
-  const [drawn, setDrawn] = useState<DrawnStretch>(() => ({ skip: 0, count: reach < 0 ? STREAM_PAGE : Math.max(STREAM_PAGE, chat ? n - reach : reach + 1) }));
+  // Far enough to draw the one at `reach`, an entry gone to; or those around where it was left.
+  const [drawn, setDrawn] = useState<DrawnStretch>(() => {
+    const first = { skip: 0, count: STREAM_PAGE };
+    if (reach >= 0) return { skip: 0, count: Math.max(STREAM_PAGE, chat ? n - reach : reach + 1) };
+    return around >= 0 ? stretchFor(n, chat, first, around, STREAM_PAGE) : first;
+  });
   const { from, to } = drawnRange(n, chat, drawn);
   const top = useRef<HTMLButtonElement>(null);
   const foot = useRef<HTMLButtonElement>(null);

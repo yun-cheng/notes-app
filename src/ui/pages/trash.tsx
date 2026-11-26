@@ -50,6 +50,7 @@ export function TrashPage() {
     <InTrash.Provider value>
       <SelectionProvider value={selection}>
         <Page
+          ownPlace={items.length > 0}
           title={
             <>
               {selection.selecting ? `${selection.ids.length} selected` : 'Trash'}
@@ -95,6 +96,7 @@ export function TrashPage() {
           {!isFiltered({ ...filter, vaultId: undefined }) && <TrashedAttachments vaultId={filter.vaultId} />}
           <Stream
             key={`trash:${JSON.stringify(filter)}`}
+            place={`trash:${JSON.stringify(filter)}`}
             items={items}
             // Not the written order: it opens at the top, newest first, under days that are only labels.
             sort="edited"

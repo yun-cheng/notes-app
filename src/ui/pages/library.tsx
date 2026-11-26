@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useMemo, useRef, useState, type MouseEvent, type ReactNode } from 'react';
+import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState, type MouseEvent, type ReactNode } from 'react';
 import { createPortal } from 'react-dom';
 import { useLocation, useNavigate, useSearchParams } from 'react-router';
 import { displayTitle, isAudio, type FileInfo } from '../../domain/content';
@@ -23,6 +23,7 @@ import { VoiceMessage } from '../voice';
 import { keptPreviews, shownPreview } from '../useLinkPreview';
 import type { LinkPreview } from '../../sync/protocol';
 import { useShownItems } from '../useShownItems';
+import { goToPlace, keepPlace, placeOf, useKeepOnLeave } from '../scrollPlace';
 
 /**
  * What the journal's entries hold, by day, for the Photos, Links or Files page: the notes and todos the journal's
@@ -122,7 +123,14 @@ interface ListProps<T extends { id: string }> {
  * under it, pressed to open the entry. A right-click on one opens its menu (`HeldMenu`). The journal's filters
  * narrow it, as on the Photos page.
  */
-function HeldList<T extends { id: string }>({ title, days: held, filtered, noun, text, empty, emptyFiltered, lead, render, menu, menuLabel }: ListProps<T>) {
+function HeldList<T extends { id: string }>(props: ListProps<T>) {
+  // Each view (its filters, its kind) afresh, keeping its own place.
+  const { pathname, search } = useLocation();
+  const { accountId } = useCards();
+  return <HeldDays key={search} placeKey={`${accountId} ${pathname}${search}`} {...props} />;
+}
+
+function HeldDays<T extends { id: string }>({ title, days: held, filtered, noun, text, empty, emptyFiltered, lead, render, menu, menuLabel, placeKey }: ListProps<T> & { placeKey: string }) {
   const today = useToday();
   const filter = useJournalFilter();
   const entry = useEntryActions();
@@ -137,14 +145,33 @@ function HeldList<T extends { id: string }>({ title, days: held, filtered, noun,
   const all = days.flatMap((d) => d.items);
   const keys = useMemo(() => days.flatMap((d) => d.items.map(() => d.day)), [days]);
   const list = useRef<HTMLDivElement>(null);
+  const idOf = (item: DayItem<T>) => `${item.card.id} ${item.id}`;
+  // Where it was left, when come back to.
+  const [back] = useState(() => {
+    const kept = placeOf(placeKey);
+    if (!kept) return null;
+    const at = all.findIndex((i) => idOf(i) === kept.id);
+    return at < 0 ? null : { at, top: kept.top };
+  });
   // Some at a time, as the journal draws its entries: thousands of link cards or voice messages at once are slow.
-  const { first: from, shown, before, after, reveal } = useShownItems(all, false, -1, noun[1]);
+  const { first: from, shown, before, after, reveal } = useShownItems(all, false, -1, noun[1], back?.at);
+  // Once, when the first show: there, or at the top.
+  const opened = useRef(false);
+  useLayoutEffect(() => {
+    if (opened.current || !all.length) return;
+    opened.current = true;
+    if (!(back && list.current && goToPlace(list.current, back.at, back.top))) window.scrollTo(0, 0);
+  }, [all.length]);
+  useKeepOnLeave(() => {
+    if (opened.current && list.current) keepPlace(placeKey, list.current, (at) => (all[at] ? idOf(all[at]) : undefined), false);
+  });
   const to = from + shown.length;
   // Each one's place among them all, for the rail.
   let place = 0;
   return (
     <Page
       viewOnly={false}
+      ownPlace={all.length > 0}
       title={title}
       actions={
         <>

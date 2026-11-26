@@ -18,15 +18,32 @@ import { SyncBadge } from './SyncStatus';
 import { AccountButton, DemoTag } from './AccountBadge';
 import { VoiceBar } from './voice';
 import { composing } from './composing';
+import { usePagePlace } from './scrollPlace';
 import { tagsFor } from '../domain/tagScope';
 
-/** A page under its title bar. `below` is a second row of the bar, like the journal's filter chips, and stays in it as the page scrolls. */
 /**
- * A page under its title bar. `viewOnly={false}` leaves out the view-only switch, on a page where nothing it stops
- * can be done (the Photos, Links and Files pages, settings, the vaults list, a page saying something is locked or
- * not here).
+ * A page under its title bar. `below` is a second row of the bar, like the journal's filter chips, and stays in it as
+ * the page scrolls. `viewOnly={false}` leaves out the view-only switch, on a page where nothing it stops can be done
+ * (the Photos, Links and Files pages, settings, the vaults list, a page saying something is locked or not here). It
+ * opens where it was left, or at the top (`usePagePlace`); `ownPlace` is for one whose list keeps its own place, as
+ * the journal's does.
  */
-export function Page({ title, actions, below, viewOnly = true, children }: { title: ReactNode; actions?: ReactNode; below?: ReactNode; viewOnly?: boolean; children: ReactNode }) {
+export function Page({
+  title,
+  actions,
+  below,
+  viewOnly = true,
+  ownPlace = false,
+  children,
+}: {
+  title: ReactNode;
+  actions?: ReactNode;
+  below?: ReactNode;
+  viewOnly?: boolean;
+  ownPlace?: boolean;
+  children: ReactNode;
+}) {
+  usePagePlace(ownPlace);
   const page = useRef<HTMLDivElement>(null);
   const head = useRef<HTMLElement>(null);
   // What sticks under the title bar (a day's badge in the journal) needs its height, which changes with the phone's notch.

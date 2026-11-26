@@ -8,6 +8,7 @@ import { useCards, useToday } from '../../state/CardsContext';
 import { useViewOnly } from '../viewOnly';
 import { ScrollRail } from '../ScrollRail';
 import { useShownItems } from '../useShownItems';
+import { goToPlace, keepPlace, placeOf, useKeepOnLeave } from '../scrollPlace';
 import { Empty, Page } from '../components';
 import { FilterBar, FilterSheetButton, SortMenu, useJournalFilter } from '../FilterPanel';
 import { Icon } from '../Icon';
@@ -70,6 +71,8 @@ function JournalStream() {
   useEntryShortcuts(selection, filter, !vaultLocked);
 
   const selecting = selection.selecting;
+  // The list of entries, which keeps its own place once it has any, rather than the board or a vault's lock.
+  const streamShown = !(vault && vaultLocked) && !vault?.withheld && !filter.board && items.length > 0;
   // How many entries are on screen, beside the title; while picking, the title says how many are picked.
   const shown = vaultLocked ? 0 : order.length;
   const count = shown > 0 && (
@@ -111,6 +114,7 @@ function JournalStream() {
   return (
     <SelectionProvider value={selection}>
       <Page
+        ownPlace={streamShown}
         title={
           <>
             {selecting ? `${selection.ids.length} selected` : filter.archived ? 'Archive' : filter.template ? 'Templates' : 'Journal'}
@@ -144,6 +148,7 @@ function JournalStream() {
           <>
             <Stream
               key={`stream:${journalPath(filter)}`}
+              place={`stream:${journalPath(filter)}`}
               items={items}
               sort={filter.sort ?? 'written'}
               empty={
@@ -244,17 +249,28 @@ function BoardMenu({ filter }: { filter: StreamFilter }) {
   );
 }
 
-/** Bubbles grouped by day. Written order opens at the newest, at the bottom, like a chat; other orders open at the top. */
-export function Stream({ items, empty, sort }: { items: StreamItem[]; empty: string; sort: StreamSort }) {
+/**
+ * Bubbles grouped by day. Written order opens at the newest, at the bottom, like a chat; other orders open at the top.
+ * Left and come back to, it opens where it was (`scrollPlace`), kept by `place`, the view it shows.
+ */
+export function Stream({ items, empty, sort, place: view }: { items: StreamItem[]; empty: string; sort: StreamSort; place: string }) {
   const today = useToday();
   const chat = sort === 'written';
-  const { index } = useCards();
+  const { index, accountId } = useCards();
+  const place = `${accountId} ${view}`;
   const navigate = useNavigate();
   const location = useLocation();
   // An entry to go to (`useShowInJournal`): it, or the stack it's in, is drawn however far back it is.
   const show = (location.state as ShowState | null)?.show;
   const holder = show && (items.some((i) => i.card.id === show) ? show : stacksOf(index).get(show));
   const reach = holder ? items.findIndex((i) => i.card.id === holder) : -1;
+  // Where it was left, unless going to an entry.
+  const [back] = useState(() => {
+    const kept = show ? undefined : placeOf(place);
+    if (!kept) return null;
+    const at = items.findIndex((i) => i.card.id === kept.id);
+    return at < 0 ? null : { at, top: kept.top };
+  });
 
   // Once, when the first entries show: they can arrive after the page does. The stream remounts when the filter changes.
   const scrolled = useRef(false);
@@ -262,7 +278,10 @@ export function Stream({ items, empty, sort }: { items: StreamItem[]; empty: str
     if (scrolled.current || !items.length) return;
     scrolled.current = true;
     const el = show && root.current?.querySelector<HTMLElement>(`[data-stack-entry="${CSS.escape(show)}"], [data-entry-id="${CSS.escape(show)}"]`);
-    if (!el) return void window.scrollTo(0, chat ? document.documentElement.scrollHeight : 0);
+    if (!el) {
+      if (back && root.current && goToPlace(root.current, back.at, back.top)) return;
+      return void window.scrollTo(0, chat ? document.documentElement.scrollHeight : 0);
+    }
     el.scrollIntoView({ block: 'center' });
     const bubble = el.querySelector<HTMLElement>('[role="article"]');
     // One too tall for the middle shows from its top, under the title bar.
@@ -286,7 +305,10 @@ export function Stream({ items, empty, sort }: { items: StreamItem[]; empty: str
   const selection = useSelection();
   const root = useRef<HTMLDivElement>(null);
   const box = useBoxSelect(root, selection);
-  const { shown, first, before, after, reveal } = useShownItems(items, chat, reach);
+  const { shown, first, before, after, reveal } = useShownItems(items, chat, reach, 'entries', back?.at);
+  useKeepOnLeave(() => {
+    if (scrolled.current && root.current) keepPlace(place, root.current, (at) => items[at]?.card.id, chat);
+  });
   const keys = useMemo(() => items.map((i) => i.day), [items]);
   // In the orders grouped by the day written, a day's badge opens the date picker at that day.
   const pickable = sort === 'written' || sort === 'newest';

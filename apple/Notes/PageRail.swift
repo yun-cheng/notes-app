@@ -19,8 +19,9 @@ import SwiftUI
         }
     }
 
-    /// Where the page is, 0 at the top and 1 at the end.
-    var at: Double = 0
+    /// Where the page is, in items: how many are above its reading line, part way into one. The rail puts it in place,
+    /// spaced as it is (`Rail.railAt`).
+    var x: Double = 0
     /// Whether there's a rail: on a page more than half a screen longer than the screen, as the web's.
     var shown = false
     /// Where each item is in the content, by ID, as last drawn.
@@ -61,7 +62,7 @@ import SwiftUI
         guard show else { return }
         if let heldUntil, Date() < heldUntil { return }
         let rows = rows ?? self.rows
-        var next = Double(min(1, max(0, g.offset / g.scrollable)))
+        var next = Double(min(1, max(0, g.offset / g.scrollable))) * Double(n)
         // The line it reads at, in the content, and the last item starting above it.
         let line = Rail.readingLine(scrolled: g.offset, scrollable: g.scrollable, top: g.offset, height: g.height)
         // Only items on screen count: their places are as just laid out. One off screen may still be where it was
@@ -76,23 +77,25 @@ import SwiftUI
         }
         if let found, let row = row(found, ids, rows) {
             let down = row.extent > 0 ? Double((line - row.top) / row.extent) : 0
-            next = Rail.rowRailAt(first: first + row.first, count: row.count, down: down, n: n)
+            next = Double(first + row.first) + min(1, max(0, down)) * Double(row.count)
         } else if firstShown == 0 {
             // Above the first drawn (the button for earlier ones, at the top of a long journal drawn only in part):
             // where that first one is, not the top of the rail, where how far it's scrolled would put it.
-            next = Rail.rowRailAt(first: first, count: 1, down: 0, n: n)
+            next = Double(first)
         } else if !rows.isEmpty {
             // What's on screen hasn't said where it is yet, a moment after a long jump: stay until it has.
             return
         }
-        if abs(next - at) > 1e-4 { at = next }
+        // As little as a ten-thousandth of the rail, spaced evenly: less isn't worth drawing it again.
+        if abs(next - x) > 1e-4 * Double(n) { x = next }
     }
 
-    /// How far to scroll for a place on the rail, when the item there has been drawn: through it, and down a row of
-    /// items side by side, as the web's; nil when it hasn't, to go by its ID instead.
-    func offset(for to: Double, ids: [String]) -> CGFloat? {
+    /// How far to scroll for a place among the items (`x`), when the item there has been drawn: through it, and down a
+    /// row of items side by side, as the web's; nil when it hasn't, to go by its ID instead.
+    func offset(for x: Double, ids: [String]) -> CGFloat? {
         guard let g = geometry, !ids.isEmpty else { return nil }
-        let (index, into) = Rail.item(at: to, count: ids.count)
+        let index = min(ids.count - 1, max(0, Int(x)))
+        let into = min(1, max(0, x - Double(index)))
         guard let row = row(index, ids, rows) else { return nil }
         let y = row.top + Rail.intoRow(index, into: into, first: row.first, count: row.count) * row.extent
         return Rail.scrollFor(y, scrollable: g.scrollable, top: 0, height: g.height)
@@ -211,11 +214,11 @@ extension View {
         modifier(KeepsPlace(key: keep, ids: ids, place: place, position: position, proxy: proxy))
         .overlay(alignment: .trailing) {
             if place.shown {
-                RailView(keys: keys, name: name, place: place) { to in
-                    if let y = place.offset(for: to, ids: ids) {
+                RailView(keys: keys, name: name, place: place) { to, x in
+                    if let y = place.offset(for: x, ids: ids) {
                         position.wrappedValue.scrollTo(y: y)
                     } else if !ids.isEmpty {
-                        withAnimation(nil) { proxy.scrollTo(ids[Rail.item(at: to, count: ids.count).index], anchor: UnitPoint(x: 0, y: to)) }
+                        withAnimation(nil) { proxy.scrollTo(ids[min(ids.count - 1, Int(x))], anchor: UnitPoint(x: 0, y: to)) }
                     }
                 }
                 .padding(.vertical, 8)
@@ -237,29 +240,46 @@ extension View {
 }
 
 /// A rail down the right of a long page, as a photo library has, as the web's `ScrollRail`: the years down it (or the
-/// months, or the groups), each item an equal share of it, a thumb at where the page is, and, pointed at or dragged,
-/// the month or day there. On a Mac a press goes there, a drag goes through the page, and the thumb held moves from
+/// months, or the groups), each item an equal share of it or spaced by nearness (`RailYears`), a thumb at where the
+/// page is, and, pointed at or dragged, the month or day there. On a Mac a press goes there, a drag goes through the page, and the thumb held moves from
 /// where it was. On a phone, as the web's on a touch screen, only a handle shows, at the edge while the page scrolls,
 /// held and dragged, with the marks and the month or day showing while it's dragged; the rest of it takes no touches.
 /**
- * The rail's marks and how it tells its items apart, worked out again only when its items or its height change. The
- * rail is drawn again on every frame of scrolling, as its thumb moves; working them out from thousands of days each
- * time was nearly all a scroll's work, and made it stutter. The same list of days passed again compares at once.
+ * The rail's marks, its spacing and how it tells its items apart, worked out again only when its items, its height or
+ * the year it's spaced around change. The rail is drawn again on every frame of scrolling, as its thumb moves; working
+ * them out from thousands of days each time was nearly all a scroll's work, and made it stutter. The same list of days
+ * passed again compares at once.
  */
 private final class RailMarks {
     private var keys: [String] = []
     private var height = -1.0
+    private var marksSpacing: [Double]?
     private var marks: [Rail.Mark] = []
     private var scaleKeys: [String]?
     private var scale: Rail.Scale = .day
+    private var spacingKeys: [String]?
+    private var spacingYear: Int?
+    private var spacing: [Double]?
 
-    func marks(_ keys: [String], height: Double, name: (String) -> String) -> [Rail.Mark] {
-        if keys != self.keys || height != self.height {
+    func marks(_ keys: [String], height: Double, name: (String) -> String, spacing: [Double]?) -> [Rail.Mark] {
+        if keys != self.keys || height != self.height || spacing != marksSpacing {
             self.keys = keys
             self.height = height
-            marks = Rail.marks(keys, height: height, name: name)
+            marksSpacing = spacing
+            marks = Rail.marks(keys, height: height, name: name, spacing: spacing)
         }
         return marks
+    }
+
+    /// Spaced by nearness around `year`, or evenly (nil) when that's off.
+    func spacing(_ keys: [String], year: Int?, near: Bool) -> [Double]? {
+        guard near else { return nil }
+        if keys != spacingKeys || year != spacingYear {
+            spacingKeys = keys
+            spacingYear = year
+            spacing = Rail.spacing(keys, year: year)
+        }
+        return spacing
     }
 
     func scale(_ keys: [String]) -> Rail.Scale {
@@ -271,14 +291,37 @@ private final class RailMarks {
     }
 }
 
+/// How the rail spaces its years, kept on this device as the web's display settings are: an equal share for each item,
+/// or more for the years nearer the one being read (`Rail.spacing`).
+enum RailYears {
+    static let key = "railYears"
+    static let choices = [("entries", "By entries"), ("near", "Nearer years larger")]
+}
+
 struct RailView: View {
     /// Each item's key, top to bottom: the day it's under, or the tag that groups it.
     let keys: [String]
     let name: (String) -> String
     let place: RailPlace
-    let go: (Double) -> Void
+    /// Goes to a place on the rail (0 at the top, 1 at the foot) and the place among the items it falls at.
+    let go: (Double, Double) -> Void
     @State private var drag: Double?
     @State private var point: Double?
+    @AppStorage(RailYears.key) private var spacedBy = "entries"
+    /// Spaced by nearness, the year it's spaced around: the one being read, but kept while the rail is pointed at or
+    /// dragged, so nothing on it moves under the pointer, and taken up again once it's let go.
+    @State private var year: Int?
+
+    private var reading: Int? { keys.isEmpty ? nil : Rail.year(keys, at: min(keys.count - 1, Int(place.x))) }
+    private var free: Bool { drag == nil && point == nil }
+    private var spacing: [Double]? { cached.spacing(keys, year: year ?? reading, near: spacedBy == "near") }
+    /// Where the thumb is, 0 at the top and 1 at the foot.
+    private func thumbAt(_ spacing: [Double]?) -> Double { Rail.railAt(item: place.x, n: keys.count, spacing: spacing) }
+    /// Goes to a place on the rail.
+    private func goTo(_ to: Double, _ spacing: [Double]?) {
+        let (index, into) = Rail.item(at: to, count: keys.count, spacing: spacing)
+        go(to, Double(index) + into)
+    }
     /// Held at the thumb: where it was, to move from.
     @State private var heldFrom: Double?
     @State private var cached = RailMarks()
@@ -292,8 +335,10 @@ struct RailView: View {
     var body: some View {
         GeometryReader { geo in
             let height = geo.size.height
-            let marks = drag == nil ? [] : cached.marks(keys, height: height, name: name)
-            let thumb = drag ?? place.at
+            let spaced = spacing
+            let marks = drag == nil ? [] : cached.marks(keys, height: height, name: name, spacing: spaced)
+            let at = thumbAt(spaced)
+            let thumb = drag ?? at
             ZStack(alignment: .topLeading) {
                 Color.clear.allowsHitTesting(false)
                 ForEach(Array(marks.enumerated()), id: \.offset) { _, mark in
@@ -323,14 +368,14 @@ struct RailView: View {
                     // In the rail's own space: the handle moves as it's dragged.
                     .gesture(DragGesture(minimumDistance: 0, coordinateSpace: .named("rail")).onChanged { v in
                         guard height > 0 else { return }
-                        if drag == nil { heldFrom = place.at }
-                        let to = min(1, max(0, (heldFrom ?? place.at) + v.translation.height / height))
+                        if drag == nil { heldFrom = at }
+                        let to = min(1, max(0, (heldFrom ?? at) + v.translation.height / height))
                         drag = to
-                        go(to)
+                        goTo(to, spaced)
                     }.onEnded { _ in drag = nil; heldFrom = nil; wakes += 1 })
                 }
                 if let told = drag, !keys.isEmpty {
-                    Text(Rail.label(keys[Rail.item(at: told, count: keys.count).index], scale: cached.scale(keys), name: name))
+                    Text(Rail.label(keys[Rail.item(at: told, count: keys.count, spacing: spaced).index], scale: cached.scale(keys), name: name))
                         .font(.system(size: 12, weight: .semibold)).foregroundStyle(Theme.bg).lineLimit(1).fixedSize()
                         .padding(.horizontal, 10).padding(.vertical, 4)
                         .background(Capsule().fill(Theme.text).shadow(color: .black.opacity(0.18), radius: 4, y: 2))
@@ -344,10 +389,11 @@ struct RailView: View {
         }
         .frame(width: 44)
         .accessibilityHidden(true)
-        .onChange(of: place.at) {
+        .onChange(of: place.x) {
             awake = true
             wakes += 1
         }
+        .onChange(of: free ? reading : year, initial: true) { _, now in year = now }
         .task(id: wakes) {
             try? await Task.sleep(for: .seconds(1.5))
             if !Task.isCancelled && drag == nil { awake = false }
@@ -357,8 +403,10 @@ struct RailView: View {
     var body: some View {
         GeometryReader { geo in
             let height = geo.size.height
-            let marks = cached.marks(keys, height: height, name: name)
-            let thumb = drag ?? place.at
+            let spaced = spacing
+            let marks = cached.marks(keys, height: height, name: name, spacing: spaced)
+            let at = thumbAt(spaced)
+            let thumb = drag ?? at
             let told = drag ?? point
             ZStack(alignment: .topLeading) {
                 Color.clear
@@ -376,7 +424,7 @@ struct RailView: View {
                 }
                 Capsule().fill(Theme.accent).frame(width: 32, height: 3).position(x: 24, y: thumb * height)
                 if let told, !keys.isEmpty {
-                    Text(Rail.label(keys[Rail.item(at: told, count: keys.count).index], scale: cached.scale(keys), name: name))
+                    Text(Rail.label(keys[Rail.item(at: told, count: keys.count, spacing: spaced).index], scale: cached.scale(keys), name: name))
                         .font(.system(size: 12, weight: .semibold)).foregroundStyle(Theme.bg).lineLimit(1).fixedSize()
                         .padding(.horizontal, 10).padding(.vertical, 4)
                         .background(Capsule().fill(Theme.text).shadow(color: .black.opacity(0.18), radius: 4, y: 2))
@@ -390,11 +438,11 @@ struct RailView: View {
                 guard height > 0 else { return }
                 if drag == nil {
                     // Pressed on the thumb, it moves with the pointer from where it was; elsewhere, it goes there.
-                    heldFrom = abs(v.startLocation.y - place.at * height) <= 8 ? place.at : nil
+                    heldFrom = abs(v.startLocation.y - at * height) <= 8 ? at : nil
                 }
                 let to = min(1, max(0, heldFrom.map { $0 + v.translation.height / height } ?? v.location.y / height))
                 drag = to
-                go(to)
+                goTo(to, spaced)
             }.onEnded { _ in drag = nil; heldFrom = nil })
             #if os(macOS)
             .onContinuousHover { phase in
@@ -407,6 +455,7 @@ struct RailView: View {
         }
         .frame(width: 44)
         .accessibilityHidden(true)
+        .onChange(of: free ? reading : year, initial: true) { _, now in year = now }
     }
     #endif
 }

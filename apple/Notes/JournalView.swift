@@ -184,8 +184,8 @@ struct JournalView: View {
                     #endif
                     .overlay(alignment: .trailing) {
                         if railPlace.shown {
-                            RailView(keys: all.map(\.day), name: { DayBadge.label($0, sort: filter.sort, model: model) }, place: railPlace) { to in
-                                railGo(to, all: all, visible: visible, proxy: proxy)
+                            RailView(keys: all.map(\.day), name: { DayBadge.label($0, sort: filter.sort, model: model) }, place: railPlace) { to, x in
+                                railGo(to, index: min(all.count - 1, Int(x)), all: all, visible: visible, proxy: proxy)
                             }
                             .padding(.vertical, 8)
                             #if os(iOS)
@@ -436,12 +436,11 @@ struct JournalView: View {
     }
     #endif
 
-    /// Goes to a place on the rail (0 at the top, 1 at the foot): to the entry there, drawing it first if it's past
+    /// Goes to a place on the rail (0 at the top, 1 at the foot), the entry at `index`: drawing it first if it's past
     /// those drawn, placed as far down the view as the place is down the rail, so the top and the foot of the rail are
     /// the top and the foot of the journal.
-    private func railGo(_ to: Double, all: [StreamItem], visible: [StreamItem], proxy: ScrollViewProxy) {
-        guard !all.isEmpty else { return }
-        let index = Rail.item(at: to, count: all.count).index
+    private func railGo(_ to: Double, index: Int, all: [StreamItem], visible: [StreamItem], proxy: ScrollViewProxy) {
+        guard !all.isEmpty, index >= 0 else { return }
         let id = all[index].card.id
         let anchor = UnitPoint(x: 0, y: to)
         let need = chat ? all.count - index : index + 1

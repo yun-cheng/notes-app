@@ -10,6 +10,7 @@ struct SettingsPage: View {
     @Environment(\.webAuthenticationSession) private var webAuth
     @AppStorage("linkStyle") private var linkStyle = LinkStyle.card.rawValue
     @AppStorage("photoStyle") private var photoStyle = "large"
+    @AppStorage(RailYears.key) private var railYears = "entries"
     @AppStorage("copyStyle") private var copyStyle = "rich"
     @State private var exporting: ExportFile?
     @State private var restoring = false
@@ -101,10 +102,13 @@ struct SettingsPage: View {
                     Text("Thumbnails").tag("thumbs")
                     Text("Off").tag("off")
                 }
+                Picker("Rail years", selection: $railYears) {
+                    ForEach(RailYears.choices, id: \.0) { Text($0.1).tag($0.0) }
+                }
             } header: {
                 Text("Journal display")
             } footer: {
-                Text("How web links and photos show under entries on this device. Links in the text can always be clicked.")
+                Text("How web links and photos show under entries on this device. Links in the text can always be clicked. The rail beside a long page gives each year room for its entries, or, nearer years larger, more room to the years nearest the one you're reading, less the further off. It changes once the pointer leaves the rail, or the rail is let go.")
             }
             Section {
                 Picker("Copy as", selection: $copyStyle) {

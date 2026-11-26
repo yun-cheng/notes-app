@@ -2,8 +2,9 @@ import Foundation
 
 /// The rail beside a long page of entries, as a photo library has, as the web's `rail.ts`: marks for the years (or
 /// months, or groups) down its length, a thumb at where the page is, and a label for the place pointed at or dragged
-/// to. Each item has a key, the day it's under (or what else groups it, a tag), and an equal share of the rail, in the
-/// order the page shows them, top to bottom.
+/// to. Each item has a key, the day it's under (or what else groups it, a tag), and a share of the rail, in the order
+/// the page shows them, top to bottom: an equal share, or, spaced by nearness (`spacing`), a share of its year's, which
+/// is larger the nearer the year is to the one being read.
 public enum Rail {
     /// A mark on the rail, a fraction of the way down: a label, or a dot where there's no room or need for one.
     public struct Mark: Equatable, Sendable {
@@ -46,7 +47,7 @@ public enum Rail {
     /// The marks for a rail `height` points tall: a label where each year starts (on a rail of years), each month (of
     /// months) or each group, with a dot for each month among years and each day among a month's; `name` names a key
     /// that isn't a day. Labels too near the one above are left out, then dots too near anything kept.
-    public static func marks(_ keys: [String], height: Double, name: (String) -> String, locale: Locale = .current) -> [Mark] {
+    public static func marks(_ keys: [String], height: Double, name: (String) -> String, locale: Locale = .current, spacing: [Double]? = nil) -> [Mark] {
         let n = keys.count
         guard n > 0, height > 0 else { return [] }
         let scale = scale(keys)
@@ -58,7 +59,7 @@ public enum Rail {
         for (i, key) in keys.enumerated() {
             if key == last { continue }
             last = key
-            let at = Double(i) / Double(n)
+            let at = railAt(item: Double(i), n: n, spacing: spacing)
             if scale == .name || !DateKey.isKey(key) {
                 labels.append(Mark(at: at, label: name(key)))
                 continue
@@ -98,8 +99,64 @@ public enum Rail {
         return shown.sorted { $0.at < $1.at }
     }
 
+    /// The rail spaced by nearness: where each item starts, from 0, and 1 after the last (`n + 1` in all). Each year
+    /// with items has a share by how many years it is from `year`, the one being read (1 for it, ½ the year either
+    /// side, ⅓ the next, and so on), and its items share that evenly; an item with no day goes with the year above it.
+    /// Nil, an equal share each, on a rail that isn't of years or with no year to go by. As the web's `railSpacing`.
+    public static func spacing(_ keys: [String], year: Int?) -> [Double]? {
+        let n = keys.count
+        guard let year, n > 1, scale(keys) == .year else { return nil }
+        var years = [Int?](repeating: nil, count: n)
+        var last: Int?
+        for (i, key) in keys.enumerated() {
+            if !key.isEmpty { last = Int(key.prefix(4)) }
+            years[i] = last
+        }
+        // Items with no day above any with one go with the first year after them.
+        let first = years.first(where: { $0 != nil }).flatMap { $0 } ?? year
+        let resolved = years.map { $0 ?? first }
+        var counts: [Int: Int] = [:]
+        for y in resolved { counts[y, default: 0] += 1 }
+        let total = counts.keys.reduce(0.0) { $0 + 1 / Double(1 + abs($1 - year)) }
+        var starts = [Double](repeating: 0, count: n + 1)
+        for i in 0..<n {
+            let y = resolved[i]
+            starts[i + 1] = starts[i] + 1 / Double(1 + abs(y - year)) / Double(counts[y]!) / total
+        }
+        starts[n] = 1
+        return starts
+    }
+
+    /// The year of the item at `index`, the year a rail spaced by nearness is spaced around; nil when it has no day.
+    public static func year(_ keys: [String], at index: Int) -> Int? {
+        if !keys.isEmpty {
+            for i in stride(from: min(index, keys.count - 1), through: 0, by: -1) where DateKey.isKey(keys[i]) { return Int(keys[i].prefix(4)) }
+        }
+        return keys.first(where: { DateKey.isKey($0) }).flatMap { Int($0.prefix(4)) }
+    }
+
+    /// The place on the rail of a place among the items: `item` items down, part way into one when it isn't whole.
+    public static func railAt(item x: Double, n: Int, spacing: [Double]? = nil) -> Double {
+        guard n > 0 else { return 0 }
+        let at = min(Double(n), max(0, x))
+        guard let spacing else { return at / Double(n) }
+        let index = min(n - 1, Int(at.rounded(.down)))
+        return spacing[index] + (at - Double(index)) * (spacing[index + 1] - spacing[index])
+    }
+
     /// The item a place on the rail (0 at the top, 1 at the foot) falls in, and how far into it.
-    public static func item(at: Double, count n: Int) -> (index: Int, into: Double) {
+    public static func item(at: Double, count n: Int, spacing: [Double]? = nil) -> (index: Int, into: Double) {
+        if let spacing, n > 0 {
+            let to = min(1, max(0, at))
+            // The last item starting at or above it.
+            var lo = 0, hi = n - 1
+            while lo < hi {
+                let mid = (lo + hi + 1) / 2
+                if spacing[mid] <= to { lo = mid } else { hi = mid - 1 }
+            }
+            let size = spacing[lo + 1] - spacing[lo]
+            return (lo, size > 0 ? min(1, max(0, (to - spacing[lo]) / size)) : 0)
+        }
         let exact = min(1, max(0, at)) * Double(n)
         let index = min(n - 1, Int(exact.rounded(.down)))
         return (index, min(1, exact - Double(index)))
@@ -113,8 +170,8 @@ public enum Rail {
     }
 
     /// `intoRow`, turned round: the place on a rail of `n` items that's `down` the stretch of a row.
-    public static func rowRailAt(first: Int, count: Int, down: Double, n: Int) -> Double {
-        n > 0 ? min(1, (Double(first) + min(1, max(0, down)) * Double(count)) / Double(n)) : 0
+    public static func rowRailAt(first: Int, count: Int, down: Double, n: Int, spacing: [Double]? = nil) -> Double {
+        n > 0 ? min(1, railAt(item: Double(first) + min(1, max(0, down)) * Double(count), n: n, spacing: spacing)) : 0
     }
 
     /// Where the page is, as the rail tells it: the line it reads at runs from the top of what's in view, scrolled to

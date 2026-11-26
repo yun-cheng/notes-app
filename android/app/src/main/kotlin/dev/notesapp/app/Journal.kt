@@ -83,6 +83,7 @@ import dev.notesapp.core.Stream
 import dev.notesapp.core.StreamFilter
 import dev.notesapp.core.StreamItem
 import dev.notesapp.core.StreamLabels
+import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.launch
 import java.time.DayOfWeek
 import java.time.format.TextStyle as DayStyle
@@ -177,11 +178,40 @@ fun JournalView(initial: StreamFilter, openDrawer: (() -> Unit)?, fixed: Boolean
                 val typing = androidx.compose.foundation.layout.WindowInsets.isImeVisible
                 LaunchedEffect(typing) { if (typing && chat && rows > 0) { list.scrollToItem(rows - 1); list.scrollBy(100_000f) } }
                 LaunchedEffect(model.lastSaved) { model.lastSaved?.let { id -> rowOf[id]?.let { list.animateScrollToItem(it) } } }
+                // More are drawn as their button comes into view, as the web's: scrolling goes on into them. Not while
+                // the list opens (drawn from its top for a moment), and, in a chat, keeping the entry at the top where
+                // it is, as they come in above it.
+                val latestRowOf by androidx.compose.runtime.rememberUpdatedState(rowOf)
+                var settled by remember(filter) { mutableStateOf(false) }
+                LaunchedEffect(filter) { kotlinx.coroutines.delay(600); settled = true }
+                val nearMore by remember(list) { androidx.compose.runtime.derivedStateOf { list.layoutInfo.visibleItemsInfo.any { it.key == MORE_KEY } } }
+                // Again after each is drawn and the place kept, while the button is still in view. Run apart from this
+                // effect, which drawing more starts again: cancelled midway, the place wasn't kept, the button stayed in
+                // view, and it drew on and on to the first entry.
+                var loadingMore by remember { mutableStateOf(false) }
+                LaunchedEffect(nearMore, settled, loadingMore) {
+                    if (!nearMore || !settled || loadingMore) return@LaunchedEffect
+                    loadingMore = true
+                    scope.launch {
+                        try {
+                            val keep = list.layoutInfo.visibleItemsInfo.firstOrNull { (it.key as? String)?.let(latestRowOf::containsKey) == true }
+                            val before = list.layoutInfo.totalItemsCount
+                            shown += PAGE_SIZE
+                            if (chat && keep != null) {
+                                // Once the longer list is laid out, with the rows it has now.
+                                androidx.compose.runtime.snapshotFlow { list.layoutInfo.totalItemsCount }.first { it != before }
+                                latestRowOf[keep.key as String]?.let { row -> list.scrollToItem(row); list.scrollBy(-keep.offset.toFloat()) }
+                            }
+                        } finally {
+                            loadingMore = false
+                        }
+                    }
+                }
                 BoxWithConstraints(Modifier.weight(1f).fillMaxWidth()) {
                     val bubbleWidth = minOf(560.dp, (minOf(maxWidth, 720.dp) - 32.dp) * 0.85f)
                     LazyColumn(Modifier.fillMaxHeight().widthIn(max = 720.dp).fillMaxWidth().align(Alignment.TopCenter), state = list, contentPadding = PaddingValues(start = 16.dp, end = 16.dp, bottom = 10.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
                         if (chat && partial) item { LoadingLine(if (all.isEmpty()) "Loading your notes…" else "Loading earlier entries…") }
-                        if (chat && all.size > visible.size) item { TextButton(onClick = { shown += PAGE_SIZE }, Modifier.fillMaxWidth()) { Text("Show earlier entries") } }
+                        if (chat && all.size > visible.size) item(key = MORE_KEY) { TextButton(onClick = { shown += PAGE_SIZE }, Modifier.fillMaxWidth()) { Text("Show earlier entries") } }
                         for ((day, items) in groups) {
                             stickyHeader(key = "day:$day:${items.first().id}") {
                                 DayBadge(day, filter.sort) { if (DateKey.isKey(it)) pickDates = it }
@@ -195,7 +225,7 @@ fun JournalView(initial: StreamFilter, openDrawer: (() -> Unit)?, fixed: Boolean
                                 }
                             }
                         }
-                        if (!chat && all.size > visible.size) item { TextButton(onClick = { shown += PAGE_SIZE }, Modifier.fillMaxWidth()) { Text("Show more entries") } }
+                        if (!chat && all.size > visible.size) item(key = MORE_KEY) { TextButton(onClick = { shown += PAGE_SIZE }, Modifier.fillMaxWidth()) { Text("Show more entries") } }
                         if (!chat && partial) item { LoadingLine(if (all.isEmpty()) "Loading your notes…" else "Loading more entries…") }
                         if (all.isEmpty() && model.loaded) item { EmptyJournal(filter, searching) }
                     }
@@ -528,3 +558,6 @@ private fun ScrollJump(down: Boolean, modifier: Modifier, jump: () -> Unit) {
         }
     }
 }
+
+/** The key of the button for more entries at the end of what's drawn, which draws them as it comes into view. */
+private const val MORE_KEY = "more"

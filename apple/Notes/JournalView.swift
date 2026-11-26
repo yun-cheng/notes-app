@@ -13,6 +13,8 @@ struct JournalView: View {
     @State private var searching = false
     @State private var query = ""
     @State private var shown = JournalView.pageSize
+    /// Opened at its end: from then on, a button for more entries coming into view draws them by itself, as the web's.
+    @State private var settled = false
     @State private var picked: Set<String> = []
     @State private var pickDates = false
     /// The date picker opened from a day's badge, at that day.
@@ -42,6 +44,15 @@ struct JournalView: View {
     let isPage: Bool
 
     static let pageSize = 150
+
+    /**
+     * Draws the entries before those drawn, keeping in place the one at the top: the list would otherwise stay put
+     * while they come in above, pushing what's being read down by a page.
+     */
+    private func showEarlier(_ proxy: ScrollViewProxy, keep: String?) {
+        shown += Self.pageSize
+        if let keep { DispatchQueue.main.async { proxy.scrollTo(keep, anchor: .top) } }
+    }
 
     init(filter: StreamFilter, isPage: Bool = true) {
         _filter = State(initialValue: filter)
@@ -88,7 +99,9 @@ struct JournalView: View {
                     ScrollView {
                         LazyVStack(alignment: .leading, spacing: 8, pinnedViews: .sectionHeaders) {
                             if chat && all.count > visible.count {
-                                Button("Show earlier entries") { shown += Self.pageSize }.buttonStyle(.borderless).frame(maxWidth: .infinity)
+                                Button("Show earlier entries") { showEarlier(proxy, keep: visible.first?.card.id) }.buttonStyle(.borderless).frame(maxWidth: .infinity)
+                                    // Drawn as it nears the screen, as the web's: scrolling up goes on into older entries.
+                                    .onAppear { if settled { showEarlier(proxy, keep: visible.first?.card.id) } }
                             }
                             ForEach(groups(visible), id: \.day) { group in
                                 Section {
@@ -116,6 +129,7 @@ struct JournalView: View {
                             }
                             if !chat && all.count > visible.count {
                                 Button("Show more entries") { shown += Self.pageSize }.buttonStyle(.borderless).frame(maxWidth: .infinity)
+                                    .onAppear { if settled { shown += Self.pageSize } }
                             }
                             if all.isEmpty && model.loaded { EmptyJournal(filter: filter, searching: searching) }
                         }
@@ -204,9 +218,14 @@ struct JournalView: View {
                     // The anchor places the end by estimated heights; once the entries are drawn, go to the newest for
                     // real, or a list opened at the bottom can sit past its end, blank.
                     .task(id: "\(all.isEmpty)|\(filter.sort)") {
-                        guard chat, let last = visible.last?.card.id else { return }
-                        try? await Task.sleep(for: .milliseconds(60))
-                        withAnimation(nil) { proxy.scrollTo(last, anchor: .bottom) }
+                        settled = false
+                        if chat, let last = visible.last?.card.id {
+                            try? await Task.sleep(for: .milliseconds(60))
+                            withAnimation(nil) { proxy.scrollTo(last, anchor: .bottom) }
+                        }
+                        // Not while it opens: a list drawn from its top for a moment would draw hundreds more.
+                        try? await Task.sleep(for: .milliseconds(400))
+                        if !Task.isCancelled { settled = true }
                     }
                     .onChange(of: model.lastSaved) { _, id in
                         if let id { withAnimation(nil) { proxy.scrollTo(id, anchor: .bottom) } }

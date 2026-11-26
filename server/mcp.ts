@@ -1,4 +1,5 @@
 import { isGroupName, settleTags } from '../src/domain/tagGroups';
+import { tagNamedIn } from '../src/domain/tagScope';
 import { buildIndex, type CardIndex } from '../src/domain/cardIndex';
 import { cardPages, displayTitle, plainText } from '../src/domain/content';
 import { isStack, stackEntries, stacksOf } from '../src/domain/stacks';
@@ -9,7 +10,7 @@ import { fromMarkdown } from '../src/domain/markdownIn';
 import { parseRepeat, repeatWord } from '../src/domain/repeat';
 import { completeTodo } from '../src/domain/todos';
 import { buildSearch } from '../src/domain/search';
-import { EMPTY_DOC, type Card, type CardRecord, type JSONNode, type Repeat, type TodoCard, type Vault } from '../src/domain/types';
+import { EMPTY_DOC, type Card, type CardRecord, type JSONNode, type Repeat, type TagCard, type TodoCard, type Vault } from '../src/domain/types';
 import type { Database } from './db';
 import type { AiCaller } from './oauth';
 import { pushRecords } from './sync';
@@ -34,6 +35,7 @@ interface ScopeVault {
   id: string;
   name: string;
   write: boolean;
+  shared: boolean;
 }
 
 interface Scope {
@@ -42,6 +44,8 @@ interface Scope {
   all: (Pick<Vault, 'id' | 'lock' | 'ai_access' | 'owner_id'> & { role: string })[];
   index: CardIndex;
   records: Map<string, CardRecord>;
+  /** Open vault IDs each card is shared into besides its home vault (from card_shares target_type='vault'). */
+  sharedInto: Map<string, string[]>;
 }
 
 class ToolError extends Error {}
@@ -71,37 +75,94 @@ async function loadScope(db: Database, userId: string, withCards = true): Promis
   for (const v of all) {
     if (v.lock !== 'none' || v.ai_access === 'off') continue;
     // Shared vaults stay read-only to AI: their text may be written by someone trying to steer it.
-    vaults.set(v.id, { id: v.id, name: v.name, write: v.ai_access === 'write' && v.role === 'owner' });
+    vaults.set(v.id, { id: v.id, name: v.name, write: v.ai_access === 'write' && v.role === 'owner', shared: v.role !== 'owner' });
   }
 
   const open = withCards ? [...vaults.keys()] : [];
   const closed = withCards ? all.map((v) => v.id).filter((id) => !vaults.has(id)) : [];
   const marks = (ids: string[]) => ids.map(() => '?').join(',');
-  if (!withCards) return { vaults, all, index: buildIndex([], new Set()), records: new Map() };
+  if (!withCards) return { vaults, all, index: buildIndex([], new Set()), records: new Map(), sharedInto: new Map() };
 
-  // The cards as last read for this account, while nothing in its vaults has changed since: an AI app makes many
-  // calls in a row, and reading and parsing every card for each was most of the work. Any write raises the highest
-  // seq; a card leaving lowers the count.
+  // The cards as last read for this account, while nothing in its vaults or vault shares has changed since: an AI app
+  // makes many calls in a row, and reading and parsing every card for each was most of the work. Any write raises the
+  // highest seq; a card leaving lowers the count.
   const ids = all.map((v) => v.id);
-  const latest = ids.length
-    ? await db.prepare(`SELECT MAX(seq) AS seq, COUNT(*) AS n FROM cards WHERE vault_id IN (${marks(ids)})`).bind(...ids).first<{ seq: number | null; n: number }>()
-    : null;
-  const key = JSON.stringify([all, latest?.seq ?? 0, latest?.n ?? 0]);
+  const [latest, sharesMeta] = await Promise.all([
+    ids.length
+      ? open.length
+        ? db
+            .prepare(
+              `SELECT MAX(seq) AS seq, COUNT(*) AS n FROM cards
+               WHERE vault_id IN (${marks(ids)})
+                  OR id IN (SELECT card_id FROM card_shares WHERE target_type = 'vault' AND target_id IN (${marks(open)}))`,
+            )
+            .bind(...ids, ...open)
+            .first<{ seq: number | null; n: number }>()
+        : db.prepare(`SELECT MAX(seq) AS seq, COUNT(*) AS n FROM cards WHERE vault_id IN (${marks(ids)})`).bind(...ids).first<{ seq: number | null; n: number }>()
+      : Promise.resolve(null),
+    open.length
+      ? db
+          .prepare(`SELECT COUNT(*) AS n, MAX(created_at) AS at FROM card_shares WHERE target_type = 'vault' AND target_id IN (${marks(open)})`)
+          .bind(...open)
+          .first<{ n: number; at: number | null }>()
+      : Promise.resolve(null),
+  ]);
+  const key = JSON.stringify([all, latest?.seq ?? 0, latest?.n ?? 0, sharesMeta?.n ?? 0, sharesMeta?.at ?? 0]);
   const kept = scopes.get(userId);
-  if (kept && kept.key === key) return { vaults, all, index: kept.index, records: kept.records };
+  if (kept && kept.key === key) return { vaults, all, index: kept.index, records: kept.records, sharedInto: kept.sharedInto };
 
-  const [{ results: rows }, { results: hidden }] = await Promise.all([
+  const closedSet = new Set(closed);
+  const [{ results: rows }, { results: hidden }, { results: vaultShares }] = await Promise.all([
     open.length
       ? db.prepare(`SELECT id, vault_id, updated_at, deleted, seq, payload FROM cards WHERE vault_id IN (${marks(open)})`).bind(...open).all<Omit<CardRecord, 'deleted'> & { deleted: number }>()
       : Promise.resolve({ results: [] as (Omit<CardRecord, 'deleted'> & { deleted: number })[] }),
     closed.length
       ? db.prepare(`SELECT id, vault_id FROM cards WHERE vault_id IN (${marks(closed)})`).bind(...closed).all<{ id: string; vault_id: string }>()
       : Promise.resolve({ results: [] as { id: string; vault_id: string }[] }),
+    open.length
+      ? db
+          .prepare(
+            // Cards shared into an open vault: never from a private/encrypted vault, and never from one of this account's closed vaults.
+            `SELECT s.card_id, s.target_id AS vault_id, c.vault_id AS home_vault_id
+             FROM card_shares s
+             JOIN cards c ON c.id = s.card_id
+             JOIN vaults v ON v.id = c.vault_id
+             WHERE s.target_type = 'vault' AND s.target_id IN (${marks(open)})
+               AND v.lock = 'none' AND v.encryption IS NULL
+             ORDER BY s.card_id, s.target_id`,
+          )
+          .bind(...open)
+          .all<{ card_id: string; vault_id: string; home_vault_id: string }>()
+      : Promise.resolve({ results: [] as { card_id: string; vault_id: string; home_vault_id: string }[] }),
   ]);
+
+  const sharedInto = new Map<string, string[]>();
+  const extraCardIds: string[] = [];
+  const seenHome = new Set(rows.map((r) => r.id));
+  const seenExtra = new Set<string>();
+  for (const share of vaultShares) {
+    if (closedSet.has(share.home_vault_id)) continue;
+    const list = sharedInto.get(share.card_id);
+    if (list) list.push(share.vault_id);
+    else sharedInto.set(share.card_id, [share.vault_id]);
+    if (!seenHome.has(share.card_id) && !seenExtra.has(share.card_id)) {
+      seenExtra.add(share.card_id);
+      extraCardIds.push(share.card_id);
+    }
+  }
+
+  const extraRows = extraCardIds.length
+    ? (
+        await db
+          .prepare(`SELECT id, vault_id, updated_at, deleted, seq, payload FROM cards WHERE id IN (${marks(extraCardIds)}) AND payload NOT LIKE 'e1:%'`)
+          .bind(...extraCardIds)
+          .all<Omit<CardRecord, 'deleted'> & { deleted: number }>()
+      ).results
+    : [];
 
   const records = new Map<string, CardRecord>();
   const cards: Card[] = [];
-  for (const row of rows) {
+  for (const row of [...rows, ...extraRows]) {
     const record = { ...row, deleted: !!row.deleted };
     records.set(row.id, record);
     const payload = parsePayload(row.payload);
@@ -109,18 +170,19 @@ async function loadScope(db: Database, userId: string, withCards = true): Promis
   }
   // Cards outside the AI's vaults go in as locked placeholders, so links to them read "Locked" and nothing of them leaks.
   for (const { id, vault_id } of hidden) {
+    if (records.has(id)) continue;
     cards.push({ id, vaultId: vault_id, type: 'note', title: '', content: EMPTY_DOC, tags: [], createdAt: 0, updatedAt: 0, deleted: false, seq: 0 });
   }
-  const index = buildIndex(cards, new Set(closed));
+  const index = buildIndex(cards, closedSet);
   scopes.delete(userId);
-  scopes.set(userId, { key, index, records });
+  scopes.set(userId, { key, index, records, sharedInto });
   // A few accounts' at most, the least recently used let go.
   while (scopes.size > 20) scopes.delete(scopes.keys().next().value!);
-  return { vaults, all, index, records };
+  return { vaults, all, index, records, sharedInto };
 }
 
 /** Each account's cards as last read for its AI apps, in this Worker's memory, while they stay as they were. */
-const scopes = new Map<string, { key: string; index: CardIndex; records: Map<string, CardRecord> }>();
+const scopes = new Map<string, { key: string; index: CardIndex; records: Map<string, CardRecord>; sharedInto: Map<string, string[]> }>();
 
 // Reading
 
@@ -136,9 +198,15 @@ function titleOf(scope: Scope) {
 
 const tagNames = (scope: Scope, card: Card) => card.tags.map((id) => titleOf(scope)(id));
 
+function cardVaultNames(scope: Scope, card: Card): string[] {
+  const home = scope.vaults.get(card.vaultId)?.name;
+  const extras = (scope.sharedInto.get(card.id) ?? []).map((id) => scope.vaults.get(id)?.name).filter((n): n is string => !!n && n !== home);
+  return home ? [home, ...extras] : extras;
+}
+
 function summary(scope: Scope, card: Card): string {
-  const vault = scope.vaults.get(card.vaultId)?.name ?? '';
-  const parts = [card.type, `id: ${card.id}`, vault && `vault: ${vault}`, `updated ${when(card.updatedAt)}`];
+  const vaultList = cardVaultNames(scope, card).join(', ');
+  const parts = [card.type, `id: ${card.id}`, vaultList && `vault: ${vaultList}`, `updated ${when(card.updatedAt)}`];
   if (card.type === 'todo') parts.splice(1, 0, card.status === 'done' ? 'done' : card.due ? `due ${dueText(card)}` : 'no due date');
   if (card.type === 'todo' && card.status === 'open' && card.start) parts.splice(1, 0, `starts ${card.start}`);
   if (card.template) parts.splice(1, 0, 'template');
@@ -155,7 +223,10 @@ const body = (scope: Scope, content: JSONNode) => toMarkdown(content, titleOf(sc
 function renderCard(scope: Scope, card: Card): string {
   const lines = [`# ${displayTitle(card)}`, ''];
   const vault = scope.vaults.get(card.vaultId);
-  lines.push(`Type: ${card.type} · ID: ${card.id} · Vault: ${vault?.name} (${vault?.write ? 'you can edit' : 'read only'})`);
+  const extras = (scope.sharedInto.get(card.id) ?? []).map((id) => scope.vaults.get(id)?.name).filter((n): n is string => !!n && n !== vault?.name);
+  const vaultLabel = vault ? `${vault.name} (${vault.write ? 'you can edit' : 'read only'})` : `Shared via ${extras.join(', ') || 'another vault'} (read only)`;
+  lines.push(`Type: ${card.type} · ID: ${card.id} · Vault: ${vaultLabel}`);
+  if (vault && extras.length) lines.push(`Also in vaults: ${extras.join(', ')}`);
   if (card.type === 'todo') lines.push(`Status: ${card.status}${card.status === 'open' && card.waiting ? ', waiting' : ''}${card.start ? ` · Starts: ${card.start}` : ''}${card.due ? ` · Due: ${dueText(card)}` : ''}`);
   if (card.tags.length) lines.push(`Tags: ${tagNames(scope, card).join(', ')}`);
   lines.push(`Created: ${when(card.createdAt)} · Updated: ${when(card.updatedAt)}`);
@@ -245,16 +316,30 @@ interface Writer {
 /** Today on the server's clock (UTC), for a repeat or time given with no date. The user's own day may differ near midnight. */
 const serverToday = (w: Writer) => toDateKey(new Date(w.now()));
 
+/** Finds an open vault by ID or name (case-insensitive). Rejects ambiguous duplicate names with their IDs. */
+function findVault(scope: Scope, ref: string): ScopeVault {
+  const trimmed = ref.trim();
+  const byId = scope.vaults.get(trimmed);
+  if (byId) return byId;
+  const lower = trimmed.toLowerCase();
+  const matches = [...scope.vaults.values()].filter((v) => v.name.toLowerCase() === lower);
+  if (matches.length === 1) return matches[0];
+  if (matches.length > 1) {
+    const ids = matches.map((v) => `"${v.name}" (id: ${v.id})`).join(', ');
+    throw new ToolError(`Multiple open vaults are named "${trimmed}": ${ids}. Pass the vault ID instead.`);
+  }
+  throw new ToolError(`No vault named "${ref}" is open to AI. Use list_vaults.`);
+}
+
 function writableVault(scope: Scope, name?: string): ScopeVault {
   if (name) {
-    const vault = [...scope.vaults.values()].find((v) => v.name.toLowerCase() === name.trim().toLowerCase());
-    if (!vault) throw new ToolError(`No vault named "${name}" is open to AI. Use list_vaults.`);
+    const vault = findVault(scope, name);
     if (!vault.write) throw new ToolError(`The vault "${vault.name}" is read only for AI.`);
     return vault;
   }
   const writable = [...scope.vaults.values()].filter((v) => v.write);
   const preferred = writable.find((v) => v.id.startsWith('vault-')) ?? writable[0];
-  if (!preferred) throw new ToolError('No vault allows AI to write. The user can allow it in the app, under Vaults.');
+  if (!preferred) throw new ToolError('No vault allows AI to write. The user can allow it in the app, under Backup & settings → AI apps.');
   return preferred;
 }
 
@@ -282,20 +367,35 @@ async function save(w: Writer, cards: Card[]): Promise<void> {
 }
 
 /**
- * Tag IDs for these names, creating tag cards that don't exist yet in `vault`. A tag group's name isn't a tag and
- * is left off, and of a one-choice group's tags (like Priority) only the last named is kept.
+ * Tag IDs for these names, creating vault-scoped tag cards that don't exist yet in `vault`. Only tags offered in
+ * `vault` (its own vault-scoped tags, ones shared into it, or all-vault tags) match; a tag group's name isn't a tag
+ * and is left off, and of a one-choice group's tags (like Priority) only the last named is kept.
  */
 function tagIds(w: Writer, wanted: string[], vault: ScopeVault, created: Card[]): string[] {
   const { groups, groupOf } = w.scope.index.tagGroups;
+  const allTags: TagCard[] = [...w.scope.index.tags, ...(created as TagCard[])];
   const ids = wanted
     .filter((name) => !isGroupName(name, groups))
     .map((name) => {
-      // Matched without regard to case, among tags already there and ones just made, so "Travel" and "travel" are one tag.
-      const key = name.trim().toLowerCase();
-      const existing = [...w.scope.index.tags, ...created].find((t) => t.title.trim().toLowerCase() === key);
+      // Matched without regard to case among tags offered in this vault and ones just made, so "Travel" and "travel" are one tag.
+      const existing = tagNamedIn(allTags, name.trim(), vault.id, w.scope.sharedInto);
       if (existing) return existing.id;
-      const tag: Card = { id: crypto.randomUUID(), vaultId: vault.id, type: 'tag', title: name, content: EMPTY_DOC, tags: [], pinned: false, createdAt: w.now(), updatedAt: 0, deleted: false, seq: 0 };
+      const tag: TagCard = {
+        id: crypto.randomUUID(),
+        vaultId: vault.id,
+        type: 'tag',
+        title: name,
+        content: EMPTY_DOC,
+        tags: [],
+        pinned: false,
+        scope: 'vault',
+        createdAt: w.now(),
+        updatedAt: 0,
+        deleted: false,
+        seq: 0,
+      };
       created.push(tag);
+      allTags.push(tag);
       return tag.id;
     });
   return settleTags(ids, groupOf);
@@ -330,14 +430,16 @@ export const TOOLS: Tool[] = [
   {
     name: 'list_vaults',
     title: 'List vaults',
-    description: 'Lists the vaults open to AI and whether you may edit each. Vaults closed to AI are counted but not named.',
+    description: 'Lists the vaults open to AI, with each vault ID and whether you may edit it. Vaults closed to AI are counted but not named.',
     inputSchema: { type: 'object', properties: {} },
     cards: false,
     run: async (_args, { scope }) => {
-      const lines = [...scope.vaults.values()].map((v) => `- ${v.name} (${v.write ? 'read and write' : 'read only'})`);
+      const lines = [...scope.vaults.values()].map(
+        (v) => `- ${v.name} (id: ${v.id}, ${v.write ? 'read and write' : 'read only'}${v.shared ? ', shared' : ''})`,
+      );
       const closed = scope.all.length - scope.vaults.size;
       if (closed) lines.push(`${closed} other ${closed === 1 ? 'vault is' : 'vaults are'} closed to AI.`);
-      return lines.join('\n') || 'No vault is open to AI. The user can open one in the app, under Vaults.';
+      return lines.join('\n') || 'No vault is open to AI. The user can open one in the app, under Backup & settings → AI apps.';
     },
   },
   {
@@ -349,21 +451,21 @@ export const TOOLS: Tool[] = [
       properties: {
         query: { type: 'string', description: 'Words to find. Prefixes match.' },
         type: { type: 'string', enum: ['note', 'todo', 'tag'] },
-        vault: { type: 'string', description: 'Only cards in the vault with this name, like Diary' },
+        vault: { type: 'string', description: 'Only cards in this vault (by name like Diary, or vault ID from list_vaults)' },
         limit: { type: 'integer', minimum: 1, maximum: 50, default: 20 },
       },
     },
     run: async (args, { scope }) => {
       const query = str(args, 'query', { optional: true, max: 500 }) ?? '';
       const type = str(args, 'type', { optional: true });
-      const vaultName = str(args, 'vault', { optional: true })?.trim().toLowerCase();
-      const vault = vaultName ? [...scope.vaults.values()].find((v) => v.name.toLowerCase() === vaultName) : undefined;
-      if (vaultName && !vault) throw new ToolError(`No vault named "${str(args, 'vault')}" is open to AI. Use list_vaults.`);
+      const vaultRef = str(args, 'vault', { optional: true });
+      const vault = vaultRef?.trim() ? findVault(scope, vaultRef) : undefined;
       const max = limit(args, 20, 50);
       const hits = query.trim()
         ? buildSearch(scope.index).search(query).map((h) => ({ card: h.card, snippet: h.snippet }))
         : scope.index.live.map((card) => ({ card, snippet: plainText(card.content, titleOf(scope)).slice(0, 140) }));
-      const shown = hits.filter((h) => (!type || h.card.type === type) && (!vault || h.card.vaultId === vault.id)).slice(0, max);
+      const inVault = (card: Card) => !vault || card.vaultId === vault.id || (scope.sharedInto.get(card.id)?.includes(vault.id) ?? false);
+      const shown = hits.filter((h) => (!type || h.card.type === type) && inVault(h.card)).slice(0, max);
       if (!shown.length) return query ? `Nothing matches "${query}".` : 'There are no cards yet.';
       return shown.map((h) => `${summary(scope, h.card)}${h.snippet ? `\n  ${h.snippet}` : ''}`).join('\n');
     },
@@ -415,7 +517,7 @@ export const TOOLS: Tool[] = [
         title: { type: 'string' },
         markdown: { type: 'string', description: 'The body. [[Exact title]] links to an existing card.' },
         tags: { type: 'array', items: { type: 'string' } },
-        vault: { type: 'string', description: 'Vault name. Defaults to the main vault.' },
+        vault: { type: 'string', description: 'Vault name or ID (from list_vaults). Defaults to the main vault.' },
       },
       required: ['title'],
     },
@@ -452,7 +554,7 @@ export const TOOLS: Tool[] = [
         time: timeSchema,
         repeat: repeatSchema,
         markdown: { type: 'string', description: 'Notes for the todo' },
-        vault: { type: 'string' },
+        vault: { type: 'string', description: 'Vault name or ID (from list_vaults). Defaults to the main vault.' },
       },
       required: ['title'],
     },

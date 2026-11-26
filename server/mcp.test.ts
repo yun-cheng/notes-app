@@ -59,7 +59,7 @@ describe('MCP server', () => {
     expect(res.status).toBe(202);
   });
   it('finds and reads cards without revealing private vaults', async () => {
-    const { tool } = await world();
+    const { tool, ann } = await world();
     const found = await tool('search_cards', { query: 'saturday' });
     expect(found.text).toContain('Tokyo plan (note, id: note-1');
     const card = await tool('get_card', { id: 'note-1' });
@@ -71,7 +71,7 @@ describe('MCP server', () => {
       expect(text).not.toMatch(/crush|Secret diary/i);
     }
     expect((await tool('get_card', { id: 'private-1' })).error).toBe(true);
-    expect((await tool('list_vaults')).text).toBe('- Personal (read and write)\n2 other vaults are closed to AI.');
+    expect((await tool('list_vaults')).text).toBe(`- Personal (id: ${ann.vault}, read and write)\n2 other vaults are closed to AI.`);
   });
   it('sees nothing when AI access is off', async () => {
     const { tool, patch, ann } = await world();
@@ -168,8 +168,8 @@ describe('MCP server', () => {
     await patch(work.id, { ai_access: 'off' });
     await call('/api/ai/settings', { method: 'PATCH', body: JSON.stringify({ default_access: 'read' }) }, ann.cookie);
     const listed = (await tool('list_vaults')).text;
-    expect(listed).toContain('Personal (read only)');
-    expect(listed).toContain('Diary (read only)');
+    expect(listed).toContain(`Personal (id: ${ann.vault}, read only)`);
+    expect(listed).toContain(`Diary (id: diary-${ann.user.id}, read only)`);
     expect(listed).not.toContain('Work');
     expect(listed).not.toContain('Secret diary');
     expect(listed).toContain('2 other vaults are closed to AI.');
@@ -177,6 +177,69 @@ describe('MCP server', () => {
     await patch(ann.vault, { ai_access: 'write' });
     expect((await tool('create_note', { title: 'Allowed' })).error).toBe(false);
     expect((await tool('create_note', { title: 'Blocked', vault: 'Diary' })).error).toBe(true);
+  });
+  it('identifies vaults by ID and disambiguates duplicate vault names', async () => {
+    const { tool, call, patch, ann } = await world();
+    const dup1 = (await (await call('/api/vaults', { method: 'POST', body: JSON.stringify({ name: 'Projects' }) }, ann.cookie)).json()) as { id: string };
+    const dup2 = (await (await call('/api/vaults', { method: 'POST', body: JSON.stringify({ name: 'Projects' }) }, ann.cookie)).json()) as { id: string };
+    await patch(dup1.id, { ai_access: 'write' });
+    await patch(dup2.id, { ai_access: 'write' });
+
+    const ambiguous = await tool('create_note', { title: 'Spec', vault: 'Projects' });
+    expect(ambiguous.error).toBe(true);
+    expect(ambiguous.text).toContain(dup1.id);
+    expect(ambiguous.text).toContain(dup2.id);
+
+    const ok = await tool('create_note', { title: 'Spec', vault: dup2.id });
+    expect(ok.error).toBe(false);
+    expect((await tool('search_cards', { vault: dup2.id })).text).toContain('Spec');
+    expect((await tool('search_cards', { vault: dup1.id })).text).toBe('There are no cards yet.');
+  });
+  it('respects vault-scoped tags when matching and creating tags', async () => {
+    const { tool, call, patch, push, pull, ann } = await world();
+    const work = (await (await call('/api/vaults', { method: 'POST', body: JSON.stringify({ name: 'Work' }) }, ann.cookie)).json()) as { id: string };
+    await patch(work.id, { ai_access: 'write' });
+    await push(ann.cookie, [
+      rec(ann.vault, 'scoped-tag', { payload: payload({ type: 'tag', title: 'Urgent', pinned: false, scope: 'vault' }) }),
+    ]);
+
+    // In Work, "Urgent" must not attach Personal's vault-scoped tag; it creates a new vault-scoped tag in Work.
+    const made = await tool('create_note', { title: 'Ship', vault: work.id, tags: ['Urgent', 'Travel'] });
+    expect(made.error).toBe(false);
+    const id = made.text.match(/id: ([\w-]+)/)![1];
+    const records = (await pull(ann.cookie)).records;
+    const note = JSON.parse(records.find((r: CardRecord) => r.id === id)!.payload) as { tags: string[] };
+    // Global tag "Travel" (tag-1, no scope) is reused, while "Urgent" gets a new vault-scoped tag in Work.
+    expect(note.tags).toContain('tag-1');
+    expect(note.tags).not.toContain('scoped-tag');
+    const createdTag = records.find((r: CardRecord) => note.tags.includes(r.id) && r.id !== 'tag-1')!;
+    expect(createdTag.vault_id).toBe(work.id);
+    expect(JSON.parse(createdTag.payload)).toMatchObject({ type: 'tag', title: 'Urgent', scope: 'vault' });
+  });
+  it('sees cards shared into an open vault, read only when from another account, and never from closed vaults', async () => {
+    const { tool, call, patch, push, signIn, ann } = await world();
+    const work = (await (await call('/api/vaults', { method: 'POST', body: JSON.stringify({ name: 'Work' }) }, ann.cookie)).json()) as { id: string };
+    await patch(work.id, { ai_access: 'write' });
+    // Share Personal's note-1 into Work.
+    await call('/api/cards/note-1/shares', { method: 'POST', body: JSON.stringify({ vault_id: work.id, role: 'edit' }) }, ann.cookie);
+    expect((await tool('search_cards', { vault: 'Work' })).text).toContain('Tokyo plan');
+    expect((await tool('get_card', { id: 'note-1' })).text).toContain('Also in vaults: Work');
+
+    // Bob shares a card from his open vault into a shared vault Ann is in (or Ann's open vault).
+    const bob = await signIn('bob');
+    await call(`/api/vaults/${work.id}/members`, { method: 'POST', body: JSON.stringify({ email: bob.user.email, role: 'editor' }) }, ann.cookie);
+    await push(bob.cookie, [rec(bob.vault, 'bob-note', { payload: payload({ type: 'note', title: 'Bob memo', content: doc(para('Shared brief')) }) })]);
+    await call('/api/cards/bob-note/shares', { method: 'POST', body: JSON.stringify({ vault_id: work.id, role: 'edit' }) }, bob.cookie);
+    expect((await tool('search_cards', { vault: 'Work', query: 'brief' })).text).toContain('Bob memo');
+    expect((await tool('get_card', { id: 'bob-note' })).text).toContain('read only');
+    expect((await tool('edit_card', { id: 'bob-note', title: 'Tampered' })).error).toBe(true);
+
+    // A card living in Ann's own closed vault stays hidden even if shared into Work.
+    const diary = `diary-${ann.user.id}`;
+    await push(ann.cookie, [rec(diary, 'closed-note', { payload: payload({ type: 'note', title: 'Diary secret', content: doc(para('Keep out')) }) })]);
+    await call('/api/cards/closed-note/shares', { method: 'POST', body: JSON.stringify({ vault_id: work.id, role: 'view' }) }, ann.cookie);
+    expect((await tool('search_cards', { query: 'Keep out' })).text).toBe('Nothing matches "Keep out".');
+    expect((await tool('get_card', { id: 'closed-note' })).error).toBe(true);
   });
   it('validates arguments', async () => {
     const { tool } = await world();

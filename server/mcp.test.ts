@@ -193,7 +193,7 @@ describe('MCP server', () => {
     const ok = await tool('create_note', { title: 'Spec', vault: dup2.id });
     expect(ok.error).toBe(false);
     expect((await tool('search_cards', { vault: dup2.id })).text).toContain('Spec');
-    expect((await tool('search_cards', { vault: dup1.id })).text).toBe('There are no cards yet.');
+    expect((await tool('search_cards', { vault: dup1.id })).text).toBe('No cards match those filters.');
   });
   it('respects vault-scoped tags when matching and creating tags', async () => {
     const { tool, call, patch, push, pull, ann } = await world();
@@ -330,6 +330,63 @@ describe('MCP server', () => {
       transcript: 'Remember to buy train tickets.',
     });
     expect(saved.pages).toHaveLength(1);
+  });
+  it('lists tag groups and vault-scoped tags with list_tags, and filters search_cards and list_todos richly', async () => {
+    const { tool, call, patch, push, ann } = await world();
+    const work = (await (await call('/api/vaults', { method: 'POST', body: JSON.stringify({ name: 'Work' }) }, ann.cookie)).json()) as { id: string };
+    await patch(work.id, { ai_access: 'write' });
+    await push(ann.cookie, [
+      rec(ann.vault, 'p-high', { payload: payload({ type: 'tag', title: 'High', pinned: false }) }),
+      rec(ann.vault, 'p-low', { payload: payload({ type: 'tag', title: 'Low', pinned: false }) }),
+      rec(ann.vault, 'grp-pri', { payload: payload({ type: 'tag', title: 'Priority', pinned: false, choice: 'one', ordered: true, members: ['p-high', 'p-low'] }) }),
+      rec(work.id, 'w-tag', { payload: payload({ type: 'tag', title: 'Sprint', pinned: true, scope: 'vault' }) }),
+      rec(ann.vault, 'arch-1', { payload: payload({ type: 'note', title: 'Old archive', archived: true, createdAt: Date.parse('2026-10-01T10:00:00Z') }) }),
+      rec(ann.vault, 'tpl-1', { payload: payload({ type: 'note', title: 'Weekly review', template: true, createdAt: Date.parse('2026-11-01T10:00:00Z') }) }),
+      rec(work.id, 'wait-todo', {
+        payload: payload({ type: 'todo', title: 'Wait for vendor', status: 'open', waiting: true, due: '2026-11-15', tags: ['p-high', 'w-tag'], completedAt: null, createdAt: Date.parse('2026-11-05T10:00:00Z') }),
+      }),
+      rec(work.id, 'stack-1', {
+        payload: payload({ type: 'note', title: 'Launch deck', stack: ['wait-todo'], color: 'blue', reactions: { '👍': [ann.user.id] }, createdAt: Date.parse('2026-11-06T10:00:00Z') }),
+      }),
+    ]);
+    // Add a comment on note-1.
+    await call('/api/cards/note-1/comments', { method: 'POST', body: JSON.stringify({ body: 'Check flights' }) }, ann.cookie);
+
+    const tagsOut = (await tool('list_tags')).text;
+    expect(tagsOut).toContain('## Group: Priority (id: grp-pri, one-choice, ordered)');
+    expect(tagsOut).toContain('- High (id: p-high, 1 card)');
+    expect(tagsOut).toContain('- Sprint (id: w-tag, 1 card, pinned, vault: Work)');
+    // Filtering list_tags to Personal hides Work's vault-scoped tag.
+    expect((await tool('list_tags', { vault: 'Personal' })).text).not.toContain('Sprint');
+
+    // Archived and templates are excluded by default, and queryable explicitly.
+    const defaultSearch = (await tool('search_cards', {})).text;
+    expect(defaultSearch).not.toContain('Old archive');
+    expect(defaultSearch).not.toContain('Weekly review');
+    expect((await tool('search_cards', { archived: 'only' })).text).toContain('Old archive (note, id: arch-1, vault: Personal, archived');
+    expect((await tool('search_cards', { templates: 'only' })).text).toContain('Weekly review (note, template');
+    expect((await tool('search_cards', { type: 'stack' })).text).toContain('Launch deck (stack, id: stack-1');
+    expect((await tool('search_cards', { tag: 'Sprint', created_after: '2026-11-04', created_before: '2026-11-06' })).text).toContain('Wait for vendor');
+
+    // list_todos separates waiting todos from actionable open ones, and filters by vault and tag.
+    const openTodos = (await tool('list_todos')).text;
+    expect(openTodos).toContain('Book hotel');
+    expect(openTodos).not.toContain('Wait for vendor');
+    expect(openTodos).toContain('1 waiting todo omitted');
+    expect((await tool('list_todos', { status: 'waiting', vault: 'Work', tag: 'High' })).text).toContain('Wait for vendor');
+    expect((await tool('list_todos', { status: 'open', include_waiting: true, vault: 'Work' })).text).toContain('Wait for vendor');
+
+    // get_card includes comments, stack parent, reactions, color, and tag group details.
+    expect((await tool('get_card', { id: 'note-1' })).text).toContain('## Comments\n- ann (');
+    expect((await tool('get_card', { id: 'note-1' })).text).toContain(': Check flights');
+    const waitCard = (await tool('get_card', { id: 'wait-todo' })).text;
+    expect(waitCard).toContain('In stack: Launch deck (id: stack-1)');
+    const stackCard = (await tool('get_card', { id: 'stack-1' })).text;
+    expect(stackCard).toContain('Color: blue');
+    expect(stackCard).toContain('Reactions: 👍 (1)');
+    const grpCard = (await tool('get_card', { id: 'grp-pri' })).text;
+    expect(grpCard).toContain('Tag group: one-choice, ordered');
+    expect(grpCard).toContain('- High (id: p-high)');
   });
   it('validates arguments', async () => {
     const { tool } = await world();

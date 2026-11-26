@@ -1,6 +1,6 @@
-import { isGroupName, settleTags } from '../src/domain/tagGroups';
+import { isGroupName, isTagGroup, settleTags } from '../src/domain/tagGroups';
 import { tagsForStatus } from '../src/domain/board';
-import { tagNamedIn } from '../src/domain/tagScope';
+import { offeredIn, tagNamedIn } from '../src/domain/tagScope';
 import { buildIndex, type CardIndex } from '../src/domain/cardIndex';
 import { cardPages, displayTitle, plainText, walk } from '../src/domain/content';
 import { isStack, stackEntries, stacksOf } from '../src/domain/stacks';
@@ -207,7 +207,16 @@ function cardVaultNames(scope: Scope, card: Card): string[] {
 
 function summary(scope: Scope, card: Card): string {
   const vaultList = cardVaultNames(scope, card).join(', ');
-  const parts = [card.type, `id: ${card.id}`, vaultList && `vault: ${vaultList}`, `updated ${when(card.updatedAt)}`];
+  const kind = isStack(card) ? 'stack' : card.type;
+  const parts = [
+    kind,
+    `id: ${card.id}`,
+    vaultList && `vault: ${vaultList}`,
+    card.archived && 'archived',
+    card.viewOnly && 'view only',
+    card.createdAt ? `created ${toDateKey(new Date(card.createdAt))}` : '',
+    `updated ${when(card.updatedAt)}`,
+  ];
   if (card.type === 'todo') parts.splice(1, 0, card.status === 'done' ? 'done' : card.due ? `due ${dueText(card)}` : 'no due date');
   if (card.type === 'todo' && card.status === 'open' && card.start) parts.splice(1, 0, `starts ${card.start}`);
   if (card.template) parts.splice(1, 0, 'template');
@@ -221,26 +230,80 @@ const dueText = (todo: TodoCard) =>
 
 const body = (scope: Scope, content: JSONNode) => toMarkdown(content, titleOf(scope)) || '(empty)';
 
-function renderCard(scope: Scope, card: Card): string {
+interface CardCommentRow {
+  id: string;
+  author: string;
+  body: string;
+  created_at: number;
+  resolved_at: number | null;
+}
+
+async function loadCardComments(db: Database, cardId: string): Promise<CardCommentRow[]> {
+  const { results } = await db
+    .prepare(
+      `SELECT k.id, u.name AS author, k.body, k.created_at, k.resolved_at
+       FROM comments k JOIN users u ON u.id = k.author_id
+       WHERE k.card_id = ? AND k.body NOT LIKE 'e1:%'
+       ORDER BY k.created_at, k.id`,
+    )
+    .bind(cardId)
+    .all<CardCommentRow>();
+  return results;
+}
+
+function renderCard(scope: Scope, card: Card, comments: CardCommentRow[] = []): string {
   const lines = [`# ${displayTitle(card)}`, ''];
   const vault = scope.vaults.get(card.vaultId);
   const extras = (scope.sharedInto.get(card.id) ?? []).map((id) => scope.vaults.get(id)?.name).filter((n): n is string => !!n && n !== vault?.name);
   const vaultLabel = vault ? `${vault.name} (${vault.write ? 'you can edit' : 'read only'})` : `Shared via ${extras.join(', ') || 'another vault'} (read only)`;
-  lines.push(`Type: ${card.type} · ID: ${card.id} · Vault: ${vaultLabel}`);
+  lines.push(`Type: ${isStack(card) ? 'stack (note)' : card.type} · ID: ${card.id} · Vault: ${vaultLabel}`);
   if (vault && extras.length) lines.push(`Also in vaults: ${extras.join(', ')}`);
   if (card.type === 'todo') lines.push(`Status: ${card.status}${card.status === 'open' && card.waiting ? ', waiting' : ''}${card.start ? ` · Starts: ${card.start}` : ''}${card.due ? ` · Due: ${dueText(card)}` : ''}`);
+  if (card.type === 'tag') {
+    if (isTagGroup(card)) {
+      lines.push(`Tag group: ${card.choice === 'one' ? 'one-choice' : 'many-choice'}${card.ordered ? ', ordered' : ''}`);
+    } else {
+      const group = scope.index.tagGroups.groupOf.get(card.id);
+      const scopeLabel = card.scope === 'vault' ? `vault (${cardVaultNames(scope, card).join(', ') || 'this vault'})` : 'all vaults';
+      lines.push(`Scope: ${scopeLabel}${card.pinned ? ' · Pinned' : ''}${group ? ` · Group: ${group.title} (${group.choice}-choice${group.ordered ? ', ordered' : ''})` : ''}`);
+    }
+  }
   if (card.tags.length) lines.push(`Tags: ${tagNames(scope, card).join(', ')}`);
+  if (card.color) lines.push(`Color: ${card.color}`);
+  const parentStackId = stacksOf(scope.index).get(card.id);
+  if (parentStackId) lines.push(`In stack: ${titleOf(scope)(parentStackId)} (id: ${parentStackId})`);
+  const reactions = card.reactions
+    ? Object.entries(card.reactions)
+        .filter(([, users]) => users.length > 0)
+        .map(([emoji, users]) => `${emoji} (${users.length})`)
+    : [];
+  if (reactions.length) lines.push(`Reactions: ${reactions.join(', ')}`);
   lines.push(`Created: ${when(card.createdAt)} · Updated: ${when(card.updatedAt)}`);
+  if (card.archived) lines.push('This card is archived.');
+  if (card.viewOnly) lines.push('View only: yes (cannot be edited by AI until the user turns off view only in the app).');
   if (card.deleted) lines.push('This card is in the Trash.');
   if (card.template) lines.push('This card is a template: the user starts new entries from copies of it.');
   const pages = cardPages(card);
-  if (pages.length) lines.push(`Pages: ${pages.length + 1} (edit_card edits Page 1 only; omit the "## Page N" sections when replacing the body)`);
+  if (pages.length) lines.push(`Pages: ${pages.length + 1} (edit_card edits Page 1 only unless "page" is set; omit "## Page N" headings when replacing a page)`);
   lines.push('', body(scope, card.content));
   pages.forEach((page, i) => lines.push('', `## Page ${i + 2}`, '', body(scope, page)));
+  if (card.type === 'tag' && isTagGroup(card)) {
+    const group = scope.index.tagGroups.groups.find((g) => g.id === card.id);
+    if (group) {
+      lines.push('', '## Tags in this group, in order');
+      lines.push(...(group.members.length ? group.members.map((m) => `- ${m.title} (id: ${m.id})`) : ['(none)']));
+    }
+  }
   if (isStack(card)) {
     const entries = stackEntries(card, scope.index.byId, stacksOf(scope.index));
     lines.push('', '## In this stack, in order');
     lines.push(...(entries.length ? entries.map((entry) => summary(scope, entry)) : ['(empty)']));
+  }
+  if (comments.length) {
+    lines.push('', '## Comments');
+    for (const c of comments) {
+      lines.push(`- ${c.author} (${when(c.created_at)})${c.resolved_at ? ' [resolved]' : ''}: ${c.body}`);
+    }
   }
   const links = scope.index.backlinks.get(card.id) ?? [];
   if (links.length) {
@@ -483,6 +546,37 @@ const repeatSchema = {
   description: 'Todos only: daily, weekdays, weekly, monthly, yearly, or every-N-days/weeks/months/years like every-2-weeks; null to stop. Completing a repeating todo moves it to its next due date.',
 };
 
+function cardInVault(scope: Scope, card: Card, vault: ScopeVault | undefined): boolean {
+  return !vault || card.vaultId === vault.id || (scope.sharedInto.get(card.id)?.includes(vault.id) ?? false);
+}
+
+/** Resolves a tag filter (by ID or name) to matching tag IDs in `scope` (narrowed to `vault` when given). */
+function filterTagIds(scope: Scope, ref: string, vault?: ScopeVault): Set<string> {
+  const trimmed = ref.trim();
+  const byId = scope.index.tags.find((t) => t.id === trimmed);
+  if (byId) return new Set([byId.id]);
+  if (vault) {
+    const match = tagNamedIn(scope.index.tags, trimmed, vault.id, scope.sharedInto);
+    if (match) return new Set([match.id]);
+    throw new ToolError(`No tag named "${ref}" is offered in "${vault.name}". Use list_tags.`);
+  }
+  const lower = trimmed.toLowerCase();
+  const matches = scope.index.tags.filter((t) => t.title.trim().toLowerCase() === lower);
+  if (matches.length) return new Set(matches.map((t) => t.id));
+  throw new ToolError(`No tag named "${ref}" is visible. Use list_tags.`);
+}
+
+function tagUseCount(scope: Scope, tagId: string): number {
+  return (scope.index.backlinks.get(tagId) ?? []).filter((l) => l.kind === 'tag' && !l.from.archived && !l.from.template).length;
+}
+
+function enumArg<T extends string>(args: Json, key: string, allowed: readonly T[], fallback: T): T {
+  const v = str(args, key, { optional: true });
+  if (v === undefined) return fallback;
+  if (!(allowed as readonly string[]).includes(v)) throw new ToolError(`"${key}" must be ${allowed.join(', ')}.`);
+  return v as T;
+}
+
 export const TOOLS: Tool[] = [
   {
     name: 'list_vaults',
@@ -500,48 +594,140 @@ export const TOOLS: Tool[] = [
     },
   },
   {
+    name: 'list_tags',
+    title: 'List tags and tag groups',
+    description: 'Lists all tag groups (with one/many choice, ordering and member tags in order) and ungrouped tags (with vault scope, pinned status and card counts).',
+    inputSchema: {
+      type: 'object',
+      properties: {
+        vault: { type: 'string', description: 'Optional vault name or ID: only list tags offered in this vault' },
+      },
+    },
+    run: async (args, { scope }) => {
+      const vaultRef = str(args, 'vault', { optional: true });
+      const vault = vaultRef?.trim() ? findVault(scope, vaultRef) : undefined;
+      const { groups, loose } = scope.index.tagGroups;
+      const lines: string[] = [];
+      const formatTag = (t: TagCard, showScope: boolean) => {
+        const count = tagUseCount(scope, t.id);
+        const meta = [
+          `id: ${t.id}`,
+          `${count} ${count === 1 ? 'card' : 'cards'}`,
+          t.pinned && 'pinned',
+          showScope && (t.scope === 'vault' ? `vault: ${cardVaultNames(scope, t).join(', ') || 'this vault'}` : 'all vaults'),
+        ].filter(Boolean);
+        return `- ${t.title} (${meta.join(', ')})`;
+      };
+      for (const group of groups) {
+        const members = vault ? group.members.filter((m) => offeredIn(m, vault.id, scope.sharedInto)) : group.members;
+        if (vault && !members.length) continue;
+        lines.push(`## Group: ${group.title} (id: ${group.id}, ${group.choice}-choice${group.ordered ? ', ordered' : ''})`);
+        lines.push(...(members.length ? members.map((m) => formatTag(m, false)) : ['- (no tags)']));
+        lines.push('');
+      }
+      const shownLoose = vault ? loose.filter((t) => offeredIn(t, vault.id, scope.sharedInto)) : loose;
+      if (shownLoose.length) {
+        if (lines.length) lines.push('## Other tags');
+        lines.push(...shownLoose.map((t) => formatTag(t, true)));
+      }
+      return lines.join('\n').trim() || (vault ? `No tags are offered in "${vault.name}".` : 'There are no tags yet.');
+    },
+  },
+  {
     name: 'search_cards',
     title: 'Search cards',
-    description: 'Full-text search over notes, todos and tags, in every vault or one. With an empty query, lists the most recently updated cards.',
+    description:
+      'Full-text search over notes, todos, stacks and tags, with filters for vault, tag, written date range, archived state and templates. With an empty query, lists cards newest first (by updated or created date). Archived cards and templates are excluded by default.',
     inputSchema: {
       type: 'object',
       properties: {
         query: { type: 'string', description: 'Words to find. Prefixes match.' },
-        type: { type: 'string', enum: ['note', 'todo', 'tag'] },
+        type: { type: 'string', enum: ['note', 'todo', 'tag', 'stack'] },
         vault: { type: 'string', description: 'Only cards in this vault (by name like Diary, or vault ID from list_vaults)' },
+        tag: { type: 'string', description: 'Only cards carrying this tag (by name or tag ID from list_tags)' },
+        created_after: { ...dateSchema, description: 'Only cards written on or after this date (UTC)' },
+        created_before: { ...dateSchema, description: 'Only cards written on or before this date (UTC)' },
+        archived: { type: 'string', enum: ['exclude', 'include', 'only'], default: 'exclude', description: 'Whether to exclude, include, or show only archived cards' },
+        templates: { type: 'string', enum: ['exclude', 'include', 'only'], default: 'exclude', description: 'Whether to exclude, include, or show only template cards' },
+        sort: { type: 'string', enum: ['updated', 'created'], default: 'updated', description: 'Order when query is empty: most recently updated or written' },
         limit: { type: 'integer', minimum: 1, maximum: 50, default: 20 },
       },
     },
     run: async (args, { scope }) => {
       const query = str(args, 'query', { optional: true, max: 500 }) ?? '';
       const type = str(args, 'type', { optional: true });
+      if (type !== undefined && !['note', 'todo', 'tag', 'stack'].includes(type)) throw new ToolError('"type" must be note, todo, tag or stack.');
       const vaultRef = str(args, 'vault', { optional: true });
       const vault = vaultRef?.trim() ? findVault(scope, vaultRef) : undefined;
+      const tagRef = str(args, 'tag', { optional: true });
+      const tagIdsWanted = tagRef?.trim() ? filterTagIds(scope, tagRef, vault) : undefined;
+      const createdAfter = date(args, 'created_after', true);
+      const createdBefore = date(args, 'created_before', true);
+      const archived = enumArg(args, 'archived', ['exclude', 'include', 'only'] as const, 'exclude');
+      const templates = enumArg(args, 'templates', ['exclude', 'include', 'only'] as const, 'exclude');
+      const sort = enumArg(args, 'sort', ['updated', 'created'] as const, 'updated');
       const max = limit(args, 20, 50);
-      const hits = query.trim()
+
+      const base = query.trim()
         ? buildSearch(scope.index).search(query).map((h) => ({ card: h.card, snippet: h.snippet }))
-        : scope.index.live.map((card) => ({ card, snippet: plainText(card.content, titleOf(scope)).slice(0, 140) }));
-      const inVault = (card: Card) => !vault || card.vaultId === vault.id || (scope.sharedInto.get(card.id)?.includes(vault.id) ?? false);
-      const shown = hits.filter((h) => (!type || h.card.type === type) && inVault(h.card)).slice(0, max);
-      if (!shown.length) return query ? `Nothing matches "${query}".` : 'There are no cards yet.';
+        : (sort === 'created' ? [...scope.index.live].sort((a, b) => b.createdAt - a.createdAt) : scope.index.live).map((card) => ({
+            card,
+            snippet: plainText(card.content, titleOf(scope)).slice(0, 140),
+          }));
+
+      const matchesType = (card: Card) => {
+        if (!type) return true;
+        if (type === 'stack') return isStack(card);
+        if (type === 'note') return card.type === 'note' && !isStack(card);
+        return card.type === type;
+      };
+      const matchesFlag = (flag: boolean | undefined, mode: 'exclude' | 'include' | 'only') =>
+        mode === 'include' || (mode === 'only' ? !!flag : !flag);
+      const matchesDate = (card: Card) => {
+        if (!createdAfter && !createdBefore) return true;
+        const day = toDateKey(new Date(card.createdAt));
+        return (!createdAfter || day >= createdAfter) && (!createdBefore || day <= createdBefore);
+      };
+
+      const shown = base
+        .filter(
+          (h) =>
+            matchesType(h.card) &&
+            cardInVault(scope, h.card, vault) &&
+            (!tagIdsWanted || h.card.tags.some((id) => tagIdsWanted.has(id))) &&
+            matchesFlag(h.card.archived, archived) &&
+            matchesFlag(h.card.template, templates) &&
+            matchesDate(h.card),
+        )
+        .slice(0, max);
+      const filtered = !!(type || vault || tagIdsWanted || createdAfter || createdBefore || archived !== 'exclude' || templates !== 'exclude');
+      if (!shown.length) return query ? `Nothing matches "${query}".` : filtered ? 'No cards match those filters.' : 'There are no cards yet.';
       return shown.map((h) => `${summary(scope, h.card)}${h.snippet ? `\n  ${h.snippet}` : ''}`).join('\n');
     },
   },
   {
     name: 'get_card',
     title: 'Read a card',
-    description: 'Reads one card as Markdown, with its fields, tags and the cards that link to it.',
+    description: 'Reads one card as Markdown, with its fields, tags, pages, stack info, comments, reactions and backlinks.',
     inputSchema: { type: 'object', properties: { id: { type: 'string' } }, required: ['id'] },
-    run: async (args, { scope }) => renderCard(scope, visibleCard(scope, str(args, 'id'))),
+    run: async (args, { scope, db }) => {
+      const card = visibleCard(scope, str(args, 'id'));
+      const comments = await loadCardComments(db, card.id);
+      return renderCard(scope, card, comments);
+    },
   },
   {
     name: 'list_todos',
     title: 'List todos',
-    description: 'Lists todos, soonest due first. Filter by status and due-date range.',
+    description:
+      'Lists todos, soonest due first. Filter by status (open, waiting, done, all), vault, tag and due-date range. "open" lists actionable open todos (pass status: "waiting" for waiting/on-hold todos, or include_waiting: true to include them).',
     inputSchema: {
       type: 'object',
       properties: {
-        status: { type: 'string', enum: ['open', 'done', 'all'], default: 'open' },
+        status: { type: 'string', enum: ['open', 'waiting', 'done', 'all'], default: 'open' },
+        include_waiting: { type: 'boolean', default: false, description: 'When status is "open", also include waiting/on-hold todos' },
+        vault: { type: 'string', description: 'Only todos in this vault (by name or vault ID from list_vaults)' },
+        tag: { type: 'string', description: 'Only todos carrying this tag (by name or tag ID from list_tags)' },
         due_after: { ...dateSchema, description: 'Only todos due on or after this date' },
         due_before: { ...dateSchema, description: 'Only todos due on or before this date' },
         include_undated: { type: 'boolean', default: true, description: 'Include todos with no due date when no range is given' },
@@ -549,18 +735,42 @@ export const TOOLS: Tool[] = [
       },
     },
     run: async (args, { scope }) => {
-      const status = str(args, 'status', { optional: true }) ?? 'open';
-      if (!['open', 'done', 'all'].includes(status)) throw new ToolError('"status" must be open, done or all.');
+      const status = enumArg(args, 'status', ['open', 'waiting', 'done', 'all'] as const, 'open');
+      const includeWaiting = args.include_waiting === true;
+      const vaultRef = str(args, 'vault', { optional: true });
+      const vault = vaultRef?.trim() ? findVault(scope, vaultRef) : undefined;
+      const tagRef = str(args, 'tag', { optional: true });
+      const tagIdsWanted = tagRef?.trim() ? filterTagIds(scope, tagRef, vault) : undefined;
       const after = date(args, 'due_after', true);
       const before = date(args, 'due_before', true);
       const ranged = !!(after || before);
       const undated = args.include_undated !== false && !ranged;
-      const todos = scope.index.todos
-        .filter((t) => status === 'all' || t.status === status)
+
+      const scoped = scope.index.todos
+        .filter((t) => cardInVault(scope, t, vault))
+        .filter((t) => !tagIdsWanted || t.tags.some((id) => tagIdsWanted.has(id)));
+
+      const matchesStatus = (t: TodoCard) => {
+        if (status === 'all') return true;
+        if (status === 'done') return t.status === 'done';
+        if (status === 'waiting') return t.status === 'open' && !!t.waiting;
+        return t.status === 'open' && (includeWaiting || !t.waiting);
+      };
+
+      const todos = scoped
+        .filter(matchesStatus)
         .filter((t) => (t.due === null ? undated : (!after || t.due >= after) && (!before || t.due <= before)))
         .sort((a, b) => (a.due ?? '9999').localeCompare(b.due ?? '9999') || a.createdAt - b.createdAt)
         .slice(0, limit(args, 100, 200));
-      return todos.map((t: TodoCard) => summary(scope, t)).join('\n') || 'No todos match.';
+
+      const omittedWaiting = status === 'open' && !includeWaiting ? scoped.filter((t) => t.status === 'open' && !!t.waiting).length : 0;
+      const lines = todos.map((t: TodoCard) => summary(scope, t));
+      if (!lines.length && !omittedWaiting) return 'No todos match.';
+      if (!lines.length) lines.push('No actionable open todos match.');
+      if (omittedWaiting) {
+        lines.push(`(${omittedWaiting} waiting ${omittedWaiting === 1 ? 'todo' : 'todos'} omitted; pass status: "waiting" or include_waiting: true to see ${omittedWaiting === 1 ? 'it' : 'them'}.)`);
+      }
+      return lines.join('\n');
     },
   },
   {

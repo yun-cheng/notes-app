@@ -241,6 +241,96 @@ describe('MCP server', () => {
     expect((await tool('search_cards', { query: 'Keep out' })).text).toBe('Nothing matches "Keep out".');
     expect((await tool('get_card', { id: 'closed-note' })).error).toBe(true);
   });
+  it('clears waiting and keeps a board Done tag in step when completing or reopening a todo', async () => {
+    const { tool, push, pull, ann } = await world();
+    await push(ann.cookie, [
+      rec(ann.vault, 'col-todo', { payload: payload({ type: 'tag', title: 'To do', pinned: false }) }),
+      rec(ann.vault, 'col-doing', { payload: payload({ type: 'tag', title: 'Doing', pinned: false }) }),
+      rec(ann.vault, 'col-done', { payload: payload({ type: 'tag', title: 'Done', pinned: false }) }),
+      rec(ann.vault, 'grp-stage', { payload: payload({ type: 'tag', title: 'Stage', pinned: false, choice: 'one', members: ['col-todo', 'col-doing', 'col-done'] }) }),
+      rec(ann.vault, 'board-todo', {
+        payload: payload({ type: 'todo', title: 'Review PR', status: 'open', waiting: true, due: '2026-11-20', completedAt: null, tags: ['col-doing'] }),
+      }),
+    ]);
+
+    expect((await tool('complete_todo', { id: 'board-todo' })).text).toBe('Marked "Review PR" done.');
+    let saved = JSON.parse((await pull(ann.cookie)).records.find((r: CardRecord) => r.id === 'board-todo')!.payload) as {
+      status: string;
+      waiting?: boolean;
+      tags: string[];
+    };
+    expect(saved).toMatchObject({ status: 'done', waiting: false, tags: ['col-done'] });
+
+    // Reopening from Done moves it back to the group's first open column.
+    expect((await tool('complete_todo', { id: 'board-todo', done: false })).text).toBe('Marked "Review PR" open.');
+    saved = JSON.parse((await pull(ann.cookie)).records.find((r: CardRecord) => r.id === 'board-todo')!.payload) as {
+      status: string;
+      waiting?: boolean;
+      tags: string[];
+    };
+    expect(saved).toMatchObject({ status: 'open', tags: ['col-todo'] });
+  });
+  it('preserves photo, video and voice attachment metadata when editing Markdown and warns about extra pages', async () => {
+    const { tool, push, pull, ann } = await world();
+    await push(ann.cookie, [
+      rec(ann.vault, 'rich-note', {
+        payload: payload({
+          type: 'note',
+          title: 'Trip log',
+          content: doc(
+            para('Day one'),
+            { type: 'photo', attrs: { id: 'photo-12345678', alt: null, width: 1600, height: 1200 } },
+            {
+              type: 'file',
+              attrs: {
+                id: 'voice-12345678',
+                name: 'Voice message',
+                mime: 'audio/webm',
+                size: 9876,
+                duration: 12,
+                voice: true,
+                peaks: [0.2, 0.8],
+                transcript: 'Remember to buy train tickets.',
+              },
+            },
+          ),
+          pages: [doc(para('Back of card'))],
+        }),
+      }),
+    ]);
+
+    const read = (await tool('get_card', { id: 'rich-note' })).text;
+    expect(read).toContain('Pages: 2 (edit_card edits Page 1 only');
+    expect(read).toContain('![Photo](attachment:photo-12345678)');
+    expect(read).toContain('[Voice message](attachment:voice-12345678)\n\n> Remember to buy train tickets.');
+
+    // Round-trip Page 1 with an edit, keeping the photo, voice link and the synthetic transcript quote from get_card.
+    const edited = await tool('edit_card', {
+      id: 'rich-note',
+      markdown: 'Day one updated\n\n![Photo](attachment:photo-12345678)\n\n[Voice message](attachment:voice-12345678)\n\n> Remember to buy train tickets.',
+    });
+    expect(edited.error).toBe(false);
+
+    const saved = JSON.parse((await pull(ann.cookie)).records.find((r: CardRecord) => r.id === 'rich-note')!.payload) as {
+      content: { content: { type: string; attrs?: Record<string, unknown> }[] };
+      pages?: unknown[];
+    };
+    const blocks = saved.content.content;
+    // The synthetic transcript blockquote is dropped instead of being duplicated as a second block.
+    expect(blocks.map((b) => b.type)).toEqual(['paragraph', 'photo', 'file']);
+    expect(blocks[1].attrs).toEqual({ id: 'photo-12345678', alt: null, width: 1600, height: 1200 });
+    expect(blocks[2].attrs).toMatchObject({
+      id: 'voice-12345678',
+      name: 'Voice message',
+      mime: 'audio/webm',
+      size: 9876,
+      duration: 12,
+      voice: true,
+      peaks: [0.2, 0.8],
+      transcript: 'Remember to buy train tickets.',
+    });
+    expect(saved.pages).toHaveLength(1);
+  });
   it('validates arguments', async () => {
     const { tool } = await world();
     expect(await tool('list_todos', { due_after: 'yesterday' })).toEqual({ text: '"due_after" must be a date like 2026-11-10.', error: true });

@@ -1,7 +1,8 @@
 import { isGroupName, settleTags } from '../src/domain/tagGroups';
+import { tagsForStatus } from '../src/domain/board';
 import { tagNamedIn } from '../src/domain/tagScope';
 import { buildIndex, type CardIndex } from '../src/domain/cardIndex';
-import { cardPages, displayTitle, plainText } from '../src/domain/content';
+import { cardPages, displayTitle, plainText, walk } from '../src/domain/content';
 import { isStack, stackEntries, stacksOf } from '../src/domain/stacks';
 import { isDateKey, isTimeKey, toDateKey } from '../src/domain/dates';
 import { toMarkdown } from '../src/domain/markdown';
@@ -232,8 +233,10 @@ function renderCard(scope: Scope, card: Card): string {
   lines.push(`Created: ${when(card.createdAt)} · Updated: ${when(card.updatedAt)}`);
   if (card.deleted) lines.push('This card is in the Trash.');
   if (card.template) lines.push('This card is a template: the user starts new entries from copies of it.');
+  const pages = cardPages(card);
+  if (pages.length) lines.push(`Pages: ${pages.length + 1} (edit_card edits Page 1 only; omit the "## Page N" sections when replacing the body)`);
   lines.push('', body(scope, card.content));
-  cardPages(card).forEach((page, i) => lines.push('', `## Page ${i + 2}`, '', body(scope, page)));
+  pages.forEach((page, i) => lines.push('', `## Page ${i + 2}`, '', body(scope, page)));
   if (isStack(card)) {
     const entries = stackEntries(card, scope.index.byId, stacksOf(scope.index));
     lines.push('', '## In this stack, in order');
@@ -404,6 +407,60 @@ function tagIds(w: Writer, wanted: string[], vault: ScopeVault, created: Card[])
 function appendDoc(content: JSONNode, extra: JSONNode): JSONNode {
   const blocks = (content.content ?? []).filter((n, _i, all) => !(all.length === 1 && n.type === 'paragraph' && !n.content));
   return { type: 'doc', content: [...blocks, ...(extra.content ?? [])] };
+}
+
+const normSpaces = (text: string) => text.replace(/\s+/g, ' ').trim();
+
+/**
+ * Restores attachment metadata (`width`, `height`, `mime`, `size`, `duration`, `poster`, `voice`, `transcript`,
+ * `peaks`, `segments`, etc.) from a card's existing documents when `edit_card` replaces its body from Markdown, and
+ * drops the synthetic transcript blockquote that `toMarkdown` emits right after a voice message.
+ */
+function preserveAttachments(nextDoc: JSONNode, existingDocs: JSONNode[]): JSONNode {
+  const photos = new Map<string, Record<string, unknown>>();
+  const files = new Map<string, Record<string, unknown>>();
+  for (const doc of existingDocs) {
+    walk(doc, (n) => {
+      const id = typeof n.attrs?.id === 'string' ? n.attrs.id : null;
+      if (!id) return;
+      if (n.type === 'photo' && !photos.has(id)) photos.set(id, { ...n.attrs });
+      if (n.type === 'file' && !files.has(id)) files.set(id, { ...n.attrs });
+    });
+  }
+  if (!photos.size && !files.size) return nextDoc;
+
+  const restore = (node: JSONNode): JSONNode => {
+    if (node.type === 'photo' && typeof node.attrs?.id === 'string') {
+      const old = photos.get(node.attrs.id);
+      if (old) {
+        const alt = node.attrs.alt;
+        const keepAlt = typeof alt === 'string' && !(old.alt == null && alt === 'Photo');
+        return { ...node, attrs: { ...old, ...(keepAlt ? { alt } : {}) } };
+      }
+    }
+    if (node.type === 'file' && typeof node.attrs?.id === 'string') {
+      const old = files.get(node.attrs.id);
+      if (old) {
+        const name = node.attrs.name;
+        const keepName = typeof name === 'string' && name.length > 0 && !(old.name == null && name === 'File');
+        return { ...node, attrs: { ...old, ...(keepName ? { name } : {}) } };
+      }
+    }
+    if (!node.content) return node;
+    const out: JSONNode[] = [];
+    for (let i = 0; i < node.content.length; i++) {
+      const child = restore(node.content[i]);
+      out.push(child);
+      // `toMarkdown` writes a voice message's transcript as a blockquote immediately after its `[name](attachment:id)` line.
+      const transcript = child.type === 'file' && typeof child.attrs?.transcript === 'string' ? normSpaces(child.attrs.transcript) : '';
+      const following = node.content[i + 1];
+      if (transcript && following?.type === 'blockquote' && normSpaces(plainText(following)) === transcript) {
+        i++;
+      }
+    }
+    return { ...node, content: out };
+  };
+  return restore(nextDoc);
 }
 
 // Tools
@@ -597,14 +654,21 @@ export const TOOLS: Tool[] = [
       if (card.type !== 'todo') throw new ToolError(`"${displayTitle(card)}" is not a todo.`);
       requireWrite(w.scope, card);
       const done = args.done !== false;
-      if (done && card.status === 'open' && card.repeat) {
-        // Its start date, if it has one, moves as far as its due date.
+      const groups = w.scope.index.tagGroups.groups;
+      if (done) {
+        // Clears waiting on every completion; a repeating todo moves to its next due date and stays in its board column.
         const { patch, next } = completeTodo(card, serverToday(w));
-        await save(w, [{ ...card, ...patch }]);
-        return `Done for now: "${card.title}" repeats, and is next due ${next}.`;
+        if (card.status === 'open' && next) {
+          await save(w, [{ ...card, ...patch }]);
+          return `Done for now: "${card.title}" repeats, and is next due ${next}.`;
+        }
+        const tags = tagsForStatus(card.tags, groups, 'done');
+        await save(w, [{ ...card, ...patch, tags, completedAt: w.now() }]);
+        return `Marked "${card.title}" done.`;
       }
-      await save(w, [{ ...card, status: done ? 'done' : 'open', completedAt: done ? w.now() : null }]);
-      return `Marked "${card.title}" ${done ? 'done' : 'open'}.`;
+      const tags = tagsForStatus(card.tags, groups, 'open');
+      await save(w, [{ ...card, status: 'open', tags, completedAt: null }]);
+      return `Marked "${card.title}" open.`;
     },
   },
   {
@@ -645,7 +709,7 @@ export const TOOLS: Tool[] = [
         changes.push('title');
       }
       if (replace !== undefined) {
-        next.content = fromMarkdown(replace, resolver(w.scope));
+        next.content = preserveAttachments(fromMarkdown(replace, resolver(w.scope)), [card.content, ...cardPages(card)]);
         changes.push('body');
       }
       if (append !== undefined) {

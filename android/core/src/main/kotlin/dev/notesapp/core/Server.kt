@@ -92,6 +92,9 @@ object UrlConnectionTransport : Transport {
 
 @Serializable data class Pairing(val pair: String, val code: String)
 
+@Serializable data class AiAppsInfo(val apps: List<ConnectedApp>, val default_access: String? = null)
+@Serializable data class AiSettingsUpdate(val default_access: String, val vaults: List<Vault>)
+
 /**
  * What a vault's settings change: its name, this account's PIN, whether it's hidden, AI access, encryption. A field
  * left null is left out; `clearPin` and `clearEncryption` send null to clear them.
@@ -434,7 +437,9 @@ class ServerApi(
     suspend fun driveConnectUrl(dev: Boolean = false): String =
         obj("/drive/connect", "POST", jobj("app" to if (dev) j("dev") else j(true)))["url"].str ?: throw ApiError.Status(0)
     suspend fun disconnectDrive() { ok(send("/drive", "DELETE")) }
-    suspend fun aiApps() = list(ConnectedApp.serializer(), "apps", "/ai/apps")
+    suspend fun aiAppsInfo() = json(AiAppsInfo.serializer(), "/ai/apps")
+    suspend fun aiApps() = aiAppsInfo().apps
+    suspend fun setAiDefaultAccess(access: String) = json(AiSettingsUpdate.serializer(), "/ai/settings", "PATCH", jobj("default_access" to j(access)))
     suspend fun disconnectAiApp(id: String) { ok(send("/ai/apps/" + part(id), "DELETE")) }
     /** The address AI apps connect to. */
     val mcpUrl get() = site.trimEnd('/') + "/api/mcp"

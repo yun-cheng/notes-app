@@ -36,6 +36,8 @@ data class Vault(
     val members_need_pin: Boolean? = null,
     /** This account hasn't set the PIN the owner asks for, or hasn't been let in: the server sends none of its cards. */
     val withheld: Boolean? = null,
+    /** Explicit per-vault override, or null when following the owner's default AI access. */
+    val ai_access_override: String? = null,
 ) {
     val isPrivate get() = lock == "pin"
     val isEncrypted get() = !encryption.isNull
@@ -43,6 +45,7 @@ data class Vault(
     val isWithheld get() = withheld == true
     val needsMemberPins get() = members_need_pin == true
     val isMemberCopy get() = encryption.obj?.containsKey("member") == true
+    val aiAccessSetting get() = ai_access_override ?: "default"
     fun isDiary(userId: String) = id == "diary-$userId"
     fun isDefault(userId: String) = id == "vault-$userId"
 }

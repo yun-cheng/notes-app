@@ -59,6 +59,9 @@ fun SettingsPage(openDrawer: (() -> Unit)?) {
     val clipboard = LocalClipboardManager.current
     var drive by remember { mutableStateOf<DriveStatus?>(null) }
     var apps by remember { mutableStateOf<List<ConnectedApp>?>(null) }
+    var defaultAiAccess by remember { mutableStateOf<String?>(null) }
+    var savingAiDefault by remember { mutableStateOf(false) }
+    var aiVaultFilter by remember { mutableStateOf("") }
     var offline by remember { mutableStateOf(false) }
     var deleting by remember { mutableStateOf(false) }
     var reload by remember { mutableIntStateOf(0) }
@@ -66,7 +69,13 @@ fun SettingsPage(openDrawer: (() -> Unit)?) {
     var remindAt by remember { mutableStateOf(Reminders.at(context)) }
     var lead by remember { mutableIntStateOf(Reminders.lead(context)) }
     LaunchedEffect(reload, model.driveReturned) {
-        try { drive = model.api.driveStatus(); apps = model.api.aiApps(); offline = false } catch (_: Exception) { offline = true }
+        try {
+            drive = model.api.driveStatus()
+            val info = model.api.aiAppsInfo()
+            apps = info.apps
+            defaultAiAccess = info.default_access ?: "off"
+            offline = false
+        } catch (_: Exception) { offline = true }
     }
     var pendingExport by remember { mutableStateOf<ByteArray?>(null) }
     val save = rememberLauncherForActivityResult(ActivityResultContracts.CreateDocument("*/*")) { uri: Uri? ->
@@ -216,8 +225,59 @@ fun SettingsPage(openDrawer: (() -> Unit)?) {
                 FormRow("Connector address")
                 SelectionContainer { Text(model.api.mcpUrl, Modifier.padding(horizontal = 16.dp), fontFamily = Theme.mono, fontSize = 13.sp, color = Theme.text) }
                 FormButton("Copy address") { clipboard.setText(AnnotatedString(model.api.mcpUrl)); model.say("Copied") }
-                val open = model.vaults.filter { it.lock == "none" && it.ai_access != "off" }
-                FormText(if (open.isEmpty()) "No vault is open to AI yet. Turn it on for a vault under Vaults." else "Open to AI: " + open.joinToString(", ") { "${it.name} (${if (it.ai_access == "write") "read and write" else "read"})" } + ".")
+                val aiLabels = mapOf("off" to "Off", "read" to "Read", "write" to "Read and write")
+                val ownedOpen = model.vaults.filter { it.isOwner && !it.isPrivate }
+                val shownDefault = defaultAiAccess ?: ownedOpen.firstOrNull { it.ai_access_override == null }?.ai_access ?: "off"
+                ChoiceRow("Default for open vaults", aiLabels[shownDefault] ?: "Off") { close ->
+                    for ((k, l) in aiLabels) MenuCheck(l, shownDefault == k) {
+                        close()
+                        if (offline || savingAiDefault || defaultAiAccess == null) return@MenuCheck
+                        model.scope.launch {
+                            savingAiDefault = true
+                            try {
+                                val res = model.api.setAiDefaultAccess(k)
+                                defaultAiAccess = res.default_access
+                                model.repo.putVaults(res.vaults)
+                                model.refresh()
+                                model.say("Default AI access updated")
+                            } catch (e: Exception) {
+                                model.say(if (e is dev.notesapp.core.ApiError.Offline) "Connect to the internet to change AI access." else "That change couldn't be saved.")
+                            } finally { savingAiDefault = false }
+                        }
+                    }
+                }
+                FormText("Applies to every unlocked vault you own, including new ones, unless you choose otherwise below. Private vaults are always off.")
+                if (ownedOpen.size > 6) FormField(aiVaultFilter, { aiVaultFilter = it }, "Filter vaults…")
+                val q = aiVaultFilter.trim().lowercase()
+                val shownVaults = if (q.isEmpty()) ownedOpen else ownedOpen.filter { it.name.lowercase().contains(q) }
+                val defaultLabel = "Default (${aiLabels[shownDefault] ?: "Off"})"
+                for (v in shownVaults) {
+                    val current = v.aiAccessSetting
+                    val currentLabel = if (current == "default") defaultLabel else (aiLabels[current] ?: "Off")
+                    ChoiceRow(v.name, currentLabel) { close ->
+                        MenuCheck(defaultLabel, current == "default") {
+                            close()
+                            model.scope.launch {
+                                runCatching { VaultEncryption(model).save(v, dev.notesapp.core.VaultChanges(ai_access = "default")) }
+                                    .onSuccess { model.say("AI access changed") }
+                                    .onFailure { model.say("That change couldn't be saved.") }
+                            }
+                        }
+                        for ((k, l) in aiLabels) MenuCheck(l, current == k) {
+                            close()
+                            model.scope.launch {
+                                runCatching { VaultEncryption(model).save(v, dev.notesapp.core.VaultChanges(ai_access = k)) }
+                                    .onSuccess { model.say("AI access changed") }
+                                    .onFailure { model.say("That change couldn't be saved.") }
+                            }
+                        }
+                    }
+                }
+                if (q.isNotEmpty() && shownVaults.isEmpty()) FormText("No open vault matches \"$aiVaultFilter\".")
+                val privateCount = model.vaults.count { it.isPrivate && !(it.hidden && it.id in model.lockedVaults) }
+                if (privateCount > 0) FormText("$privateCount ${if (privateCount == 1) "private vault is" else "private vaults are"} always off.")
+                val sharedOpen = model.vaults.filter { !it.isOwner && !it.isPrivate && !it.isWithheld && it.ai_access != "off" }
+                if (sharedOpen.isNotEmpty()) FormText("Shared vaults open to AI (read only): " + sharedOpen.joinToString(", ") { it.name } + ".")
                 for (app in apps ?: emptyList()) FormRow(app.name, app.last_used_at?.let { "Last used " + formatMillis(it) } ?: "Not used yet") {
                     TextButton(onClick = { model.scope.launch { runCatching { model.api.disconnectAiApp(app.id) }; reload++ } }) { Text("Disconnect") }
                 }

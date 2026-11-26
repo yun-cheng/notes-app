@@ -19,6 +19,7 @@ struct JournalBox: View {
     @State private var importing = false
     @State private var pickingPhotos = false
     @State private var recordNow = 0
+    @State private var recording = VoiceRecording()
     @FocusState private var focused: Bool
 
     /// The web's name for this view's draft, so the box's draft follows the account to its other devices.
@@ -46,6 +47,7 @@ struct JournalBox: View {
             } else if let (mark, query) = typedWord, !typeahead(mark, query).isEmpty {
                 TypeaheadMenu(title: mark == "#" ? "Tags" : "Due date", items: typeahead(mark, query)) { pickTypeahead($0) }
             }
+            if recording.isRecording { VoiceRecordingBar(recording: recording) }
             HStack(alignment: .bottom, spacing: 8) {
                 Button { todos.toggle() } label: {
                     Image(systemName: todos ? "checkmark.circle.fill" : "checkmark.circle")
@@ -82,7 +84,7 @@ struct JournalBox: View {
                     .buttonStyle(.plain)
                     .accessibilityLabel("Attach a file")
                     .padding(.bottom, 8)
-                VoiceRecordButton(vaultId: targetVault, start: recordNow) { node in attached.append(node) }
+                VoiceRecordButton(vaultId: targetVault, recording: recording, start: recordNow) { node in attached.append(node) }
                 Button(action: send) {
                     Image(systemName: "arrow.up")
                         .font(.body.weight(.semibold))
@@ -117,6 +119,8 @@ struct JournalBox: View {
             if text.isEmpty, let doc = Drafts.shared.get("journal", draftKey) { text = Drafts.text(doc) }
         }
         .onChange(of: model.focusBox) { focused = true }
+        // Gone from the page while recording: thrown away, as on the web.
+        .onDisappear { recording.finish(keep: false) }
         .onChange(of: model.pastedToBox) { _, pasted in takePasted(pasted) }
         // Shown again for it, as picking stopped.
         .onAppear { takePasted(model.pastedToBox) }

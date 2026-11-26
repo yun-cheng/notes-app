@@ -58,6 +58,21 @@ import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
+import androidx.compose.ui.text.TextStyle
+import androidx.compose.ui.semantics.semantics
+import androidx.compose.ui.semantics.contentDescription
+import androidx.compose.ui.semantics.clearAndSetSemantics
+import androidx.compose.ui.graphics.graphicsLayer
+import androidx.compose.ui.draw.shadow
+import androidx.compose.material.icons.outlined.Delete
+import androidx.compose.material.icons.filled.Stop
+import androidx.compose.material.icons.filled.Mic
+import androidx.compose.animation.core.tween
+import androidx.compose.animation.core.rememberInfiniteTransition
+import androidx.compose.animation.core.infiniteRepeatable
+import androidx.compose.animation.core.animateFloat
+import androidx.compose.animation.core.RepeatMode
+import androidx.compose.animation.core.FastOutSlowInEasing
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.geometry.CornerRadius
@@ -405,26 +420,113 @@ fun Waveform(peaks: List<Double>, progress: Double, modifier: Modifier, line: Bo
 }
 
 /**
- * The box's mic: press to record a voice message, press again to stop. It's added to the box like a file, drawn by its
- * loudness, and transcribed by the server once it's up (not in an encrypted vault, whose words never reach it).
+ * A voice message being recorded from the box's mic, as the web app's `useVoiceRecorder`: while it records, a bar over
+ * the box shows the time, how loud it is now, Discard and Done (`VoiceRecordingBar`). Only Discard throws it away:
+ * Done, or stopping by itself after 15 minutes, hands what was recorded on.
+ */
+class VoiceRecording {
+    /** When it started, or 0 when it isn't recording. */
+    var started by mutableLongStateOf(0L)
+        private set
+    /** How loud it was over the last few seconds, oldest first, each from 0 to 100. */
+    var levels by mutableStateOf(List(LEVELS) { 0f })
+        private set
+    val isRecording get() = started != 0L
+    private var recorder: Recorder? = null
+    private var done: ((Recorder) -> Unit)? = null
+
+    /** Starts, unless it's recording already; `done` gets the recorder once it's stopped and kept. */
+    fun start(done: (Recorder) -> Unit): Boolean {
+        if (recorder != null) return true
+        val r = Recorder()
+        if (!r.start()) return false
+        recorder = r
+        this.done = done
+        levels = List(LEVELS) { 0f }
+        started = System.currentTimeMillis()
+        return true
+    }
+
+    /** Takes how loud it is now, and stops it once it's run as long as one can. */
+    fun sample() {
+        val r = recorder ?: return
+        levels = levels.drop(1) + minOf(100f, Math.round(r.level * 400).toFloat())
+        if (System.currentTimeMillis() - started >= MAX_SECONDS * 1000) finish(true)
+    }
+
+    /** Stops, keeping what was recorded or throwing it away. */
+    fun finish(keep: Boolean) {
+        val r = recorder ?: return
+        recorder = null
+        started = 0L
+        val d = done
+        done = null
+        if (keep && d != null) d(r) else r.discard()
+    }
+
+    companion object {
+        const val LEVELS = 28
+        const val MAX_SECONDS = 15 * 60
+    }
+}
+
+/** The bar over the box while a voice message records, as the web's: a dot, the time, how loud it is now, Discard and Done. */
+@Composable
+fun VoiceRecordingBar(recording: VoiceRecording) {
+    val started = recording.started
+    var now by remember { mutableLongStateOf(System.currentTimeMillis()) }
+    LaunchedEffect(started) {
+        while (recording.isRecording) { recording.sample(); now = System.currentTimeMillis(); delay(100) }
+    }
+    val dim by rememberInfiniteTransition(label = "recording").animateFloat(
+        1f, 0.3f, infiniteRepeatable(tween(600, easing = FastOutSlowInEasing), RepeatMode.Reverse), label = "dot",
+    )
+    val accent = Theme.accent
+    Box(Modifier.fillMaxWidth(), contentAlignment = Alignment.Center) {
+        Row(
+            Modifier.semantics(mergeDescendants = false) { contentDescription = "Recording a voice message" }
+                .shadow(6.dp, CircleShape).clip(CircleShape).background(Theme.raised).border(1.dp, Theme.line, CircleShape)
+                .padding(start = 14.dp, end = 8.dp, top = 8.dp, bottom = 8.dp),
+            horizontalArrangement = Arrangement.spacedBy(10.dp), verticalAlignment = Alignment.CenterVertically,
+        ) {
+            Box(Modifier.size(10.dp).graphicsLayer { alpha = dim }.clip(CircleShape).background(Theme.alert))
+            Text(
+                Doc.clipLength(((now - started).coerceAtLeast(0) / 1000).toDouble()), Modifier.widthIn(min = 38.dp),
+                fontSize = 14.sp, fontWeight = FontWeight.SemiBold, color = Theme.text, style = TextStyle(fontFeatureSettings = "tnum"),
+            )
+            Canvas(Modifier.size(112.dp, 26.dp).clearAndSetSemantics {}) {
+                val bars = recording.levels
+                val gap = 2.dp.toPx()
+                val w = (size.width - gap * (bars.size - 1)) / bars.size
+                bars.forEachIndexed { i, l ->
+                    val h = size.height * maxOf(8f, l) / 100f
+                    drawRoundRect(accent, Offset(i * (w + gap), (size.height - h) / 2), Size(w, h), CornerRadius(2.dp.toPx()))
+                }
+            }
+            Icon(
+                Icons.Outlined.Delete, "Discard the recording",
+                Modifier.size(36.dp).clip(CircleShape).clickable { recording.finish(false) }.padding(7.dp), tint = Theme.muted,
+            )
+            Row(
+                Modifier.clip(CircleShape).background(Theme.accent).clickable { recording.finish(true) }.padding(start = 12.dp, end = 14.dp, top = 7.dp, bottom = 7.dp),
+                horizontalArrangement = Arrangement.spacedBy(6.dp), verticalAlignment = Alignment.CenterVertically,
+            ) {
+                Icon(Icons.Filled.Stop, null, Modifier.size(16.dp), tint = Theme.onAccent)
+                Text("Done", fontSize = 14.sp, fontWeight = FontWeight.SemiBold, color = Theme.onAccent)
+            }
+        }
+    }
+}
+
+/**
+ * The box's mic: press to record a voice message, shown in the bar over the box (`VoiceRecordingBar`) until it's done.
+ * It's added to the box like a file, drawn by its loudness, and transcribed by the server once it's up (not in an
+ * encrypted vault, whose words never reach it).
  */
 @Composable
-fun VoiceRecordButton(vaultId: String, start: Int = 0, add: (JsonElement) -> Unit) {
+fun VoiceRecordButton(vaultId: String, recording: VoiceRecording, start: Int = 0, add: (JsonElement) -> Unit) {
     val model = LocalModel.current
     val context = LocalContext.current
-    var recorder by remember { mutableStateOf<Recorder?>(null) }
-    var started by remember { mutableLongStateOf(0L) }
-    var now by remember { mutableLongStateOf(0L) }
-    LaunchedEffect(recorder) { while (recorder != null) { now = System.currentTimeMillis(); delay(500) } }
-    fun begin() {
-        val r = Recorder()
-        if (!r.start()) { model.say("Recording didn't start."); return }
-        recorder = r
-        started = System.currentTimeMillis()
-    }
-    val ask = rememberLauncherForActivityResult(ActivityResultContracts.RequestPermission()) { granted ->
-        if (granted) begin() else model.say("The app isn't allowed to use the microphone. Turn it on in Android's settings.")
-    }
     fun finish(r: Recorder) {
         model.scope.launch {
             val samples = r.stop()
@@ -444,26 +546,22 @@ fun VoiceRecordButton(vaultId: String, start: Int = 0, add: (JsonElement) -> Uni
             }
         }
     }
+    fun begin() {
+        if (!recording.start { finish(it) }) model.say("Recording didn't start.")
+    }
+    val ask = rememberLauncherForActivityResult(ActivityResultContracts.RequestPermission()) { granted ->
+        if (granted) begin() else model.say("The app isn't allowed to use the microphone. Turn it on in Android's settings.")
+    }
+    fun press() {
+        if (recording.isRecording) return
+        if (ContextCompat.checkSelfPermission(context, Manifest.permission.RECORD_AUDIO) == PackageManager.PERMISSION_GRANTED) begin() else ask.launch(Manifest.permission.RECORD_AUDIO)
+    }
     // The box's /voice starts recording.
-    LaunchedEffect(start) {
-        if (start > 0 && recorder == null) {
-            if (ContextCompat.checkSelfPermission(context, Manifest.permission.RECORD_AUDIO) == PackageManager.PERMISSION_GRANTED) begin() else ask.launch(Manifest.permission.RECORD_AUDIO)
-        }
-    }
-    val r = recorder
-    if (r != null) {
-        Row(
-            Modifier.padding(bottom = 8.dp).clickable { recorder = null; finish(r) },
-            horizontalArrangement = Arrangement.spacedBy(3.dp), verticalAlignment = Alignment.CenterVertically,
-        ) {
-            Icon(Icons.Outlined.StopCircle, "Stop recording", Modifier.size(22.dp), tint = Theme.alert)
-            Text(Doc.clipLength((now - started) / 1000.0), fontSize = 14.sp, color = Theme.alert)
-        }
-    } else {
-        Icon(Icons.Outlined.Mic, "Record a voice message", Modifier.padding(bottom = 8.dp).size(22.dp).clickable {
-            if (ContextCompat.checkSelfPermission(context, Manifest.permission.RECORD_AUDIO) == PackageManager.PERMISSION_GRANTED) begin() else ask.launch(Manifest.permission.RECORD_AUDIO)
-        }, tint = Theme.muted)
-    }
+    LaunchedEffect(start) { if (start > 0) press() }
+    Icon(
+        if (recording.isRecording) Icons.Filled.Mic else Icons.Outlined.Mic, "Record a voice message",
+        Modifier.padding(bottom = 8.dp).size(22.dp).clickable { press() }, tint = if (recording.isRecording) Theme.accent else Theme.muted,
+    )
 }
 
 /** Records from the microphone at the rate the transcriber hears, keeping the samples, and makes an AAC file of them. */
@@ -472,6 +570,9 @@ class Recorder {
     private val out = ByteArrayOutputStream()
     @Volatile private var running = false
     private var thread: Thread? = null
+    /** How loud the last tenth of a second was: the root of its mean square, from 0 to 1. */
+    @Volatile var level = 0f
+        private set
 
     @SuppressLint("MissingPermission")
     fun start(): Boolean {
@@ -482,10 +583,28 @@ class Recorder {
         running = true
         r.startRecording()
         thread = Thread {
-            val buf = ByteArray(size)
-            while (running) { val n = r.read(buf, 0, buf.size); if (n > 0) synchronized(out) { out.write(buf, 0, n) } }
+            // A tenth of a second at a time, so how loud it is now keeps up.
+            val buf = ByteArray(Voice.RATE / 10 * 2)
+            while (running) {
+                val n = r.read(buf, 0, buf.size)
+                if (n <= 0) continue
+                synchronized(out) { out.write(buf, 0, n) }
+                var sum = 0.0
+                for (i in 0 until n / 2) {
+                    val v = ((buf[2 * i].toInt() and 0xff) or (buf[2 * i + 1].toInt() shl 8)).toShort() / 32768.0
+                    sum += v * v
+                }
+                level = kotlin.math.sqrt(sum / maxOf(1, n / 2)).toFloat()
+            }
         }.apply { start() }
         return true
+    }
+
+    /** Stops and throws away what was recorded, off the main thread. */
+    fun discard() {
+        running = false
+        val t = thread
+        Thread { t?.join(); record?.stop(); record?.release() }.start()
     }
 
     /** Stops, and the sound as samples from -1 to 1. */

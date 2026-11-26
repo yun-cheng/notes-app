@@ -74,6 +74,7 @@ _Last checked 2026-11-25._
 | A bar along the top of the journal while one plays: previous, play, next, what's said, time, speed, volume, close, a line to seek | ✅ | ✅ | ✅ | T |
 | Transcript: each sentence plays from there, the one being said marked; hidden or shown from the player, kept on the device | ✅ | ✅ | ✅ | T |
 | Copy and Transcribe again under the transcript | ✅ | ✅ | ✅ | T |
+| Recording from the box's mic: a bar over the box with a pulsing dot, the time, how loud it is now (28 bars, from the microphone a tenth of a second at a time), Discard and Done; it stops by itself after 15 minutes, and leaving the page throws it away; on a phone's browser the same bar fits above the box and the tabs | ✅ (since 2026-11-26; before, the mic turned into a stop button with the time) (C: built; not recorded with, as it would use this Mac's microphone) | ✅ (since 2026-11-26, the Mac's code) (T: refusing the microphone says so; recording not tried, as the Simulator records from the Mac's microphone) | ✅ (since 2026-11-26; before, the same stop button) (T: the bar, Done adding the recording, Discard dropping it; the levels stayed flat, as the emulator's microphone is silent) | T |
 
 ## Journal page
 

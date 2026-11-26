@@ -52,6 +52,7 @@ import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateListOf
 import androidx.compose.runtime.mutableStateOf
@@ -118,6 +119,9 @@ fun JournalBox(filter: StreamFilter) {
     val focus = remember { FocusRequester() }
     val pickers = rememberAttachmentPickers(targetVault) { attached.add(it) }
     var recordNow by remember { mutableStateOf(0) }
+    val recording = remember { VoiceRecording() }
+    // Gone from the page while recording: thrown away, as on the web.
+    DisposableEffect(Unit) { onDispose { recording.finish(false) } }
 
     LaunchedEffect(model.focusBox) { if (model.focusBox > 0) runCatching { focus.requestFocus() } }
     LaunchedEffect(model.sharedText) { model.sharedText?.let { text = if (text.isBlank()) it else text + "\n" + it; model.sharedText = null } }
@@ -188,6 +192,7 @@ fun JournalBox(filter: StreamFilter) {
                 attached.forEachIndexed { i, node -> AttachedThumb(node, targetVault) { attached.removeAt(i) } }
             }
         }
+        if (recording.isRecording) VoiceRecordingBar(recording)
         val empty = text.isBlank() && attached.isEmpty()
         Row(
             Modifier.fillMaxWidth().clip(RoundedCornerShape(22.dp)).background(Theme.surface).border(1.dp, if (focused) Theme.accent else Theme.line, RoundedCornerShape(22.dp))
@@ -213,7 +218,7 @@ fun JournalBox(filter: StreamFilter) {
             )
             Icon(Icons.Outlined.Photo, "Add photos", Modifier.padding(bottom = 8.dp).size(22.dp).clickable { pickers.photos() }, tint = Theme.muted)
             Icon(Icons.Outlined.AttachFile, "Attach a file", Modifier.padding(bottom = 8.dp).size(22.dp).clickable { pickers.files() }, tint = Theme.muted)
-            VoiceRecordButton(targetVault, recordNow) { attached.add(it) }
+            VoiceRecordButton(targetVault, recording, recordNow) { attached.add(it) }
             Box(
                 Modifier.size(34.dp).clip(CircleShape).background(if (empty) Theme.sunken else Theme.accent).clickable(enabled = !empty) { send() },
                 contentAlignment = Alignment.Center,

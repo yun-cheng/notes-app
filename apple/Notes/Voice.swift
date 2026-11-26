@@ -442,43 +442,29 @@ struct FlowText: View {
     }
 }
 
-/// The box's mic: press to record a voice message, press again to stop. It's added to the box like a file, drawn by
-/// its loudness, and transcribed by the server once it's up (not in an encrypted vault, whose words never reach it).
-struct VoiceRecordButton: View {
-    @Environment(AppModel.self) private var model
-    let vaultId: String
-    /// Raised to start recording from elsewhere, as the box's /voice does.
-    var start = 0
-    let add: (JSONValue) -> Void
-    @State private var recorder: AVAudioRecorder?
-    @State private var started: Date?
+/// A voice message being recorded from the box's mic, as the web app's `useVoiceRecorder`: while it records, a bar over
+/// the box shows the time, how loud it is now, Discard and Done (`VoiceRecordingBar`). Only Discard throws it away:
+/// Done, or stopping by itself after 15 minutes, hands what was recorded on.
+@MainActor
+@Observable
+final class VoiceRecording {
+    static let levelCount = 28
+    static let maxSeconds = 15.0 * 60
+    private(set) var started: Date?
+    /// How loud it was over the last few seconds, oldest first, each from 0 to 100.
+    private(set) var levels = [Double](repeating: 0, count: levelCount)
+    var isRecording: Bool { started != nil }
+    @ObservationIgnored private var recorder: AVAudioRecorder?
+    @ObservationIgnored private var tick: Timer?
+    @ObservationIgnored private var asking = false
+    @ObservationIgnored private var done: ((URL) -> Void)?
 
-    var body: some View {
-        Button(action: toggle) {
-            if let started {
-                TimelineView(.periodic(from: started, by: 1)) { context in
-                    Label(Doc.clipLength(context.date.timeIntervalSince(started)), systemImage: "stop.circle.fill")
-                        .labelStyle(.titleAndIcon).foregroundStyle(Theme.alert).font(.callout.monospacedDigit())
-                }
-            } else {
-                Image(systemName: "mic").foregroundStyle(Theme.muted)
-            }
-        }
-        .buttonStyle(.plain)
-        .padding(.bottom, 8)
-        .accessibilityLabel(started == nil ? "Record a voice message" : "Stop recording")
-        .onChange(of: start) { if recorder == nil { toggle() } }
-    }
-
-    private func toggle() {
-        if let recorder {
-            recorder.stop()
-            self.recorder = nil
-            started = nil
-            finish(recorder.url)
-            return
-        }
+    /// Asks for the microphone and starts, unless it's recording already; `done` gets the file once it's stopped and kept.
+    func start(model: AppModel, done: @escaping (URL) -> Void) {
+        guard recorder == nil, !asking else { return }
+        asking = true
         Task {
+            defer { asking = false }
             guard await AVAudioApplication.requestRecordPermission() else {
                 model.say("The app isn't allowed to use the microphone. Turn it on in Settings.")
                 return
@@ -489,13 +475,126 @@ struct VoiceRecordButton: View {
             #endif
             let url = URL.temporaryDirectory.appending(path: "voice-\(UUID().uuidString).m4a")
             let settings: [String: Any] = [AVFormatIDKey: kAudioFormatMPEG4AAC, AVSampleRateKey: 44_100, AVNumberOfChannelsKey: 1, AVEncoderAudioQualityKey: AVAudioQuality.high.rawValue]
-            guard let r = try? AVAudioRecorder(url: url, settings: settings), r.record() else {
+            guard let r = try? AVAudioRecorder(url: url, settings: settings) else {
+                model.say("Recording didn't start.")
+                return
+            }
+            r.isMeteringEnabled = true
+            guard r.record() else {
                 model.say("Recording didn't start.")
                 return
             }
             recorder = r
+            self.done = done
+            levels = [Double](repeating: 0, count: Self.levelCount)
             started = Date()
+            let t = Timer(timeInterval: 0.1, repeats: true) { [weak self] _ in MainActor.assumeIsolated { self?.sample() } }
+            // Kept ticking while a menu is open or the page scrolls.
+            RunLoop.main.add(t, forMode: .common)
+            tick = t
         }
+    }
+
+    private func sample() {
+        guard let recorder, let started else { return }
+        recorder.updateMeters()
+        // From decibels to how far the sound swings, scaled as the web's.
+        let power = Double(recorder.averagePower(forChannel: 0))
+        levels = Array(levels.dropFirst()) + [min(100, (pow(10, power / 20) * 400).rounded())]
+        if Date().timeIntervalSince(started) >= Self.maxSeconds { finish(keep: true) }
+    }
+
+    /// Stops, keeping what was recorded or throwing it away.
+    func finish(keep: Bool) {
+        guard let recorder else { return }
+        tick?.invalidate()
+        tick = nil
+        recorder.stop()
+        self.recorder = nil
+        started = nil
+        let done = self.done
+        self.done = nil
+        if keep { done?(recorder.url) } else { try? FileManager.default.removeItem(at: recorder.url) }
+    }
+}
+
+/// The bar over the box while a voice message records, as the web's: a dot, the time, how loud it is now, Discard and Done.
+struct VoiceRecordingBar: View {
+    let recording: VoiceRecording
+    @Environment(\.accessibilityReduceMotion) private var still
+    @State private var dim = false
+
+    var body: some View {
+        HStack(spacing: 10) {
+            Circle().fill(Theme.alert).frame(width: 10, height: 10)
+                .opacity(dim ? 0.3 : 1)
+                .onAppear {
+                    guard !still else { return }
+                    withAnimation(.easeInOut(duration: 0.6).repeatForever(autoreverses: true)) { dim = true }
+                }
+            if let started = recording.started {
+                TimelineView(.periodic(from: started, by: 1)) { context in
+                    Text(Doc.clipLength(context.date.timeIntervalSince(started).rounded(.down)))
+                        .font(.callout.weight(.semibold).monospacedDigit())
+                        .frame(minWidth: 38, alignment: .leading)
+                }
+            }
+            HStack(spacing: 2) {
+                ForEach(recording.levels.indices, id: \.self) { i in
+                    RoundedRectangle(cornerRadius: 2).fill(Theme.accent)
+                        .frame(height: 26 * max(8, recording.levels[i]) / 100)
+                }
+            }
+            .frame(width: 112, height: 26)
+            .accessibilityHidden(true)
+            Button { recording.finish(keep: false) } label: { Image(systemName: "trash").foregroundStyle(Theme.muted).frame(width: 32, height: 32) }
+                .buttonStyle(.plain)
+                .help("Discard")
+                .accessibilityLabel("Discard the recording")
+            Button { recording.finish(keep: true) } label: {
+                Label("Done", systemImage: "stop.fill")
+                    .font(.callout.weight(.semibold))
+                    .padding(.vertical, 7).padding(.leading, 12).padding(.trailing, 14)
+                    .background(Capsule().fill(Theme.accent))
+                    .foregroundStyle(Theme.onAccent)
+            }
+            .buttonStyle(.plain)
+            .help("Stop and add it")
+        }
+        .padding(.leading, 14).padding(.trailing, 8).padding(.vertical, 8)
+        .background(Capsule().fill(Theme.raised))
+        .overlay(Capsule().stroke(Theme.line))
+        .shadow(color: .black.opacity(0.15), radius: 8, y: 2)
+        .frame(maxWidth: .infinity)
+        .accessibilityElement(children: .contain)
+        .accessibilityLabel("Recording a voice message")
+    }
+}
+
+/// The box's mic: press to record a voice message, shown in the bar over the box (`VoiceRecordingBar`) until it's
+/// done. It's added to the box like a file, drawn by its loudness, and transcribed by the server once it's up (not in
+/// an encrypted vault, whose words never reach it).
+struct VoiceRecordButton: View {
+    @Environment(AppModel.self) private var model
+    let vaultId: String
+    let recording: VoiceRecording
+    /// Raised to start recording from elsewhere, as the box's /voice does.
+    var start = 0
+    let add: (JSONValue) -> Void
+
+    var body: some View {
+        Button(action: begin) {
+            Image(systemName: recording.isRecording ? "mic.fill" : "mic").foregroundStyle(recording.isRecording ? Theme.accent : Theme.muted)
+        }
+        .buttonStyle(.plain)
+        .padding(.bottom, 8)
+        .help("Record a voice message")
+        .accessibilityLabel("Record a voice message")
+        .onChange(of: start) { begin() }
+    }
+
+    private func begin() {
+        recording.start(model: model) { url in finish(url) }
     }
 
     private func finish(_ url: URL) {

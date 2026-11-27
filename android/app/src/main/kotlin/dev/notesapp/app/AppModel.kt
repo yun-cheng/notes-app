@@ -88,17 +88,24 @@ class AppModel(private val context: Context, val site: String) {
     /** Every card on the device, sealed ones too: `index` keeps locked ones out of every list. */
     // Set only when a card changed (see refresh), so a plain reference check is enough, not comparing every card.
     var cards by mutableStateOf<List<Card>>(emptyList(), referentialEqualityPolicy()); private set
-    /** Search over `index`, built when first asked for after it changes rather than on every keystroke. */
-    val search: CardSearch get() {
+    /** Search over `index`, built off the main thread when first asked for after `index` changes so searching thousands of cards never freezes the UI. */
+    var readySearch by mutableStateOf<CardSearch?>(null); private set
+    private var searchedIndex: CardIndex? = null
+    private var searchJob: kotlinx.coroutines.Job? = null
+
+    fun searchFor(query: String): List<CardSearch.Hit> {
+        if (query.isBlank()) return emptyList()
         val now = index
         if (searchedIndex !== now) {
-            cachedSearch = CardSearch(now)
             searchedIndex = now
+            searchJob?.cancel()
+            searchJob = scope.launch {
+                val built = kotlinx.coroutines.withContext(Dispatchers.Default) { CardSearch(now) }
+                if (index === now) readySearch = built
+            }
         }
-        return cachedSearch!!
+        return readySearch?.search(query) ?: emptyList()
     }
-    private var searchedIndex: CardIndex? = null
-    private var cachedSearch: CardSearch? = null
 
     /** Goes up each time `cards` changes: a cheap key for an effect to watch instead of every card. */
     var cardsVersion by mutableIntStateOf(0); private set
@@ -191,6 +198,9 @@ class AppModel(private val context: Context, val site: String) {
     private suspend fun open(account: Account, token: String) {
         sync = null
         openVaults = emptySet()
+        searchJob?.cancel()
+        searchedIndex = null
+        readySearch = null
         repo.keyring.forgetAll()
         repo = openRepo(account.id)
         repo.onChange = { scope.launch { changed() } }
@@ -257,6 +267,9 @@ class AppModel(private val context: Context, val site: String) {
         cards = emptyList()
         indexed = null
         index = CardIndex()
+        searchJob?.cancel()
+        searchedIndex = null
+        readySearch = null
         vaults = emptyList()
         openVaults = emptySet()
         page = Page.Journal()

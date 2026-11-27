@@ -133,7 +133,7 @@ fun <T> HeldList(
     var query by remember { mutableStateOf("") }
     var searching by remember { mutableStateOf(false) }
     val q = query.trim()
-    val hits = if (q.isEmpty()) null else model.search.search(q).map { it.card.id }.toSet()
+    val hits = if (q.isEmpty()) null else remember(q, model.index, model.readySearch) { model.searchFor(q).map { it.card.id }.toSet() }
     val shown = days.map { d -> d.copy(items = d.items.filter { hits == null || it.second.id in hits || text(it.first).contains(q, ignoreCase = true) }) }.filter { it.items.isNotEmpty() }
     val all = shown.flatMap { it.items }
     Column(Modifier.fillMaxSize().background(Theme.bg)) {

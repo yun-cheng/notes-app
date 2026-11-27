@@ -25,18 +25,35 @@ final class AppModel {
     private(set) var cardsVersion = 0
     /// Derived from the cards, with locked vaults' cards left out.
     private(set) var index = CardIndex() {
-        didSet { cachedSearch = nil }
+        didSet { indexVersion += 1 }
     }
     /// The cards have been read once: until then the journal is empty because it hasn't been read, not because it is.
     private(set) var loaded = false
-    /// Search over `index`, built when first asked for after it changes rather than on every keystroke.
-    var search: CardSearch {
-        if let cachedSearch { return cachedSearch }
-        let made = CardSearch(index)
-        cachedSearch = made
-        return made
+    /// Search over `index`, built off the main actor when first asked for after `index` changes so searching thousands
+    /// of cards never stalls the UI.
+    private(set) var readySearch: CardSearch?
+    @ObservationIgnored private var indexVersion = 0
+    @ObservationIgnored private var searchedVersion = -1
+    @ObservationIgnored private var searchTask: Task<Void, Never>?
+
+    func searchHits(_ query: String) -> [CardSearch.Hit] {
+        guard !query.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty else { return [] }
+        if searchedVersion != indexVersion {
+            let target = indexVersion
+            let snapshot = index
+            searchedVersion = target
+            searchTask?.cancel()
+            searchTask = Task.detached(priority: .userInitiated) { [weak self] in
+                let built = CardSearch(snapshot)
+                guard !Task.isCancelled else { return }
+                await MainActor.run {
+                    guard let self, self.indexVersion == target else { return }
+                    self.readySearch = built
+                }
+            }
+        }
+        return readySearch?.search(query) ?? []
     }
-    @ObservationIgnored private var cachedSearch: CardSearch?
     /// The vaults each card is shared into besides its own.
     private(set) var sharedInto: SharedInto = [:]
     /// Open comments on each card.
@@ -163,6 +180,9 @@ final class AppModel {
     private func open(account: Account, token: String) async {
         sync = nil
         openVaults = []
+        searchTask?.cancel()
+        searchedVersion = -1
+        readySearch = nil
         repo.keyring.forgetAll()
         repo = try! Repository(path: Self.database(for: account.id))
         await repo.onChange { [weak self] in
@@ -222,6 +242,9 @@ final class AppModel {
         sync = nil
         cards = []
         index = CardIndex()
+        searchTask?.cancel()
+        searchedVersion = -1
+        readySearch = nil
         indexed = ([], [])
         vaults = []
         openVaults = []

@@ -72,7 +72,7 @@ struct JournalView: View {
     private var items: [StreamItem] {
         var items = Stream.items(model.index, filter, today: model.today, sharedInto: model.sharedInto)
         if searching && !query.trimmingCharacters(in: .whitespaces).isEmpty {
-            let hits = Set(model.search.search(query).map(\.card.id))
+            let hits = Set(model.searchHits(query).map(\.card.id))
             items = items.filter { hits.contains($0.card.id) }
         } else {
             items = Stream.foldStacks(items, stackOf: model.index.stackOf)
@@ -135,7 +135,13 @@ struct JournalView: View {
                                 Button("Show more entries") { shown += Self.pageSize }.buttonStyle(.borderless).frame(maxWidth: .infinity)
                                     .onAppear { if settled { shown += Self.pageSize } }
                             }
-                            if all.isEmpty && model.loaded { EmptyJournal(filter: filter, searching: searching) }
+                            if all.isEmpty && model.loaded {
+                                if searching && !query.trimmingCharacters(in: .whitespaces).isEmpty && model.readySearch == nil {
+                                    Text("Searching…").foregroundStyle(Theme.muted).frame(maxWidth: .infinity).padding(.vertical, 60)
+                                } else {
+                                    EmptyJournal(filter: filter, searching: searching)
+                                }
+                            }
                         }
                         .padding(.horizontal, 16)
                         #if os(macOS)

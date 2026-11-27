@@ -195,7 +195,7 @@ fun TrashPage(openDrawer: (() -> Unit)?) {
 fun SearchPage(openDrawer: (() -> Unit)?) {
     val model = LocalModel.current
     var query by remember { mutableStateOf("") }
-    val hits = remember(query, model.index) { model.search.search(query) }
+    val hits = remember(query, model.index, model.readySearch) { model.searchFor(query) }
     Column(Modifier.fillMaxSize().background(Theme.bg)) {
         TopBar("Search", openDrawer, filters = false)
         PageSearchField(query, { query = it }, placeholder = "Search notes, todos and tags") { query = "" }
@@ -213,7 +213,7 @@ fun SearchPage(openDrawer: (() -> Unit)?) {
                 }
                 HorizontalDivider(color = Theme.line)
             }
-            if (query.isNotBlank() && hits.isEmpty()) item { Text("No results for “${query.trim()}”.", Modifier.fillMaxWidth().padding(top = 60.dp), color = Theme.muted, textAlign = TextAlign.Center) }
+            if (query.isNotBlank() && hits.isEmpty()) item { Text(if (model.readySearch == null) "Searching…" else "No results for “${query.trim()}”.", Modifier.fillMaxWidth().padding(top = 60.dp), color = Theme.muted, textAlign = TextAlign.Center) }
         }
     }
 }

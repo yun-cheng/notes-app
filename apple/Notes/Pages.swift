@@ -165,7 +165,7 @@ struct HeldList<T: Identifiable, Row: View, Lead: View>: View where T.ID == Stri
 
     var body: some View {
         let q = query.trimmingCharacters(in: .whitespaces)
-        let hits = q.isEmpty ? nil : Set(model.search.search(q).map(\.card.id))
+        let hits = q.isEmpty ? nil : Set(model.searchHits(q).map(\.card.id))
         let shown = days.map { d in HeldDay(day: d.day, items: d.items.filter { hits == nil || hits!.contains($0.card.id) || text($0.item).localizedCaseInsensitiveContains(q) }) }.filter { !$0.items.isEmpty }
         let all = shown.flatMap(\.items)
         VStack(spacing: 0) {
@@ -337,7 +337,7 @@ struct SearchPage: View {
 
     var body: some View {
         let q = query.trimmingCharacters(in: .whitespaces)
-        let hits = q.isEmpty ? [] : model.search.search(q)
+        let hits = q.isEmpty ? [] : model.searchHits(q)
         List {
             ForEach(hits, id: \.card.id) { hit in
                 Button {
@@ -355,7 +355,7 @@ struct SearchPage: View {
                 .listRowBackground(Theme.surface)
             }
             if !q.isEmpty && hits.isEmpty {
-                Text("No results for “\(q)”.").foregroundStyle(Theme.muted).listRowBackground(Color.clear)
+                Text(model.readySearch == nil ? "Searching…" : "No results for “\(q)”.").foregroundStyle(Theme.muted).listRowBackground(Color.clear)
             }
         }
         .scrollContentBackground(.hidden)
@@ -407,7 +407,7 @@ struct CommandPalette: View {
     var body: some View {
         let q = query.trimmingCharacters(in: .whitespaces)
         let matching = marked ? [] : commands.filter { q.isEmpty || $0.id.localizedCaseInsensitiveContains(q) }
-        let hits = q.isEmpty ? [] : model.search.search(q).prefix(20)
+        let hits = q.isEmpty ? [] : model.searchHits(q).prefix(20)
         VStack(spacing: 0) {
             TextField("Search or run a command", text: $query)
                 .textFieldStyle(.plain)

@@ -127,7 +127,7 @@ fun JournalView(initial: StreamFilter, openDrawer: (() -> Unit)?, fixed: Boolean
     val partial = !model.loaded
     var all = remember(model.shown, filter, model.today, model.sharedInto) { Stream.items(model.shown, filter, model.today, model.sharedInto) }
     all = if (searching && query.isNotBlank()) {
-        val hits = remember(model.index, query) { model.search.search(query).map { it.card.id }.toSet() }
+        val hits = remember(model.index, model.readySearch, query) { model.searchFor(query).map { it.card.id }.toSet() }
         all.filter { it.card.id in hits }
     } else Stream.foldStacks(all, model.shown.stackOf)
     // Whether the stream reads like a chat, newest at the bottom.
@@ -159,6 +159,7 @@ fun JournalView(initial: StreamFilter, openDrawer: (() -> Unit)?, fixed: Boolean
             locked != null -> UnlockView(locked, Modifier.weight(1f))
             // A search, a filter or a board needs every card: it waits for them, rather than showing too few.
             partial && (searching || filter.isFiltered || filter.board != null) -> LoadingNotes(Modifier.weight(1f))
+            searching && query.isNotBlank() && model.readySearch == null -> Box(Modifier.weight(1f).fillMaxWidth(), contentAlignment = Alignment.Center) { Text("Searching…", color = Theme.muted) }
             filter.board != null -> Box(Modifier.weight(1f)) { BoardView(filter, filter.board!!) }
             else -> {
                 val list = rememberLazyListState()

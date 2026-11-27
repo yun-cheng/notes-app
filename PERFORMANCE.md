@@ -4,7 +4,7 @@ How fast each app is with a real person's amount of notes, measured, so it needn
 was tried, how, the numbers before and after each fix, and what's still slow. Measure again after a change that could
 move these numbers, and update this file with the new ones and the date.
 
-_Last measured 2026-11-26._
+_Last measured 2026-11-27._
 
 ## The data
 
@@ -67,7 +67,7 @@ cpu-clock -f 1000 -g --duration 15"`; the bench build's names are shrunk, so loo
 | Reload, production build | | 1.8 s until the journal shows | |
 | Ticking a todo, dev server | 125–213 ms | 88–175 ms | Cards kept in memory and each write put into them, rather than reading all 10,000 back (`DexieStore`) |
 | Ticking a todo, dev server, bubbles drawn only when theirs changes | 93–111 ms | 58–93 ms | Bubbles memoized, reading the cards through `useCardsSelect` and `useServices`; the selection object kept; the rail's days kept when the same |
-| Ticking a todo, production build | 70–113 ms | 69–107 ms | About 30 ms is the IndexedDB write; about 45 ms is drawing the page around the bubbles (the journal's list, the sidebar's filter counts) |
+| Ticking a todo, production build | 69–107 ms | 19–23 ms (first tick 46 ms; dev 62–77 ms) | Optimistic in-memory update before IndexedDB commit (`DexieStore`); incremental `updateIndex` + pre-sorted `entriesByCreated` + cached `entryDay`; `FilterPanel`, `SortMenu`, and `PageOrNotHere` read via `useCardsSelect`; skip encrypted-vault scans when none are open |
 | Photos tiles moving as they load | moved (laid out as squares) | none of 40 moved | Each photo's size kept in its block (`width`, `height`) |
 
 Already fine, unchanged: the journal reloads in about 1.2 s on the dev server; Calendar, Timeline, Tags, History and
@@ -101,8 +101,6 @@ a jump on the rail settles in under 0.2 s; typing in the journal box takes 17 ms
 
 ## Still slow
 
-- **Web: an edit still takes 70–110 ms in production.** Bubbles are no longer drawn again (2026-11-26), but the journal
-  page around them is (`Stream`, the sidebar's `FilterPanel` counts), and the save waits about 30 ms on IndexedDB.
 - **Android: the first frame takes 1.3–3 s,** most of it the app starting before Android has compiled it. A baseline
   profile of our own launch (made with a Macrobenchmark module) would compile it at install. Reading every card still
   takes about 3 s more after the first entries show; meanwhile a search, a filter, the board and the pages that need

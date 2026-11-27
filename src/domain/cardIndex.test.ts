@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { buildIndex, cardText, linkTitle, resolveTags } from './cardIndex';
+import { buildIndex, cardText, linkTitle, resolveTags, updateIndex } from './cardIndex';
 import { base, doc, link, note, p, tag, text } from './testFixtures';
 import type { Card, NoteCard, TodoCard } from './types';
 
@@ -69,5 +69,56 @@ describe('locked vaults', () => {
     expect(open.lockedCards.size).toBe(0);
     expect(open.live.map((c) => c.id).sort()).toEqual(['d', 'o', 's', 'st', 't']);
     expect(cardText(open, pointing)).toBe('see Secret title');
+  });
+});
+
+describe('incremental updateIndex', () => {
+  const byId = (cards: Card[]) => [...cards].sort((a, b) => (a.id < b.id ? -1 : a.id > b.id ? 1 : 0));
+
+  it('matches buildIndex across edits, archive/trash transitions, tag/link updates and additions', () => {
+    const t1 = tag('t1', 'Work', true);
+    const t2 = tag('t2', 'Home', false);
+    const n1 = note('n1', 'First', { createdAt: 100, updatedAt: 100, tags: ['t1'] });
+    const todo1: TodoCard = { ...base, id: 'td1', title: 'Buy milk', type: 'todo', status: 'open', due: '2026-11-20', completedAt: null, createdAt: 200, updatedAt: 200, tags: ['t1'] };
+    const start = byId([t1, t2, n1, todo1]);
+    let prev = buildIndex(start);
+    let prevCards = start;
+
+    const step = (nextCards: Card[], checkSameTags = false) => {
+      const sorted = byId(nextCards);
+      const inc = updateIndex(prev, prevCards, sorted, new Set());
+      const fresh = buildIndex(sorted, new Set());
+      expect(inc.live.map((c) => c.id)).toEqual(fresh.live.map((c) => c.id));
+      expect(inc.entriesByCreated.map((c) => c.id)).toEqual(fresh.entriesByCreated.map((c) => c.id));
+      expect(inc.todos.map((c) => c.id)).toEqual(fresh.todos.map((c) => c.id));
+      expect(inc.trash.map((c) => c.id)).toEqual(fresh.trash.map((c) => c.id));
+      expect(inc.archivedCount).toBe(fresh.archivedCount);
+      expect(inc.tags.map((c) => c.id)).toEqual(fresh.tags.map((c) => c.id));
+      expect(inc.pinnedTags.map((c) => c.id)).toEqual(fresh.pinnedTags.map((c) => c.id));
+      expect([...inc.backlinks.keys()].sort()).toEqual([...fresh.backlinks.keys()].sort());
+      for (const [k, list] of fresh.backlinks) {
+        expect(inc.backlinks.get(k)?.map((l) => `${l.from.id}:${l.kind}`).sort()).toEqual(list.map((l) => `${l.from.id}:${l.kind}`).sort());
+      }
+      if (checkSameTags) expect(inc.tagGroups).toBe(prev.tagGroups);
+      prev = inc;
+      prevCards = sorted;
+    };
+
+    // Tick todo (keeps tagGroups identity)
+    const tdDone: TodoCard = { ...todo1, status: 'done', completedAt: 300, updatedAt: 300 };
+    step([t1, t2, n1, tdDone], true);
+
+    // Archive note and add a link to td1
+    const nArch = { ...n1, archived: true, updatedAt: 400, tags: ['t2'], content: doc(p(link('td1', 'Buy milk'))) };
+    step([t1, t2, nArch, tdDone], true);
+
+    // Trash todo
+    const tdTrash = { ...tdDone, deleted: true, updatedAt: 500 };
+    step([t1, t2, nArch, tdTrash], true);
+
+    // Add a new note and rename a tag
+    const n2 = note('n2', 'Second', { createdAt: 600, updatedAt: 600, tags: ['t1'] });
+    const t2Renamed = { ...t2, title: 'Alpha', pinned: true, updatedAt: 650 };
+    step([t1, t2Renamed, nArch, tdTrash, n2], false);
   });
 });

@@ -235,8 +235,13 @@ function matchesStatus(todo: TodoCard, status: TodoStatus, today: string): boole
   return true;
 }
 
-/** The day an entry was written on. */
-const entryDay = (card: Card) => toDateKey(new Date(card.createdAt));
+/** The day an entry was written on, cached per immutable Card object so edits don't allocate thousands of Dates. */
+const entryDayCache = new WeakMap<Card, string>();
+const entryDay = (card: Card) => {
+  let day = entryDayCache.get(card);
+  if (!day) entryDayCache.set(card, (day = toDateKey(new Date(card.createdAt))));
+  return day;
+};
 
 /** The vaults each card is shared into besides its own, by card ID. A card shows in those vaults too. */
 export type SharedInto = ReadonlyMap<string, readonly string[]>;
@@ -265,17 +270,42 @@ export function entryMatcher(filter: StreamFilter, today: string, sharedInto?: S
 /** Notes and todos in the order they were written, oldest first, like messages in a chat. Archived ones only with the Archived filter. */
 export function streamItems(index: CardIndex, filter: StreamFilter = {}, today = toDateKey(new Date()), sharedInto?: SharedInto): StreamItem[] {
   const keep = entryMatcher(filter, today, sharedInto);
+  const group = sortGroup(filter.sort, index.tagGroups.groups);
+  // A sort by a group that's gone falls back to the usual order.
+  const sort = filter.sort && filter.sort in SORT_LABEL ? (filter.sort as BaseSort) : 'written';
+  const wantArchived = !!filter.archived;
+  const wantTemplate = !!filter.template;
+
+  // `entriesByCreated` is already sorted by `createdAt` ascending, so `written` and `newest` skip O(N log N) sorting.
+  if (!group && (sort === 'written' || sort === 'newest')) {
+    const src = index.entriesByCreated;
+    const items: StreamItem[] = [];
+    if (sort === 'written') {
+      for (let i = 0; i < src.length; i++) {
+        const card = src[i];
+        if (!!card.archived !== wantArchived || !!card.template !== wantTemplate) continue;
+        const day = entryDay(card);
+        if (keep(card, day)) items.push({ card, day, at: card.createdAt });
+      }
+    } else {
+      for (let i = src.length - 1; i >= 0; i--) {
+        const card = src[i];
+        if (!!card.archived !== wantArchived || !!card.template !== wantTemplate) continue;
+        const day = entryDay(card);
+        if (keep(card, day)) items.push({ card, day, at: card.createdAt });
+      }
+    }
+    return items;
+  }
+
   const items: StreamItem[] = [];
   for (const card of index.live) {
     // Archived entries only under Archived, and templates only under Templates.
-    if ((card.type !== 'note' && card.type !== 'todo') || !!card.archived !== !!filter.archived || !!card.template !== !!filter.template) continue;
+    if ((card.type !== 'note' && card.type !== 'todo') || !!card.archived !== wantArchived || !!card.template !== wantTemplate) continue;
     const day = entryDay(card);
     if (keep(card, day)) items.push({ card, day, at: card.createdAt });
   }
-  const group = sortGroup(filter.sort, index.tagGroups.groups);
   if (group) return sortByGroup(items, group);
-  // A sort by a group that's gone falls back to the usual order.
-  const sort = filter.sort && filter.sort in SORT_LABEL ? (filter.sort as BaseSort) : 'written';
   return sortItems(items, sort);
 }
 

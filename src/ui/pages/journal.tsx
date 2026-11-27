@@ -309,7 +309,23 @@ export function Stream({ items, empty, sort, place: view }: { items: StreamItem[
   useKeepOnLeave(() => {
     if (scrolled.current && root.current) keepPlace(place, root.current, (at) => items[at]?.card.id, chat);
   });
-  const keys = useMemo(() => items.map((i) => i.day), [items]);
+  const prevKeys = useRef<string[]>([]);
+  const keys = useMemo(() => {
+    const prev = prevKeys.current;
+    if (prev.length === items.length) {
+      let same = true;
+      for (let i = 0; i < items.length; i++) {
+        if (prev[i] !== items[i].day) {
+          same = false;
+          break;
+        }
+      }
+      if (same) return prev;
+    }
+    const next = items.map((i) => i.day);
+    prevKeys.current = next;
+    return next;
+  }, [items]);
   // In the orders grouped by the day written, a day's badge opens the date picker at that day.
   const pickable = sort === 'written' || sort === 'newest';
   const [pickFrom, setPickFrom] = useState<string | null>(null);

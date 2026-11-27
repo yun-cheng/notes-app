@@ -6,7 +6,7 @@ import { registerSW } from 'virtual:pwa-register';
 import { AuthGate, useAccount } from '../auth/AuthContext';
 import { PairPage } from '../auth/PairPage';
 import { missingFromFilter } from '../domain/stream';
-import { useCards, useSyncStatus } from '../state/CardsContext';
+import { useCardsSelect, useSyncStatus } from '../state/CardsContext';
 import { Page, useNewNote } from './components';
 import { Icon, type IconName } from './Icon';
 import { ConnectPage } from './pages/ai';
@@ -185,8 +185,12 @@ function Layout() {
 function PageOrNotHere() {
   const filter = useJournalFilter();
   const filterPath = useFilterPath();
-  const { vaults, index } = useCards();
-  const missing = missingFromFilter(filter, { vault: (id) => vaults.some((v) => v.id === id), card: (id) => index.byId.has(id) || index.lockedCards.has(id) });
+  const missing = useCardsSelect((v) =>
+    missingFromFilter(filter, {
+      vault: (id) => v.vaults.some((x) => x.id === id),
+      card: (id) => v.index.byId.has(id) || v.index.lockedCards.has(id),
+    }),
+  );
   if (!missing) return <Outlet />;
   return (
     <Page title="Not found" viewOnly={false}>

@@ -1,4 +1,4 @@
-import { Children, isValidElement, useState, useSyncExternalStore, type ReactNode } from 'react';
+import { Children, isValidElement, memo, useState, useSyncExternalStore, type ReactNode } from 'react';
 import { Link, useLocation, useNavigate, useSearchParams } from 'react-router';
 import { sortVaults } from '../domain/locks';
 import {
@@ -20,7 +20,7 @@ import {
   type StreamSort,
   type TodoStatus,
 } from '../domain/stream';
-import { useCards, useToday } from '../state/CardsContext';
+import { useCards, useCardsSelect, useToday } from '../state/CardsContext';
 import { DatesDialog } from './DatesDialog';
 import { colorClass } from './EntryStyle';
 import { Icon, type IconName } from './Icon';
@@ -297,12 +297,12 @@ function FilterMenu({
  * The journal's order, in its top bar: the order in use, named, over a native menu of the others, so a phone
  * shows its own picker. On a narrow screen only the icon shows.
  */
-export function SortMenu({ filter }: { filter: StreamFilter }) {
-  const { index } = useCards();
+export const SortMenu = memo(function SortMenu({ filter }: { filter: StreamFilter }) {
+  const groups = useCardsSelect((v) => v.index.tagGroups.groups);
   const navigate = useNavigate();
   const sort = filter.sort ?? 'written';
-  const label = sortLabel(sort, index.tagGroups.groups);
-  const boards = index.tagGroups.groups.filter((g) => g.members.length);
+  const label = sortLabel(sort, groups);
+  const boards = groups.filter((g) => g.members.length);
   return (
     <label className="sort-menu btn btn--quiet" title={`Sort: ${label}`}>
       <Icon name="sort" size={16} />
@@ -322,12 +322,12 @@ export function SortMenu({ filter }: { filter: StreamFilter }) {
             {SORT_LABEL[s]}
           </option>
         ))}
-        {index.tagGroups.groups
+        {groups
           // A group with no tags would sort everything under "No priority": it isn't offered until it has some.
           .filter((g) => g.ordered && g.members.length)
           .map((g) => (
             <option key={g.id} value={`group:${g.id}`}>
-              {sortLabel(`group:${g.id}`, index.tagGroups.groups)}
+              {sortLabel(`group:${g.id}`, groups)}
             </option>
           ))}
         <optgroup label="Board">
@@ -341,7 +341,7 @@ export function SortMenu({ filter }: { filter: StreamFilter }) {
       </select>
     </label>
   );
-}
+});
 
 /**
  * The places to narrow the journal to, in the sidebar on a computer and in a sheet on a phone: its tags, by group,
@@ -351,10 +351,51 @@ export function SortMenu({ filter }: { filter: StreamFilter }) {
  * the calendar and the timeline their todos, and on Photos its photos; Journal, History, Calendar, Timeline and Photos
  * switch between them.
  */
-export function FilterPanel({ onPick }: { onPick?: () => void }) {
-  const { index, vaults, locked } = useCards();
-  const archivedCount = index.live.filter((c) => (c.type === 'note' || c.type === 'todo') && c.archived && !c.template).length;
+export const FilterPanel = memo(function FilterPanel({ onPick }: { onPick?: () => void }) {
   const filter = useJournalFilter();
+  const filterTagId = filter.tagId;
+  const { archivedCount, trashCount, vaults, locked, tagGroups, tags, counts } = useCardsSelect(
+    (v) => {
+      const { groupOf } = v.index.tagGroups;
+      const pinned = v.index.pinnedTags.filter((t) => !groupOf.has(t.id));
+      const shownTags = pinned.some((t) => t.id === filterTagId) || groupOf.has(filterTagId ?? '') ? pinned : [...pinned, ...v.index.tags.filter((t) => t.id === filterTagId)];
+      const tagCount = (id: string) => {
+        const list = v.index.backlinks.get(id);
+        if (!list) return 0;
+        let n = 0;
+        for (let i = 0; i < list.length; i++) if (list[i].kind === 'tag') n++;
+        return n;
+      };
+      const counts = new Map<string, number>();
+      for (const g of v.index.tagGroups.groups) for (const t of g.members) counts.set(t.id, tagCount(t.id));
+      for (const t of shownTags) if (!counts.has(t.id)) counts.set(t.id, tagCount(t.id));
+      return {
+        archivedCount: v.index.archivedCount,
+        trashCount: v.index.trash.length,
+        vaults: v.vaults,
+        locked: v.locked,
+        tagGroups: v.index.tagGroups,
+        tags: shownTags,
+        counts,
+      };
+    },
+    (a, b) => {
+      if (
+        a.archivedCount !== b.archivedCount ||
+        a.trashCount !== b.trashCount ||
+        a.vaults !== b.vaults ||
+        a.locked !== b.locked ||
+        a.tagGroups !== b.tagGroups ||
+        a.tags.length !== b.tags.length ||
+        a.counts.size !== b.counts.size
+      ) {
+        return false;
+      }
+      for (let i = 0; i < a.tags.length; i++) if (a.tags[i] !== b.tags[i]) return false;
+      for (const [id, n] of a.counts) if (b.counts.get(id) !== n) return false;
+      return true;
+    },
+  );
   const { pathname } = useLocation();
   const onJournal = pathname === '/journal';
   const onArchive = pathname === ARCHIVE_PATH;
@@ -393,11 +434,7 @@ export function FilterPanel({ onPick }: { onPick?: () => void }) {
 
   // A hidden vault stays out of sight until it's unlocked from Vaults.
   const shownVaults = sortVaults(vaults).filter((v) => !(v.hidden && locked.has(v.id)));
-  // Grouped tags show under their group; other pinned tags, and the one filtered by, under Tags.
-  const { groupOf } = index.tagGroups;
-  const pinned = index.pinnedTags.filter((t) => !groupOf.has(t.id));
-  const tags = pinned.some((t) => t.id === filter.tagId) || groupOf.has(filter.tagId ?? '') ? pinned : [...pinned, ...index.tags.filter((t) => t.id === filter.tagId)];
-  const tagCount = (id: string) => (index.backlinks.get(id) ?? []).filter((l) => l.kind === 'tag').length;
+  const tagCount = (id: string) => counts.get(id) ?? 0;
 
   return (
     <div className="filters">
@@ -413,10 +450,10 @@ export function FilterPanel({ onPick }: { onPick?: () => void }) {
         {link('files', 'Files', libraryLink(FILES_PATH), libraryActive(FILES_PATH), 'file')}
         {/* Put away, and thrown away: each a page of its own, out of the journal. */}
         {link('archive', 'Archive', journalPath({ sort: filter.sort, archived: true }), onArchive && !filter.tagId && !filter.vaultId, 'archive', archivedCount || undefined)}
-        {link('trash', 'Trash', TRASH_PATH, pathname === TRASH_PATH && !filter.tagId && !filter.vaultId, 'trash', index.trash.length || undefined)}
+        {link('trash', 'Trash', TRASH_PATH, pathname === TRASH_PATH && !filter.tagId && !filter.vaultId, 'trash', trashCount || undefined)}
       </nav>
 
-      {index.tagGroups.groups
+      {tagGroups.groups
         .filter((g) => g.members.length)
         .map((g) => (
           <FilterSection key={g.id} id={`group:${g.id}`} title={g.title}>
@@ -442,7 +479,7 @@ export function FilterPanel({ onPick }: { onPick?: () => void }) {
       </FilterSection>
     </div>
   );
-}
+});
 
 /** Sidebar sections folded on this device, by ID. Storage can be off; then nothing stays folded after a reload. */
 const FOLDED_KEY = 'notes-app:sidebar-folded';

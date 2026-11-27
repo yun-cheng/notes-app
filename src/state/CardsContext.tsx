@@ -1,7 +1,7 @@
 import Dexie from 'dexie';
 import { canWriteIn } from '../domain/access';
 import { createContext, useContext, useEffect, useLayoutEffect, useMemo, useRef, useState, useSyncExternalStore, type ReactNode } from 'react';
-import { buildIndex, type CardIndex } from '../domain/cardIndex';
+import { buildIndex, updateIndex, type CardIndex } from '../domain/cardIndex';
 import { toDateKey } from '../domain/dates';
 import { lockedVaultIds, sortVaults, unreadVaultIds, VaultLocks, type VaultKeyHooks } from '../domain/locks';
 import type { Card, CardRecord, Vault } from '../domain/types';
@@ -217,7 +217,14 @@ export function CardsProvider({ accountId, children }: { accountId: string; chil
   const open = useSyncExternalStore(locks.subscribe, locks.getOpen);
   const locked = useMemo(() => lockedVaultIds(vaults ?? [], open), [vaults, open]);
   // Waits for the vault list, so a locked card can't flash up before its lock is known.
-  const index = useMemo<CardIndex | null>(() => (cards && vaults ? buildIndex(cards, locked) : null), [cards, vaults, locked]);
+  const prevIndex = useRef<{ cards: Card[]; locked: ReadonlySet<string>; index: CardIndex } | null>(null);
+  const index = useMemo<CardIndex | null>(() => {
+    if (!cards || !vaults) return null;
+    const prev = prevIndex.current;
+    const next = prev && prev.locked === locked ? updateIndex(prev.index, prev.cards, cards, locked) : buildIndex(cards, locked);
+    prevIndex.current = { cards, locked, index: next };
+    return next;
+  }, [cards, vaults, locked]);
   const [error, setError] = useState<string | null>(null);
   const [shared, setShared] = useState<ReadonlyMap<string, SharedCard>>(new Map());
   const [sharedInto, setSharedInto] = useState<ReadonlyMap<string, readonly string[]>>(new Map());
@@ -296,6 +303,7 @@ export function CardsProvider({ accountId, children }: { accountId: string; chil
   useEffect(() => {
     if (!index || !vaults) return;
     const open = new Set(vaults.filter((v) => v.encryption && canWriteIn(v, locked)).map((v) => v.id));
+    if (!open.size) return;
     const due = new Set([...open].filter((id) => !commentsSealed.current.has(id)));
     const homes = commentHomes.current;
     for (const [id, card] of index.byId) {
@@ -363,6 +371,7 @@ export function CardsProvider({ accountId, children }: { accountId: string; chil
   // Only what reminds counts, so edits elsewhere don't start it.
   const sealing = useMemo(() => {
     const open = (vaults ?? []).filter((v) => v.encryption && canWriteIn(v, locked));
+    if (!open.length) return { open, todos: [] as Card[], key: '' };
     const ids = new Set(open.map((v) => v.id));
     const todos = (index?.live ?? []).filter((c) => c.type === 'todo' && ids.has(c.vaultId));
     const key = JSON.stringify([open.map((v) => v.id), todos.map((c) => [c.id, c.vaultId, reminderOf(c)])]);
@@ -565,6 +574,6 @@ export function useToday(): string {
 }
 
 export function usePhotoState(): PhotoState {
-  const { photos } = useCards();
+  const { photos } = useServices();
   return useSyncExternalStore(photos.subscribe, photos.getState);
 }

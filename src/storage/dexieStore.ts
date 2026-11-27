@@ -87,15 +87,21 @@ export class DexieStore implements CardStore, PhotoStore, TranslationStore {
     for (const listener of this.cardListeners) listener(this.mirror);
   }
 
-  /** What this store just wrote, put into what subscribers have, and told to other tabs. */
-  private wrote(put: readonly CardRecord[], removed: readonly string[] = []) {
+  /** Updates this store's in-memory mirror and tells local subscribers right away. */
+  private wroteLocal(put: readonly CardRecord[], removed: readonly string[] = []) {
     if (!put.length && !removed.length) return;
-    this.channel?.postMessage('cards');
     this.during?.push({ put, removed });
     if (!this.mirror) return;
     const next = withWrite(this.mirror, put, removed);
     this.mirror = next;
     for (const listener of this.cardListeners) listener(next);
+  }
+
+  /** What this store just wrote, put into what subscribers have, and told to other tabs. */
+  private wrote(put: readonly CardRecord[], removed: readonly string[] = []) {
+    if (!put.length && !removed.length) return;
+    this.wroteLocal(put, removed);
+    this.channel?.postMessage('cards');
   }
 
   listCards() {
@@ -114,15 +120,27 @@ export class DexieStore implements CardStore, PhotoStore, TranslationStore {
     this.db.close();
   }
   getCard(id: string) {
+    if (this.mirror && !this.during) {
+      const { at, found } = placeOf(this.mirror, id);
+      return Promise.resolve(found ? this.mirror[at] : undefined);
+    }
     return this.db.cards.get(id);
   }
   async putCards(records: CardRecord[]) {
+    if (!records.length) return;
+    // Update this tab's UI right away without waiting on IndexedDB's disk flush; roll back from disk if the write fails.
+    this.wroteLocal(records);
     const { cards, dirty } = this.db;
-    await this.db.transaction('rw', cards, dirty, async () => {
-      await cards.bulkPut(records);
-      await dirty.bulkPut(records.map(({ id }) => ({ id })));
-    });
-    this.wrote(records);
+    try {
+      await this.db.transaction('rw', cards, dirty, async () => {
+        await cards.bulkPut(records);
+        await dirty.bulkPut(records.map(({ id }) => ({ id })));
+      });
+    } catch (err) {
+      if (this.cardListeners.size) void this.readAll().catch(() => undefined);
+      throw err;
+    }
+    this.channel?.postMessage('cards');
   }
   async listDirty() {
     const ids = await this.db.dirty.toCollection().primaryKeys();

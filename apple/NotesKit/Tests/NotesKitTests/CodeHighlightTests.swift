@@ -26,6 +26,13 @@ import Testing
         let ts = CodeHighlight.tokenize("const msg = \"hello\";", language: "ts")
         #expect(ts.contains(CodeHighlight.Token("const", .keyword)))
         #expect(ts.contains(CodeHighlight.Token("\"hello\"", .string)))
+
+        // Language-specific keywords (like Rust's `fn`) must stay plain identifiers in JavaScript.
+        let js = CodeHighlight.tokenize("export function debounce(fn, ms = 300) { return fn; }", language: "js")
+        #expect(js.contains(CodeHighlight.Token("export", .keyword)))
+        #expect(js.contains(CodeHighlight.Token("debounce", .title)))
+        #expect(js.contains(CodeHighlight.Token("300", .number)))
+        #expect(!js.contains(CodeHighlight.Token("fn", .keyword)))
     }
 
     @Test func highlightsSpecializedLanguagesAndPlainText() {

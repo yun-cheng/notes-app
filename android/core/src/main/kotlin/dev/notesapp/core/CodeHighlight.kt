@@ -406,21 +406,73 @@ object CodeHighlight {
     private val funcIntroducers = setOf("func", "fn", "fun", "def", "function", "sub")
     private val typeIntroducers = setOf("class", "struct", "enum", "interface", "protocol", "trait", "type", "record", "object")
 
-    private val commonKeywords = setOf(
-        "if", "else", "elif", "elsif", "for", "while", "do", "loop", "break", "continue", "return", "yield",
-        "switch", "case", "default", "match", "when", "try", "catch", "except", "finally", "throw", "throws",
-        "raise", "defer", "guard", "where", "in", "of", "as", "is", "not", "and", "or", "new", "delete",
-        "import", "export", "from", "package", "module", "use", "using", "include", "require", "namespace",
-        "class", "struct", "enum", "interface", "protocol", "trait", "impl", "extension", "extends", "implements",
-        "type", "typedef", "typealias", "record", "object", "data", "sealed", "open", "abstract", "override",
-        "func", "fn", "fun", "def", "function", "lambda", "async", "await", "suspend", "coroutine",
-        "let", "var", "val", "const", "mut", "static", "final", "readonly", "public", "private", "protected",
-        "internal", "fileprivate", "pub", "extern", "unsafe", "inline", "virtual", "explicit", "volatile",
-        "this", "self", "Self", "super", "init", "deinit", "get", "set", "with", "pass", "global", "nonlocal",
-        "go", "chan", "select", "range", "fallthrough", "ref", "out", "params", "sizeof", "typeof", "instanceof",
-        "then", "fi", "esac", "done", "local", "echo", "end", "begin", "rescue", "ensure", "until",
-        "query", "mutation", "subscription", "fragment", "scalar", "input", "union", "schema",
+    private val coreKeywords = setOf(
+        "if", "else", "for", "while", "do", "break", "continue", "return", "switch", "case", "default",
+        "try", "catch", "finally", "throw", "class", "import", "export", "new", "this", "super", "async", "await",
     )
+
+    private fun keywordsFor(lang: String?): Set<String> = when (lang) {
+        "javascript", "typescript" -> coreKeywords + setOf(
+            "function", "const", "let", "var", "from", "as", "of", "in", "typeof", "instanceof", "void", "delete",
+            "yield", "extends", "implements", "interface", "type", "enum", "namespace", "readonly", "public",
+            "private", "protected", "static", "abstract", "override", "get", "set", "declare", "keyof", "infer",
+        )
+        "swift" -> coreKeywords + setOf(
+            "func", "let", "var", "struct", "enum", "protocol", "extension", "typealias", "guard", "defer",
+            "where", "in", "is", "as", "throws", "rethrows", "public", "private", "fileprivate", "internal",
+            "open", "static", "final", "override", "mutating", "nonmutating", "init", "deinit", "self", "Self",
+            "get", "set", "some", "any", "actor", "nonisolated", "isolated", "inout", "fallthrough", "repeat",
+        )
+        "kotlin" -> coreKeywords + setOf(
+            "fun", "val", "var", "object", "interface", "data", "sealed", "enum", "package", "when", "in", "is",
+            "as", "override", "open", "abstract", "final", "public", "private", "protected", "internal",
+            "companion", "suspend", "inline", "reified", "typealias", "init", "get", "set", "by", "where",
+        )
+        "python" -> coreKeywords + setOf(
+            "def", "elif", "except", "raise", "from", "as", "in", "is", "not", "and", "or", "lambda", "yield",
+            "with", "pass", "global", "nonlocal", "del", "assert", "match", "self",
+        )
+        "rust" -> coreKeywords + setOf(
+            "fn", "let", "mut", "struct", "enum", "trait", "impl", "mod", "use", "pub", "crate", "self", "Self",
+            "match", "loop", "in", "as", "where", "type", "const", "static", "unsafe", "extern", "ref", "move",
+            "dyn", "box",
+        )
+        "go" -> coreKeywords + setOf(
+            "func", "var", "const", "type", "struct", "interface", "package", "go", "chan", "select", "range",
+            "defer", "fallthrough", "map", "goto",
+        )
+        "java", "csharp" -> coreKeywords + setOf(
+            "interface", "enum", "extends", "implements", "package", "namespace", "using", "public", "private",
+            "protected", "internal", "static", "final", "readonly", "abstract", "override", "virtual", "sealed",
+            "struct", "record", "var", "const", "ref", "out", "params", "in", "is", "as", "sizeof", "typeof",
+            "instanceof", "synchronized", "volatile", "throws", "yield", "lock", "foreach",
+        )
+        "c", "cpp" -> coreKeywords + setOf(
+            "struct", "enum", "union", "typedef", "namespace", "using", "template", "typename", "const",
+            "constexpr", "static", "extern", "inline", "virtual", "override", "final", "public", "private",
+            "protected", "explicit", "volatile", "sizeof", "delete", "goto", "auto", "nullptr",
+        )
+        "ruby" -> coreKeywords + setOf(
+            "def", "elsif", "end", "module", "begin", "rescue", "ensure", "until", "unless", "then", "yield",
+            "self", "in", "and", "or", "not", "require", "include", "extend",
+        )
+        "php" -> coreKeywords + setOf(
+            "function", "use", "namespace", "extends", "implements", "interface", "trait", "public", "private",
+            "protected", "static", "final", "abstract", "const", "echo", "foreach", "as", "match", "require",
+            "include", "yield", "readonly",
+        )
+        "bash" -> coreKeywords + setOf(
+            "then", "elif", "fi", "esac", "in", "done", "function", "local", "echo", "unset", "readonly", "until",
+        )
+        "lua" -> coreKeywords + setOf(
+            "function", "local", "end", "then", "elseif", "until", "repeat", "in", "and", "or", "not",
+        )
+        "graphql" -> setOf("query", "mutation", "subscription", "fragment", "on", "type", "interface", "union", "enum", "scalar", "input", "schema", "extend", "implements")
+        "r" -> coreKeywords + setOf("function", "in", "repeat", "next")
+        else -> coreKeywords + setOf(
+            "function", "func", "def", "const", "let", "var", "struct", "enum", "interface", "type", "from", "in", "as", "self",
+        )
+    }
 
     private val literals = setOf("true", "false", "nil", "null", "None", "True", "False", "undefined", "NaN", "Infinity")
 
@@ -432,6 +484,7 @@ object CodeHighlight {
     )
 
     private fun tokenizeGeneral(code: String, lang: String?): List<Token> {
+        val keywordSet = keywordsFor(lang)
         val allowSlash = lang == null || lang in slashCommentLangs
         val allowHash = lang == null || lang in hashCommentLangs
         val isCPreproc = lang == "c" || lang == "cpp" || lang == "csharp"
@@ -524,7 +577,7 @@ object CodeHighlight {
                     expectTitle -> { expectTitle = false; Role.TITLE }
                     expectType -> { expectType = false; Role.TYPE }
                     word in literals -> Role.NUMBER
-                    word in commonKeywords -> {
+                    word in keywordSet -> {
                         expectTitle = word in funcIntroducers
                         expectType = word in typeIntroducers
                         Role.KEYWORD

@@ -33,6 +33,13 @@ class CodeHighlightTest {
         val ts = CodeHighlight.tokenize("const msg = \"hello\";", "ts")
         assertTrue(Token("const", Role.KEYWORD) in ts)
         assertTrue(Token("\"hello\"", Role.STRING) in ts)
+
+        // Language-specific keywords (like Rust's `fn`) must stay plain identifiers in JavaScript.
+        val js = CodeHighlight.tokenize("export function debounce(fn, ms = 300) { return fn; }", "js")
+        assertTrue(Token("export", Role.KEYWORD) in js)
+        assertTrue(Token("debounce", Role.TITLE) in js)
+        assertTrue(Token("300", Role.NUMBER) in js)
+        assertTrue(Token("fn", Role.KEYWORD) !in js)
     }
 
     @Test fun highlightsSpecializedLanguagesAndPlainText() {

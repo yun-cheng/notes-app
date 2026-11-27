@@ -432,21 +432,90 @@ public enum CodeHighlight {
     private static let funcIntroducers: Set<String> = ["func", "fn", "fun", "def", "function", "sub"]
     private static let typeIntroducers: Set<String> = ["class", "struct", "enum", "interface", "protocol", "trait", "type", "record", "object"]
 
-    private static let commonKeywords: Set<String> = [
-        "if", "else", "elif", "elsif", "for", "while", "do", "loop", "break", "continue", "return", "yield",
-        "switch", "case", "default", "match", "when", "try", "catch", "except", "finally", "throw", "throws",
-        "raise", "defer", "guard", "where", "in", "of", "as", "is", "not", "and", "or", "new", "delete",
-        "import", "export", "from", "package", "module", "use", "using", "include", "require", "namespace",
-        "class", "struct", "enum", "interface", "protocol", "trait", "impl", "extension", "extends", "implements",
-        "type", "typedef", "typealias", "record", "object", "data", "sealed", "open", "abstract", "override",
-        "func", "fn", "fun", "def", "function", "lambda", "async", "await", "suspend", "coroutine",
-        "let", "var", "val", "const", "mut", "static", "final", "readonly", "public", "private", "protected",
-        "internal", "fileprivate", "pub", "extern", "unsafe", "inline", "virtual", "explicit", "volatile",
-        "this", "self", "Self", "super", "init", "deinit", "get", "set", "with", "pass", "global", "nonlocal",
-        "go", "chan", "select", "range", "fallthrough", "ref", "out", "params", "sizeof", "typeof", "instanceof",
-        "then", "fi", "esac", "done", "local", "echo", "export", "end", "begin", "rescue", "ensure", "until",
-        "query", "mutation", "subscription", "fragment", "scalar", "input", "union", "schema",
+    private static let coreKeywords: Set<String> = [
+        "if", "else", "for", "while", "do", "break", "continue", "return", "switch", "case", "default",
+        "try", "catch", "finally", "throw", "class", "import", "export", "new", "this", "super", "async", "await",
     ]
+
+    private static func keywords(for lang: String?) -> Set<String> {
+        switch lang {
+        case "javascript", "typescript":
+            return coreKeywords.union([
+                "function", "const", "let", "var", "from", "as", "of", "in", "typeof", "instanceof", "void", "delete",
+                "yield", "extends", "implements", "interface", "type", "enum", "namespace", "readonly", "public",
+                "private", "protected", "static", "abstract", "override", "get", "set", "declare", "keyof", "infer",
+            ])
+        case "swift":
+            return coreKeywords.union([
+                "func", "let", "var", "struct", "enum", "protocol", "extension", "typealias", "guard", "defer",
+                "where", "in", "is", "as", "throws", "rethrows", "public", "private", "fileprivate", "internal",
+                "open", "static", "final", "override", "mutating", "nonmutating", "init", "deinit", "self", "Self",
+                "get", "set", "some", "any", "actor", "nonisolated", "isolated", "inout", "fallthrough", "repeat",
+            ])
+        case "kotlin":
+            return coreKeywords.union([
+                "fun", "val", "var", "object", "interface", "data", "sealed", "enum", "package", "when", "in", "is",
+                "as", "override", "open", "abstract", "final", "public", "private", "protected", "internal",
+                "companion", "suspend", "inline", "reified", "typealias", "init", "get", "set", "by", "where",
+            ])
+        case "python":
+            return coreKeywords.union([
+                "def", "elif", "except", "raise", "from", "as", "in", "is", "not", "and", "or", "lambda", "yield",
+                "with", "pass", "global", "nonlocal", "del", "assert", "match", "self",
+            ])
+        case "rust":
+            return coreKeywords.union([
+                "fn", "let", "mut", "struct", "enum", "trait", "impl", "mod", "use", "pub", "crate", "self", "Self",
+                "match", "loop", "in", "as", "where", "type", "const", "static", "unsafe", "extern", "ref", "move",
+                "dyn", "box",
+            ])
+        case "go":
+            return coreKeywords.union([
+                "func", "var", "const", "type", "struct", "interface", "package", "go", "chan", "select", "range",
+                "defer", "fallthrough", "map", "goto",
+            ])
+        case "java", "csharp":
+            return coreKeywords.union([
+                "interface", "enum", "extends", "implements", "package", "namespace", "using", "public", "private",
+                "protected", "internal", "static", "final", "readonly", "abstract", "override", "virtual", "sealed",
+                "struct", "record", "var", "const", "ref", "out", "params", "in", "is", "as", "sizeof", "typeof",
+                "instanceof", "synchronized", "volatile", "throws", "yield", "lock", "foreach",
+            ])
+        case "c", "cpp":
+            return coreKeywords.union([
+                "struct", "enum", "union", "typedef", "namespace", "using", "template", "typename", "const",
+                "constexpr", "static", "extern", "inline", "virtual", "override", "final", "public", "private",
+                "protected", "explicit", "volatile", "sizeof", "delete", "goto", "auto", "nullptr",
+            ])
+        case "ruby":
+            return coreKeywords.union([
+                "def", "elsif", "end", "module", "begin", "rescue", "ensure", "until", "unless", "then", "yield",
+                "self", "in", "and", "or", "not", "require", "include", "extend",
+            ])
+        case "php":
+            return coreKeywords.union([
+                "function", "use", "namespace", "extends", "implements", "interface", "trait", "public", "private",
+                "protected", "static", "final", "abstract", "const", "echo", "foreach", "as", "match", "require",
+                "include", "yield", "readonly",
+            ])
+        case "bash":
+            return coreKeywords.union([
+                "then", "elif", "fi", "esac", "in", "done", "function", "local", "echo", "unset", "readonly", "until",
+            ])
+        case "lua":
+            return coreKeywords.union([
+                "function", "local", "end", "then", "elseif", "until", "repeat", "in", "and", "or", "not",
+            ])
+        case "graphql":
+            return ["query", "mutation", "subscription", "fragment", "on", "type", "interface", "union", "enum", "scalar", "input", "schema", "extend", "implements"]
+        case "r":
+            return coreKeywords.union(["function", "in", "repeat", "next"])
+        default:
+            return coreKeywords.union([
+                "function", "func", "def", "const", "let", "var", "struct", "enum", "interface", "type", "from", "in", "as", "self",
+            ])
+        }
+    }
 
     private static let literals: Set<String> = [
         "true", "false", "nil", "null", "None", "True", "False", "undefined", "NaN", "Infinity",
@@ -461,6 +530,7 @@ public enum CodeHighlight {
 
     private static func tokenizeGeneral(_ code: String, lang: String?) -> [Token] {
         let chars = Array(code)
+        let keywordSet = keywords(for: lang)
         let allowSlash = lang == nil || slashCommentLangs.contains(lang!)
         let allowHash = lang == nil || hashCommentLangs.contains(lang!)
         let isCPreproc = lang == "c" || lang == "cpp" || lang == "csharp"
@@ -568,7 +638,7 @@ public enum CodeHighlight {
                     expectType = false
                 } else if literals.contains(word) {
                     role = .number
-                } else if commonKeywords.contains(word) {
+                } else if keywordSet.contains(word) {
                     role = .keyword
                     expectTitle = funcIntroducers.contains(word)
                     expectType = typeIntroducers.contains(word)

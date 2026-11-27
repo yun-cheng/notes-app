@@ -22,7 +22,7 @@ Local testing: run `npm run dev` and point the native apps at `http://localhost:
 demo's photos, videos and voice messages won't load (the README says how). That was why photos and voice messages
 seemed broken on the Mac and iPhone: the API answers 503 for the demo's files, which only the dev server serves.
 
-_Last checked 2026-11-25._
+_Last checked 2026-11-27._
 
 ## Journal: bubbles
 
@@ -52,9 +52,9 @@ _Last checked 2026-11-25._
 | Tags on the left, a todo's dates on the right, red once overdue, ↻ for a repeat | ✅ | ✅ | ✅ | T |
 | A waiting todo: dashed box and a Waiting mark | ✅ | ✅ | ✅ | C |
 | Ticking a todo's box finishes it (a repeating one moves on) | ✅ | ✅ | ✅ | C |
-| Hidden words as dots until pressed; each press shows or hides that stretch | ✅ | ✅ | ✅ | C |
+| Hidden words as drifting dots until pressed; each press shows or hides that stretch | ✅ (C) | ✅ (C) | ✅ (T) | T/C |
 | Links in the text open | ✅ | ✅ | ✅ | T |
-| Code: indents kept, the language named, a copy button | ✅ | ✅ | ✅ | C |
+| Code: indents kept, syntax-colored by language, the language named, a copy button | ✅ (C) | ✅ (C) | ✅ (T) | T/C |
 | A template shows Use it | ✅ | ✅ | ✅ | C |
 | Photos under the bubble, whole, in rows; the last of five says +N | ✅ | ✅ | ✅ | T |
 | Files as chips with size and type; open, share and download | ✅ | ✅ | ✅ | C |
@@ -69,7 +69,7 @@ _Last checked 2026-11-25._
 | Play and pause; the waveform fills as it plays and seeks where it's pressed | ✅ | ✅ | ✅ | T |
 | Speed 1×, 1.5×, 2× | ✅ | ✅ | ✅ | T |
 | One volume for all of them, from a speaker button: a click mutes on a computer, the slider shows on hover; a tap shows it on a phone | ✅ | ✅ | ✅ | T |
-| Each evened out to the same loudness | ✅ (`Voice.Leveler` on `MTAudioProcessingTap`) | ✅ (`Voice.Leveler` on `MTAudioProcessingTap`) | ✅ (`Voice.nextLevel` + `LoudnessEnhancer`) | C |
+| Each evened out to the same loudness | ✅ (`Voice.Leveler` on `MTAudioProcessingTap`) (C) | ✅ (`Voice.Leveler` on `MTAudioProcessingTap`) (C) | ✅ (`Voice.nextLevel` + `LoudnessEnhancer`) (T) | T/C |
 | One plays at a time, and runs on to the next in the same entry or the next one | ✅ | ✅ | ✅ | C |
 | A bar along the top of the journal while one plays: previous, play, next, what's said, time, speed, volume, close, a line to seek | ✅ | ✅ | ✅ | T |
 | Transcript: each sentence plays from there, the one being said marked; hidden or shown from the player, kept on the device | ✅ | ✅ | ✅ | T |
@@ -111,7 +111,7 @@ _Last checked 2026-11-25._
 | A draft is kept per view and follows the account to its other devices | ✅ | ✅ | ✅ | C |
 | Pasting keeps formatting; a chip offers Markdown or plain instead | ❌ the editor keeps formatting, with no choice | ❌ the same | ❌ the editor takes plain words only | C |
 | Buttons for a todo, a photo or video, a file and a voice message, beside Save | ✅ (T) | ✅ | ✅ | C |
-| A pasted picture, or a picture's address alone, becomes a photo; typing goes on after it | ? | ? | ? | ? |
+| A pasted picture, or a picture's address alone, becomes a photo; typing goes on after it | ⚠️ pasted images/files and dropped picture URLs work; pasting a plain picture URL string does not | ❌ | ❌ | C |
 
 ## Open entry
 
@@ -176,7 +176,7 @@ _Last checked 2026-11-25._
 | Archive puts any entry away without trashing it; the Archive page holds them | ✅ | ✅ | ✅ | C |
 | Save as template saves a copy among the templates (the Templates filter), where Use it starts a new entry from it | ✅ | ✅ | ✅ | C |
 | Stack: picked entries become one, in an order of their own; Take out of the stack from the entry's menu | ✅ | ✅ | ✅ | C |
-| An open stack's cards are dragged into a new order | ? | ? | ? | ? |
+| An open stack's cards are dragged into a new order | ❌ (open stack shows a read-only preview of up to 5 cards) | ❌ (same) | ❌ (same) | C |
 | Add a page behind the first; numbered pages, turned with ‹ › round from the last to the first | ✅ | ✅ | ✅ | C |
 | Each entry's color and its preview style (Color and previews) | ✅ | ✅ | ✅ | C |
 | Undo in the toast after ticking a todo, moving or trashing an entry | ✅ | ✅ | ✅ | C |
@@ -219,7 +219,7 @@ _Last checked 2026-11-25._
 |---|---|---|---|---|
 | Several accounts signed in at once, switched from the account's picture; Add another account | ✅ | ✅ | ✅ | C |
 | Backup: Download backup, Restore from backup, Export as Markdown; Import Markdown files or a zip | ✅ | ✅ | ✅ | C |
-| AI apps: the connector address to add in Claude and other AI apps; default AI access for open vaults and per-vault overrides including unlocked non-encrypted private vaults (filterable when > 6); the apps connected, each to disconnect | ✅ | ✅ | ✅ | C |
+| AI apps: the connector address to add in Claude and other AI apps; default AI access for open vaults and per-vault overrides including unlocked non-encrypted private vaults (filterable when > 6); the apps connected, each to disconnect | ✅ (C) | ✅ (C) | ✅ (T) | T/C |
 | Reminders: the web's words; This device with Turn on reminders, Turn off and Send a test; Todos with a time; Todos with only a date | ✅ | ✅ | ✅ | C |
 | Storage: whether the browser has agreed to keep the notes | ➖ | ➖ | ➖ | C |
 | A new version is looked for every half hour and on coming back, and offered with Reload | ➖ the apps update as releases | ➖ | ➖ | C |
@@ -239,11 +239,10 @@ Reviewed 2026-11-24, after Android's sign-in turned out to send people to Chrome
 
 ## Not checked yet
 
-Rows marked **?** above, still to try in each app: a pasted picture or
-picture address becoming a photo, and dragging an open stack's cards into a new order. Rows marked **C** were read in
-the code, not tried, so they're next once these are done.
+No rows marked **?** remain. Rows marked **C** were read in the code, not tried live yet, so they're next.
 
-Missing in all three native apps, found on 2026-11-25: Paste as. Restyling a paste after the editor has taken it
-means reading the clipboard again, which on the iPhone asks "Allow Paste?" every time (and newer macOS is moving the
-same way), so it waits on a design that takes the paste itself; a first try is kept in `.git/paste-as-wip.patch`. (Locking open vaults by themselves, the wait after
-wrong PINs and the button back to the newest entries, found the same day, are done.)
+Known gaps in the native apps:
+- **Paste as** (found 2026-11-25, missing on Mac, iPhone and Android): restyling a paste after the editor has taken it means reading the clipboard again, which on the iPhone asks "Allow Paste?" every time (and newer macOS is moving the same way), so it waits on a design that takes the paste itself; a first try is kept in `.git/paste-as-wip.patch`.
+- **Pasting a picture or picture URL into the writing box** (checked 2026-11-27): Mac handles pasted images/files and dropped picture URLs, but not pasting a plain picture URL string; missing on iPhone and Android.
+- **Dragging an open stack's cards into a new order** (checked 2026-11-27): missing on Mac, iPhone and Android (open stack currently shows a read-only preview of up to 5 cards).
+(Locking open vaults by themselves, the wait after wrong PINs and the button back to the newest entries, found on 2026-11-25, are done.)

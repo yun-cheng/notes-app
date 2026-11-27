@@ -315,14 +315,21 @@ final class AppModel {
             loaded = true
             return
         }
-        let index = await Task.detached(priority: .userInitiated) { CardIndex(all, locked: locked) }.value
+        let prevIndex = self.index
+        let prevTodos = prevIndex.todos
+        let sameLock = loaded && indexed.locked == locked
+        let index = await Task.detached(priority: .userInitiated) {
+            sameLock ? prevIndex.updating(nextCards: all, locked: locked) : CardIndex(all, locked: locked)
+        }.value
         guard run == refreshes else { return }
         indexed = (marks, locked)
         cards = all
         self.index = index
         loaded = true
         Transcriber.shared.apply(model: self)
-        Reminders.reschedule(index)
+        if !sameLock || index.todos != prevTodos {
+            Reminders.reschedule(index)
+        }
     }
 
     /// What tells one version of a card from another without comparing its whole body.

@@ -88,16 +88,16 @@ final class CardStore {
     }
 
     /// Changes from the server. A card with unpushed local changes keeps them; push settles it.
-    /// Returns how many it stored: none when each is waiting to be pushed or already here.
+    /// Returns the records it stored: empty when each is waiting to be pushed or already here.
     @discardableResult
-    func applyRemote(_ records: [CardRecord]) throws -> Int {
-        var stored = 0
+    func applyRemote(_ records: [CardRecord]) throws -> [CardRecord] {
+        var stored: [CardRecord] = []
         try db.transaction {
             for r in records {
                 if try !db.query("SELECT 1 FROM dirty WHERE id = ?", [.text(r.id)]).isEmpty { continue }
                 if let seq = try db.query("SELECT seq FROM cards WHERE id = ?", [.text(r.id)]).first?[0] as? Int64, seq == r.seq { continue }
                 try put(r)
-                stored += 1
+                stored.append(r)
             }
         }
         return stored

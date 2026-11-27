@@ -81,6 +81,48 @@ func makeRepo(_ clock: Clock = Clock()) async throws -> Repository {
         #expect(all.first { $0.id == b.id }?.seq == 9)
     }
 
+    @Test func incrementalIndexMatchesFullRebuild() async throws {
+        let repo = try await makeRepo()
+        let tagWork = try await repo.createTag(title: "Work")
+        let n1 = try await repo.createNote(title: "First", tags: [tagWork.id])
+        let td1 = try await repo.createTodo(title: "Buy milk", due: "2026-11-20", tags: [tagWork.id])
+
+        var idx = CardIndex(try await repo.allCards())
+        func check() async throws {
+            let all = try await repo.allCards()
+            let inc = idx.updating(nextCards: all)
+            let fresh = CardIndex(all)
+            #expect(inc.live.map(\.id) == fresh.live.map(\.id))
+            #expect(inc.todos.map(\.id) == fresh.todos.map(\.id))
+            #expect(inc.trash.map(\.id) == fresh.trash.map(\.id))
+            #expect(inc.tags.map(\.id) == fresh.tags.map(\.id))
+            #expect(inc.stackOf == fresh.stackOf)
+            #expect(Set(inc.backlinks.keys) == Set(fresh.backlinks.keys))
+            for (k, list) in fresh.backlinks {
+                #expect(Set(inc.backlinks[k]?.map { "\($0.from.id):\($0.kind)" } ?? []) == Set(list.map { "\($0.from.id):\($0.kind)" }))
+            }
+            idx = inc
+        }
+
+        // Tick todo
+        try await repo.setDone(td1.id, true)
+        try await check()
+        // Add a link and archive note
+        try await repo.update(n1.id) { c in
+            c.archived = true
+            c.content = ["type": "doc", "content": [["type": "paragraph", "content": [["type": "cardLink", "attrs": ["id": .string(td1.id), "label": "Buy milk"]]]]]]
+        }
+        try await check()
+        // Trash todo
+        try await repo.setDeleted(td1.id, true)
+        try await check()
+        // Add a stack and drop a card
+        _ = try await repo.createNote(title: "Deck", stack: [n1.id])
+        try await check()
+        try await repo.dropCards([td1.id])
+        try await check()
+    }
+
     @Test func blankNewCardsStayLocal() async throws {
         let repo = try await makeRepo()
         _ = try await repo.createNote()

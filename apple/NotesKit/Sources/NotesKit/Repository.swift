@@ -44,14 +44,37 @@ public actor Repository {
         keyring.decode(payload, id: id, vaultId: vaultId).map { modernPayload($0) }
     }
 
-    /// Each card's payload as last read by `allCards`, by ID, with the text it was read from, so a card not changed since
-    /// isn't parsed again: the app reads every card after each change, thousands of them. Only those not encrypted, as
-    /// reading an encrypted one depends on its vault's key being open here.
+    /// In-memory mirror of every card record in SQLite, loaded once on first `allCards` and kept up to date on every
+    /// write so editing one card never re-reads thousands of rows from disk.
+    private var recordMirror: [String: CardRecord]?
+    /// Each non-encrypted card's parsed payload by ID, so unchanged cards are never JSON-decoded again.
     private var parsed: [String: (text: String, payload: [String: JSONValue])] = [:]
 
+    private func mirrorPut(_ records: [CardRecord]) {
+        guard recordMirror != nil else { return }
+        for r in records { recordMirror?[r.id] = r }
+    }
+
+    private func mirrorRemove(_ ids: [String]) {
+        guard recordMirror != nil else { return }
+        for id in ids {
+            recordMirror?.removeValue(forKey: id)
+            parsed.removeValue(forKey: id)
+        }
+    }
+
     public func allCards() throws -> [Card] {
+        let records: [CardRecord]
+        if let cached = recordMirror {
+            records = Array(cached.values)
+        } else {
+            let loaded = try store.listCards()
+            recordMirror = Dictionary(loaded.map { ($0.id, $0) }, uniquingKeysWith: { _, b in b })
+            records = loaded
+        }
         var next: [String: (text: String, payload: [String: JSONValue])] = [:]
-        let cards = try store.listCards().map { r -> Card in
+        next.reserveCapacity(records.count)
+        let cards = records.map { r -> Card in
             if let hit = parsed[r.id], hit.text == r.payload {
                 next[r.id] = hit
                 return Card(id: r.id, vaultId: r.vault_id, updatedAt: r.updated_at, deleted: r.deleted, seq: r.seq, payload: hit.payload)
@@ -64,7 +87,10 @@ public actor Repository {
         return cards
     }
 
-    public func card(_ id: String) throws -> Card? { try store.getCard(id).map(decode) }
+    public func card(_ id: String) throws -> Card? {
+        if let r = recordMirror?[id] { return decode(r) }
+        return try store.getCard(id).map(decode)
+    }
 
     public func vaults() throws -> [Vault] { try store.listVaults() }
 
@@ -79,7 +105,9 @@ public actor Repository {
 
     /// Stores a card from a backup as it is, to be pushed.
     func putImported(_ card: Card) throws {
-        try store.putCards([encode(card)])
+        let record = try encode(card)
+        try store.putCards([record])
+        mirrorPut([record])
         changeHandler?()
     }
 
@@ -118,8 +146,10 @@ public actor Repository {
     @discardableResult
     private func write(_ card: Card, group: String? = nil, typed: Bool = false, before: Card? = nil) throws -> Card {
         let record = try encode(card)
-        let prior = group == nil ? nil : try store.getCard(card.id)
+        let prior: CardRecord? = group == nil ? nil : try (recordMirror?[card.id] ?? store.getCard(card.id))
         try store.putCards([record])
+        mirrorPut([record])
+        if !card.sealed && !VaultCrypto.isEncrypted(record.payload) { parsed[card.id] = (record.payload, card.payload) }
         if let group { try? log(group: group, typed: typed, prior: prior, before: before ?? prior.map(decode), card: card, record: record) }
         changeHandler?()
         return card
@@ -301,6 +331,7 @@ public actor Repository {
         let records = try store.listCards().filter { $0.vault_id == vaultId }.map(decode).filter { !$0.sealed }.map(encode)
         if !records.isEmpty {
             try store.putCards(records)
+            mirrorPut(records)
             changeHandler?()
         }
         // Logged changes are stored the way the vault stored its cards then, which is no longer how it does.
@@ -393,6 +424,7 @@ public actor Repository {
                 guard keyring.hasKey(record.vault_id) else { continue }
                 record = try encode(decode(record))
                 try store.putCards([record])
+                mirrorPut([record])
             }
             if record.seq == 0 && decode(record).isBlank { continue }
             out.append(record)
@@ -422,6 +454,7 @@ public actor Repository {
             let stray = try store.listDirty().filter(outOfReach).map(\.id)
             if !stray.isEmpty {
                 try store.deleteCards(stray)
+                mirrorRemove(stray)
                 changeHandler?()
             }
             keyring.setVaults(vaults)
@@ -435,7 +468,10 @@ public actor Repository {
         try store.replaceVaults(vaults)
         try store.setMeta("shared", shared)
         keyring.setVaults(vaults)
-        if !gone.isEmpty { try store.deleteCards(gone) }
+        if !gone.isEmpty {
+            try store.deleteCards(gone)
+            mirrorRemove(gone)
+        }
         // The log goes with the cards it's about, and keeps nothing readable from a vault since encrypted.
         let lost = Set(gone)
         let encrypted = Set(vaults.filter(\.isEncrypted).map(\.id))
@@ -466,6 +502,7 @@ public actor Repository {
     /// Removes cards that someone moved out of this account's reach, along with their place in the log.
     public func dropCards(_ ids: [String]) throws {
         try store.deleteCards(ids)
+        mirrorRemove(ids)
         let lost = Set(ids)
         try store.deleteChanges(try store.listChanges().filter { lost.contains($0.cardId) }.compactMap(\.n))
         changeHandler?()
@@ -473,19 +510,30 @@ public actor Repository {
 
     public func applyRemote(_ records: [CardRecord]) throws {
         // A pull that only echoes this device's own pushes changes nothing to show.
-        if try store.applyRemote(records) > 0 { changeHandler?() }
+        let stored = try store.applyRemote(records)
+        if !stored.isEmpty {
+            mirrorPut(stored)
+            changeHandler?()
+        }
     }
 
     /// Takes the server's version of a card. Given `ifUpdatedAt`, an edit made since then stays instead, and this says false.
     @discardableResult
     public func forceRemote(_ record: CardRecord, ifUpdatedAt: Int64? = nil) throws -> Bool {
         let taken = try store.forceRemote(record, ifUpdatedAt: ifUpdatedAt)
-        if taken { changeHandler?() }
+        if taken {
+            mirrorPut([record])
+            changeHandler?()
+        }
         return taken
     }
 
     public func markSynced(id: String, updatedAt: Int64, seq: Int64) throws {
         try store.markSynced(id: id, updatedAt: updatedAt, seq: seq)
+        if var rec = recordMirror?[id] {
+            rec.seq = seq
+            recordMirror?[id] = rec
+        }
     }
 
     public func cursor() throws -> Int64 { try store.getMeta("cursor", as: Int64.self) ?? 0 }
@@ -525,6 +573,8 @@ public actor Repository {
     /// Removes everything from the device, for signing out.
     public func clear() throws {
         try store.clear()
+        recordMirror = nil
+        parsed = [:]
         keyring.forgetAll()
         keyring.setVaults([])
         changeHandler?()

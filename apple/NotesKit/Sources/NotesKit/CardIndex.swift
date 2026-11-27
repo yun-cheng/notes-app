@@ -184,6 +184,147 @@ public struct CardIndex: Sendable {
         stackOf = Self.stackIndex(live)
     }
 
+    /// Updates this index incrementally when `locked` hasn't changed and only a small set of cards changed, avoiding
+    /// walking every card's TipTap JSON and re-sorting thousands of entries on every edit. Falls back to full rebuild
+    /// on bulk changes or locked-vault transitions.
+    public func updating(nextCards all: [Card], locked: Set<String> = []) -> CardIndex {
+        guard !byId.isEmpty || !lockedCards.isEmpty else { return CardIndex(all, locked: locked) }
+        var changed: [(old: Card?, next: Card?)] = []
+        var seenOpen = 0
+        var seenLocked = 0
+
+        for card in all {
+            let nowLocked = locked.contains(card.vaultId) || card.sealed
+            if nowLocked {
+                if lockedCards[card.id] == card.vaultId {
+                    seenLocked += 1
+                    continue
+                }
+                // Card newly locked or moved between locked vaults: rebuild cleanly so backlink visibility is exact.
+                return CardIndex(all, locked: locked)
+            }
+            if lockedCards[card.id] != nil {
+                // Card unlocked or moved out of a locked vault: rebuild cleanly.
+                return CardIndex(all, locked: locked)
+            }
+            if let old = byId[card.id] {
+                seenOpen += 1
+                if old.updatedAt != card.updatedAt || old.deleted != card.deleted || old.vaultId != card.vaultId || old.sealed != card.sealed || old.seq != card.seq {
+                    changed.append((old: old, next: card))
+                    if changed.count > 32 { return CardIndex(all, locked: locked) }
+                }
+            } else {
+                changed.append((old: nil, next: card))
+                if changed.count > 32 { return CardIndex(all, locked: locked) }
+            }
+        }
+
+        if seenLocked != lockedCards.count {
+            return CardIndex(all, locked: locked)
+        }
+        if seenOpen != byId.count {
+            let nextIds = Set(all.map(\.id))
+            for (id, old) in byId where !nextIds.contains(id) {
+                changed.append((old: old, next: nil))
+                if changed.count > 32 { return CardIndex(all, locked: locked) }
+            }
+        }
+        if changed.isEmpty { return self }
+
+        var next = self
+        var tagsChanged = false
+        var stacksChanged = false
+
+        func linkedIds(_ card: Card) -> [String] {
+            var linked: [String] = []
+            for doc in [card.content] + card.turnPages {
+                for id in Doc.linkedCardIds(doc) where !linked.contains(id) { linked.append(id) }
+            }
+            return linked
+        }
+
+        func insertUpdatedDesc(_ list: inout [Card], _ card: Card) {
+            if list.isEmpty || card.updatedAt >= list[0].updatedAt {
+                list.insert(card, at: 0)
+                return
+            }
+            var lo = 1
+            var hi = list.count
+            while lo < hi {
+                let mid = (lo + hi) >> 1
+                if list[mid].updatedAt >= card.updatedAt { lo = mid + 1 } else { hi = mid }
+            }
+            list.insert(card, at: lo)
+        }
+
+        func isActiveTodo(_ c: Card) -> Bool { !c.deleted && !c.isBlank && c.type == .todo && !c.archived && !c.template }
+
+        for delta in changed {
+            let id = (delta.next ?? delta.old)!.id
+            if let c = delta.next { next.byId[id] = c } else { next.byId.removeValue(forKey: id) }
+
+            let wasLive = delta.old.map { !$0.deleted && !$0.isBlank } ?? false
+            let nowLive = delta.next.map { !$0.deleted && !$0.isBlank } ?? false
+            let wasTrash = delta.old.map { $0.deleted && !$0.isBlank } ?? false
+            let nowTrash = delta.next.map { $0.deleted && !$0.isBlank } ?? false
+
+            if delta.old?.type == .tag || delta.next?.type == .tag { tagsChanged = true }
+            if delta.old?.isStack == true || delta.next?.isStack == true { stacksChanged = true }
+
+            // Update live (updatedAt DESC)
+            if wasLive, nowLive, let old = delta.old, let cur = delta.next, old.updatedAt == cur.updatedAt {
+                if let idx = next.live.firstIndex(where: { $0.id == id }) { next.live[idx] = cur }
+            } else {
+                if wasLive, let idx = next.live.firstIndex(where: { $0.id == id }) { next.live.remove(at: idx) }
+                if nowLive, let cur = delta.next { insertUpdatedDesc(&next.live, cur) }
+            }
+
+            // Update todos (updatedAt DESC)
+            let wasTodo = delta.old.map(isActiveTodo) ?? false
+            let nowTodo = delta.next.map(isActiveTodo) ?? false
+            if wasTodo, nowTodo, let old = delta.old, let cur = delta.next, old.updatedAt == cur.updatedAt {
+                if let idx = next.todos.firstIndex(where: { $0.id == id }) { next.todos[idx] = cur }
+            } else {
+                if wasTodo, let idx = next.todos.firstIndex(where: { $0.id == id }) { next.todos.remove(at: idx) }
+                if nowTodo, let cur = delta.next { insertUpdatedDesc(&next.todos, cur) }
+            }
+
+            // Update trash (updatedAt DESC)
+            if wasTrash, nowTrash, let old = delta.old, let cur = delta.next, old.updatedAt == cur.updatedAt {
+                if let idx = next.trash.firstIndex(where: { $0.id == id }) { next.trash[idx] = cur }
+            } else {
+                if wasTrash, let idx = next.trash.firstIndex(where: { $0.id == id }) { next.trash.remove(at: idx) }
+                if nowTrash, let cur = delta.next { insertUpdatedDesc(&next.trash, cur) }
+            }
+
+            // Update backlinks only for targets this card touched
+            if wasLive, let old = delta.old {
+                let targets = Set(old.tags + linkedIds(old))
+                for to in targets {
+                    if var list = next.backlinks[to] {
+                        list.removeAll { $0.from.id == old.id }
+                        if list.isEmpty { next.backlinks.removeValue(forKey: to) } else { next.backlinks[to] = list }
+                    }
+                }
+            }
+            if nowLive, let cur = delta.next {
+                for to in cur.tags { next.add(to, Backlink(from: cur, kind: .tag)) }
+                for to in linkedIds(cur) { next.add(to, Backlink(from: cur, kind: .link)) }
+            }
+        }
+
+        if tagsChanged {
+            let tagCards = next.live.filter { $0.type == .tag }.sorted { $0.title.localizedCompare($1.title) == .orderedAscending }
+            next.tagGroups = TagGroups(tagCards)
+            next.tags = tagCards.filter { !$0.isGroup }
+            next.pinnedTags = next.tags.filter(\.pinned)
+        }
+        if stacksChanged {
+            next.stackOf = Self.stackIndex(next.live)
+        }
+        return next
+    }
+
     private mutating func add(_ to: String, _ link: Backlink) {
         if to == link.from.id || lockedCards[to] != nil { return }
         backlinks[to, default: []].append(link)

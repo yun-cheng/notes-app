@@ -44,11 +44,27 @@ class Repository(
     }
 
     /**
-     * Each card's payload as last read by `allCards`, by ID, with the text it was read from, so a card not changed since
-     * isn't parsed again: the app reads every card after each change, thousands of them. Only those not encrypted, as
-     * reading an encrypted one depends on its vault's key being open here.
+     * In-memory mirror of every card record in SQLite, loaded once on first `allCards` and kept up to date on every
+     * local write so editing one card never re-reads thousands of rows from disk.
+     */
+    private var recordMirror: HashMap<String, CardRecord>? = null
+    /**
+     * Each non-encrypted card's parsed payload by ID, so unchanged cards are never JSON-decoded again.
      */
     private var parsed = HashMap<String, Pair<String, JsonObject>>()
+
+    private fun mirrorPut(records: List<CardRecord>) {
+        val m = recordMirror ?: return
+        for (r in records) m[r.id] = r
+    }
+
+    private fun mirrorRemove(ids: List<String>) {
+        val m = recordMirror ?: return
+        for (id in ids) {
+            m.remove(id)
+            parsed.remove(id)
+        }
+    }
 
     /** `CardStore.recentCards`, read: the newest entries and the tags, to show while every card is read (`allCards`). */
     suspend fun recentCards(n: Int) = locked {
@@ -64,8 +80,12 @@ class Repository(
     }
 
     suspend fun allCards() = locked {
-        val records = store.listCards()
-        val next = HashMap<String, Pair<String, JsonObject>>()
+        val records = recordMirror?.values?.toList() ?: store.listCards().also { loaded ->
+            val m = HashMap<String, CardRecord>(loaded.size)
+            for (r in loaded) m[r.id] = r
+            recordMirror = m
+        }
+        val next = HashMap<String, Pair<String, JsonObject>>(records.size)
         val cards = arrayOfNulls<Card>(records.size)
         val misses = ArrayList<Int>()
         records.forEachIndexed { i, r ->
@@ -96,8 +116,8 @@ class Repository(
         parsed = next
         cards.map { it!! }
     }
-    suspend fun card(id: String) = locked { store.getCard(id)?.let(::decode) }
-    private fun read(id: String) = store.getCard(id)?.let(::decode)
+    suspend fun card(id: String) = locked { read(id) }
+    private fun read(id: String) = (recordMirror?.get(id) ?: store.getCard(id))?.let(::decode)
     suspend fun vaults() = locked { store.listVaults() }
 
     private fun encode(c: Card): CardRecord {
@@ -109,8 +129,10 @@ class Repository(
 
     private fun write(card: Card, group: String? = null, typed: Boolean = false, before: Card? = null): Card {
         val record = encode(card)
-        val prior = if (group == null) null else store.getCard(card.id)
+        val prior = if (group == null) null else (recordMirror?.get(card.id) ?: store.getCard(card.id))
         store.putCards(listOf(record))
+        mirrorPut(listOf(record))
+        if (!card.sealed && !VaultCrypto.isEncrypted(record.payload)) parsed[card.id] = record.payload to card.payload
         if (group != null) runCatching { log(group, typed, prior, before ?: prior?.let(::decode), card, record) }
         onChange?.invoke()
         return card
@@ -226,7 +248,7 @@ class Repository(
     /** Stores every readable card in a vault again, after its key was unlocked or its encryption changed. */
     suspend fun recodeVault(vaultId: String) = locked {
         val records = store.listCards().filter { it.vault_id == vaultId }.map(::decode).filter { !it.sealed }.map(::encode)
-        if (records.isNotEmpty()) { store.putCards(records); onChange?.invoke() }
+        if (records.isNotEmpty()) { store.putCards(records); mirrorPut(records); onChange?.invoke() }
         store.deleteChanges(store.listChanges().filter { it.after.vault_id == vaultId || it.beforeVault == vaultId }.mapNotNull { it.n })
     }
 
@@ -309,6 +331,7 @@ class Repository(
                 if (!keyring.hasKey(r.vault_id)) continue
                 r = encode(decode(r))
                 store.putCards(listOf(r))
+                mirrorPut(listOf(r))
             }
             if (r.seq == 0L && decode(r).isBlank) continue
             out.add(r)
@@ -333,7 +356,7 @@ class Repository(
         val outOfReach = { r: CardRecord -> r.vault_id !in vaultIds && r.id !in sharedIds }
         if (known.toSet() == vaults.toSet() && knownShared.toSet() == shared.toSet()) {
             val stray = store.listDirty().filter(outOfReach).map { it.id }
-            if (stray.isNotEmpty()) { store.deleteCards(stray); onChange?.invoke() }
+            if (stray.isNotEmpty()) { store.deleteCards(stray); mirrorRemove(stray); onChange?.invoke() }
             keyring.setVaults(vaults)
             return@locked false
         }
@@ -344,7 +367,7 @@ class Repository(
         store.replaceVaults(vaults)
         setMeta("shared", ListSerializer(SharedCard.serializer()), shared)
         keyring.setVaults(vaults)
-        if (gone.isNotEmpty()) store.deleteCards(gone)
+        if (gone.isNotEmpty()) { store.deleteCards(gone); mirrorRemove(gone) }
         val lost = gone.toSet()
         val encrypted = vaults.filter { it.isEncrypted }.map { it.id }.toSet()
         store.deleteChanges(store.listChanges().filter { it.cardId in lost || (it.after.vault_id in encrypted && !VaultCrypto.isEncrypted(it.after.payload)) }.mapNotNull { it.n })
@@ -372,15 +395,26 @@ class Repository(
 
     suspend fun dropCards(ids: List<String>) = locked {
         store.deleteCards(ids)
+        mirrorRemove(ids)
         val lost = ids.toSet()
         store.deleteChanges(store.listChanges().filter { it.cardId in lost }.mapNotNull { it.n })
         onChange?.invoke()
     }
 
     /** A pull that only echoes this device's own pushes changes nothing to show, so it says nothing. */
-    suspend fun applyRemote(records: List<CardRecord>) = locked { if (store.applyRemote(records) > 0) onChange?.invoke() }
-    suspend fun forceRemote(record: CardRecord, ifUpdatedAt: Long? = null): Boolean = locked { store.forceRemote(record, ifUpdatedAt).also { if (it) onChange?.invoke() } }
-    suspend fun markSynced(id: String, updatedAt: Long, seq: Long) = locked { store.markSynced(id, updatedAt, seq) }
+    suspend fun applyRemote(records: List<CardRecord>) = locked {
+        if (store.applyRemote(records) > 0) {
+            recordMirror = null
+            onChange?.invoke()
+        }
+    }
+    suspend fun forceRemote(record: CardRecord, ifUpdatedAt: Long? = null): Boolean = locked {
+        store.forceRemote(record, ifUpdatedAt).also { if (it) { mirrorPut(listOf(record)); onChange?.invoke() } }
+    }
+    suspend fun markSynced(id: String, updatedAt: Long, seq: Long) = locked {
+        store.markSynced(id, updatedAt, seq)
+        recordMirror?.get(id)?.let { recordMirror?.put(id, it.copy(seq = seq)) }
+    }
     suspend fun cursor() = locked { store.getMeta("cursor")?.toLongOrNull() ?: 0L }
     suspend fun setCursor(seq: Long) = locked { store.setMeta("cursor", seq.toString()) }
 
@@ -399,7 +433,7 @@ class Repository(
 
     suspend fun deviceId(): String = locked { store.getMeta("deviceId") ?: newId().also { store.setMeta("deviceId", it) } }
 
-    suspend fun clear() = locked { store.clear(); keyring.forgetAll(); keyring.setVaults(emptyList()); onChange?.invoke() }
+    suspend fun clear() = locked { store.clear(); recordMirror = null; parsed.clear(); keyring.forgetAll(); keyring.setVaults(emptyList()); onChange?.invoke() }
 
     suspend fun importBackup(cards: List<Card>): Triple<Int, Int, Int> = locked {
         val known = store.listVaults().map { it.id }.toSet()
@@ -413,7 +447,9 @@ class Repository(
                 if (current.updatedAt >= c.updatedAt) { skipped++; continue }
                 c = c.copy(seq = current.seq); updated++
             } else added++
-            store.putCards(listOf(encode(c)))
+            val rec = encode(c)
+            store.putCards(listOf(rec))
+            mirrorPut(listOf(rec))
         }
         onChange?.invoke()
         Triple(added, updated, skipped)

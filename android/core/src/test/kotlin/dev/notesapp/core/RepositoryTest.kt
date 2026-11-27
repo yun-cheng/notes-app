@@ -50,6 +50,43 @@ class RepositoryTest {
         assertEquals(9, all.first { it.id == b.id }.seq)
     }
 
+    @Test fun incrementalIndexMatchesFullRebuild() = runBlocking {
+        val repo = makeRepo()
+        val tagWork = repo.createTag(title = "Work")
+        val n1 = repo.createNote(title = "First", tags = listOf(tagWork.id))
+        val td1 = repo.createTodo(title = "Buy milk", due = "2026-11-20", tags = listOf(tagWork.id))
+
+        var idx = CardIndex(repo.allCards())
+        suspend fun check() {
+            val all = repo.allCards()
+            val inc = idx.updating(all)
+            val fresh = CardIndex(all)
+            assertEquals(fresh.live.map { it.id }, inc.live.map { it.id })
+            assertEquals(fresh.todos.map { it.id }, inc.todos.map { it.id })
+            assertEquals(fresh.trash.map { it.id }, inc.trash.map { it.id })
+            assertEquals(fresh.tags.map { it.id }, inc.tags.map { it.id })
+            assertEquals(fresh.stackOf, inc.stackOf)
+            assertEquals(fresh.backlinks.keys, inc.backlinks.keys)
+            for ((k, list) in fresh.backlinks) {
+                assertEquals(list.map { "${it.from.id}:${it.kind}" }.toSet(), inc.backlinks[k]?.map { "${it.from.id}:${it.kind}" }?.toSet())
+            }
+            idx = inc
+        }
+
+        repo.setDone(td1.id, true)
+        check()
+        repo.update(n1.id) { c ->
+            c.withArchived(true).withContent(jobj("type" to j("doc"), "content" to jarr(listOf(jobj("type" to j("paragraph"), "content" to jarr(listOf(jobj("type" to j("cardLink"), "attrs" to jobj("id" to j(td1.id), "label" to j("Buy milk"))))))))))
+        }
+        check()
+        repo.setDeleted(td1.id, true)
+        check()
+        repo.createNote(title = "Deck", stack = listOf(n1.id))
+        check()
+        repo.dropCards(listOf(td1.id))
+        check()
+    }
+
     @Test fun theNewestAndTheTagsAreReadFirst() = runBlocking {
         val clock = Clock()
         val repo = makeRepo(clock)

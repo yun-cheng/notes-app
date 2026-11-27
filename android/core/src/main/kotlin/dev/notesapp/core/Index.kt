@@ -101,39 +101,185 @@ data class Backlink(val from: Card, val kind: Kind) { enum class Kind { link, ta
  * `partial`: only some of the cards, as the journal's preview at launch (`AppModel.preview`): a link to one not among
  * them is named as the link was written, not taken for one this account can't see.
  */
-class CardIndex(all: List<Card> = emptyList(), locked: Set<String> = emptySet(), private val partial: Boolean = false) {
-    val lockedCards = mutableMapOf<String, String>()
-    val byId: Map<String, Card>
-    val live: List<Card>
-    val tags: List<Card>
-    val tagGroups: TagGroups
-    val pinnedTags: List<Card>
-    val todos: List<Card>
-    val trash: List<Card>
-    val backlinks = mutableMapOf<String, MutableList<Backlink>>()
-    val stackOf: Map<String, String>
+class CardIndex private constructor(
+    val lockedCards: MutableMap<String, String>,
+    val byId: Map<String, Card>,
+    val live: List<Card>,
+    val tags: List<Card>,
+    val tagGroups: TagGroups,
+    val pinnedTags: List<Card>,
+    val todos: List<Card>,
+    val trash: List<Card>,
+    val backlinks: MutableMap<String, MutableList<Backlink>>,
+    val stackOf: Map<String, String>,
+    private val partial: Boolean,
+) {
+    private constructor(built: Built, partial: Boolean) : this(
+        built.lockedCards, built.byId, built.live, built.tags, built.tagGroups, built.pinnedTags,
+        built.todos, built.trash, built.backlinks, built.stackOf, partial,
+    )
 
-    init {
-        val cards = mutableListOf<Card>()
-        for (c in all) if (c.vaultId in locked || c.sealed) lockedCards[c.id] = c.vaultId else cards.add(c)
-        byId = cards.associateBy { it.id }
-        live = cards.filter { !it.deleted && !it.isBlank }.sortedByDescending { it.updatedAt }
-        for (card in live) {
-            card.tags.forEach { add(it, Backlink(card, Backlink.Kind.tag)) }
-            (listOf(card.content) + card.turnPages).flatMap(Doc::linkedCardIds).distinct().forEach { add(it, Backlink(card, Backlink.Kind.link)) }
+    constructor(all: List<Card> = emptyList(), locked: Set<String> = emptySet(), partial: Boolean = false) : this(build(all, locked), partial)
+
+    /**
+     * Updates this index incrementally when `locked` hasn't changed and only a small set of cards changed, avoiding
+     * walking every card's TipTap JSON and re-sorting thousands of entries on every edit. Falls back to full rebuild
+     * on bulk changes or locked-vault transitions.
+     */
+    fun updating(nextCards: List<Card>, locked: Set<String> = emptySet()): CardIndex {
+        if (partial || (byId.isEmpty() && lockedCards.isEmpty())) return CardIndex(nextCards, locked)
+        val changed = ArrayList<Pair<Card?, Card?>>()
+        var seenOpen = 0
+        var seenLocked = 0
+
+        for (card in nextCards) {
+            val nowLocked = card.vaultId in locked || card.sealed
+            if (nowLocked) {
+                if (lockedCards[card.id] == card.vaultId) {
+                    seenLocked++
+                    continue
+                }
+                return CardIndex(nextCards, locked)
+            }
+            if (lockedCards.containsKey(card.id)) return CardIndex(nextCards, locked)
+            val old = byId[card.id]
+            if (old != null) {
+                seenOpen++
+                if (old.updatedAt != card.updatedAt || old.deleted != card.deleted || old.vaultId != card.vaultId || old.sealed != card.sealed || old.seq != card.seq) {
+                    changed.add(old to card)
+                    if (changed.size > 32) return CardIndex(nextCards, locked)
+                }
+            } else {
+                changed.add(null to card)
+                if (changed.size > 32) return CardIndex(nextCards, locked)
+            }
         }
-        val tagCards = live.filter { it.type == CardType.tag }.sortedWith(compareBy(String.CASE_INSENSITIVE_ORDER) { it.title })
-        tagGroups = TagGroups(tagCards)
-        tags = tagCards.filterNot { it.isGroup }
-        pinnedTags = tags.filter { it.pinned }
-        todos = live.filter { it.type == CardType.todo && !it.archived && !it.template }
-        trash = cards.filter { it.deleted && !it.isBlank }.sortedByDescending { it.updatedAt }
-        stackOf = stackIndex(live)
-    }
+        if (seenLocked != lockedCards.size) return CardIndex(nextCards, locked)
+        if (seenOpen != byId.size) {
+            val nextIds = nextCards.mapTo(HashSet(nextCards.size)) { it.id }
+            for ((id, old) in byId) {
+                if (id !in nextIds) {
+                    changed.add(old to null)
+                    if (changed.size > 32) return CardIndex(nextCards, locked)
+                }
+            }
+        }
+        if (changed.isEmpty()) return this
 
-    private fun add(to: String, link: Backlink) {
-        if (to == link.from.id || lockedCards.containsKey(to)) return
-        backlinks.getOrPut(to) { mutableListOf() }.add(link)
+        val nextById = HashMap(byId)
+        val nextLive = ArrayList(live)
+        val nextTodos = ArrayList(todos)
+        val nextTrash = ArrayList(trash)
+        var nextBacklinks: MutableMap<String, MutableList<Backlink>>? = null
+        fun ensureBacklinks(): MutableMap<String, MutableList<Backlink>> =
+            nextBacklinks ?: HashMap(backlinks).also { nextBacklinks = it }
+        var tagsChanged = false
+        var stacksChanged = false
+
+        fun insertUpdatedDesc(list: ArrayList<Card>, card: Card) {
+            if (list.isEmpty() || card.updatedAt >= list[0].updatedAt) {
+                list.add(0, card)
+                return
+            }
+            var lo = 1
+            var hi = list.size
+            while (lo < hi) {
+                val mid = (lo + hi) ushr 1
+                if (list[mid].updatedAt >= card.updatedAt) lo = mid + 1 else hi = mid
+            }
+            list.add(lo, card)
+        }
+
+        fun isActiveTodo(c: Card) = !c.deleted && !c.isBlank && c.type == CardType.todo && !c.archived && !c.template
+
+        for ((old, cur) in changed) {
+            val id = (cur ?: old)!!.id
+            if (cur != null) nextById[id] = cur else nextById.remove(id)
+
+            val wasLive = old != null && !old.deleted && !old.isBlank
+            val nowLive = cur != null && !cur.deleted && !cur.isBlank
+            val wasTrash = old != null && old.deleted && !old.isBlank
+            val nowTrash = cur != null && cur.deleted && !cur.isBlank
+
+            if (old?.type == CardType.tag || cur?.type == CardType.tag) tagsChanged = true
+            if (old?.isStack == true || cur?.isStack == true) stacksChanged = true
+
+            if (wasLive && nowLive && old!!.updatedAt == cur!!.updatedAt) {
+                val idx = nextLive.indexOfFirst { it.id == id }
+                if (idx >= 0) nextLive[idx] = cur
+            } else {
+                if (wasLive) { val idx = nextLive.indexOfFirst { it.id == id }; if (idx >= 0) nextLive.removeAt(idx) }
+                if (nowLive) insertUpdatedDesc(nextLive, cur!!)
+            }
+
+            val wasTodo = old != null && isActiveTodo(old)
+            val nowTodo = cur != null && isActiveTodo(cur)
+            if (wasTodo && nowTodo && old!!.updatedAt == cur!!.updatedAt) {
+                val idx = nextTodos.indexOfFirst { it.id == id }
+                if (idx >= 0) nextTodos[idx] = cur
+            } else {
+                if (wasTodo) { val idx = nextTodos.indexOfFirst { it.id == id }; if (idx >= 0) nextTodos.removeAt(idx) }
+                if (nowTodo) insertUpdatedDesc(nextTodos, cur!!)
+            }
+
+            if (wasTrash && nowTrash && old!!.updatedAt == cur!!.updatedAt) {
+                val idx = nextTrash.indexOfFirst { it.id == id }
+                if (idx >= 0) nextTrash[idx] = cur
+            } else {
+                if (wasTrash) { val idx = nextTrash.indexOfFirst { it.id == id }; if (idx >= 0) nextTrash.removeAt(idx) }
+                if (nowTrash) insertUpdatedDesc(nextTrash, cur!!)
+            }
+
+            if (wasLive) {
+                val targets = LinkedHashSet<String>().apply { addAll(old!!.tags); addAll(linkedIds(old)) }
+                for (to in targets) {
+                    val map = ensureBacklinks()
+                    val existing = map[to] ?: continue
+                    val kept = existing.filterTo(ArrayList(existing.size)) { it.from.id != old!!.id }
+                    if (kept.isEmpty()) map.remove(to) else map[to] = kept
+                }
+            }
+            if (nowLive) {
+                val map = ensureBacklinks()
+                fun addOne(to: String, kind: Backlink.Kind) {
+                    if (to == cur!!.id || lockedCards.containsKey(to)) return
+                    val existing = map[to]
+                    val nextList = if (existing == null) arrayListOf(Backlink(cur, kind)) else ArrayList<Backlink>(existing.size + 1).apply { addAll(existing); add(Backlink(cur, kind)) }
+                    map[to] = nextList
+                }
+                for (to in cur!!.tags) addOne(to, Backlink.Kind.tag)
+                for (to in linkedIds(cur)) addOne(to, Backlink.Kind.link)
+            }
+        }
+
+        val nextTags: List<Card>
+        val nextTagGroups: TagGroups
+        val nextPinnedTags: List<Card>
+        if (tagsChanged) {
+            val tagCards = nextLive.filter { it.type == CardType.tag }.sortedWith(compareBy(String.CASE_INSENSITIVE_ORDER) { it.title })
+            nextTagGroups = TagGroups(tagCards)
+            nextTags = tagCards.filterNot { it.isGroup }
+            nextPinnedTags = nextTags.filter { it.pinned }
+        } else {
+            nextTags = tags
+            nextTagGroups = tagGroups
+            nextPinnedTags = pinnedTags
+        }
+        val nextStackOf = if (stacksChanged) stackIndex(nextLive) else stackOf
+
+        return CardIndex(
+            lockedCards = lockedCards,
+            byId = nextById,
+            live = nextLive,
+            tags = nextTags,
+            tagGroups = nextTagGroups,
+            pinnedTags = nextPinnedTags,
+            todos = nextTodos,
+            trash = nextTrash,
+            backlinks = nextBacklinks ?: backlinks,
+            stackOf = nextStackOf,
+            partial = false,
+        )
     }
 
     fun resolveTags(ids: List<String>) = ids.mapNotNull { byId[it] }.filter { it.type == CardType.tag && !it.deleted }
@@ -152,10 +298,58 @@ class CardIndex(all: List<Card> = emptyList(), locked: Set<String> = emptySet(),
         byId[id]?.takeIf { !it.deleted && !it.archived && !it.template && it.isEntry && !it.isStack && stackOf[id] == stack.id }
     }
 
+    private class Built(
+        val lockedCards: MutableMap<String, String>,
+        val byId: Map<String, Card>,
+        val live: List<Card>,
+        val tags: List<Card>,
+        val tagGroups: TagGroups,
+        val pinnedTags: List<Card>,
+        val todos: List<Card>,
+        val trash: List<Card>,
+        val backlinks: MutableMap<String, MutableList<Backlink>>,
+        val stackOf: Map<String, String>,
+    )
+
     companion object {
         /** What a link shows in place of a card this device can't read; never saved as the link's label. */
         const val LOCKED_TITLE = "Locked"
         const val UNSHARED_TITLE = "Not shared"
+
+        private fun linkedIds(card: Card): List<String> =
+            (listOf(card.content) + card.turnPages).flatMap(Doc::linkedCardIds).distinct()
+
+        private fun build(all: List<Card>, locked: Set<String>): Built {
+            val lockedCards = mutableMapOf<String, String>()
+            val cards = mutableListOf<Card>()
+            for (c in all) if (c.vaultId in locked || c.sealed) lockedCards[c.id] = c.vaultId else cards.add(c)
+            val byId = cards.associateBy { it.id }
+            val live = cards.filter { !it.deleted && !it.isBlank }.sortedByDescending { it.updatedAt }
+            val backlinks = mutableMapOf<String, MutableList<Backlink>>()
+            fun add(to: String, link: Backlink) {
+                if (to == link.from.id || lockedCards.containsKey(to)) return
+                backlinks.getOrPut(to) { mutableListOf() }.add(link)
+            }
+            for (card in live) {
+                card.tags.forEach { add(it, Backlink(card, Backlink.Kind.tag)) }
+                linkedIds(card).forEach { add(it, Backlink(card, Backlink.Kind.link)) }
+            }
+            val tagCards = live.filter { it.type == CardType.tag }.sortedWith(compareBy(String.CASE_INSENSITIVE_ORDER) { it.title })
+            val tagGroups = TagGroups(tagCards)
+            val tags = tagCards.filterNot { it.isGroup }
+            return Built(
+                lockedCards = lockedCards,
+                byId = byId,
+                live = live,
+                tags = tags,
+                tagGroups = tagGroups,
+                pinnedTags = tags.filter { it.pinned },
+                todos = live.filter { it.type == CardType.todo && !it.archived && !it.template },
+                trash = cards.filter { it.deleted && !it.isBlank }.sortedByDescending { it.updatedAt },
+                backlinks = backlinks,
+                stackOf = stackIndex(live),
+            )
+        }
 
         fun stackIndex(cards: List<Card>): Map<String, String> {
             val stacks = cards.filter { it.isStack && !it.deleted }.sortedWith(compareBy({ it.createdAt }, { it.id }))

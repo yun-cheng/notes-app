@@ -360,16 +360,24 @@ class AppModel(private val context: Context, val site: String) {
         val marks = all.map { CardMark(it.id, it.vaultId, it.updatedAt, it.seq, it.deleted, it.sealed) }
         val locked = lockedVaults
         if (marks == indexed?.first && locked == indexed?.second) { loaded = true; preview = null; return }
-        val next = kotlinx.coroutines.withContext(Dispatchers.Default) { CardIndex(all, locked) }
+        val prevIndex = index
+        val sameLock = loaded && indexed?.second == locked
+        val next = kotlinx.coroutines.withContext(Dispatchers.Default) {
+            if (sameLock) prevIndex.updating(all, locked) else CardIndex(all, locked)
+        }
         if (run != refreshes) return
         indexed = marks to locked
         cards = all
         cardsVersion++
         index = next
-        runCatching { repo.keepTagIds(all.filter { it.type == dev.notesapp.core.CardType.tag && !it.deleted }.map { it.id }) }
+        if (!sameLock || next.tags != prevIndex.tags) {
+            runCatching { repo.keepTagIds(next.live.filter { it.type == dev.notesapp.core.CardType.tag }.map { it.id }) }
+        }
         loaded = true
         preview = null
-        Reminders.reschedule(context, next)
+        if (!sameLock || next.todos != prevIndex.todos) {
+            Reminders.reschedule(context, next)
+        }
         Transcriber.apply(this)
     }
 
